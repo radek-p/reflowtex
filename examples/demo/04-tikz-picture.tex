@@ -1,0 +1,15 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+\section*{A TikZ picture}
+A TikZ picture is externalised to a PDF, converted to inline SVG, and placed back
+in the text as a box with \TeX{}'s own metrics --- so it can sit anywhere a box
+can, here as a displayed automaton inside an \texttt{align*}:
+\begin{align*}
+\begin{tikzpicture}[>=Stealth, baseline=(q0.base), thick]
+  \node[draw, circle] (q0) at (0,0) {$q_0$};
+  \node[draw, circle] (q1) at (2.4,0) {$q_1$};
+  \node[draw, circle, double] (q2) at (4.8,0) {$q_2$};
+  \draw[->, blue] (q0) -- node[above] {$a$} (q1);
+  \draw[->, blue] (q1) -- node[above] {$b$} (q2);
+  \draw[->, red]  (q1) to[bend left=40] node[below] {$a$} (q0);
+\end{tikzpicture}
+\end{align*}

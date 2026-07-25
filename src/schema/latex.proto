@@ -1,0 +1,144 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Protobuf schema for the LaTeX node list. Replaces schema.kiwi.
+//
+// proto2 (not proto3) on purpose: the renderer relies on field *presence* — a
+// glyph carries `metrics` but no width; a box carries `shift` only when shifted;
+// gW falls back on `width === undefined`. proto2 tracks presence explicitly, so
+// an unset field decodes as absent (undefined in JS via toObject{defaults:false},
+// missing in Python via HasField), exactly as the kiwi format behaved. proto3
+// would default unset scalars to 0 and lose that distinction.
+//
+// Enum values are lowercased to match the strings the renderer compares against
+// (`n.type === 'glyph'`, `it.kind === 'display'`): protobuf.js toObject({enums:
+// String}) then yields those strings directly, with no translation layer.
+//
+// Floats are `double` (kiwi only had 32-bit float): glue_set and the transform
+// matrix now round-trip Lua's float64 exactly, removing the precision question.
+
+syntax = "proto2";
+
+package latex;
+
+enum NodeType {
+  glyph     = 0;
+  glue      = 1;
+  kern      = 2;
+  rule      = 3;
+  hlist     = 4;
+  vlist     = 5;
+  disc      = 6;
+  penalty   = 7;
+  math      = 8;
+  picture   = 9;   // an externalised tikzpicture, drawn from precompiled SVG
+  transform = 10;  // \rotatebox and friends: a matrix applied to `children`
+}
+
+message Node {
+  optional NodeType type          = 1;
+  optional int32    char          = 2;   // glyph: Unicode codepoint
+  optional uint32   font          = 3;   // glyph: font ID
+  optional int32    width         = 4;   // glue/kern/rule/hlist/vlist (glyphs use `metrics`)
+  optional int32    height        = 5;   // rule/hlist/vlist
+  optional int32    depth         = 6;   // rule/hlist/vlist
+  optional int32    stretch       = 7;   // glue
+  optional int32    shrink        = 8;   // glue
+  optional uint32   stretch_order = 9;   // glue (omitted when 0)
+  optional uint32   shrink_order  = 10;  // glue (omitted when 0)
+  optional uint32   subtype       = 11;  // glue/disc (omitted when 0)
+  optional int32    kern          = 12;  // kern: spacing amount
+  optional int32    shift         = 13;  // hlist/vlist (omitted when 0)
+  optional double   glue_set      = 14;  // hlist/vlist: pre-computed glue ratio
+  optional uint32   glue_sign     = 15;  // hlist/vlist (omitted when 0)
+  optional uint32   glue_order    = 16;  // hlist/vlist (omitted when 0)
+  repeated Node     children      = 17;  // hlist/vlist (recursive)
+  repeated Node     pre           = 18;  // disc
+  repeated Node     post          = 19;  // disc
+  repeated Node     replace       = 20;  // disc
+  optional int32    penalty       = 21;  // penalty: break penalty value
+  optional int32    surround      = 22;  // math: thin-space width
+  optional string   color         = 23;  // glyph/rule: CSS hex colour; absent = default text colour
+  optional uint32   picture       = 24;  // picture: 1-based index into Document.pictures
+  optional Node     leader        = 25;  // glue: box tiled across the set width (\cleaders, arrows)
+
+  // transform: the PDF matrix [a b c d] from \rotatebox/\reflectbox/\scalebox,
+  // applied about the current point. No metrics of its own — it only wraps its
+  // children (the enclosing box was already sized by TeX).
+  optional double   m_a           = 26;
+  optional double   m_b           = 27;
+  optional double   m_c           = 28;
+  optional double   m_d           = 29;
+
+  // glyph: citation wiring. `cite` links a \lrcite number's glyphs; `citetarget`
+  // marks a bibliography [n] label.
+  optional uint32   cite          = 30;
+  optional uint32   citetarget    = 31;
+
+  // glyph: 1-based index into Document.glyph_metrics. A glyph's width/height/
+  // depth are interned there (the same box repeats across thousands of glyphs)
+  // and referenced here instead of stored inline. Only glyphs use this.
+  optional uint32   metrics       = 32;
+}
+
+// One distinct glyph box (width/height/depth in sp), referenced by Node.metrics.
+message GlyphMetrics {
+  optional int32 width  = 1;
+  optional int32 height = 2;
+  optional int32 depth  = 3;
+}
+
+// A precompiled tikzpicture. `svg` is the markup inside the wrapping <g> (ids
+// namespaced, colours rewritten to CSS custom properties). vb_w/vb_h are the
+// source viewBox, scaled by the renderer to the node's TeX width.
+message Picture {
+  optional string svg  = 1;
+  optional double vb_w = 2;
+  optional double vb_h = 3;
+}
+
+message FontInfo {
+  optional uint32 id       = 1;
+  optional string name     = 2;
+  optional uint32 size_sp  = 3;
+  optional string filename = 4;
+}
+
+message Paragraph {
+  repeated Node  nodes  = 1;
+  optional int32 indent = 2;  // sp; left offset from \parshape, 0 normally
+  // TeX interline parameters (sp) so the renderer reproduces the exact
+  // baseline-to-baseline advance when it re-breaks the paragraph.
+  optional int32 baselineskip  = 3;
+  optional int32 lineskip      = 4;
+  optional int32 lineskiplimit = 5;
+  // Per-paragraph alignment from TeX's \leftskip/\rightskip: "center", "left"
+  // (\raggedright), or "right" (\raggedleft). Absent = justified (the default),
+  // so the paragraph inherits the block's --latex-align.
+  optional string align = 6;
+}
+
+enum ItemKind {
+  paragraph = 0;
+  display   = 1;
+  vspace    = 2;
+}
+
+message ContentItem {
+  optional ItemKind kind   = 1;
+  optional uint32   para   = 2;  // paragraph: 1-based index into Document.paragraphs
+  optional Node     box    = 3;  // display: the finished hlist, glue already set
+  optional int32    amount = 4;  // vspace: vertical gap in sp
+
+  // display: the band [display_indent, display_indent+display_width] the display
+  // occupied, and where TeX shifted the box within it.
+  optional int32 display_width  = 5;
+  optional int32 display_indent = 6;
+  optional int32 display_shift  = 7;
+}
+
+message Document {
+  repeated FontInfo     fonts         = 1;
+  repeated Paragraph    paragraphs    = 2;
+  repeated ContentItem  content       = 3;
+  repeated Picture      pictures      = 4;
+  repeated GlyphMetrics glyph_metrics = 5;  // interned glyph boxes; see Node.metrics
+}

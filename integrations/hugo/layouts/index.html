@@ -1,0 +1,20 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ site.Title }}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ctext%20x='3'%20y='13'%20font-size='15'%20font-family='Georgia,serif'%20fill='%23888'%3E%E2%88%AB%3C/text%3E%3C/svg%3E">
+<style>
+  body { max-width: 46rem; margin: 3rem auto; padding: 0 1.25rem;
+         font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>{{ site.Title }}</h1>
+{{ .Content }}
+{{/* Include the viewer once per page that can contain latex blocks. */}}
+{{ partial "reflowtex-viewer.html" . }}
+</body>
+</html>

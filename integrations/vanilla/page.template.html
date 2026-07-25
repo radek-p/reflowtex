@@ -1,0 +1,253 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<!-- Inline SVG favicon (an integral sign). Without a favicon the browser still
+     requests /favicon.ico and logs a 404; this satisfies it with no extra file. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ctext%20x='3'%20y='13'%20font-size='15'%20font-family='Georgia,serif'%20fill='%23888'%3E%E2%88%AB%3C/text%3E%3C/svg%3E">
+
+<!-- Theme: latex-viewer.js keys its colour maps off a class on <html>. `light` is
+     the default (no class); `dark`, `sepia`, `contrast` each remap default ink,
+     red/blue, and the page background. Set the class before first paint (from the
+     saved choice, else the OS preference) so text is never briefly invisible; the
+     switcher (bottom-right) calls window.__setTheme to change it live. -->
+<script>
+  (function () {
+    var KEY = 'reflowtex-theme';
+    function set(t) {
+      var root = document.documentElement;
+      root.classList.remove('dark', 'sepia', 'contrast');
+      if (t !== 'light') root.classList.add(t);
+      root.setAttribute('data-theme', t);
+      try { localStorage.setItem(KEY, t); } catch (e) {}
+    }
+    var saved; try { saved = localStorage.getItem(KEY); } catch (e) {}
+    set(saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    window.__setTheme = set;
+  })();
+</script>
+
+<!-- Content width: 'auto' is the fluid column (a max-width, shrinking below it);
+     'narrow'/'normal'/'wide' pin it to a fixed measure that overflows into a
+     horizontal scroll when the window is narrower. Set from the saved choice
+     before first paint — like the theme — so the blocks lay out at the chosen
+     width immediately rather than reflowing once after load. The switcher (bottom-
+     right) calls window.__setWidth, which resizes #lt-content; the viewer's
+     ResizeObserver reflows each block to the new width. -->
+<script>
+  (function () {
+    var KEY = 'reflowtex-width';
+    function set(w) {
+      document.documentElement.setAttribute('data-width', w);
+      try { localStorage.setItem(KEY, w); } catch (e) {}
+    }
+    var saved; try { saved = localStorage.getItem(KEY); } catch (e) {}
+    set(saved || 'auto');
+    window.__setWidth = set;
+  })();
+</script>
+
+<!-- Page zoom: emulates the browser's own Cmd/Ctrl +/- with CSS `zoom` on the
+     content, so the whole document scales (line breaks unchanged, like zooming a
+     PDF) and a fixed-width column can overflow into a horizontal scroll. Applied
+     via a custom property on <html> so it is in force before #lt-content exists
+     (no first-paint flash). window.__zoom(dir): dir<0 smaller, 0 reset, dir>0
+     bigger; the reset button doubles as a live percentage readout. A synthetic
+     resize event nudges the viewer to repaint the (now differently sized) viewport
+     — scaling does not fire its ResizeObserver, which keys off unzoomed widths. -->
+<script>
+  (function () {
+    var KEY = 'reflowtex-zoom', MIN = 0.5, MAX = 3, STEP = 1.1, z = 1;
+    function clamp(v) { return Math.min(MAX, Math.max(MIN, v)); }
+    function apply() {
+      document.documentElement.style.setProperty('--lt-zoom', z);
+      var el = document.getElementById('zoom-level');
+      if (el) el.textContent = Math.round(z * 100) + '%';
+      try { localStorage.setItem(KEY, String(z)); } catch (e) {}
+      window.dispatchEvent(new Event('resize'));
+    }
+    var saved; try { saved = parseFloat(localStorage.getItem(KEY)); } catch (e) {}
+    if (saved > 0) z = clamp(saved);
+    document.documentElement.style.setProperty('--lt-zoom', z);   // before first paint
+    window.__zoom = function (dir) { z = dir === 0 ? 1 : clamp(z * (dir > 0 ? STEP : 1 / STEP)); apply(); };
+    document.addEventListener('DOMContentLoaded', function () {    // fill the readout
+      var el = document.getElementById('zoom-level');
+      if (el) el.textContent = Math.round(z * 100) + '%';
+    });
+  })();
+</script>
+
+<!-- reflowtex embeds the schema (schema/latex.proto as base64 text) once per page;
+     latex-viewer.js parses it at runtime. -->
+<div id="latex-schema" data-schema-b64="{{SCHEMA_B64}}" hidden></div>
+
+<!-- Font URL map: original filename → served filename (a modified font is served
+     renamed + content-hashed). latex-viewer.js reads it to build @font-face.
+     data-fonts-base is the URL prefix for those files; the default '/fonts/'
+     serves from the site root, a relative value (e.g. 'fonts/') makes the page
+     portable under a subpath. -->
+<script id="latex-font-map" type="application/json" data-fonts-base="{{FONTS_BASE}}">{{FONT_MAP_JSON}}</script>
+
+<style>
+  :root { color-scheme: light dark; }
+  /* Page palette lives on <html> (not <body>) so it also fills the strip a
+     fixed-width column reveals when it overflows into a horizontal scroll.
+     Driven by html.dark etc. (set by the theme script), which the viewer keys
+     its colour maps off too — so text and background stay in step. */
+  html {
+    background: #fafaf9; color: #333333;
+    transition: background 150ms ease, color 150ms ease;
+  }
+  html.dark     { background: #0c0a09; color: #e7e5e4; }
+  html.sepia    { background: #f4ecd8; color: #453a26; }
+  html.contrast { background: #ffffff; color: #000000; }
+  body {
+    margin: 0; min-height: 100vh;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+  h1 { font-weight: 700; }
+
+  /* ── The content column ──────────────────────────────────────────────────
+     Holds the title and every block, centred with a reading measure. The width
+     switch retargets it and the zoom control scales it (see the head scripts);
+     both act here rather than on <body> so the floating switches and the
+     citation popover — siblings in <body> — are neither resized nor scaled. */
+  #lt-content {
+    max-width: 46rem; margin: 3rem auto; padding: 0 1.25rem;
+    zoom: var(--lt-zoom, 1);
+  }
+  /* Fixed widths carry no viewport cap: a column wider than the window overflows
+     into a horizontal scroll rather than shrinking. No width transition —
+     animating it would fire the viewer's ResizeObserver every frame and re-break
+     every paragraph. */
+  html[data-width="narrow"] #lt-content { max-width: none; width: 34rem; }
+  html[data-width="normal"] #lt-content { max-width: none; width: 46rem; }
+  html[data-width="wide"]   #lt-content { max-width: none; width: 64rem; }
+
+  /* ── Floating switches (bottom-right) ────────────────────────────────────
+     A content-width switch and a colour-theme switch, side by side and fixed in
+     view as the reader scrolls. Anchored at the right edge; when the viewport is
+     too narrow to hold both on one row they stack (the container grows upward, so
+     it stays put). Buttons call window.__setWidth / window.__setTheme (defined in
+     <head>); the active one is marked via the data-width / data-theme attribute
+     the setters write on <html>. */
+  #lt-switches {
+    position: fixed; right: 1rem; bottom: 1rem; z-index: 1000;
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem;
+  }
+  @media (max-width: 32rem) { #lt-switches { flex-direction: column; align-items: flex-end; } }
+  .lt-switch {
+    display: flex; gap: 2px; padding: 3px; border-radius: 999px;
+    font-size: 0.72rem;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    box-shadow: 0 1px 8px color-mix(in srgb, currentColor 14%, transparent);
+    backdrop-filter: blur(6px);
+  }
+  .lt-switch button {
+    border: 0; background: none; color: inherit; cursor: pointer;
+    padding: 0.3rem 0.6rem; border-radius: 999px; opacity: 0.7;
+    font: inherit; letter-spacing: 0.02em; white-space: nowrap;
+  }
+  .lt-switch button:hover { opacity: 1; }
+  /* The zoom readout (middle button) shows the current level and doubles as the
+     reset. A fixed min-width and tabular figures keep 90% / 100% / 125% the same
+     width, so cycling zoom never jiggles the right-anchored row. */
+  #zoom-switch button[data-z="reset"] {
+    min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums;
+  }
+  /* Active state is background + full opacity only — deliberately NOT a weight
+     change, which would make the active button wider and reflow the row (and,
+     since the switcher is anchored at its right edge, visibly shift it) on every
+     switch. */
+  html[data-width="auto"]     #width-switch button[data-w="auto"],
+  html:not([data-width])      #width-switch button[data-w="auto"],
+  html[data-width="narrow"]   #width-switch button[data-w="narrow"],
+  html[data-width="normal"]   #width-switch button[data-w="normal"],
+  html[data-width="wide"]     #width-switch button[data-w="wide"],
+  html[data-theme="light"]    #theme-switch button[data-t="light"],
+  html[data-theme="dark"]     #theme-switch button[data-t="dark"],
+  html[data-theme="sepia"]    #theme-switch button[data-t="sepia"],
+  html[data-theme="contrast"] #theme-switch button[data-t="contrast"] {
+    opacity: 1; background: color-mix(in srgb, currentColor 18%, transparent);
+  }
+  /* ── The viewer's rendering surface ──────────────────────────────────────
+     latex-viewer.js reads each block's pixel width from its box, lays the SVG
+     out to that width, and (for a display that overflows the column) wraps it
+     in a .latex-display scroll box it creates itself. These rules are the
+     minimum the rendered SVG needs; copy them into any page that hosts a
+     block. */
+  /* Each block is a self-contained snippet (with its own \section heading, if
+     any); give neighbours room to read as separate sections. */
+  .latex-block { margin: 2.75rem 0; overflow: visible; }
+  .latex-block svg {
+    display: block; max-width: 100%; overflow: visible;
+    font-weight: normal !important; font-style: normal !important;
+  }
+  .latex-block svg text, .latex-block svg tspan {
+    font-weight: normal !important; font-style: normal !important;
+    fill: currentColor;
+  }
+  /* A display wide enough to overflow the column becomes horizontally
+     scrollable. Setting overflow-x forces overflow-y to auto, which would clip
+     ascenders/descenders, so the renderer measures the overhang and reserves it
+     as padding (the 4px here is only the pre-measure base). */
+  .latex-display { overflow-x: auto; padding: 4px 0; }
+  .latex-display > svg { max-width: none; }
+
+  /* ── AGPL source-offer notice ────────────────────────────────────────────
+     latex-viewer.js is AGPL-3.0 and runs in the visitor's browser, so §13
+     requires deployed pages to offer their users the Corresponding Source.
+     This muted footer carries that offer; keep it (or an equivalent link) on
+     any site you publish. It sits outside #lt-content so the width/zoom
+     controls do not scale it. */
+  #lt-agpl-notice {
+    max-width: 46rem; margin: 4rem auto 2rem; padding: 0 1.25rem;
+    font-size: 0.75rem; line-height: 1.5; text-align: center; opacity: 0.55;
+  }
+  #lt-agpl-notice a { color: inherit; }
+</style>
+</head>
+<body>
+<div id="lt-switches">
+  <nav id="width-switch" class="lt-switch" aria-label="Content width">
+    <button type="button" data-w="auto"   onclick="window.__setWidth('auto')">Auto</button>
+    <button type="button" data-w="narrow" onclick="window.__setWidth('narrow')">Narrow</button>
+    <button type="button" data-w="normal" onclick="window.__setWidth('normal')">Normal</button>
+    <button type="button" data-w="wide"   onclick="window.__setWidth('wide')">Wide</button>
+  </nav>
+  <nav id="zoom-switch" class="lt-switch" aria-label="Zoom">
+    <button type="button" data-z="out"   onclick="window.__zoom(-1)" title="Zoom out"   aria-label="Zoom out">&minus;</button>
+    <button type="button" data-z="reset" onclick="window.__zoom(0)"  title="Reset zoom"  aria-label="Reset zoom" id="zoom-level">100%</button>
+    <button type="button" data-z="in"    onclick="window.__zoom(1)"  title="Zoom in"     aria-label="Zoom in">+</button>
+  </nav>
+  <nav id="theme-switch" class="lt-switch" aria-label="Colour theme">
+    <button type="button" data-t="light"    onclick="window.__setTheme('light')">Light</button>
+    <button type="button" data-t="dark"     onclick="window.__setTheme('dark')">Dark</button>
+    <button type="button" data-t="sepia"    onclick="window.__setTheme('sepia')">Sepia</button>
+    <button type="button" data-t="contrast" onclick="window.__setTheme('contrast')">Contrast</button>
+  </nav>
+</div>
+
+<main id="lt-content">
+<h1>{{TITLE}}</h1>
+
+{{BLOCKS}}
+</main>
+
+<!-- AGPL-3.0 §13 source offer for the software running in this page. -->
+<footer id="lt-agpl-notice">
+  Rendered with <a href="{{SOURCE_URL}}" rel="license">Reflow TeX</a> —
+  free software under <abbr title="GNU Affero General Public License v3.0 or later">AGPL-3.0-or-later</abbr>.
+  <a href="{{SOURCE_URL}}">Source code</a>.
+</footer>
+
+<!-- protobuf.min.js must load before latex-viewer.js (it exposes global `protobuf`). -->
+<script src="protobuf.min.js"></script>
+<script src="latex-viewer.js"></script>
+</body>
+</html>

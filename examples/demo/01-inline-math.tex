@@ -1,0 +1,12 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+\section*{Inline mathematics}
+The Knuth--Plass line-breaking algorithm chooses breakpoints by minimising the
+total badness of a paragraph, and Reflow TeX runs it in the browser rather than at
+compile time. So this paragraph reflows to whatever width the page gives it, while
+inline mathematics stays set exactly as \TeX{} positioned it: Euler's identity
+$e^{i\pi} + 1 = 0$, the Cauchy--Schwarz bound
+$\abs{\langle x, y\rangle} \le \norm{x}\,\norm{y}$, the golden ratio
+$\varphi = \tfrac{1+\sqrt{5}}{2}$, a binomial coefficient $\binom{n}{k}$, and a
+quantified statement $\forall\,\varepsilon > 0\ \exists\,\delta > 0$ all read
+inline, with the surrounding words. Resize the window and watch the lines
+re-break around the mathematics.

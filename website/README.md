@@ -1,0 +1,46 @@
+# Reflow TeX — landing site
+
+The project's public site (Hugo), built to be hosted on **GitHub Pages**. Most of
+its prose is set through the reflowtex pipeline itself — the page is its own demo.
+
+## Build
+
+```sh
+./build.sh          # compile LaTeX blocks + hugo -> public/
+./build.sh server   # live preview at the printed URL
+```
+
+`build.sh` vendors the shortcode and viewer partial from `../integrations/hugo`,
+runs `prebuild.py` (which needs the pipeline prerequisites — `lualatex`,
+`dvisvgm`, `protoc`, and the Python deps; see the repo `Makefile`'s `check`
+target), then runs Hugo. Everything it generates is git-ignored.
+
+## What's here
+
+| Path | |
+|---|---|
+| `content/_index.md` | home copy + feature grid (rendered via `{{< latex >}}`) |
+| `content/hero/` | the headless hero paragraph (breathing-width reflow) |
+| `content/{docs,examples,about}/` | getting-started, live demos, license/about |
+| `static/testmath/` | standalone AMS `testmath.tex` demo (built by `build.sh`, served at `/testmath/`, linked from Examples) |
+| `layouts/` | base template, home, page layouts, and the hero/nav/switch partials |
+| `layouts/partials/hero.html` | the animated hero (ported from `experiments/26-reflow-tex-hero`) |
+
+The reader controls from the vanilla output — **width**, **colour theme**, and
+**text size** — are in the bottom-right corner and persist across pages.
+
+## Before you publish
+
+Set these to the real values (all currently placeholders):
+
+- `baseURL` in `hugo.toml` — your Pages URL, e.g. `https://<user>.github.io/reflowtex/`.
+  The viewer resolves font URLs against it, so a project subpath works.
+- `params.github` and `params.reflowtexSource` in `hugo.toml` — the repository URL
+  (used by the nav link and the AGPL-3.0 source-offer footer).
+
+## Deploy
+
+`.github/workflows/deploy.yml` (at the repo root) builds and publishes to GitHub
+Pages on push to the default branch. Because `prebuild.py` runs a real TeX pass,
+the workflow installs the TeX toolchain — that's the slow step; see the comments
+in the workflow for the trade-offs.

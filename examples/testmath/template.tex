@@ -1,0 +1,28 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% Classic extraction template for the testmath.tex demo.
+%
+% Unlike the default template (src/extract/template.tex), this one loads NO
+% fontspec and NO unicode-math: testmath.tex is a plain amsmath document written
+% for the classic Computer Modern Type1 fonts, and we render it exactly that way.
+% Those 8-bit fonts have no OpenType form, so the pipeline converts them to web
+% OTFs addressed via PUA (src/encode/t1_convert.py) — this demo exercises that.
+%
+% The build substitutes two placeholders (each is the word PREAMBLE or CONTENT
+% wrapped in double percent signs, not spelled literally here so the plain-text
+% replace does not rewrite this comment):
+%   - the PREAMBLE marker → testmath.tex's own preamble, documentclass and all,
+%     used verbatim so the document's setup is untouched;
+%   - the CONTENT marker  → testmath.tex's document body.
+%
+% The serializer and its shipout hook are the only things added, injected *after*
+% the document's preamble so nothing in it is overridden.
+
+%%PREAMBLE%%
+
+% ── reflowtex node-list serializer (the only addition to the document) ────────
+\directlua{dofile("serializer.lua")}
+\AddToHook{shipout/before}{\directlua{Serializer.shipout(\the\numexpr\ShipoutBox\relax)}}
+
+\begin{document}
+%%CONTENT%%
+\end{document}

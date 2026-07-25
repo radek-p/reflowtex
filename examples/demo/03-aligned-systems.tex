@@ -1,0 +1,20 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+\section*{Aligned systems and matrices}
+Multi-line derivations align on their relation symbols, and matrices set exactly
+as \TeX{} builds them:
+\begin{align*}
+  (f \circ g)'(x) &= f'\bigl(g(x)\bigr)\,g'(x), \\
+  \frac{d}{dx} \int_{a}^{x} f(t)\,dt &= f(x), \\
+  \begin{pmatrix} a & b \\ c & d \end{pmatrix}^{-1}
+    &= \textcolor{blue}{\frac{1}{ad - bc}}\begin{pmatrix} d & -b \\ -c & a \end{pmatrix}.
+\end{align*}
+A piecewise definition, using a \texttt{cases} environment (and a little colour,
+which the theme switcher remaps per palette):
+\[
+  \operatorname{sgn}(x) =
+  \begin{cases}
+    \textcolor{blue}{+1} & \text{if } x > 0, \\
+    \phantom{+}0 & \text{if } x = 0, \\
+    \textcolor{red}{-1} & \text{if } x < 0.
+  \end{cases}
+\]

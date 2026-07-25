@@ -1,0 +1,114 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% reflowtex extraction template.
+%
+% This is the wrapper reflowtex compiles every snippet inside. The build pipeline
+% (src/encode/pipeline.py) substitutes two placeholders, written further down as
+% "PREAMBLE-MARK" and "CONTENT-MARK" below (each is the word PREAMBLE or CONTENT
+% wrapped in double percent signs):
+%
+%   - the PREAMBLE marker  → the caller's preamble (extra packages, macros, fonts)
+%   - the CONTENT marker   → the snippet body, set between begin/end document
+%
+% (The markers are not spelled literally in this comment because the substitution
+% is a plain text replace and would rewrite them here too.)
+%
+% Everything the pipeline itself depends on (the serializer, the TikZ picture
+% capture, the shipout hook) is set up *here*, before the user preamble, so a
+% preamble is free to load its own packages and TikZ libraries on top.
+
+\documentclass{article}
+
+% ── Fonts & math ─────────────────────────────────────────────────────────────
+% mathtools must load before unicode-math: loaded afterwards it re-patches
+% \overbrace/\underbrace to the legacy cmex construction, whose glyphs and rule
+% height are wrong for an OpenType math font (the brace renders as stray
+% characters around a thick black bar). A user preamble may \usepackage it again
+% — the second load is a no-op.
+\usepackage{mathtools}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+% Defaults chosen to look like classic Computer Modern. Override in a preamble
+% with another \setmainfont / \setmathfont if you want a different face; the last
+% declaration wins.
+\setmainfont{Latin Modern Roman}
+\setmathfont{NewCMMath-Regular.otf}
+
+% Classic Computer Modern fraction geometry. The OpenType MATH constants scale
+% rule thickness and clearances with the script font size, which makes nested
+% fraction bars hairline-thin (0.2pt at scriptscript) and lets denominators
+% nearly touch the bar. Classic TeX (Appendix G) uses a constant 0.4pt rule at
+% every nesting level. unicode-math re-initialises every \Umath parameter from
+% the font's MATH table inside \everymath/\everydisplay, so the overrides must be
+% appended to those token lists to run *after* unicode-math's hook.
+\def\reflowtexClassicFracParams{%
+  \Umathfractionrule\displaystyle=0.4pt
+  \Umathfractionrule\crampeddisplaystyle=0.4pt
+  \Umathfractionnumvgap\displaystyle=1.2pt
+  \Umathfractionnumvgap\crampeddisplaystyle=1.2pt
+  \Umathfractiondenomvgap\displaystyle=1.2pt
+  \Umathfractiondenomvgap\crampeddisplaystyle=1.2pt
+  \Umathfractionrule\textstyle=0.4pt
+  \Umathfractionrule\crampedtextstyle=0.4pt
+  \Umathfractionnumvgap\textstyle=0.4pt
+  \Umathfractionnumvgap\crampedtextstyle=0.4pt
+  \Umathfractiondenomvgap\textstyle=0.4pt
+  \Umathfractiondenomvgap\crampedtextstyle=0.4pt
+  \Umathfractionrule\scriptstyle=0.4pt
+  \Umathfractionrule\crampedscriptstyle=0.4pt
+  \Umathfractionnumvgap\scriptstyle=0.4pt
+  \Umathfractionnumvgap\crampedscriptstyle=0.4pt
+  \Umathfractiondenomvgap\scriptstyle=0.4pt
+  \Umathfractiondenomvgap\crampedscriptstyle=0.4pt
+  \Umathfractionrule\scriptscriptstyle=0.4pt
+  \Umathfractionrule\crampedscriptscriptstyle=0.4pt
+  \Umathfractionnumvgap\scriptscriptstyle=0.4pt
+  \Umathfractionnumvgap\crampedscriptscriptstyle=0.4pt
+  \Umathfractiondenomvgap\scriptscriptstyle=0.4pt
+  \Umathfractiondenomvgap\crampedscriptscriptstyle=0.4pt
+}
+\AtBeginDocument{%
+  \everymath\expandafter{\the\everymath\reflowtexClassicFracParams}%
+  \everydisplay\expandafter{\the\everydisplay\reflowtexClassicFracParams}%
+}
+
+% ── reflowtex node-list serializer ─────────────────────────────────────────────
+% Exports the finished node list as output.json (see src/extract/serializer.lua).
+\directlua{dofile("serializer.lua")}
+
+% ── TikZ picture capture ─────────────────────────────────────────────────────
+% A tikzpicture is already an hbox with the dimensions TeX computed; only its
+% contents are unusable to us (raw pdf_literal drawing operators). So each
+% picture is externalised to its own PDF, which the pipeline converts to SVG —
+% the box keeps TeX's metrics and gains a payload the browser can draw. Because
+% the result is still just a box, a picture can sit anywhere a box can: inline,
+% inside math, inside an align row.
+%
+% Loaded here, before the user preamble, so a preamble can \usetikzlibrary{…}
+% and \pgfdeclarelayer on top of it.
+\usepackage{tikz}
+\usetikzlibrary{external}
+\tikzexternalize[prefix=pics/]
+% Linking the node back to its file needs a hook, because the image node cannot
+% name its own file (LuaTeX's img.fromnode is unavailable here). The hook must be
+% \pgfincludeexternalgraphics: tikz's external library never calls
+% \includegraphics, so patching that would silently do nothing.
+\newcount\reflowtexPicCount
+\let\reflowtexOrigIncludeExternal\pgfincludeexternalgraphics
+\def\pgfincludeexternalgraphics#1{%
+  \global\advance\reflowtexPicCount by 1
+  \directlua{Serializer.note_picture(\the\reflowtexPicCount, "\luaescapestring{#1}")}%
+  % The attribute rides on every node created inside the group, which is how the
+  % image rule node is later matched to its file.
+  \begingroup\attribute902=\reflowtexPicCount\relax\reflowtexOrigIncludeExternal{#1}\endgroup}
+
+% The serializer needs the finished page to learn the document order of
+% paragraphs and displays (displays never reach pre_linebreak_filter).
+% \ShipoutBox is \chardef'd by the kernel, so \numexpr yields its number.
+\AddToHook{shipout/before}{\directlua{Serializer.shipout(\the\numexpr\ShipoutBox\relax)}}
+
+% ── User preamble ────────────────────────────────────────────────────────────
+%%PREAMBLE%%
+
+\begin{document}
+%%CONTENT%%
+\end{document}

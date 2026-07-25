@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en-us">
+<head><script src="/reflowtex/livereload.js?mindelay=10&amp;v=2&amp;port=60044&amp;path=reflowtex/livereload" data-no-instant defer></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Categories · Reflow TeX</title>
+<meta name="description" content="Real LaTeX, set by a genuine TeX run and re-flowed live in the browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ctext%20x='3'%20y='13'%20font-size='15'%20font-family='Georgia,serif'%20fill='%23888'%3E%E2%88%AB%3C/text%3E%3C/svg%3E">
+
+
+<script>
+  (function () {                                   
+    var KEY = 'reflowtex-theme';
+    function set(t) {
+      var root = document.documentElement;
+      root.classList.remove('dark', 'sepia', 'contrast');
+      if (t !== 'light') root.classList.add(t);
+      root.setAttribute('data-theme', t);
+      try { localStorage.setItem(KEY, t); } catch (e) {}
+    }
+    var saved; try { saved = localStorage.getItem(KEY); } catch (e) {}
+    set(saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    window.__setTheme = set;
+  })();
+  (function () {                                   
+    var KEY = 'reflowtex-width';
+    function set(w) {
+      document.documentElement.setAttribute('data-width', w);
+      try { localStorage.setItem(KEY, w); } catch (e) {}
+    }
+    var saved; try { saved = localStorage.getItem(KEY); } catch (e) {}
+    set(saved || 'auto');
+    window.__setWidth = set;
+  })();
+  (function () {                                   
+    var KEY = 'reflowtex-zoom', MIN = 0.5, MAX = 3, STEP = 1.1, z = 1;
+    function clamp(v) { return Math.min(MAX, Math.max(MIN, v)); }
+    function apply() {
+      document.documentElement.style.setProperty('--lt-zoom', z);
+      var el = document.getElementById('zoom-level');
+      if (el) el.textContent = Math.round(z * 100) + '%';
+      try { localStorage.setItem(KEY, String(z)); } catch (e) {}
+      window.dispatchEvent(new Event('resize'));
+    }
+    var saved; try { saved = parseFloat(localStorage.getItem(KEY)); } catch (e) {}
+    if (saved > 0) z = clamp(saved);
+    document.documentElement.style.setProperty('--lt-zoom', z);
+    window.__zoom = function (dir) { z = dir === 0 ? 1 : clamp(z * (dir > 0 ? STEP : 1 / STEP)); apply(); };
+    document.addEventListener('DOMContentLoaded', function () {
+      var el = document.getElementById('zoom-level');
+      if (el) el.textContent = Math.round(z * 100) + '%';
+    });
+  })();
+</script>
+
+<style>
+  :root { color-scheme: light dark; }
+   
+  html { background: #fafaf9; color: #333; transition: background .15s ease, color .15s ease; }
+  html.dark     { background: #0c0a09; color: #e7e5e4; }
+  html.sepia    { background: #f4ecd8; color: #453a26; }
+  html.contrast { background: #fff;    color: #000; }
+  body {
+    margin: 0; min-height: 100vh; line-height: 1.6;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+
+   
+  .site-nav {
+    display: flex; align-items: center; gap: 1.2rem;
+    max-width: 64rem; margin: 0 auto; padding: 1rem 1.25rem;
+    font-size: 0.9rem;
+  }
+  .site-nav .brand { font-weight: 700; letter-spacing: 0.01em; text-decoration: none; }
+  .site-nav .brand .int { opacity: 0.5; }
+  .site-nav .spacer { flex: 1; }
+  .site-nav a.navlink { text-decoration: none; opacity: 0.72; }
+  .site-nav a.navlink:hover { opacity: 1; }
+
+   
+  #lt-content {
+    max-width: 46rem; margin: 2rem auto 5rem; padding: 0 1.25rem;
+    zoom: var(--lt-zoom, 1);
+  }
+  html[data-width="narrow"] #lt-content { max-width: none; width: 34rem; }
+  html[data-width="normal"] #lt-content { max-width: none; width: 46rem; }
+  html[data-width="wide"]   #lt-content { max-width: none; width: 64rem; }
+  #lt-content h1 { font-weight: 700; line-height: 1.2; }
+  #lt-content h2 { font-weight: 650; margin-top: 2.5rem; opacity: 0.85; }
+
+   
+  .feature-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem 2.5rem; }
+  @media (min-width: 52rem) { .feature-grid { grid-template-columns: 1fr 1fr; } }
+  .feature-grid .latex-block { margin: 1rem 0; }
+
+   
+  .demo-link { margin: 1.5rem 0 0.5rem; }
+  .demo-link a {
+    display: inline-block; text-decoration: none; font-size: 0.95rem;
+    padding: 0.55rem 1.2rem; border-radius: 999px;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    background: color-mix(in srgb, currentColor 8%, transparent);
+  }
+  .demo-link a:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
+
+   
+  .hero { text-align: center; padding: 3.5rem 1rem 2.5rem; }
+  .hero .kicker {
+    font-size: 0.8rem; letter-spacing: 0.34em; text-transform: uppercase;
+    opacity: 0.5; font-weight: 600; padding-left: 0.34em;
+  }
+   
+  #stage {
+    box-sizing: border-box; width: min(720px, calc(100vw - 2rem)); height: 18rem;
+    margin: 1.6rem auto 0; padding: 0 clamp(0.5rem, 3vw, 2rem);
+    border-left: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
+    border-right: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #hero-flow { width: 100%; overflow: hidden; }          
+  #stage .latex-block { width: 100%; margin: 0; }
+  .hero .tagline { max-width: 34rem; margin: 1.8rem auto 0; opacity: 0.62; font-size: 0.95rem; }
+  .hero .cta { margin-top: 1.6rem; display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap; }
+  .hero .cta a {
+    text-decoration: none; padding: 0.5rem 1.1rem; border-radius: 999px;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 0.9rem;
+  }
+  .hero .cta a.primary { background: color-mix(in srgb, currentColor 14%, transparent); }
+  @media (prefers-reduced-motion: reduce) { .hero .tagline .motion { display: none; } }
+
+   
+  #lt-switches {
+    position: fixed; right: 1rem; bottom: 1rem; z-index: 1000;
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem;
+  }
+  @media (max-width: 34rem) { #lt-switches { flex-direction: column; align-items: flex-end; } }
+  .lt-switch {
+    display: flex; gap: 2px; padding: 3px; border-radius: 999px; font-size: 0.72rem;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    box-shadow: 0 1px 8px color-mix(in srgb, currentColor 14%, transparent);
+    backdrop-filter: blur(6px);
+  }
+  .lt-switch button {
+    border: 0; background: none; color: inherit; cursor: pointer; font: inherit;
+    padding: 0.3rem 0.6rem; border-radius: 999px; opacity: 0.7;
+    letter-spacing: 0.02em; white-space: nowrap;
+  }
+  .lt-switch button:hover { opacity: 1; }
+  #zoom-switch button[data-z="reset"] { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; }
+  html[data-width="auto"]     #width-switch button[data-w="auto"],
+  html:not([data-width])      #width-switch button[data-w="auto"],
+  html[data-width="narrow"]   #width-switch button[data-w="narrow"],
+  html[data-width="normal"]   #width-switch button[data-w="normal"],
+  html[data-width="wide"]     #width-switch button[data-w="wide"],
+  html[data-theme="light"]    #theme-switch button[data-t="light"],
+  html[data-theme="dark"]     #theme-switch button[data-t="dark"],
+  html[data-theme="sepia"]    #theme-switch button[data-t="sepia"],
+  html[data-theme="contrast"] #theme-switch button[data-t="contrast"] {
+    opacity: 1; background: color-mix(in srgb, currentColor 18%, transparent);
+  }
+</style>
+
+</head>
+<body>
+<nav class="site-nav">
+  <a class="brand" href="/reflowtex/">Reflow&nbsp;TeX</a>
+  <span class="spacer"></span><a class="navlink" href="/reflowtex/docs/">Docs</a><a class="navlink" href="/reflowtex/examples/">Examples</a><a class="navlink" href="/reflowtex/about/">About</a>
+  <a class="navlink" href="https://github.com/radek-p/reflowtex" rel="noopener">GitHub</a>
+</nav>
+
+
+<main id="lt-content">
+<h1>Categories</h1>
+
+
+</main>
+
+<div id="lt-switches">
+  <nav id="width-switch" class="lt-switch" aria-label="Content width">
+    <button type="button" data-w="auto"   onclick="window.__setWidth('auto')">Auto</button>
+    <button type="button" data-w="narrow" onclick="window.__setWidth('narrow')">Narrow</button>
+    <button type="button" data-w="normal" onclick="window.__setWidth('normal')">Normal</button>
+    <button type="button" data-w="wide"   onclick="window.__setWidth('wide')">Wide</button>
+  </nav>
+  <nav id="zoom-switch" class="lt-switch" aria-label="Text size">
+    <button type="button" data-z="out"   onclick="window.__zoom(-1)" title="Smaller" aria-label="Smaller">&minus;</button>
+    <button type="button" data-z="reset" onclick="window.__zoom(0)"  title="Reset"   aria-label="Reset text size" id="zoom-level">100%</button>
+    <button type="button" data-z="in"    onclick="window.__zoom(1)"  title="Bigger"  aria-label="Bigger">+</button>
+  </nav>
+  <nav id="theme-switch" class="lt-switch" aria-label="Colour theme">
+    <button type="button" data-t="light"    onclick="window.__setTheme('light')">Light</button>
+    <button type="button" data-t="dark"     onclick="window.__setTheme('dark')">Dark</button>
+    <button type="button" data-t="sepia"    onclick="window.__setTheme('sepia')">Sepia</button>
+    <button type="button" data-t="contrast" onclick="window.__setTheme('contrast')">Contrast</button>
+  </nav>
+</div>
+
+
+
+<div id="latex-schema" data-schema-b64="Ly8gU1BEWC1MaWNlbnNlLUlkZW50aWZpZXI6IEFHUEwtMy4wLW9yLWxhdGVyCi8vIFByb3RvYnVmIHNjaGVtYSBmb3IgdGhlIExhVGVYIG5vZGUgbGlzdC4gUmVwbGFjZXMgc2NoZW1hLmtpd2kuCi8vCi8vIHByb3RvMiAobm90IHByb3RvMykgb24gcHVycG9zZTogdGhlIHJlbmRlcmVyIHJlbGllcyBvbiBmaWVsZCAqcHJlc2VuY2UqIOKAlCBhCi8vIGdseXBoIGNhcnJpZXMgYG1ldHJpY3NgIGJ1dCBubyB3aWR0aDsgYSBib3ggY2FycmllcyBgc2hpZnRgIG9ubHkgd2hlbiBzaGlmdGVkOwovLyBnVyBmYWxscyBiYWNrIG9uIGB3aWR0aCA9PT0gdW5kZWZpbmVkYC4gcHJvdG8yIHRyYWNrcyBwcmVzZW5jZSBleHBsaWNpdGx5LCBzbwovLyBhbiB1bnNldCBmaWVsZCBkZWNvZGVzIGFzIGFic2VudCAodW5kZWZpbmVkIGluIEpTIHZpYSB0b09iamVjdHtkZWZhdWx0czpmYWxzZX0sCi8vIG1pc3NpbmcgaW4gUHl0aG9uIHZpYSBIYXNGaWVsZCksIGV4YWN0bHkgYXMgdGhlIGtpd2kgZm9ybWF0IGJlaGF2ZWQuIHByb3RvMwovLyB3b3VsZCBkZWZhdWx0IHVuc2V0IHNjYWxhcnMgdG8gMCBhbmQgbG9zZSB0aGF0IGRpc3RpbmN0aW9uLgovLwovLyBFbnVtIHZhbHVlcyBhcmUgbG93ZXJjYXNlZCB0byBtYXRjaCB0aGUgc3RyaW5ncyB0aGUgcmVuZGVyZXIgY29tcGFyZXMgYWdhaW5zdAovLyAoYG4udHlwZSA9PT0gJ2dseXBoJ2AsIGBpdC5raW5kID09PSAnZGlzcGxheSdgKTogcHJvdG9idWYuanMgdG9PYmplY3Qoe2VudW1zOgovLyBTdHJpbmd9KSB0aGVuIHlpZWxkcyB0aG9zZSBzdHJpbmdzIGRpcmVjdGx5LCB3aXRoIG5vIHRyYW5zbGF0aW9uIGxheWVyLgovLwovLyBGbG9hdHMgYXJlIGBkb3VibGVgIChraXdpIG9ubHkgaGFkIDMyLWJpdCBmbG9hdCk6IGdsdWVfc2V0IGFuZCB0aGUgdHJhbnNmb3JtCi8vIG1hdHJpeCBub3cgcm91bmQtdHJpcCBMdWEncyBmbG9hdDY0IGV4YWN0bHksIHJlbW92aW5nIHRoZSBwcmVjaXNpb24gcXVlc3Rpb24uCgpzeW50YXggPSAicHJvdG8yIjsKCnBhY2thZ2UgbGF0ZXg7CgplbnVtIE5vZGVUeXBlIHsKICBnbHlwaCAgICAgPSAwOwogIGdsdWUgICAgICA9IDE7CiAga2VybiAgICAgID0gMjsKICBydWxlICAgICAgPSAzOwogIGhsaXN0ICAgICA9IDQ7CiAgdmxpc3QgICAgID0gNTsKICBkaXNjICAgICAgPSA2OwogIHBlbmFsdHkgICA9IDc7CiAgbWF0aCAgICAgID0gODsKICBwaWN0dXJlICAgPSA5OyAgIC8vIGFuIGV4dGVybmFsaXNlZCB0aWt6cGljdHVyZSwgZHJhd24gZnJvbSBwcmVjb21waWxlZCBTVkcKICB0cmFuc2Zvcm0gPSAxMDsgIC8vIFxyb3RhdGVib3ggYW5kIGZyaWVuZHM6IGEgbWF0cml4IGFwcGxpZWQgdG8gYGNoaWxkcmVuYAp9CgptZXNzYWdlIE5vZGUgewogIG9wdGlvbmFsIE5vZGVUeXBlIHR5cGUgICAgICAgICAgPSAxOwogIG9wdGlvbmFsIGludDMyICAgIGNoYXIgICAgICAgICAgPSAyOyAgIC8vIGdseXBoOiBVbmljb2RlIGNvZGVwb2ludAogIG9wdGlvbmFsIHVpbnQzMiAgIGZvbnQgICAgICAgICAgPSAzOyAgIC8vIGdseXBoOiBmb250IElECiAgb3B0aW9uYWwgaW50MzIgICAgd2lkdGggICAgICAgICA9IDQ7ICAgLy8gZ2x1ZS9rZXJuL3J1bGUvaGxpc3Qvdmxpc3QgKGdseXBocyB1c2UgYG1ldHJpY3NgKQogIG9wdGlvbmFsIGludDMyICAgIGhlaWdodCAgICAgICAgPSA1OyAgIC8vIHJ1bGUvaGxpc3Qvdmxpc3QKICBvcHRpb25hbCBpbnQzMiAgICBkZXB0aCAgICAgICAgID0gNjsgICAvLyBydWxlL2hsaXN0L3ZsaXN0CiAgb3B0aW9uYWwgaW50MzIgICAgc3RyZXRjaCAgICAgICA9IDc7ICAgLy8gZ2x1ZQogIG9wdGlvbmFsIGludDMyICAgIHNocmluayAgICAgICAgPSA4OyAgIC8vIGdsdWUKICBvcHRpb25hbCB1aW50MzIgICBzdHJldGNoX29yZGVyID0gOTsgICAvLyBnbHVlIChvbWl0dGVkIHdoZW4gMCkKICBvcHRpb25hbCB1aW50MzIgICBzaHJpbmtfb3JkZXIgID0gMTA7ICAvLyBnbHVlIChvbWl0dGVkIHdoZW4gMCkKICBvcHRpb25hbCB1aW50MzIgICBzdWJ0eXBlICAgICAgID0gMTE7ICAvLyBnbHVlL2Rpc2MgKG9taXR0ZWQgd2hlbiAwKQogIG9wdGlvbmFsIGludDMyICAgIGtlcm4gICAgICAgICAgPSAxMjsgIC8vIGtlcm46IHNwYWNpbmcgYW1vdW50CiAgb3B0aW9uYWwgaW50MzIgICAgc2hpZnQgICAgICAgICA9IDEzOyAgLy8gaGxpc3Qvdmxpc3QgKG9taXR0ZWQgd2hlbiAwKQogIG9wdGlvbmFsIGRvdWJsZSAgIGdsdWVfc2V0ICAgICAgPSAxNDsgIC8vIGhsaXN0L3ZsaXN0OiBwcmUtY29tcHV0ZWQgZ2x1ZSByYXRpbwogIG9wdGlvbmFsIHVpbnQzMiAgIGdsdWVfc2lnbiAgICAgPSAxNTsgIC8vIGhsaXN0L3ZsaXN0IChvbWl0dGVkIHdoZW4gMCkKICBvcHRpb25hbCB1aW50MzIgICBnbHVlX29yZGVyICAgID0gMTY7ICAvLyBobGlzdC92bGlzdCAob21pdHRlZCB3aGVuIDApCiAgcmVwZWF0ZWQgTm9kZSAgICAgY2hpbGRyZW4gICAgICA9IDE3OyAgLy8gaGxpc3Qvdmxpc3QgKHJlY3Vyc2l2ZSkKICByZXBlYXRlZCBOb2RlICAgICBwcmUgICAgICAgICAgID0gMTg7ICAvLyBkaXNjCiAgcmVwZWF0ZWQgTm9kZSAgICAgcG9zdCAgICAgICAgICA9IDE5OyAgLy8gZGlzYwogIHJlcGVhdGVkIE5vZGUgICAgIHJlcGxhY2UgICAgICAgPSAyMDsgIC8vIGRpc2MKICBvcHRpb25hbCBpbnQzMiAgICBwZW5hbHR5ICAgICAgID0gMjE7ICAvLyBwZW5hbHR5OiBicmVhayBwZW5hbHR5IHZhbHVlCiAgb3B0aW9uYWwgaW50MzIgICAgc3Vycm91bmQgICAgICA9IDIyOyAgLy8gbWF0aDogdGhpbi1zcGFjZSB3aWR0aAogIG9wdGlvbmFsIHN0cmluZyAgIGNvbG9yICAgICAgICAgPSAyMzsgIC8vIGdseXBoL3J1bGU6IENTUyBoZXggY29sb3VyOyBhYnNlbnQgPSBkZWZhdWx0IHRleHQgY29sb3VyCiAgb3B0aW9uYWwgdWludDMyICAgcGljdHVyZSAgICAgICA9IDI0OyAgLy8gcGljdHVyZTogMS1iYXNlZCBpbmRleCBpbnRvIERvY3VtZW50LnBpY3R1cmVzCiAgb3B0aW9uYWwgTm9kZSAgICAgbGVhZGVyICAgICAgICA9IDI1OyAgLy8gZ2x1ZTogYm94IHRpbGVkIGFjcm9zcyB0aGUgc2V0IHdpZHRoIChcY2xlYWRlcnMsIGFycm93cykKCiAgLy8gdHJhbnNmb3JtOiB0aGUgUERGIG1hdHJpeCBbYSBiIGMgZF0gZnJvbSBccm90YXRlYm94L1xyZWZsZWN0Ym94L1xzY2FsZWJveCwKICAvLyBhcHBsaWVkIGFib3V0IHRoZSBjdXJyZW50IHBvaW50LiBObyBtZXRyaWNzIG9mIGl0cyBvd24g4oCUIGl0IG9ubHkgd3JhcHMgaXRzCiAgLy8gY2hpbGRyZW4gKHRoZSBlbmNsb3NpbmcgYm94IHdhcyBhbHJlYWR5IHNpemVkIGJ5IFRlWCkuCiAgb3B0aW9uYWwgZG91YmxlICAgbV9hICAgICAgICAgICA9IDI2OwogIG9wdGlvbmFsIGRvdWJsZSAgIG1fYiAgICAgICAgICAgPSAyNzsKICBvcHRpb25hbCBkb3VibGUgICBtX2MgICAgICAgICAgID0gMjg7CiAgb3B0aW9uYWwgZG91YmxlICAgbV9kICAgICAgICAgICA9IDI5OwoKICAvLyBnbHlwaDogY2l0YXRpb24gd2lyaW5nLiBgY2l0ZWAgbGlua3MgYSBcbHJjaXRlIG51bWJlcidzIGdseXBoczsgYGNpdGV0YXJnZXRgCiAgLy8gbWFya3MgYSBiaWJsaW9ncmFwaHkgW25dIGxhYmVsLgogIG9wdGlvbmFsIHVpbnQzMiAgIGNpdGUgICAgICAgICAgPSAzMDsKICBvcHRpb25hbCB1aW50MzIgICBjaXRldGFyZ2V0ICAgID0gMzE7CgogIC8vIGdseXBoOiAxLWJhc2VkIGluZGV4IGludG8gRG9jdW1lbnQuZ2x5cGhfbWV0cmljcy4gQSBnbHlwaCdzIHdpZHRoL2hlaWdodC8KICAvLyBkZXB0aCBhcmUgaW50ZXJuZWQgdGhlcmUgKHRoZSBzYW1lIGJveCByZXBlYXRzIGFjcm9zcyB0aG91c2FuZHMgb2YgZ2x5cGhzKQogIC8vIGFuZCByZWZlcmVuY2VkIGhlcmUgaW5zdGVhZCBvZiBzdG9yZWQgaW5saW5lLiBPbmx5IGdseXBocyB1c2UgdGhpcy4KICBvcHRpb25hbCB1aW50MzIgICBtZXRyaWNzICAgICAgID0gMzI7Cn0KCi8vIE9uZSBkaXN0aW5jdCBnbHlwaCBib3ggKHdpZHRoL2hlaWdodC9kZXB0aCBpbiBzcCksIHJlZmVyZW5jZWQgYnkgTm9kZS5tZXRyaWNzLgptZXNzYWdlIEdseXBoTWV0cmljcyB7CiAgb3B0aW9uYWwgaW50MzIgd2lkdGggID0gMTsKICBvcHRpb25hbCBpbnQzMiBoZWlnaHQgPSAyOwogIG9wdGlvbmFsIGludDMyIGRlcHRoICA9IDM7Cn0KCi8vIEEgcHJlY29tcGlsZWQgdGlrenBpY3R1cmUuIGBzdmdgIGlzIHRoZSBtYXJrdXAgaW5zaWRlIHRoZSB3cmFwcGluZyA8Zz4gKGlkcwovLyBuYW1lc3BhY2VkLCBjb2xvdXJzIHJld3JpdHRlbiB0byBDU1MgY3VzdG9tIHByb3BlcnRpZXMpLiB2Yl93L3ZiX2ggYXJlIHRoZQovLyBzb3VyY2Ugdmlld0JveCwgc2NhbGVkIGJ5IHRoZSByZW5kZXJlciB0byB0aGUgbm9kZSdzIFRlWCB3aWR0aC4KbWVzc2FnZSBQaWN0dXJlIHsKICBvcHRpb25hbCBzdHJpbmcgc3ZnICA9IDE7CiAgb3B0aW9uYWwgZG91YmxlIHZiX3cgPSAyOwogIG9wdGlvbmFsIGRvdWJsZSB2Yl9oID0gMzsKfQoKbWVzc2FnZSBGb250SW5mbyB7CiAgb3B0aW9uYWwgdWludDMyIGlkICAgICAgID0gMTsKICBvcHRpb25hbCBzdHJpbmcgbmFtZSAgICAgPSAyOwogIG9wdGlvbmFsIHVpbnQzMiBzaXplX3NwICA9IDM7CiAgb3B0aW9uYWwgc3RyaW5nIGZpbGVuYW1lID0gNDsKfQoKbWVzc2FnZSBQYXJhZ3JhcGggewogIHJlcGVhdGVkIE5vZGUgIG5vZGVzICA9IDE7CiAgb3B0aW9uYWwgaW50MzIgaW5kZW50ID0gMjsgIC8vIHNwOyBsZWZ0IG9mZnNldCBmcm9tIFxwYXJzaGFwZSwgMCBub3JtYWxseQogIC8vIFRlWCBpbnRlcmxpbmUgcGFyYW1ldGVycyAoc3ApIHNvIHRoZSByZW5kZXJlciByZXByb2R1Y2VzIHRoZSBleGFjdAogIC8vIGJhc2VsaW5lLXRvLWJhc2VsaW5lIGFkdmFuY2Ugd2hlbiBpdCByZS1icmVha3MgdGhlIHBhcmFncmFwaC4KICBvcHRpb25hbCBpbnQzMiBiYXNlbGluZXNraXAgID0gMzsKICBvcHRpb25hbCBpbnQzMiBsaW5lc2tpcCAgICAgID0gNDsKICBvcHRpb25hbCBpbnQzMiBsaW5lc2tpcGxpbWl0ID0gNTsKICAvLyBQZXItcGFyYWdyYXBoIGFsaWdubWVudCBmcm9tIFRlWCdzIFxsZWZ0c2tpcC9ccmlnaHRza2lwOiAiY2VudGVyIiwgImxlZnQiCiAgLy8gKFxyYWdnZWRyaWdodCksIG9yICJyaWdodCIgKFxyYWdnZWRsZWZ0KS4gQWJzZW50ID0ganVzdGlmaWVkICh0aGUgZGVmYXVsdCksCiAgLy8gc28gdGhlIHBhcmFncmFwaCBpbmhlcml0cyB0aGUgYmxvY2sncyAtLWxhdGV4LWFsaWduLgogIG9wdGlvbmFsIHN0cmluZyBhbGlnbiA9IDY7Cn0KCmVudW0gSXRlbUtpbmQgewogIHBhcmFncmFwaCA9IDA7CiAgZGlzcGxheSAgID0gMTsKICB2c3BhY2UgICAgPSAyOwp9CgptZXNzYWdlIENvbnRlbnRJdGVtIHsKICBvcHRpb25hbCBJdGVtS2luZCBraW5kICAgPSAxOwogIG9wdGlvbmFsIHVpbnQzMiAgIHBhcmEgICA9IDI7ICAvLyBwYXJhZ3JhcGg6IDEtYmFzZWQgaW5kZXggaW50byBEb2N1bWVudC5wYXJhZ3JhcGhzCiAgb3B0aW9uYWwgTm9kZSAgICAgYm94ICAgID0gMzsgIC8vIGRpc3BsYXk6IHRoZSBmaW5pc2hlZCBobGlzdCwgZ2x1ZSBhbHJlYWR5IHNldAogIG9wdGlvbmFsIGludDMyICAgIGFtb3VudCA9IDQ7ICAvLyB2c3BhY2U6IHZlcnRpY2FsIGdhcCBpbiBzcAoKICAvLyBkaXNwbGF5OiB0aGUgYmFuZCBbZGlzcGxheV9pbmRlbnQsIGRpc3BsYXlfaW5kZW50K2Rpc3BsYXlfd2lkdGhdIHRoZSBkaXNwbGF5CiAgLy8gb2NjdXBpZWQsIGFuZCB3aGVyZSBUZVggc2hpZnRlZCB0aGUgYm94IHdpdGhpbiBpdC4KICBvcHRpb25hbCBpbnQzMiBkaXNwbGF5X3dpZHRoICA9IDU7CiAgb3B0aW9uYWwgaW50MzIgZGlzcGxheV9pbmRlbnQgPSA2OwogIG9wdGlvbmFsIGludDMyIGRpc3BsYXlfc2hpZnQgID0gNzsKfQoKbWVzc2FnZSBEb2N1bWVudCB7CiAgcmVwZWF0ZWQgRm9udEluZm8gICAgIGZvbnRzICAgICAgICAgPSAxOwogIHJlcGVhdGVkIFBhcmFncmFwaCAgICBwYXJhZ3JhcGhzICAgID0gMjsKICByZXBlYXRlZCBDb250ZW50SXRlbSAgY29udGVudCAgICAgICA9IDM7CiAgcmVwZWF0ZWQgUGljdHVyZSAgICAgIHBpY3R1cmVzICAgICAgPSA0OwogIHJlcGVhdGVkIEdseXBoTWV0cmljcyBnbHlwaF9tZXRyaWNzID0gNTsgIC8vIGludGVybmVkIGdseXBoIGJveGVzOyBzZWUgTm9kZS5tZXRyaWNzCn0K" hidden></div>
+
+
+
+
+<script id="latex-font-map" type="application/json"
+        data-fonts-base="/reflowtex/fonts/">{"NewCMMath-Regular.otf":"NewCMMath-Regular.reflowtex-de55af25.otf","lmmono10-regular.otf":"lmmono10-regular.otf","lmroman10-bold.otf":"lmroman10-bold.otf","lmroman10-italic.otf":"lmroman10-italic.otf","lmroman10-regular.otf":"lmroman10-regular.otf","lmroman12-bold.otf":"lmroman12-bold.otf","lmroman12-italic.otf":"lmroman12-italic.otf","lmroman17-regular.otf":"lmroman17-regular.otf","lmroman7-regular.otf":"lmroman7-regular.otf"}</script>
+
+
+<style>
+  .latex-block { margin: 1.25rem 0; overflow: visible; }
+  .latex-block svg {
+    display: block; max-width: 100%; overflow: visible;
+    font-weight: normal !important; font-style: normal !important;
+  }
+  .latex-block svg text, .latex-block svg tspan {
+    font-weight: normal !important; font-style: normal !important;
+    fill: currentColor;
+  }
+  .latex-display { overflow-x: auto; padding: 4px 0; }
+  .latex-display > svg { max-width: none; }
+  .latex-block--missing {
+    border: 2px dashed #c00; padding: 0.75em 1em; color: #c00;
+    font-size: 0.9em; border-radius: 4px;
+  }
+  #lt-agpl-notice {
+    margin: 4rem auto 2rem; font-size: 0.75rem; line-height: 1.5;
+    text-align: center; opacity: 0.55;
+  }
+  #lt-agpl-notice a { color: inherit; }
+</style><footer id="lt-agpl-notice">
+  Rendered with <a href="https://github.com/radek-p/reflowtex" rel="license">Reflow TeX</a> —
+  free software under <abbr title="GNU Affero General Public License v3.0 or later">AGPL-3.0-or-later</abbr>.
+  <a href="https://github.com/radek-p/reflowtex">Source code</a>.
+</footer>
+
+<script src="/reflowtex/protobuf.min.js?v=69b02b21"></script>
+<script src="/reflowtex/latex-viewer.js?v=be0ce05c"></script>
+
+</body>
+</html>

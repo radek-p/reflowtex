@@ -1,0 +1,38 @@
+# Reflow TeX — project landing site.
+#
+# Build it with ./build.sh (runs the reflowtex prebuild, then hugo). See README.md.
+#
+# baseURL: for a GitHub Pages *project* site this is https://<user>.github.io/<repo>/.
+# The viewer resolves font URLs against it (data-fonts-base uses relURL), so a
+# subpath works — just set the real value here before deploying. For a custom
+# domain or a user/org page served at the root, set it to that root instead.
+baseURL = "https://radek-p.github.io/reflowtex/"
+languageCode = "en-us"
+title = "Reflow TeX"
+enableInlineShortcodes = true
+
+[params]
+  github = "https://github.com/radek-p/reflowtex"
+  # AGPL-3.0 §13 source offer, read by the viewer partial's footer.
+  reflowtexSource = "https://github.com/radek-p/reflowtex"
+  tagline = "Real LaTeX, set by a genuine TeX run and re-flowed live in the browser."
+
+# The landing copy is rendered through the reflowtex pipeline via {{< latex >}}
+# shortcodes wrapped in a little layout HTML (feature grid, hero), so unsafe
+# (raw-HTML passthrough in Markdown) is required.
+[markup.goldmark.renderer]
+  unsafe = true
+
+[menu]
+  [[menu.main]]
+    name = "Docs"
+    pageRef = "/docs"
+    weight = 10
+  [[menu.main]]
+    name = "Examples"
+    pageRef = "/examples"
+    weight = 20
+  [[menu.main]]
+    name = "About"
+    pageRef = "/about"
+    weight = 30

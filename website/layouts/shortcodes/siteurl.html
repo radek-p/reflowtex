@@ -1,0 +1,4 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* Resolve a site-relative path against the baseURL (so links work under a
+       GitHub Pages project subpath). Usage: {{< siteurl "testmath/" >}} */ -}}
+{{- (.Get 0) | relURL -}}

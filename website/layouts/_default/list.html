@@ -1,0 +1,12 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{ define "main" }}
+<main id="lt-content">
+<h1>{{ .Title }}</h1>
+{{ .Content }}
+{{ with .Pages }}
+<ul class="child-list">
+  {{ range . }}<li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>{{ end }}
+</ul>
+{{ end }}
+</main>
+{{ end }}

@@ -1,0 +1,59 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  reflowtex viewer partial. Include it once, near the end of any layout that can
+  contain {{< latex >}} blocks (e.g. in your baseof.html before </body>):
+
+      {{ partial "reflowtex-viewer.html" . }}
+
+  It embeds the schema, the minimum CSS the rendered SVG needs, and the two
+  scripts (protobuf.min.js must load before latex-viewer.js). prebuild.py copies
+  both scripts into static/ and writes data/latex_schema.json.
+*/ -}}
+{{ with site.Data.latex_schema }}
+<div id="latex-schema" data-schema-b64="{{ .schema_b64 }}" hidden></div>
+{{ end }}
+{{/* Font URL map: original filename → served filename (a modified font is served
+     renamed + content-hashed). safeJS keeps it raw JSON in the script context. */}}
+{{ with site.Data.latex_font_map }}
+{{/* data-fonts-base makes @font-face URLs respect the site's baseURL, so fonts
+     resolve when the site is served under a subpath (e.g. a GitHub Pages project
+     site at /reponame/). Defaults to /fonts/ in the viewer when absent. */}}
+<script id="latex-font-map" type="application/json"
+        data-fonts-base="{{ "fonts/" | relURL }}">{{ . | jsonify | safeJS }}</script>
+{{ end }}
+
+<style>
+  .latex-block { margin: 1.25rem 0; overflow: visible; }
+  .latex-block svg {
+    display: block; max-width: 100%; overflow: visible;
+    font-weight: normal !important; font-style: normal !important;
+  }
+  .latex-block svg text, .latex-block svg tspan {
+    font-weight: normal !important; font-style: normal !important;
+    fill: currentColor;
+  }
+  .latex-display { overflow-x: auto; padding: 4px 0; }
+  .latex-display > svg { max-width: none; }
+  .latex-block--missing {
+    border: 2px dashed #c00; padding: 0.75em 1em; color: #c00;
+    font-size: 0.9em; border-radius: 4px;
+  }
+  #lt-agpl-notice {
+    margin: 4rem auto 2rem; font-size: 0.75rem; line-height: 1.5;
+    text-align: center; opacity: 0.55;
+  }
+  #lt-agpl-notice a { color: inherit; }
+</style>
+
+{{- /* AGPL-3.0 §13: latex-viewer.js runs in the visitor's browser, so a deployed
+       page must offer its users the Corresponding Source. Set the repository URL
+       in your site config as params.reflowtexSource; keep this notice (or an
+       equivalent source link) on any site you publish. */ -}}
+<footer id="lt-agpl-notice">
+  Rendered with <a href="{{ site.Params.reflowtexSource | default "https://github.com/radek-p/reflowtex" }}" rel="license">Reflow TeX</a> —
+  free software under <abbr title="GNU Affero General Public License v3.0 or later">AGPL-3.0-or-later</abbr>.
+  <a href="{{ site.Params.reflowtexSource | default "https://github.com/radek-p/reflowtex" }}">Source code</a>.
+</footer>
+
+<script src="{{ "protobuf.min.js" | relURL }}?v={{ substr (readFile "static/protobuf.min.js" | crypto.MD5) 0 8 }}"></script>
+<script src="{{ "latex-viewer.js" | relURL }}?v={{ substr (readFile "static/latex-viewer.js" | crypto.MD5) 0 8 }}"></script>

@@ -1,0 +1,23 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* The reader controls from the vanilla output: content width, zoom (text
+       size), and colour theme. They call the window.__set* / __zoom hooks
+       defined in partials/head.html. */ -}}
+<div id="lt-switches">
+  <nav id="width-switch" class="lt-switch" aria-label="Content width">
+    <button type="button" data-w="auto"   onclick="window.__setWidth('auto')">Auto</button>
+    <button type="button" data-w="narrow" onclick="window.__setWidth('narrow')">Narrow</button>
+    <button type="button" data-w="normal" onclick="window.__setWidth('normal')">Normal</button>
+    <button type="button" data-w="wide"   onclick="window.__setWidth('wide')">Wide</button>
+  </nav>
+  <nav id="zoom-switch" class="lt-switch" aria-label="Text size">
+    <button type="button" data-z="out"   onclick="window.__zoom(-1)" title="Smaller" aria-label="Smaller">&minus;</button>
+    <button type="button" data-z="reset" onclick="window.__zoom(0)"  title="Reset"   aria-label="Reset text size" id="zoom-level">100%</button>
+    <button type="button" data-z="in"    onclick="window.__zoom(1)"  title="Bigger"  aria-label="Bigger">+</button>
+  </nav>
+  <nav id="theme-switch" class="lt-switch" aria-label="Colour theme">
+    <button type="button" data-t="light"    onclick="window.__setTheme('light')">Light</button>
+    <button type="button" data-t="dark"     onclick="window.__setTheme('dark')">Dark</button>
+    <button type="button" data-t="sepia"    onclick="window.__setTheme('sepia')">Sepia</button>
+    <button type="button" data-t="contrast" onclick="window.__setTheme('contrast')">Contrast</button>
+  </nav>
+</div>

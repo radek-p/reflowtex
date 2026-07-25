@@ -1,0 +1,64 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  reflowtex shortcode. Two forms:
+
+    inline    {{< latex >}} $e^{i\pi} + 1 = 0$ {{< /latex >}}
+    file ref  {{< latex file="01-inline-math.tex" />}}   (self-closing)
+
+  The file ref points at a shared .tex source (resolved by prebuild.py against
+  its --demos-dir), so the same snippet can feed several integrations. prebuild
+  records file→key in site.Data.latex_files; the inline form is hashed here.
+
+  Optional attributes (all forwarded to latex-viewer.js as data-* on the block):
+    preamble="name"   use latex-preambles/name.tex (inline form; also hashed)
+    width="N"         layout width in pt (default: the block's own pixel width)
+    align="justify"   justify | left | right | center
+    class="…"         extra CSS classes on the wrapper
+    plus the Knuth–Plass knobs: line-penalty, adj-demerits,
+    double-hyphen-demerits, pretolerance, tolerance, tolerance2,
+    emergency-tolerance, last-line-min, last-line-penalty, max-expand,
+    max-shrink, min-gap, pad, protrusion, expansion, bleed.
+
+  Run prebuild.py before `hugo` to populate the data. */ -}}
+{{- $file := .Get "file" -}}
+{{- $key := "" -}}
+{{- if $file -}}
+  {{- $key = index site.Data.latex_files $file -}}
+{{- else -}}
+  {{- $inner := .Inner | strings.TrimSpace -}}
+  {{- $hashInput := $inner -}}
+  {{- with .Get "preamble" -}}
+    {{- $pre := os.ReadFile (printf "latex-preambles/%s.tex" .) -}}
+    {{- /* Boundary must match pipeline.content_key in reflowtex/src/encode. */ -}}
+    {{- $hashInput = printf "%s\n===REFLOWTEX-PREAMBLE-BOUNDARY===\n%s" $pre $inner -}}
+  {{- end -}}
+  {{- $key = printf "%.16s" ($hashInput | sha256) -}}
+{{- end -}}
+{{- $data := and $key (index site.Data.latex_blocks $key) -}}
+{{ if $data -}}
+<div class="latex-block{{ with .Get "class" }} {{ . }}{{ end }}"
+     data-nodelist-b64="{{ $data.nodelist_b64 }}"
+     {{- with .Get "width" }}                  data-latex-width="{{ . }}"{{ end }}
+     {{- with .Get "align" }}                  data-align="{{ . }}"{{ end }}
+     {{- with .Get "line-penalty" }}           data-line-penalty="{{ . }}"{{ end }}
+     {{- with .Get "adj-demerits" }}           data-adj-demerits="{{ . }}"{{ end }}
+     {{- with .Get "double-hyphen-demerits" }} data-double-hyphen-demerits="{{ . }}"{{ end }}
+     {{- with .Get "pretolerance" }}           data-pretolerance="{{ . }}"{{ end }}
+     {{- with .Get "tolerance" }}              data-tolerance="{{ . }}"{{ end }}
+     {{- with .Get "tolerance2" }}             data-tolerance2="{{ . }}"{{ end }}
+     {{- with .Get "emergency-tolerance" }}    data-emergency-tolerance="{{ . }}"{{ end }}
+     {{- with .Get "last-line-min" }}          data-last-line-min="{{ . }}"{{ end }}
+     {{- with .Get "last-line-penalty" }}      data-last-line-penalty="{{ . }}"{{ end }}
+     {{- with .Get "max-expand" }}             data-max-expand="{{ . }}"{{ end }}
+     {{- with .Get "max-shrink" }}             data-max-shrink="{{ . }}"{{ end }}
+     {{- with .Get "min-gap" }}                data-min-gap="{{ . }}"{{ end }}
+     {{- with .Get "pad" }}                    data-pad="{{ . }}"{{ end }}
+     {{- with .Get "protrusion" }}             data-protrusion="{{ . }}"{{ end }}
+     {{- with .Get "expansion" }}              data-expansion="{{ . }}"{{ end }}
+     {{- with .Get "bleed" }}                  data-bleed-px="{{ . }}"{{ end }}></div>
+{{- else }}
+<div class="latex-block latex-block--missing">
+  LaTeX block not compiled — run <code>python prebuild.py</code>.
+  <small>({{ with $file }}file <code>{{ . }}</code>{{ else }}hash <code>{{ $key }}</code>{{ end }})</small>
+</div>
+{{- end }}

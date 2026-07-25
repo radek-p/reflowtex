@@ -1,0 +1,12 @@
+# This directory doubles as a runnable reflowtex example site: `python prebuild.py`
+# then `hugo server`. In your own site you only need layouts/shortcodes/latex.html
+# and layouts/partials/reflowtex-viewer.html (copy them into your layouts/), plus
+# prebuild.py run before every build.
+baseURL = "/"
+title = "Reflow TeX — Hugo example"
+disableKinds = ["taxonomy", "term", "RSS", "sitemap", "404"]
+
+[params]
+  # AGPL-3.0 §13 source offer: the viewer partial links its footer here so users
+  # of a deployed site can obtain the Corresponding Source.
+  reflowtexSource = "https://github.com/radek-p/reflowtex"

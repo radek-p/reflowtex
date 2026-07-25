@@ -1,0 +1,173 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }} · {{ site.Title }}{{ end }}</title>
+<meta name="description" content="{{ site.Params.tagline }}">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ctext%20x='3'%20y='13'%20font-size='15'%20font-family='Georgia,serif'%20fill='%23888'%3E%E2%88%AB%3C/text%3E%3C/svg%3E">
+
+{{/* ── The three reader controls, ported from the vanilla output ──────────────
+     Colour theme, content width, and zoom. Each sets state before first paint
+     (from localStorage, else a sensible default) so nothing flashes, and exposes
+     a window.__set* / window.__zoom hook the floating switches call. */}}
+<script>
+  (function () {                                   // colour theme
+    var KEY = 'reflowtex-theme';
+    function set(t) {
+      var root = document.documentElement;
+      root.classList.remove('dark', 'sepia', 'contrast');
+      if (t !== 'light') root.classList.add(t);
+      root.setAttribute('data-theme', t);
+      try { localStorage.setItem(KEY, t); } catch (e) {}
+    }
+    var saved; try { saved = localStorage.getItem(KEY); } catch (e) {}
+    set(saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    window.__setTheme = set;
+  })();
+  (function () {                                   // content width
+    var KEY = 'reflowtex-width';
+    function set(w) {
+      document.documentElement.setAttribute('data-width', w);
+      try { localStorage.setItem(KEY, w); } catch (e) {}
+    }
+    var saved; try { saved = localStorage.getItem(KEY); } catch (e) {}
+    set(saved || 'auto');
+    window.__setWidth = set;
+  })();
+  (function () {                                   // zoom (text size)
+    var KEY = 'reflowtex-zoom', MIN = 0.5, MAX = 3, STEP = 1.1, z = 1;
+    function clamp(v) { return Math.min(MAX, Math.max(MIN, v)); }
+    function apply() {
+      document.documentElement.style.setProperty('--lt-zoom', z);
+      var el = document.getElementById('zoom-level');
+      if (el) el.textContent = Math.round(z * 100) + '%';
+      try { localStorage.setItem(KEY, String(z)); } catch (e) {}
+      window.dispatchEvent(new Event('resize'));
+    }
+    var saved; try { saved = parseFloat(localStorage.getItem(KEY)); } catch (e) {}
+    if (saved > 0) z = clamp(saved);
+    document.documentElement.style.setProperty('--lt-zoom', z);
+    window.__zoom = function (dir) { z = dir === 0 ? 1 : clamp(z * (dir > 0 ? STEP : 1 / STEP)); apply(); };
+    document.addEventListener('DOMContentLoaded', function () {
+      var el = document.getElementById('zoom-level');
+      if (el) el.textContent = Math.round(z * 100) + '%';
+    });
+  })();
+</script>
+
+<style>
+  :root { color-scheme: light dark; }
+  /* Palette lives on <html> so it also fills the strip a fixed-width column
+     reveals when it overflows horizontally. The viewer keys its colour maps off
+     the same html.dark / .sepia / .contrast classes, so text stays in step. */
+  html { background: #fafaf9; color: #333; transition: background .15s ease, color .15s ease; }
+  html.dark     { background: #0c0a09; color: #e7e5e4; }
+  html.sepia    { background: #f4ecd8; color: #453a26; }
+  html.contrast { background: #fff;    color: #000; }
+  body {
+    margin: 0; min-height: 100vh; line-height: 1.6;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+
+  /* ── Top nav ─────────────────────────────────────────────────────────────*/
+  .site-nav {
+    display: flex; align-items: center; gap: 1.2rem;
+    max-width: 64rem; margin: 0 auto; padding: 1rem 1.25rem;
+    font-size: 0.9rem;
+  }
+  .site-nav .brand { font-weight: 700; letter-spacing: 0.01em; text-decoration: none; }
+  .site-nav .brand .int { opacity: 0.5; }
+  .site-nav .spacer { flex: 1; }
+  .site-nav a.navlink { text-decoration: none; opacity: 0.72; }
+  .site-nav a.navlink:hover { opacity: 1; }
+
+  /* ── Content column (the width switch retargets it; zoom scales it) ───────*/
+  #lt-content {
+    max-width: 46rem; margin: 2rem auto 5rem; padding: 0 1.25rem;
+    zoom: var(--lt-zoom, 1);
+  }
+  html[data-width="narrow"] #lt-content { max-width: none; width: 34rem; }
+  html[data-width="normal"] #lt-content { max-width: none; width: 46rem; }
+  html[data-width="wide"]   #lt-content { max-width: none; width: 64rem; }
+  #lt-content h1 { font-weight: 700; line-height: 1.2; }
+  #lt-content h2 { font-weight: 650; margin-top: 2.5rem; opacity: 0.85; }
+
+  /* ── Feature grid: one column, two on wide screens ───────────────────────*/
+  .feature-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem 2.5rem; }
+  @media (min-width: 52rem) { .feature-grid { grid-template-columns: 1fr 1fr; } }
+  .feature-grid .latex-block { margin: 1rem 0; }
+
+  /* Prominent link to a standalone demo (e.g. the full testmath.tex page). */
+  .demo-link { margin: 1.5rem 0 0.5rem; }
+  .demo-link a {
+    display: inline-block; text-decoration: none; font-size: 0.95rem;
+    padding: 0.55rem 1.2rem; border-radius: 999px;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    background: color-mix(in srgb, currentColor 8%, transparent);
+  }
+  .demo-link a:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
+
+  /* ── Hero (the breathing paragraph) ──────────────────────────────────────
+     Sits OUTSIDE #lt-content, so the width/zoom controls (which act on the
+     reading column) never distort the animation. */
+  .hero { text-align: center; padding: 3.5rem 1rem 2.5rem; }
+  .hero .kicker {
+    font-size: 0.8rem; letter-spacing: 0.34em; text-transform: uppercase;
+    opacity: 0.5; font-weight: 600; padding-left: 0.34em;
+  }
+  /* Fixed height reserves the tallest (≈6-line) layout, so the paragraph reflows
+     *inside* a stationary box: the lead above and the tagline/buttons below never
+     move, and nothing on the page below the hero shifts. Only the width is
+     animated (by the JS); the line count changes within this reserved space. On
+     screens too narrow to breathe, the JS switches height back to auto. */
+  #stage {
+    box-sizing: border-box; width: min(720px, calc(100vw - 2rem)); height: 18rem;
+    margin: 1.6rem auto 0; padding: 0 clamp(0.5rem, 3vw, 2rem);
+    border-left: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
+    border-right: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #hero-flow { width: 100%; overflow: hidden; }         /* block is centred in #stage */
+  #stage .latex-block { width: 100%; margin: 0; }
+  .hero .tagline { max-width: 34rem; margin: 1.8rem auto 0; opacity: 0.62; font-size: 0.95rem; }
+  .hero .cta { margin-top: 1.6rem; display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap; }
+  .hero .cta a {
+    text-decoration: none; padding: 0.5rem 1.1rem; border-radius: 999px;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 0.9rem;
+  }
+  .hero .cta a.primary { background: color-mix(in srgb, currentColor 14%, transparent); }
+  @media (prefers-reduced-motion: reduce) { .hero .tagline .motion { display: none; } }
+
+  /* ── Floating switches (bottom-right), from the vanilla output ───────────*/
+  #lt-switches {
+    position: fixed; right: 1rem; bottom: 1rem; z-index: 1000;
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem;
+  }
+  @media (max-width: 34rem) { #lt-switches { flex-direction: column; align-items: flex-end; } }
+  .lt-switch {
+    display: flex; gap: 2px; padding: 3px; border-radius: 999px; font-size: 0.72rem;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    box-shadow: 0 1px 8px color-mix(in srgb, currentColor 14%, transparent);
+    backdrop-filter: blur(6px);
+  }
+  .lt-switch button {
+    border: 0; background: none; color: inherit; cursor: pointer; font: inherit;
+    padding: 0.3rem 0.6rem; border-radius: 999px; opacity: 0.7;
+    letter-spacing: 0.02em; white-space: nowrap;
+  }
+  .lt-switch button:hover { opacity: 1; }
+  #zoom-switch button[data-z="reset"] { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; }
+  html[data-width="auto"]     #width-switch button[data-w="auto"],
+  html:not([data-width])      #width-switch button[data-w="auto"],
+  html[data-width="narrow"]   #width-switch button[data-w="narrow"],
+  html[data-width="normal"]   #width-switch button[data-w="normal"],
+  html[data-width="wide"]     #width-switch button[data-w="wide"],
+  html[data-theme="light"]    #theme-switch button[data-t="light"],
+  html[data-theme="dark"]     #theme-switch button[data-t="dark"],
+  html[data-theme="sepia"]    #theme-switch button[data-t="sepia"],
+  html[data-theme="contrast"] #theme-switch button[data-t="contrast"] {
+    opacity: 1; background: color-mix(in srgb, currentColor 18%, transparent);
+  }
+</style>

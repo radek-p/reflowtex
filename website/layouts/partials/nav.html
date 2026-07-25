@@ -1,0 +1,13 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+<nav class="site-nav">
+  <a class="brand" href="{{ "" | relURL }}">Reflow&nbsp;TeX</a>
+  <span class="spacer"></span>
+  {{- range site.Menus.main }}
+  {{- /* Prefer the resolved page's permalink (correct trailing slash + baseURL
+         subpath); fall back to a raw .URL for external entries. */ -}}
+  {{- $href := .URL -}}
+  {{- with .Page }}{{ $href = .RelPermalink }}{{ end -}}
+  <a class="navlink" href="{{ $href }}">{{ .Name }}</a>
+  {{- end }}
+  <a class="navlink" href="{{ site.Params.github }}" rel="noopener">GitHub</a>
+</nav>
