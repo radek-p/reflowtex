@@ -30,8 +30,10 @@ codepoint will be wrong. Install it with `pip install fonttools`.
 """
 
 import hashlib
+import os
 import shutil
 import subprocess
+import tempfile
 import threading
 from pathlib import Path
 
@@ -76,6 +78,26 @@ class Fonts:
         self._convert_lock = threading.Lock()
 
     # ── provisioning ─────────────────────────────────────────────────────────
+    @staticmethod
+    def _copy_atomic(src, dst: Path) -> None:
+        """Copy src to dst via a same-directory temp file + atomic rename.
+
+        Blocks compile on a thread pool, and more than one can need the same
+        font at once. A plain shutil.copy(src, dst) briefly exposes a
+        partially-written dst; a racing thread's `dst.exists()` check can see
+        that half-written file, decide provisioning is done, and hand it
+        straight to fontTools, which chokes ("not enough data"). Writing to a
+        temp name first and renaming into place means dst only ever appears
+        once it's complete, so that race window doesn't exist."""
+        fd, tmp = tempfile.mkstemp(dir=dst.parent, prefix=f'.{dst.name}.')
+        try:
+            with os.fdopen(fd, 'wb') as f:
+                shutil.copyfileobj(open(src, 'rb'), f)
+            os.replace(tmp, dst)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+
     def provision(self, filenames) -> None:
         """Ensure every named font file exists in output_dir, copying it from the
         local dir or the TeX installation the first time it is needed."""
@@ -87,7 +109,7 @@ class Fonts:
             if dst.exists():
                 continue
             if self.local_dir and (self.local_dir / fname).exists():
-                shutil.copy(self.local_dir / fname, dst)
+                self._copy_atomic(self.local_dir / fname, dst)
                 print(f'  font-provision: {fname} ← {self.local_dir / fname}')
                 continue
             result = subprocess.run(['kpsewhich', fname], capture_output=True, text=True)
@@ -96,7 +118,7 @@ class Fonts:
                 print(f'  font-provision: WARNING — {fname} not found via kpsewhich; '
                       f'the browser will fall back to a system font')
                 continue
-            shutil.copy(src, dst)
+            self._copy_atomic(src, dst)
             print(f'  font-provision: {fname} ← {src}')
 
     # ── legacy Type1 → OTF conversion ────────────────────────────────────────

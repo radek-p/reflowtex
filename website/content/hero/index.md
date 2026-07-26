@@ -12,5 +12,5 @@ build:
 \fontsize{15}{20}\selectfont
 Reflow\,\TeX{} sets real LaTeX in your browser -- every glyph, kern, and
 $e^{i\pi}+1=0$ from a genuine \TeX{} run -- then re-breaks each paragraph
-\emph{live}, with Knuth and Plass's own algorithm.
+\emph{live}, with Knuth--Plass algorithm.
 {{< /latex >}}

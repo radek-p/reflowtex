@@ -17,6 +17,27 @@ REPO="$(cd "$SITE/.." && pwd)"                 # reflowtex/
 HUGO_INT="$REPO/integrations/hugo"
 DEMOS="$REPO/examples/demo"                     # shared snippets for examples/
 
+# Python deps (protobuf, fonttools) live in the repo-root virtualenv, not the
+# system interpreter. `make venv` (in $REPO) creates it; build it here too so
+# this script works standalone. Needs Python 3.10+ (src/encode uses bare
+# `X | None` union syntax) — macOS's bundled /usr/bin/python3 is often 3.9, so
+# rebuild the venv if it's missing or was created with a too-old interpreter.
+VENV="$REPO/.venv"
+if [ -x "$VENV/bin/python3" ] && "$VENV/bin/python3" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+  :
+else
+  BASE_PYTHON="$("$REPO/scripts/find_python.sh")"
+  echo "Creating $VENV with $BASE_PYTHON ($("$BASE_PYTHON" --version))"
+  rm -rf "$VENV"
+  "$BASE_PYTHON" -m venv "$VENV"
+fi
+PYTHON="$VENV/bin/python3"
+if [ ! -f "$VENV/.deps-installed" ] || [ "$REPO/src/encode/requirements.txt" -nt "$VENV/.deps-installed" ]; then
+  "$VENV/bin/pip" install --upgrade pip
+  "$VENV/bin/pip" install -r "$REPO/src/encode/requirements.txt"
+  touch "$VENV/.deps-installed"
+fi
+
 # 1. Vendor the shortcode + viewer partial from the Hugo integration (the docs'
 #    "copy these two files into layouts/" step, done automatically).
 mkdir -p "$SITE/layouts/shortcodes" "$SITE/layouts/partials"
@@ -26,7 +47,7 @@ cp "$HUGO_INT/layouts/partials/reflowtex-viewer.html" "$SITE/layouts/partials/re
 # 2. Compile all LaTeX blocks, embed the schema, provision + patch fonts.
 #    Set PREBUILD_ARGS to pass extra flags (e.g. --force, --prune, -j 8).
 # shellcheck disable=SC2086
-python3 "$HUGO_INT/prebuild.py" "$SITE" --demos-dir "$DEMOS" ${PREBUILD_ARGS:-}
+"$PYTHON" "$HUGO_INT/prebuild.py" "$SITE" --demos-dir "$DEMOS" ${PREBUILD_ARGS:-}
 
 # 2b. Build the standalone testmath.tex demo (the AMS sample paper, set in classic
 #     Computer Modern via the legacy Type1 path, multi-pass) into static/ so Hugo
@@ -35,7 +56,7 @@ python3 "$HUGO_INT/prebuild.py" "$SITE" --demos-dir "$DEMOS" ${PREBUILD_ARGS:-}
 #     so it's skipped if already built — set FORCE_TESTMATH=1 to rebuild.
 TESTMATH_OUT="$SITE/static/testmath"
 if [ ! -f "$TESTMATH_OUT/index.html" ] || [ -n "${FORCE_TESTMATH:-}" ]; then
-  python3 "$REPO/examples/testmath/build.py" --out "$TESTMATH_OUT" --fonts-base 'fonts/'
+  "$PYTHON" "$REPO/examples/testmath/build.py" --out "$TESTMATH_OUT" --fonts-base 'fonts/'
 else
   echo "testmath demo already built ($TESTMATH_OUT) — set FORCE_TESTMATH=1 to rebuild"
 fi

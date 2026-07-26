@@ -25,7 +25,7 @@ enableInlineShortcodes = true
 
 [menu]
   [[menu.main]]
-    name = "Docs"
+    name = "Getting started"
     pageRef = "/docs"
     weight = 10
   [[menu.main]]

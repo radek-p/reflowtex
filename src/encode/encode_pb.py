@@ -72,13 +72,13 @@ def fill(msg, d: dict) -> None:
         if f.type == FD.TYPE_ENUM:
             setattr(msg, k, f.enum_type.values_by_name[v].number)
         elif f.type == FD.TYPE_MESSAGE:
-            if f.label == FD.LABEL_REPEATED:
+            if f.is_repeated:
                 for item in v:
                     fill(getattr(msg, k).add(), item)
             else:
                 fill(getattr(msg, k), v)
         else:
-            if f.label == FD.LABEL_REPEATED:
+            if f.is_repeated:
                 getattr(msg, k).extend(v)
             else:
                 setattr(msg, k, v)

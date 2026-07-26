@@ -18,58 +18,51 @@
 
 \documentclass{article}
 
-% ── Fonts & math ─────────────────────────────────────────────────────────────
-% mathtools must load before unicode-math: loaded afterwards it re-patches
-% \overbrace/\underbrace to the legacy cmex construction, whose glyphs and rule
-% height are wrong for an OpenType math font (the brace renders as stray
-% characters around a thick black bar). A user preamble may \usepackage it again
-% — the second load is a no-op.
-\usepackage{mathtools}
-\usepackage{fontspec}
-\usepackage{unicode-math}
-% Defaults chosen to look like classic Computer Modern. Override in a preamble
-% with another \setmainfont / \setmathfont if you want a different face; the last
-% declaration wins.
-\setmainfont{Latin Modern Roman}
-\setmathfont{NewCMMath-Regular.otf}
+% ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
+% luaotfload resolves a font *by name* against a database built from several
+% locations, searched in `location_precedence` order — whose default is
+% {"system", "texmf", "local"}. On macOS, "system" means ~/Library/Fonts and
+% /Library/Fonts — regular Font Book directories any app (or a user, installing
+% a font by hand) can add to, independently of TeX Live. If a font of the same
+% name ends up there too, it can be a *different, non-identical* copy of what
+% TeX Live ships under texmf-dist (different glyph-index ordering internally,
+% despite matching filenames). Since reflowtex addresses glyphs by the index
+% LuaTeX assigns while compiling but *serves the browser the texmf-dist file*
+% (via kpsewhich, see fonts.py), a "system" font winning that lookup makes every
+% glyph index wrong — wrong enough that normalise_glyph_addressing
+% (transforms.py) treats it as a substituted glyph and PUA-rewrites it, and the
+% served font (lacking the PUA codepoints, since they were computed against a
+% different file) can't display it at all. Reordering precedence so texmf wins
+% keeps compilation and serving on the same file. This can't be set via a
+% config file shipped in the repo (luaotfload reads its config before this
+% document exists), so it's forced here, before any font is loaded. Only an
+% issue if a same-named font happens to exist outside texmf-dist too (nothing
+% to do with a stock TeX Live install), but forcing texmf first costs nothing
+% when there's no such collision.
+\directlua{
+  if fonts and fonts.names and fonts.names.set_location_precedence then
+    fonts.names.set_location_precedence({'texmf', 'system', 'local'})
+    fonts.names.flush_lookup_cache()
+  end
+}
 
-% Classic Computer Modern fraction geometry. The OpenType MATH constants scale
-% rule thickness and clearances with the script font size, which makes nested
-% fraction bars hairline-thin (0.2pt at scriptscript) and lets denominators
-% nearly touch the bar. Classic TeX (Appendix G) uses a constant 0.4pt rule at
-% every nesting level. unicode-math re-initialises every \Umath parameter from
-% the font's MATH table inside \everymath/\everydisplay, so the overrides must be
-% appended to those token lists to run *after* unicode-math's hook.
-\def\reflowtexClassicFracParams{%
-  \Umathfractionrule\displaystyle=0.4pt
-  \Umathfractionrule\crampeddisplaystyle=0.4pt
-  \Umathfractionnumvgap\displaystyle=1.2pt
-  \Umathfractionnumvgap\crampeddisplaystyle=1.2pt
-  \Umathfractiondenomvgap\displaystyle=1.2pt
-  \Umathfractiondenomvgap\crampeddisplaystyle=1.2pt
-  \Umathfractionrule\textstyle=0.4pt
-  \Umathfractionrule\crampedtextstyle=0.4pt
-  \Umathfractionnumvgap\textstyle=0.4pt
-  \Umathfractionnumvgap\crampedtextstyle=0.4pt
-  \Umathfractiondenomvgap\textstyle=0.4pt
-  \Umathfractiondenomvgap\crampedtextstyle=0.4pt
-  \Umathfractionrule\scriptstyle=0.4pt
-  \Umathfractionrule\crampedscriptstyle=0.4pt
-  \Umathfractionnumvgap\scriptstyle=0.4pt
-  \Umathfractionnumvgap\crampedscriptstyle=0.4pt
-  \Umathfractiondenomvgap\scriptstyle=0.4pt
-  \Umathfractiondenomvgap\crampedscriptstyle=0.4pt
-  \Umathfractionrule\scriptscriptstyle=0.4pt
-  \Umathfractionrule\crampedscriptscriptstyle=0.4pt
-  \Umathfractionnumvgap\scriptscriptstyle=0.4pt
-  \Umathfractionnumvgap\crampedscriptscriptstyle=0.4pt
-  \Umathfractiondenomvgap\scriptscriptstyle=0.4pt
-  \Umathfractiondenomvgap\crampedscriptscriptstyle=0.4pt
-}
-\AtBeginDocument{%
-  \everymath\expandafter{\the\everymath\reflowtexClassicFracParams}%
-  \everydisplay\expandafter{\the\everydisplay\reflowtexClassicFracParams}%
-}
+% ── Fonts & math ─────────────────────────────────────────────────────────────
+% Text is set in Latin Modern Roman via fontspec (OpenType, modern glyph
+% addressing — see the location-precedence fix above). Math intentionally stays
+% on *classic* Computer Modern (cmex/cmsy/cmmi, plus amssymb's msam/msbm) rather
+% than routing it through an OpenType math font: those 8-bit fonts are exactly
+% what reflowtex's legacy Type1→OTF conversion exists for (fonts.py's
+% legacy_otf(), t1_convert.py) — every glyph gets PUA-remapped into a
+% purpose-built cmap the served font actually has, instead of depending on an
+% OpenType math font's own glyph-assembly mechanism matching between compile
+% time and what gets served (examples/testmath renders this way and is the
+% reference for how the legacy path should look). A preamble that wants an
+% OpenType math font instead can \usepackage{unicode-math} and \setmathfont{}
+% itself; the template no longer preloads either.
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
 
 % ── reflowtex node-list serializer ─────────────────────────────────────────────
 % Exports the finished node list as output.json (see src/extract/serializer.lua).

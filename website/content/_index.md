@@ -12,20 +12,20 @@ LaTeX and never quite matches it. Reflow\,\TeX{} takes a third path.
 
 {{< latex >}}
 \textbf{Genuine TeX.} A real \LaTeX{} run sets your source; a Lua hook
-exports the node list --- every glyph, kern, ligature, rule, and math box, with
+exports the node list -- every glyph, kern, ligature, rule, and math box, with
 TeX's own positions.
 {{< /latex >}}
 
 {{< latex >}}
 \textbf{Auto re-flowed.} \texttt{latex-viewer.js} re-breaks each
 paragraph with the Knuth--Plass algorithm, so lines fill the column at \emph{any}
-width --- resize the window and watch.
+width.
 {{< /latex >}}
 
 {{< latex >}}
 \textbf{Real math fonts.} Inline and display math, \texttt{align},
-theorem environments, and TikZ pictures, set in Latin Modern and New Computer
-Modern and drawn as inline SVG.
+theorem environments, and TikZ pictures, set in Latin Modern and Computer
+Modern and drawn as SVG.
 {{< /latex >}}
 
 {{< latex >}}

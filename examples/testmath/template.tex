@@ -17,6 +17,28 @@
 % The serializer and its shipout hook are the only things added, injected *after*
 % the document's preamble so nothing in it is overridden.
 
+% ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
+% See the identical block in src/extract/template.tex for the full explanation.
+% luaotfload defaults to preferring OS-installed fonts (location_precedence
+% {"system", "texmf", "local"}) over TeX Live's own texmf-dist copies. On macOS,
+% "system" means ~/Library/Fonts and /Library/Fonts — regular Font Book
+% directories, populated by whatever apps or manual installs put fonts there,
+% independently of TeX Live. If a same-named font ends up there too, it can be
+% a different file from texmf-dist's, with different internal glyph-index
+% ordering. Even without fontspec, LuaTeX's default font substitution can
+% resolve a classic 8-bit name (e.g. cmr10) to "Latin Modern Roman" directly,
+% and if that lookup wins against the "system" location, the glyph indices
+% captured at compile time won't match the texmf-dist file this pipeline
+% serves to the browser, breaking most of the document's body text. Forcing
+% texmf first keeps compilation and serving on the same file — harmless when
+% there's no such collision, which is the common case.
+\directlua{
+  if fonts and fonts.names and fonts.names.set_location_precedence then
+    fonts.names.set_location_precedence({'texmf', 'system', 'local'})
+    fonts.names.flush_lookup_cache()
+  end
+}
+
 %%PREAMBLE%%
 
 % ── reflowtex node-list serializer (the only addition to the document) ────────

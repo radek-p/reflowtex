@@ -88,13 +88,15 @@ planned. To embed blocks in a hand-written page, follow the DOM contract in
 
 The build pipeline shells out to a real TeX toolchain:
 
-- **LuaTeX** (`lualatex`) — TeX Live 2023+ with the OpenType math fonts
-  (Latin Modern, New Computer Modern)
+- **LuaTeX** (`lualatex`) — TeX Live 2023+
 - **dvisvgm** — converts externalised TikZ pictures to SVG
 - **protoc** — the Protocol Buffers compiler (`apt install protobuf-compiler`)
 - **Python 3.10+** with the packages in
-  [`src/encode/requirements.txt`](src/encode/requirements.txt)
-  (`pip install -r src/encode/requirements.txt`)
+  [`src/encode/requirements.txt`](src/encode/requirements.txt), installed into a
+  project-local virtualenv — `make venv` creates `.venv/` and installs them; every
+  other `make` target (and `website/build.sh`) depends on it, so this happens
+  automatically. To do it by hand: `python3 -m venv .venv && .venv/bin/pip install
+  -r src/encode/requirements.txt`
 
 The **browser** side has no build step and no external dependency beyond the
 vendored `protobuf.min.js`.
