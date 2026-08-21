@@ -7,23 +7,33 @@
 
   The file ref points at a shared .tex source (resolved by prebuild.py against
   its --demos-dir), so the same snippet can feed several integrations. prebuild
-  records file→key in site.Data.latex_files; the inline form is hashed here.
+  records file→key in hugo.Data.latex_files; the inline form is hashed here.
+  An inline block can register in that same lookup with as="name" instead —
+  for a snippet with no natural .tex file of its own (a page's short title, a
+  handful of one-line labels a sidebar looks up from every page, …) that
+  another template wants to find later by name, without a --demos-dir entry
+  per snippet. See prebuild.py's module docstring.
 
   Optional attributes (all forwarded to latex-viewer.js as data-* on the block):
-    preamble="name"   use latex-preambles/name.tex (inline form; also hashed)
-    width="N"         layout width in pt (default: the block's own pixel width)
-    align="justify"   justify | left | right | center
-    class="…"         extra CSS classes on the wrapper
+    preamble="name"    use latex-preambles/name.tex (inline form; also hashed)
+    as="name"          inline form only: also register under this name in
+                       hugo.Data.latex_files, as if it were a file="name" ref
+    color-map="name"   use latex-color-maps/name.json (see prebuild.py); does
+                       not affect compilation, so file refs need it repeated
+                       per shortcode call the same as any other data-* option
+    width="N"          layout width in pt (default: the block's own pixel width)
+    align="justify"    justify | left | right | center
+    class="…"          extra CSS classes on the wrapper
     plus the Knuth–Plass knobs: line-penalty, adj-demerits,
     double-hyphen-demerits, pretolerance, tolerance, tolerance2,
     emergency-tolerance, last-line-min, last-line-penalty, max-expand,
-    max-shrink, min-gap, pad, protrusion, expansion, bleed.
+    max-shrink, min-gap, pad, protrusion, expansion.
 
   Run prebuild.py before `hugo` to populate the data. */ -}}
 {{- $file := .Get "file" -}}
 {{- $key := "" -}}
 {{- if $file -}}
-  {{- $key = index site.Data.latex_files $file -}}
+  {{- $key = index hugo.Data.latex_files $file -}}
 {{- else -}}
   {{- $inner := .Inner | strings.TrimSpace -}}
   {{- $hashInput := $inner -}}
@@ -34,12 +44,13 @@
   {{- end -}}
   {{- $key = printf "%.16s" ($hashInput | sha256) -}}
 {{- end -}}
-{{- $data := and $key (index site.Data.latex_blocks $key) -}}
+{{- $data := and $key (index hugo.Data.latex_blocks $key) -}}
 {{ if $data -}}
 <div class="latex-block{{ with .Get "class" }} {{ . }}{{ end }}"
      data-nodelist-b64="{{ $data.nodelist_b64 }}"
      {{- with .Get "width" }}                  data-latex-width="{{ . }}"{{ end }}
      {{- with .Get "align" }}                  data-align="{{ . }}"{{ end }}
+     {{- with .Get "color-map" }}              data-color-map="{{ . }}"{{ end }}
      {{- with .Get "line-penalty" }}           data-line-penalty="{{ . }}"{{ end }}
      {{- with .Get "adj-demerits" }}           data-adj-demerits="{{ . }}"{{ end }}
      {{- with .Get "double-hyphen-demerits" }} data-double-hyphen-demerits="{{ . }}"{{ end }}
@@ -54,8 +65,7 @@
      {{- with .Get "min-gap" }}                data-min-gap="{{ . }}"{{ end }}
      {{- with .Get "pad" }}                    data-pad="{{ . }}"{{ end }}
      {{- with .Get "protrusion" }}             data-protrusion="{{ . }}"{{ end }}
-     {{- with .Get "expansion" }}              data-expansion="{{ . }}"{{ end }}
-     {{- with .Get "bleed" }}                  data-bleed-px="{{ . }}"{{ end }}></div>
+     {{- with .Get "expansion" }}              data-expansion="{{ . }}"{{ end }}></div>
 {{- else }}
 <div class="latex-block latex-block--missing">
   LaTeX block not compiled — run <code>python prebuild.py</code>.

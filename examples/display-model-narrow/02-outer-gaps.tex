@@ -1,0 +1,17 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+\section*{Outer gaps close, internal gaps hold}
+A one-column display carries its centring in the alignment's outer tabskips.
+Those have ink on one side only, so they close completely and the display is
+never held wider than the formula itself:
+\begin{align*}
+\text{functional rational relations} \quad \subseteq \quad \text{unambiguous rational relations.}
+\end{align*}
+Narrow the column past that width and the display freezes flush with the left
+margin, peeks into whatever margin the page allows, and scrolls for the rest.
+
+A numbered equation adds a gap with ink on both sides — the formula on one, its
+number on the other. That one stops at the configured minimum instead of
+closing, so the number never runs into the equation:
+\begin{equation}
+  \text{unambiguous rational relations} \quad \subseteq \quad \text{bimachines.}
+\end{equation}

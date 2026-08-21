@@ -1,0 +1,14 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+\section*{Narrow display-model smoke test}
+Resize until the display becomes horizontally scrollable. Equation numbers stay
+on their rows; the browser never uses amsmath's print fallback of moving a tag.
+\begin{align}
+  a&=b & ccccccc^7&=d & e&=f \\
+  g&=h & i&=j & k&=\text{long entry}
+\end{align}
+
+The next display is deliberately wider than the desktop reading column, so the
+full margin peek, fade, and horizontal-scroll affordance can be inspected:
+\[
+  \hbox to 440pt{left edge\hfil genuinely overflowing display\hfil right edge}
+\]

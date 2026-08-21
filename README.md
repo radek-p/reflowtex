@@ -14,7 +14,9 @@ TeX set them.
 
 - **Faithful.** Glyphs, spacing, fractions, accents, and TikZ pictures come from
   a genuine TeX run, not an approximation.
-- **Reflowable.** Paragraphs re-break on resize; displays scroll when too wide.
+- **Reflowable.** Paragraphs re-break on resize; displays use width models
+  recovered from several real TeX runs and scroll only when their content is
+  genuinely too wide.
 - **Self-contained.** The data is embedded in the page; no runtime fetches, works
   offline. The only client dependency is a vendored protobuf runtime.
 
@@ -23,7 +25,73 @@ TeX set them.
 
 ## Try it in one command
 
-You need the [prerequisites](#prerequisites) below. Then:
+The build pipeline shells out to a real TeX toolchain (LuaTeX, dvisvgm,
+protoc, Hugo for the website) — enough moving parts that the default,
+recommended way to run it is in the provided container rather than installing
+all of that on your machine. See [local install](#local-install) below if
+you'd rather not use a container.
+
+**1. Get a container runtime**, if you don't have one:
+
+- **macOS:** [OrbStack](https://orbstack.dev) — `brew install orbstack`, or
+  the installer from its site. Docker Desktop or
+  [Colima](https://github.com/abiosoft/colima) (`brew install colima docker`)
+  work too.
+- **Linux:** Docker Engine — your distro's package (e.g. `apt install
+  docker.io`) or the [official install script](https://docs.docker.com/engine/install/)
+  (`curl -fsSL https://get.docker.com | sh`); add yourself to the `docker`
+  group so it runs without `sudo`. [Podman](https://podman.io) works as a
+  drop-in too.
+- *(Windows isn't covered here yet — the container should still work under
+  WSL2, just untested.)*
+
+**2. Run the pipeline** — no local TeX Live, Python venv, or Hugo install
+needed, the container has all of it:
+
+```sh
+docker compose run --rm reflowtex make check
+docker compose run --rm --service-ports reflowtex make serve   # → http://localhost:8000
+```
+
+Open the URL and resize the window — the text re-breaks live. `.venv` lives
+in its own named Docker volume rather than the bind-mounted repo, so it can't
+collide with a `.venv` you might also build on the host outside the container.
+
+**In VS Code** (Dev Containers extension, or OrbStack's Container Tools):
+open the repo folder and run **Dev Containers: Reopen in Container** (or the
+equivalent Container Tools command). It builds from `Dockerfile` /
+`.devcontainer/devcontainer.json`; first build takes a few minutes, cached
+after. The integrated terminal then has `make`, `lualatex`, `hugo`, etc., and
+ports 8000 and 1313 forward to your host automatically.
+
+A snippet's own preamble is free to `\usepackage` anything (see
+[docs/architecture.md](docs/architecture.md)); if that pulls in a LaTeX
+package the image doesn't already have, it's installed via `tlmgr` on the
+spot and the run retried (see `docker/lualatex-autoinstall.sh`) — needs
+network the first time a given package is used.
+
+**Rebuilding the reflowtex.dev website from scratch:** the site's `baseURL`
+bakes in a `/reflowtex/` path prefix, so serving `website/public` with a
+plain static file server 404s on every asset — use Hugo's own dev server
+instead, which rewrites the prefix to match:
+
+```sh
+docker compose run --rm reflowtex bash -lc 'make website-clean'
+docker compose run --rm --service-ports reflowtex bash -lc 'cd website && hugo server --bind 0.0.0.0'
+# → http://127.0.0.1:1313/reflowtex/
+```
+
+`make website-clean` forces every block to recompile, including the slow
+multi-pass `testmath.tex`; for routine content edits use `make website`
+instead (incremental), or `website/build.sh server --bind 0.0.0.0` to build
+and serve in one step (equivalent to the two commands above, minus the forced
+full rebuild — `--bind` is still needed so the dev server is reachable from
+outside the container).
+
+## Local install
+
+If you'd rather not use a container, you need the [prerequisites](#prerequisites)
+below on your own machine. Then:
 
 ```sh
 make check     # confirm lualatex, dvisvgm, protoc, python deps are present
@@ -76,7 +144,7 @@ becomes a self-contained static site:
 
 ```sh
 python integrations/vanilla/build.py my-snippets/ -o site/
-python -m http.server -d site        # the viewer loads fonts from /fonts/, so serve at root
+open site/index.html                 # self-contained — works straight off disk
 ```
 
 For a **Hugo** site, copy two layout files and run the prebuild before `hugo` —
@@ -89,7 +157,8 @@ planned. To embed blocks in a hand-written page, follow the DOM contract in
 The build pipeline shells out to a real TeX toolchain:
 
 - **LuaTeX** (`lualatex`) — TeX Live 2023+
-- **dvisvgm** — converts externalised TikZ pictures to SVG
+- **Ghostscript** (`gs`) — normalises ICC-coloured included PDFs before SVG conversion
+- **dvisvgm** — converts captured TikZ pages and included PDFs to SVG
 - **protoc** — the Protocol Buffers compiler (`apt install protobuf-compiler`)
 - **Python 3.10+** with the packages in
   [`src/encode/requirements.txt`](src/encode/requirements.txt), installed into a
@@ -101,7 +170,8 @@ The build pipeline shells out to a real TeX toolchain:
 The **browser** side has no build step and no external dependency beyond the
 vendored `protobuf.min.js`.
 
-`make check` verifies all of the above.
+`make check` verifies all of the above. The [container](#try-it-in-one-command)
+described above has all of this baked in, if you'd rather not install it.
 
 ## License
 

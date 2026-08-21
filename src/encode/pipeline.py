@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""reflowtex build pipeline — framework-agnostic.
+r"""reflowtex build pipeline — framework-agnostic.
 
 Turns a LaTeX snippet into the protobuf blob the browser viewer renders, and
 provisions the fonts it needs. Integrations (vanilla, Hugo, Jekyll, …) drive this
@@ -16,7 +16,7 @@ One snippet → one `build/<key>/` directory holding input.tex, the lualatex run
 output.json and nodelist.pb, so a rebuild can skip unchanged snippets and the
 intermediate artefacts are there to inspect when something looks wrong.
 
-Requires: lualatex, dvisvgm, protoc on PATH; the Python packages in
+Requires: lualatex, Ghostscript (gs), dvisvgm, protoc on PATH; the Python packages in
 requirements.txt (protobuf, fonttools).
 """
 
@@ -43,6 +43,12 @@ sys.path.insert(0, str(ENCODE_DIR))
 
 PREAMBLE_MARK = '%%PREAMBLE%%'
 CONTENT_MARK  = '%%CONTENT%%'
+WIDTH_EXTRA_MARK = '%%WIDTH-EXTRA-SP%%'
+
+# Wide display samples use an additive step, not 2x/3x multipliers: this keeps
+# successive fits well-conditioned without approaching TeX's \maxdimen quickly.
+DISPLAY_SAMPLE_STEP_SP = 128 * 65536
+TEX_MAX_DIMEN_SP = 1073741823
 
 
 def content_key(content: str, preamble: str = '') -> str:
@@ -116,14 +122,19 @@ class Pipeline:
         key = key or content_key(content, preamble)
         build_dir = self.build_root / key
         build_dir.mkdir(parents=True, exist_ok=True)
-        # tikz's external library writes each picture here and will not create the
-        # directory itself; the prefix must match \tikzexternalize in template.tex.
+        # A caller may have configured PGF externalisation with this conventional
+        # prefix. The template disables it before content and captures finished
+        # boxes instead, but creating the directory keeps such preambles valid.
         (build_dir / 'pics').mkdir(exist_ok=True)
 
-        tex = (self.template.read_text()
-               .replace(PREAMBLE_MARK, preamble)
-               .replace(CONTENT_MARK, content))
-        (build_dir / 'input.tex').write_text(tex, encoding='utf-8')
+        template_text = self.template.read_text()
+
+        def write_input(width_extra_sp: int) -> None:
+            tex = (template_text
+                   .replace(PREAMBLE_MARK, preamble)
+                   .replace(CONTENT_MARK, content)
+                   .replace(WIDTH_EXTRA_MARK, str(width_extra_sp)))
+            (build_dir / 'input.tex').write_text(tex, encoding='utf-8')
 
         # Always refresh: a stale serializer copy would silently produce output
         # missing newer features.
@@ -135,9 +146,47 @@ class Pipeline:
             if not dst.exists() or dst.stat().st_mtime < otf.stat().st_mtime:
                 shutil.copy(otf, dst)
 
-        self._run_lualatex(build_dir, key, passes)
+        # A display-bearing snippet is compiled at an additive sequence of
+        # widths. Keep a sliding three-sample window; a topology change or a
+        # non-affine field rejects only its smallest width, then sampling moves
+        # upward. Text-only snippets retain the ordinary single compilation.
+        import display_model
+        samples = []
+        sample_index = 0
+        while True:
+            width_extra_sp = sample_index * DISPLAY_SAMPLE_STEP_SP
+            write_input(width_extra_sp)
+            self._run_lualatex(build_dir, key, passes if sample_index == 0 else 1)
+            data = json.loads((build_dir / 'output.json').read_text())
+            if not display_model.has_displays(data):
+                break
+            reported_width = int(data.get('source_width', 0))
+            if reported_width <= 0:
+                sys.exit(f'ERROR: display-bearing template {self.template} did not report '
+                         f'a positive source width (is {WIDTH_EXTRA_MARK} and the '
+                         f'Serializer.note_source_width hook missing?)')
+            if samples and reported_width <= int(samples[-1].get('source_width', 0)):
+                sys.exit(f'ERROR: display sample width did not increase for block {key}: '
+                         f'{samples[-1].get("source_width")}, {reported_width}')
+            samples.append(data)
+            if len(samples) >= 3:
+                ok, reason = display_model.check_samples(*samples[-3:])
+                if ok:
+                    data = display_model.attach_model(samples[-3], samples[-2], samples[-1])
+                    (build_dir / 'output.json').write_text(json.dumps(data))
+                    print(f'  {key}: display model stable at '
+                          f'{samples[-3]["source_width"] / 65536:g}, '
+                          f'{samples[-2]["source_width"] / 65536:g}, '
+                          f'{samples[-1]["source_width"] / 65536:g} pt')
+                    break
+                rejected = samples[-3]['source_width'] / 65536
+                print(f'  {key}: rejected display sample at {rejected:g} pt: {reason}')
+                samples = samples[-2:]
+            if int(data.get('source_width', 0)) + DISPLAY_SAMPLE_STEP_SP >= TEX_MAX_DIMEN_SP:
+                sys.exit(f'ERROR: no stable affine display topology before \\maxdimen '
+                         f'for block {key}')
+            sample_index += 1
 
-        data = json.loads((build_dir / 'output.json').read_text())
         n_pictures  = transforms.convert_pictures(data, build_dir)
         n_stripped  = transforms.strip_unsupported_nodes(data)
         # Legacy fonts first: it sets 'unknown' fonts' filenames to the OTFs it
@@ -159,15 +208,17 @@ class Pipeline:
         return blob
 
     def _run_lualatex(self, build_dir: Path, key: str, passes: int = 1) -> None:
-        # -shell-escape is required by tikz's external library, which compiles
-        # each tikzpicture to its own PDF in a sub-run. Repeated passes reuse the
-        # build dir's .aux, so references resolve; the last pass's output.json wins.
+        # TikZ capture itself no longer invokes a sub-run. Keep shell escape for
+        # compatibility with caller preambles that already relied on it. Repeated
+        # passes reuse the build dir's .aux, so references resolve; the last
+        # pass's output.json wins.
+        output_json = build_dir / 'output.json'
+        output_json.unlink(missing_ok=True)
         result = None
         for _ in range(max(1, passes)):
             result = subprocess.run(
                 ['lualatex', '-shell-escape', '-interaction=nonstopmode', 'input.tex'],
                 cwd=build_dir, capture_output=True, text=True)
-        output_json = build_dir / 'output.json'
         log = build_dir / 'input.log'
         if not output_json.exists():
             detail = log.read_text() if log.exists() else result.stdout + result.stderr

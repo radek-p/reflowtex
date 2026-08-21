@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Reflow TeX — one-command demos.
 #
-# Prerequisites on PATH: lualatex (TeX Live), dvisvgm, protoc, python3.
+# Prerequisites on PATH: lualatex (TeX Live), gs (Ghostscript), dvisvgm, protoc, python3.
 # Python deps: managed automatically in a local .venv — see the `venv` target.
 
 PORT ?= 8000
@@ -13,13 +13,14 @@ PROTOBUFJS_VERSION := 8.7.1
 VENV := .venv
 PYTHON := $(CURDIR)/$(VENV)/bin/python3
 
-.PHONY: help demo serve hugo-demo testmath-demo website website-clean check clean vendor-protobuf venv
+.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check clean vendor-protobuf venv
 
 help:
 	@echo "Reflow TeX targets:"
 	@echo "  make venv             create .venv and install the Python deps into it"
 	@echo "  make check            verify the pipeline prerequisites are installed"
 	@echo "  make demo             build the vanilla demo site into $(DEMO_OUT)"
+	@echo "  make display-model-smoke  build the narrow display regression site"
 	@echo "  make serve            build the demo and serve it at http://localhost:$(PORT)"
 	@echo "  make hugo-demo        compile + serve the Hugo example (needs hugo)"
 	@echo "  make testmath-demo    render AMS' testmath.tex (classic CM fonts, legacy path)"
@@ -50,7 +51,7 @@ venv:
 
 check: venv
 	@ok=1; \
-	for t in lualatex dvisvgm protoc python3; do \
+	for t in lualatex gs dvisvgm protoc python3; do \
 	  if command -v $$t >/dev/null 2>&1; then echo "  found: $$t"; \
 	  else echo "  MISSING: $$t"; ok=0; fi; \
 	done; \
@@ -61,6 +62,10 @@ check: venv
 
 demo: venv
 	$(PYTHON) integrations/vanilla/build.py examples/demo -o $(DEMO_OUT) --title "Reflow TeX demo"
+
+display-model-smoke: venv
+	$(PYTHON) integrations/vanilla/build.py examples/display-model-narrow \
+		-o build/display-model-smoke --title "Display model smoke test"
 
 serve: demo
 	@echo "Serving $(DEMO_OUT) at http://localhost:$(PORT)  (Ctrl-C to stop)"

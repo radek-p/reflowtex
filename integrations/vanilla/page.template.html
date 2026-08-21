@@ -86,9 +86,10 @@
 
 <!-- Font URL map: original filename → served filename (a modified font is served
      renamed + content-hashed). latex-viewer.js reads it to build @font-face.
-     data-fonts-base is the URL prefix for those files; the default '/fonts/'
-     serves from the site root, a relative value (e.g. 'fonts/') makes the page
-     portable under a subpath. -->
+     data-fonts-base is the URL prefix for those files — the default 'fonts/'
+     resolves against latex-viewer.js's own URL (see build.py --fonts-base),
+     which works under a subpath, a different domain, or opened straight off
+     disk over file://, with no reconfiguration. -->
 <script id="latex-font-map" type="application/json" data-fonts-base="{{FONTS_BASE}}">{{FONT_MAP_JSON}}</script>
 
 <style>
@@ -196,8 +197,73 @@
      scrollable. Setting overflow-x forces overflow-y to auto, which would clip
      ascenders/descenders, so the renderer measures the overhang and reserves it
      as padding (the 4px here is only the pre-measure base). */
-  .latex-display { overflow-x: auto; padding: 4px 0; }
-  .latex-display > svg { max-width: none; }
+  .latex-display {
+    /* Use at most 100px of each page margin, but never extend past the viewport.
+       The inline padding keeps x=0 aligned with the prose column. */
+    --latex-display-peek: clamp(0px, calc(50vw - 50%), 100px);
+    box-sizing: border-box;
+    margin-inline: calc(0px - var(--latex-display-peek));
+    /* The trailing peek is a real box (the ::after below), not padding on this
+       element. A scroll container's *end* padding is not part of the scrollable
+       overflow in every engine — WebKit drops it — and where it is dropped the
+       display can no longer be panned the whole distance it overflows the
+       column, so its last glyphs can never be brought level with the text edge.
+       A flex item's border box is counted everywhere. Start padding is counted
+       everywhere too, so the leading peek stays padding and keeps x=0 on the
+       prose column. */
+    display: flex;
+    align-items: flex-start;   /* or the SVG would be stretched to the row */
+    padding: 4px 0 4px var(--latex-display-peek);
+    overflow-x: auto;
+  }
+  .latex-display::after {
+    content: ''; align-self: stretch;
+    flex: 0 0 var(--latex-display-peek);
+  }
+  .latex-display.latex-overflow-right:not(.latex-overflow-left) {
+    -webkit-mask-image: linear-gradient(to right, #000 0,
+      #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0,
+      #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+  }
+  .latex-display.latex-overflow-left:not(.latex-overflow-right) {
+    -webkit-mask-image: linear-gradient(to right, transparent 0,
+      #000 var(--latex-display-peek), #000 100%);
+    mask-image: linear-gradient(to right, transparent 0,
+      #000 var(--latex-display-peek), #000 100%);
+  }
+  .latex-display.latex-overflow-left.latex-overflow-right {
+    -webkit-mask-image: linear-gradient(to right, transparent 0,
+      #000 var(--latex-display-peek),
+      #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0,
+      #000 var(--latex-display-peek),
+      #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+  }
+  .latex-display > svg { max-width: none; flex: 0 0 auto; }
+  /* ── Cross-references ────────────────────────────────────────────────────
+     A \ref is a *set* of glyphs sharing data-link, not one element, so the
+     viewer toggles these classes across the whole set: hovering any part of a
+     reference lights all of it, including when it broke across two lines.
+     Colour only — nothing here may change a glyph's size or position, or the
+     text would reflow under the pointer. Glyph fill is set inline when TeX
+     coloured it, hence the !important. */
+  .latex-block svg .latex-link {
+    fill: var(--latex-link, #2f6fb3) !important;
+    cursor: pointer;
+  }
+  .latex-block svg .latex-link.latex-link-hover {
+    fill: var(--latex-link-hover, #1a4d85) !important;
+    text-decoration: underline;
+  }
+  .latex-block svg .latex-link.latex-link-active {
+    fill: var(--latex-link-active, #c2410c) !important;
+  }
+  .latex-block svg .latex-link:focus-visible { outline: 2px solid currentColor; }
+  /* Scroll destination for a \label. Zero height so it takes part in nothing;
+     give it scroll-margin-top if the page has a sticky header. */
+  .latex-anchor { height: 0; overflow: hidden; }
+
 
   /* ── AGPL source-offer notice ────────────────────────────────────────────
      latex-viewer.js is AGPL-3.0 and runs in the visitor's browser, so §13

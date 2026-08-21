@@ -9,17 +9,53 @@
   scripts (protobuf.min.js must load before latex-viewer.js). prebuild.py copies
   both scripts into static/ and writes data/latex_schema.json.
 */ -}}
-{{ with site.Data.latex_schema }}
+{{ with hugo.Data.latex_schema }}
 <div id="latex-schema" data-schema-b64="{{ .schema_b64 }}" hidden></div>
 {{ end }}
 {{/* Font URL map: original filename → served filename (a modified font is served
-     renamed + content-hashed). safeJS keeps it raw JSON in the script context. */}}
-{{ with site.Data.latex_font_map }}
-{{/* data-fonts-base makes @font-face URLs respect the site's baseURL, so fonts
-     resolve when the site is served under a subpath (e.g. a GitHub Pages project
-     site at /reponame/). Defaults to /fonts/ in the viewer when absent. */}}
-<script id="latex-font-map" type="application/json"
-        data-fonts-base="{{ "fonts/" | relURL }}">{{ . | jsonify | safeJS }}</script>
+     renamed + content-hashed). safeJS keeps it raw JSON in the script context.
+     No data-fonts-base here: the viewer's own default already resolves fonts/
+     against latex-viewer.js's own URL (see src/viewer/latex-viewer.js), which
+     fonts/ always sits beside (prebuild.py copies both into static/) — that
+     works under a subpath, a different domain, and a page opened straight off
+     disk over file://, none of which a build-time absolute path (e.g. from
+     Hugo's relURL) can promise all at once. data-fonts-base is still read if
+     a page sets it, for the rarer case of fonts served from somewhere else
+     entirely (a CDN), but nothing here needs to. */}}
+{{ with hugo.Data.latex_font_map }}
+<script id="latex-font-map" type="application/json">{{ . | jsonify | safeJS }}</script>
+{{ end }}
+
+{{/* Colour maps: name → {colors, tints}, only for names some block's
+     color-map="…" actually referenced (prebuild.py reads them from
+     <site>/latex-color-maps/<name>.json). Entirely optional — a block with no
+     color-map renders TeX's own colours as-is. See src/viewer/README.md's
+     Theming section for the data shape. */}}
+{{ with hugo.Data.latex_color_maps }}
+<script id="latex-color-maps" type="application/json">{{ . | jsonify | safeJS }}</script>
+{{ end }}
+
+{{/* Cross-reference resolution. prebuild.py records which content page defines
+     each \label, from the compilation itself; only Hugo knows what URL that page
+     ended up at, so the join happens here. A label whose page cannot be resolved
+     is simply left out, and the viewer then renders that reference as plain text
+     rather than as a link that goes nowhere. */}}
+{{ with hugo.Data.latex_link_map }}
+{{ $m := dict }}
+{{ $home := site.Home.RelPermalink }}
+{{ range $label, $src := . }}
+{{ with site.GetPage $src }}
+{{/* Site-root-relative, and naming the file rather than the directory. The
+     viewer resolves it against the directory it was itself loaded from, so one
+     built tree works served at a domain root, served under a subpath, and
+     opened straight off disk over file:// — where a directory URL would not
+     load its index.html at all. */}}
+{{ $u := strings.TrimPrefix $home .RelPermalink }}
+{{ if or (eq $u "") (hasSuffix $u "/") }}{{ $u = printf "%sindex.html" $u }}{{ end }}
+{{ $m = merge $m (dict $label (printf "%s#%s" $u $label)) }}
+{{ end }}
+{{ end }}
+<script id="latex-link-map" type="application/json">{{ $m | jsonify | safeJS }}</script>
 {{ end }}
 
 <style>
@@ -32,8 +68,71 @@
     font-weight: normal !important; font-style: normal !important;
     fill: currentColor;
   }
-  .latex-display { overflow-x: auto; padding: 4px 0; }
-  .latex-display > svg { max-width: none; }
+  .latex-display {
+    --latex-display-peek: clamp(0px, calc(50vw - 50%), 100px);
+    box-sizing: border-box;
+    margin-inline: calc(0px - var(--latex-display-peek));
+    /* The trailing peek is a real box (the ::after below), not padding on this
+       element. A scroll container's *end* padding is not part of the scrollable
+       overflow in every engine — WebKit drops it — and where it is dropped the
+       display can no longer be panned the whole distance it overflows the
+       column, so its last glyphs can never be brought level with the text edge.
+       A flex item's border box is counted everywhere. Start padding is counted
+       everywhere too, so the leading peek stays padding and keeps x=0 on the
+       prose column. */
+    display: flex;
+    align-items: flex-start;   /* or the SVG would be stretched to the row */
+    padding: 4px 0 4px var(--latex-display-peek);
+    overflow-x: auto;
+  }
+  .latex-display::after {
+    content: ''; align-self: stretch;
+    flex: 0 0 var(--latex-display-peek);
+  }
+  .latex-display.latex-overflow-right:not(.latex-overflow-left) {
+    -webkit-mask-image: linear-gradient(to right, #000 0,
+      #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0,
+      #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+  }
+  .latex-display.latex-overflow-left:not(.latex-overflow-right) {
+    -webkit-mask-image: linear-gradient(to right, transparent 0,
+      #000 var(--latex-display-peek), #000 100%);
+    mask-image: linear-gradient(to right, transparent 0,
+      #000 var(--latex-display-peek), #000 100%);
+  }
+  .latex-display.latex-overflow-left.latex-overflow-right {
+    -webkit-mask-image: linear-gradient(to right, transparent 0,
+      #000 var(--latex-display-peek),
+      #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0,
+      #000 var(--latex-display-peek),
+      #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+  }
+  .latex-display > svg { max-width: none; flex: 0 0 auto; }
+  /* ── Cross-references ────────────────────────────────────────────────────
+     A \ref is a *set* of glyphs sharing data-link, not one element, so the
+     viewer toggles these classes across the whole set: hovering any part of a
+     reference lights all of it, including when it broke across two lines.
+     Colour only — nothing here may change a glyph's size or position, or the
+     text would reflow under the pointer. Glyph fill is set inline when TeX
+     coloured it, hence the !important. */
+  .latex-block svg .latex-link {
+    fill: var(--latex-link, #2f6fb3) !important;
+    cursor: pointer;
+  }
+  .latex-block svg .latex-link.latex-link-hover {
+    fill: var(--latex-link-hover, #1a4d85) !important;
+    text-decoration: underline;
+  }
+  .latex-block svg .latex-link.latex-link-active {
+    fill: var(--latex-link-active, #c2410c) !important;
+  }
+  .latex-block svg .latex-link:focus-visible { outline: 2px solid currentColor; }
+  /* Scroll destination for a \label. Zero height so it takes part in nothing;
+     give it scroll-margin-top if the page has a sticky header. */
+  .latex-anchor { height: 0; overflow: hidden; }
+
   .latex-block--missing {
     border: 2px dashed #c00; padding: 0.75em 1em; color: #c00;
     font-size: 0.9em; border-radius: 4px;

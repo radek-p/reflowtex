@@ -1,0 +1,36 @@
+name: Container build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker/**
+      - .github/workflows/docker.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker/**
+      - .github/workflows/docker.yml
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: reflowtex:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run the pipeline inside the image
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace reflowtex:ci \
+            bash -lc 'make check && make demo && make website-clean'

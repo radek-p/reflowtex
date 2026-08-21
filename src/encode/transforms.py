@@ -7,8 +7,7 @@ Three passes, each returning a count of what it changed:
   * strip_unsupported_nodes   — drop nodes the schema/renderer do not model.
   * normalise_glyph_addressing — rewrite glyphs the served font cannot address by
                                  their Unicode codepoint to a private-use code.
-  * convert_pictures          — turn each externalised tikzpicture PDF into inline
-                                 SVG the browser can draw.
+  * convert_pictures          — turn TikZ and included PDF pictures into inline SVG.
 
 None of these depend on any framework; they operate on the parsed dict and (for
 fonts) a Fonts instance from fonts.py.
@@ -22,6 +21,13 @@ import unicodedata
 from pathlib import Path
 
 from fonts import fonts_of
+
+
+def _all_content_items(data: dict):
+    """Yield main-flow and separately stored footnote items."""
+    yield from data.get('content', [])
+    for footnote in data.get('footnotes', []):
+        yield from footnote.get('content', [])
 
 
 # ── Unsupported nodes ────────────────────────────────────────────────────────
@@ -63,7 +69,7 @@ def strip_unsupported_nodes(data: dict) -> int:
 
     for para in data.get('paragraphs', []):
         para['nodes'] = walk(para.get('nodes', []))
-    for item in data.get('content', []):
+    for item in _all_content_items(data):
         if 'box' in item:
             item['box']['children'] = walk(item['box'].get('children', []))
     return stripped
@@ -130,7 +136,7 @@ def normalise_glyph_addressing(data: dict, fonts) -> int:
         walk(para.get('nodes', []))
     # Display boxes carry their own glyphs (and are the heaviest users of ssty
     # script variants, which is exactly what PUA addressing exists for).
-    for item in data.get('content', []):
+    for item in _all_content_items(data):
         if 'box' in item:
             walk(item['box'].get('children', []))
     return rewritten
@@ -192,13 +198,13 @@ def normalise_legacy_font_addressing(data: dict, fonts) -> int:
 
     for para in data.get('paragraphs', []):
         walk(para.get('nodes', []))
-    for item in data.get('content', []):
+    for item in _all_content_items(data):
         if 'box' in item:
             walk(item['box'].get('children', []))
     return rewritten
 
 
-# ── Pictures: externalised tikzpicture PDFs → inline SVG ─────────────────────
+# ── Pictures: TikZ and included PDFs → inline SVG ────────────────────────────
 # Each picture keeps TeX's box metrics (so it behaves as an ordinary box
 # anywhere) and gains an SVG payload the browser can draw. Two rewrites make the
 # payload safe to inline:
@@ -220,14 +226,32 @@ SVG_USE_RE   = re.compile(r"(xlink:href|href)='#([^']+)'")
 SVG_COLOR_RE = re.compile(r"\b(fill|stroke)='#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})'")
 SVG_ROOT_RE  = re.compile(r"<svg\b[^>]*\bviewBox='([\d.eE+-]+) ([\d.eE+-]+) ([\d.eE+-]+) ([\d.eE+-]+)'[^>]*>(.*)</svg>",
                           re.DOTALL)
+SVG_PAGE_RECT_RE = re.compile(
+    r"<path d='M0 0H([\d.eE+-]+)V([\d.eE+-]+)H0V0Z?'"
+    r"(?: fill='#(?:fff|ffffff)')?/>\s*")
 
 
-def _rewrite_picture_svg(svg: str, prefix: str) -> tuple[str, float, float]:
+def _rewrite_picture_svg(svg: str, prefix: str, *, strip_page_background: bool = False
+                         ) -> tuple[str, float, float]:
     m = SVG_ROOT_RE.search(svg)
     if not m:
         raise RuntimeError('dvisvgm output has no <svg viewBox=...> root')
     vb_w, vb_h = float(m.group(3)), float(m.group(4))
     inner = m.group(5)
+
+    # Figma exports an opaque white page rectangle. ICC normalisation below
+    # makes it explicit white; the fallback for older/raw dvisvgm output has no
+    # fill at all. Ordinary included PDFs are artwork on the host page, so drop
+    # either form only when its geometry is exactly the complete viewBox. Do not
+    # require it to be the first child: clipped PDFs put <defs> before the page
+    # group. TikZ captures are excluded because their full-size rectangle may be
+    # intentional content.
+    if strip_page_background:
+        for bg in SVG_PAGE_RECT_RE.finditer(inner):
+            if (abs(float(bg.group(1)) - vb_w) < 1e-6
+                    and abs(float(bg.group(2)) - vb_h) < 1e-6):
+                inner = inner[:bg.start()] + inner[bg.end():]
+                break
 
     ids = set(SVG_ID_RE.findall(inner))
     if ids:
@@ -250,29 +274,72 @@ def _rewrite_picture_svg(svg: str, prefix: str) -> tuple[str, float, float]:
 
 
 def convert_pictures(data: dict, build_dir: Path) -> int:
-    """Turn every picture node's PDF into inline SVG, indexed per document."""
+    """Turn every picture node's PDF page into inline SVG, indexed per document."""
     pictures = data.setdefault('pictures', [])
-    by_file: dict[str, int] = {}
+    by_source: dict[tuple[str, int, bool, bool], int] = {}
+    rgb_pdfs: dict[Path, Path] = {}
     converted = 0
+
+    # dvisvgm 3.4 drops every ICC `scn` fill in PDFs exported by Figma, not just
+    # the white canvas: coloured and pale-grey shapes silently become the SVG
+    # default black. Ghostscript rewrites those paints to ordinary DeviceRGB,
+    # which dvisvgm preserves. Keep one normalised copy per source PDF for this
+    # document; several pages commonly come from the same Figma export.
+    pdf_tmp = tempfile.TemporaryDirectory(prefix='picture-pdf-')
+
+    def normalise_included_pdf(pdf: Path) -> Path:
+        if pdf not in rgb_pdfs:
+            normalised = Path(pdf_tmp.name) / f'source-{len(rgb_pdfs) + 1}.pdf'
+            r = subprocess.run(
+                ['gs', '-q', '-dSAFER', '-dNOPAUSE', '-dBATCH',
+                 '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.7',
+                 '-sColorConversionStrategy=RGB',
+                 '-dProcessColorModel=/DeviceRGB', '-dUseCIEColor=false',
+                 f'-sOutputFile={normalised}', str(pdf)],
+                cwd=build_dir, capture_output=True, text=True)
+            if r.returncode != 0 or not normalised.exists():
+                sys.exit(f'ERROR: Ghostscript failed while normalising colours in {pdf}:\n'
+                         f'{r.stderr[-2000:]}')
+            rgb_pdfs[pdf] = normalised
+        return rgb_pdfs[pdf]
 
     def walk(nodes: list) -> None:
         nonlocal converted
         for n in nodes:
             if n.get('type') == 'picture':
                 src = n.pop('file', None)
+                page = int(n.pop('page', 1) or 1)
+                externalized = bool(n.pop('externalized', False))
+                generated = bool(n.pop('generated', False))
                 if not src:
-                    # Never silently blank the picture: an unstamped image means
-                    # the \pgfincludeexternalgraphics hook did not run, and the
-                    # drawing would vanish from the page with no other symptom.
                     sys.exit(f'ERROR: picture node in {build_dir.name} has no source file — '
-                             f'the template hook did not record it (check that '
-                             f'Serializer.note_picture runs when '
-                             f'\\pgfincludeexternalgraphics does)')
-                if src not in by_file:
-                    pdf = build_dir / f'{src}.pdf'
-                    out = build_dir / f'{src}.svg'
+                             f'the template image hook did not record it')
+                source_key = (src, page, externalized, generated)
+                if source_key not in by_source:
+                    if generated:
+                        pdf = build_dir / src
+                        out = build_dir / f'captured-picture-{page}.svg'
+                    elif externalized:
+                        pdf = build_dir / f'{src}.pdf'
+                        out = build_dir / f'{src}.svg'
+                    else:
+                        # src is whatever kpse.find_file returned inside the
+                        # LuaTeX process (serializer.lua's note_graphic) — kpathsea
+                        # doesn't necessarily absolutise its answer, so a relative
+                        # TEXINPUTS entry comes back as a path relative to *that
+                        # process's* cwd (build_dir, per _run_lualatex). This
+                        # transform runs later, as plain Python, with no reason to
+                        # share that cwd — so a relative src must still be resolved
+                        # against build_dir, not wherever this happens to run from.
+                        pdf = Path(src) if Path(src).is_absolute() else build_dir / src
+                        out = build_dir / f'included-{len(pictures) + 1}.svg'
                     if not pdf.exists():
-                        sys.exit(f'ERROR: picture {pdf} missing — did tikz externalisation run?')
+                        sys.exit(f'ERROR: picture source {pdf} is missing')
+                    if pdf.suffix.lower() != '.pdf':
+                        sys.exit(f'ERROR: picture source {pdf} is not a PDF; '
+                                 f'only PDF includegraphics is supported')
+                    conversion_pdf = (pdf if externalized or generated
+                                      else normalise_included_pdf(pdf))
                     # --tmpdir is required for correctness, not tidiness: dvisvgm's
                     # temporary files are not namespaced per process, so concurrent
                     # conversions (blocks compile on a thread pool) collide and some
@@ -281,17 +348,18 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
                     # just loses all its labels. A private tmpdir avoids it.
                     with tempfile.TemporaryDirectory(prefix='dvisvgm-') as tmpdir:
                         r = subprocess.run(
-                            ['dvisvgm', '--pdf', '--no-fonts', '--optimize=all',
-                             f'--tmpdir={tmpdir}', f'--output={out}', str(pdf)],
+                            ['dvisvgm', '--pdf', f'--page={page}', '--no-fonts', '--optimize=all',
+                             f'--tmpdir={tmpdir}', f'--output={out}', str(conversion_pdf)],
                             cwd=build_dir, capture_output=True, text=True)
                     if not out.exists():
                         sys.exit(f'ERROR: dvisvgm failed on {pdf}:\n{r.stderr[-2000:]}')
                     inner, vb_w, vb_h = _rewrite_picture_svg(
-                        out.read_text(encoding='utf-8'), f'p{len(pictures)+1}-')
+                        out.read_text(encoding='utf-8'), f'p{len(pictures)+1}-',
+                        strip_page_background=not externalized and not generated)
                     pictures.append({'svg': inner, 'vb_w': vb_w, 'vb_h': vb_h})
-                    by_file[src] = len(pictures)      # 1-based
+                    by_source[source_key] = len(pictures)      # 1-based
                     converted += 1
-                n['picture'] = by_file[src]
+                n['picture'] = by_source[source_key]
             for k in ('children', 'replace', 'pre', 'post', 'nobreak'):
                 if k in n:
                     walk(n[k])
@@ -300,7 +368,8 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
 
     for para in data.get('paragraphs', []):
         walk(para.get('nodes', []))
-    for item in data.get('content', []):
+    for item in _all_content_items(data):
         if 'box' in item:
             walk(item['box'].get('children', []))
+    pdf_tmp.cleanup()
     return converted
