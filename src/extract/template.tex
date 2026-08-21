@@ -8,12 +8,14 @@
 %
 %   - the PREAMBLE marker  → the caller's preamble (extra packages, macros, fonts)
 %   - the CONTENT marker   → the snippet body, set between begin/end document
+%   - the WIDTH-EXTRA-SP marker → an additive virtual-width increment (sp) used
+%                                 by display-geometry sampling
 %
 % (The markers are not spelled literally in this comment because the substitution
 % is a plain text replace and would rewrite them here too.)
 %
-% Everything the pipeline itself depends on (the serializer, the TikZ picture
-% capture, the shipout hook) is set up *here*, before the user preamble, so a
+% Everything the pipeline itself depends on (the serializer and TikZ picture
+% capture) is set up *here*, before the user preamble, so a
 % preamble is free to load its own packages and TikZ libraries on top.
 
 \documentclass{article}
@@ -46,61 +48,312 @@
   end
 }
 
+% The directive above cannot reach one font: the *default* text face,
+% \TU/lmr/m/n/10. LuaLaTeX loads it while the format is built (that is
+% where "PRELOADED" fonts come from), long before this document exists, so it
+% was resolved under the default precedence -- and NFSS keeps reusing that
+% definition for every later \selectfont. Nearly every block is set in it.
+% Drop the NFSS identifier of each OpenType face loaded so far and re-select,
+% so the default face is looked up again under the precedence just set. A
+% fresh load of any *other* face was never affected. Backslashes are built
+% with string.char so TeX does not tokenize them inside \directlua.
+\directlua{
+  local bs = string.char(92)
+  for id, f in font.each() do
+    local ident = tex.fontidentifier(id)
+    if ident and ident:sub(1, 4) == bs .. "TU/" then
+      texio.write_nl("reflowtex: re-resolving preloaded font " .. ident)
+      tex.print(bs .. "expandafter" .. bs .. "let" .. bs .. "csname "
+                .. ident:sub(2) .. bs .. "endcsname" .. bs .. "relax")
+    end
+  end
+}
+\selectfont
+
 % ── Fonts & math ─────────────────────────────────────────────────────────────
-% Text is set in Latin Modern Roman via fontspec (OpenType, modern glyph
-% addressing — see the location-precedence fix above). Math intentionally stays
-% on *classic* Computer Modern (cmex/cmsy/cmmi, plus amssymb's msam/msbm) rather
-% than routing it through an OpenType math font: those 8-bit fonts are exactly
-% what reflowtex's legacy Type1→OTF conversion exists for (fonts.py's
-% legacy_otf(), t1_convert.py) — every glyph gets PUA-remapped into a
-% purpose-built cmap the served font actually has, instead of depending on an
-% OpenType math font's own glyph-assembly mechanism matching between compile
-% time and what gets served (examples/testmath renders this way and is the
-% reference for how the legacy path should look). A preamble that wants an
-% OpenType math font instead can \usepackage{unicode-math} and \setmathfont{}
-% itself; the template no longer preloads either.
+% The template deliberately chooses *no* fonts. A document's typefaces are the
+% author's, and imposing one here does more than override a preference: loading
+% fontspec switches the default encoding to TU, and every 8-bit family the
+% preamble then selects — Libertine, Inconsolata, and most of what a real book
+% loads — has no TU shape, so NFSS silently substitutes the template's own
+% font for it. Code set in \ttfamily comes out in a proportional serif, and the
+% log says so only as a font-shape warning nobody reads.
+%
+% Both worlds work without help here. A preamble that wants OpenType loads
+% fontspec and picks its faces; one that stays with classic 8-bit families gets
+% them through reflowtex's Type1 conversion (fonts.py legacy_otf(),
+% t1_convert.py), which PUA-remaps every glyph into a cmap the served font
+% actually has — the path examples/testmath exercises. Math likewise keeps
+% whatever the document set up, classic Computer Modern included.
 \usepackage{mathtools}
 \usepackage{amssymb}
-\usepackage{fontspec}
-\setmainfont{Latin Modern Roman}
+
+% Reflow TeX produces a continuous, pageless document, so TeX's page-oriented
+% float placement is both unnecessary and actively harmful: the serializer
+% learns document order from the shipped vertical list, after a figure may have
+% moved ahead of the prose that introduced it. Make figures ordinary flow
+% containers instead. Their captions are ordinary paragraphs (rather than the
+% direct boxes LaTeX's float machinery builds, which are invisible to the
+% paragraph content stream), while the standard counter and \label semantics
+% are retained. Placement options are accepted for source compatibility and
+% deliberately ignored.
+\makeatletter
+\RenewDocumentEnvironment{figure}{O{}}{%
+  \par\addvspace{\intextsep}%
+  \begingroup
+  \def\@captype{figure}%
+  \RenewDocumentCommand{\caption}{o m}{%
+    \refstepcounter{figure}%
+    \par\small\centering\figurename~\thefigure: ##2\par}%
+}{%
+  \par\endgroup\addvspace{\intextsep}%
+}
+\makeatother
 
 % ── reflowtex node-list serializer ─────────────────────────────────────────────
 % Exports the finished node list as output.json (see src/extract/serializer.lua).
 \directlua{dofile("serializer.lua")}
 
 % ── TikZ picture capture ─────────────────────────────────────────────────────
-% A tikzpicture is already an hbox with the dimensions TeX computed; only its
-% contents are unusable to us (raw pdf_literal drawing operators). So each
-% picture is externalised to its own PDF, which the pipeline converts to SVG —
-% the box keeps TeX's metrics and gains a payload the browser can draw. Because
-% the result is still just a box, a picture can sit anywhere a box can: inline,
-% inside math, inside an align row.
-%
-% Loaded here, before the user preamble, so a preamble can \usetikzlibrary{…}
-% and \pgfdeclarelayer on top of it.
+% TikZ pictures contain backend pdf_literal nodes, which the browser cannot
+% replay directly. TikZ itself is loaded here so the post-preamble hook below
+% can capture every picture, including packages layered on top of it.
 \usepackage{tikz}
-\usetikzlibrary{external}
-\tikzexternalize[prefix=pics/]
-% Linking the node back to its file needs a hook, because the image node cannot
-% name its own file (LuaTeX's img.fromnode is unavailable here). The hook must be
-% \pgfincludeexternalgraphics: tikz's external library never calls
-% \includegraphics, so patching that would silently do nothing.
 \newcount\reflowtexPicCount
-\let\reflowtexOrigIncludeExternal\pgfincludeexternalgraphics
-\def\pgfincludeexternalgraphics#1{%
-  \global\advance\reflowtexPicCount by 1
-  \directlua{Serializer.note_picture(\the\reflowtexPicCount, "\luaescapestring{#1}")}%
-  % The attribute rides on every node created inside the group, which is how the
-  % image rule node is later matched to its file.
-  \begingroup\attribute902=\reflowtexPicCount\relax\reflowtexOrigIncludeExternal{#1}\endgroup}
 
-% The serializer needs the finished page to learn the document order of
-% paragraphs and displays (displays never reach pre_linebreak_filter).
-% \ShipoutBox is \chardef'd by the kernel, so \numexpr yields its number.
-\AddToHook{shipout/before}{\directlua{Serializer.shipout(\the\numexpr\ShipoutBox\relax)}}
+% Ordinary \includegraphics images arrive as the same kind of LuaTeX image
+% rule, and likewise do not expose their filename through the node API. Record
+% that filename (and an optional PDF page) while preserving graphicx's starred,
+% key/value, and legacy two-optional-argument forms. This is deliberately a
+% separate hook: completed TikZ boxes use the post-preamble capture below.
+\let\reflowtexOrigIncludeGraphics\includegraphics
+\RenewDocumentCommand{\includegraphics}{s o o m}{%
+  \global\advance\reflowtexPicCount by 1
+  \IfNoValueTF{#2}
+    {\directlua{Serializer.note_graphic(\the\reflowtexPicCount,
+       "\luaescapestring{#4}", "")}}%
+    {\directlua{Serializer.note_graphic(\the\reflowtexPicCount,
+       "\luaescapestring{#4}", "\luaescapestring{#2}")}}%
+  \begingroup\attribute902=\reflowtexPicCount\relax
+    \IfBooleanTF{#1}
+      {\IfNoValueTF{#2}
+         {\reflowtexOrigIncludeGraphics*{#4}}%
+         {\IfNoValueTF{#3}
+            {\reflowtexOrigIncludeGraphics*[#2]{#4}}%
+            {\reflowtexOrigIncludeGraphics*[#2][#3]{#4}}}}%
+      {\IfNoValueTF{#2}
+         {\reflowtexOrigIncludeGraphics{#4}}%
+         {\IfNoValueTF{#3}
+            {\reflowtexOrigIncludeGraphics[#2]{#4}}%
+            {\reflowtexOrigIncludeGraphics[#2][#3]{#4}}}}%
+  \endgroup}
 
 % ── User preamble ────────────────────────────────────────────────────────────
 %%PREAMBLE%%
+
+% The build pipeline compiles display-bearing snippets at several increasingly
+% wide virtual measures. Paragraph node lists do not depend on this measure;
+% finished display trees do, and comparing them lets the encoder recover their
+% affine geometry without knowing whether the source used equation, align,
+% gather, multline, or a package-defined display. This hook runs after the user
+% preamble so it scales the final configured text width.
+\newdimen\reflowtexWidthExtra
+\reflowtexWidthExtra=%%WIDTH-EXTRA-SP%%sp\relax
+\AtBeginDocument{%
+  \ifdim\reflowtexWidthExtra>0pt
+    \advance\textwidth by \reflowtexWidthExtra
+    \hsize=\textwidth
+    \linewidth=\textwidth
+    \columnwidth=\textwidth
+  \fi
+  \directlua{Serializer.note_source_width(\number\textwidth)}}
+
+% Capture the finished TikZ hbox rather than scanning its source. This also
+% handles front ends such as tikz-cd, which call the low-level \tikzpicture and
+% \endtikzpicture macros and are incompatible with PGF's LaTeX source scanner.
+% A copy is shipped as a tightly-sized private PDF page; the document flow gets
+% an empty box with identical metrics and attribute 908. serializer.lua turns
+% that placeholder into a picture node referring to the private page.
+%
+% If the caller enabled PGF externalisation, turn it off first: capturing boxes
+% is the single picture path, independent of how the source was configured.
+\makeatletter
+\@ifundefined{tikzexternaldisable}{}{\tikzexternaldisable}
+\let\reflowtexOrigTikzpicture\tikzpicture
+\let\reflowtexOrigEndtikzpicture\endtikzpicture
+\newbox\reflowtexTikzBox
+\newbox\reflowtexTikzPageBox
+\newdimen\reflowtexTikzWidth
+\newdimen\reflowtexTikzHeight
+\newdimen\reflowtexTikzDepth
+\ExplSyntaxOn
+\cs_new_eq:NN \reflowtexPrimitiveShipout \tex_shipout:D
+\ExplSyntaxOff
+\def\tikzpicture{%
+  \global\advance\reflowtexPicCount by 1
+  \edef\reflowtexThisPic{\the\reflowtexPicCount}%
+  \setbox\reflowtexTikzBox=\hbox\bgroup
+    \reflowtexOrigTikzpicture}
+\def\endtikzpicture{%
+    \reflowtexOrigEndtikzpicture
+  \egroup
+  \reflowtexTikzWidth=\wd\reflowtexTikzBox
+  \reflowtexTikzHeight=\ht\reflowtexTikzBox
+  \reflowtexTikzDepth=\dp\reflowtexTikzBox
+  \begingroup
+    \pagewidth=\reflowtexTikzWidth
+    \pageheight=\dimexpr\reflowtexTikzHeight+\reflowtexTikzDepth\relax
+    \pdfvariable horigin=0pt
+    \pdfvariable vorigin=0pt
+    \setbox\reflowtexTikzPageBox=\vbox{%
+      \offinterlineskip
+      \hbox{\copy\reflowtexTikzBox}}%
+    \reflowtexPrimitiveShipout\box\reflowtexTikzPageBox
+    \directlua{Serializer.note_captured_picture(
+      \reflowtexThisPic, status.total_pages)}%
+  \endgroup
+  \begingroup
+    \attribute908=\reflowtexThisPic\relax
+    \setbox\reflowtexTikzBox=\hbox to \reflowtexTikzWidth{\hss}%
+    \ht\reflowtexTikzBox=\reflowtexTikzHeight
+    \dp\reflowtexTikzBox=\reflowtexTikzDepth
+    \box\reflowtexTikzBox
+  \endgroup}
+\makeatother
+
+% ── Cross-reference capture ──────────────────────────────────────────────────
+% \ref and friends print a number; what the reader wants is to be taken to the
+% thing numbered. Stamp every glyph of the printed text with a document-local
+% link id and record which label that id points at, and leave an empty box where
+% each \label stood so the target has a position in the flow.
+%
+% Nothing here changes what is typeset. Each reference still prints through the
+% original macro, so its number, formatting and any package's decoration are
+% unaffected, and the box carries no ink and no dimensions, so line breaking is
+% unchanged.
+%
+% `"` is forced back to an ordinary character while this is read. A preamble may
+% legitimately have made it active — the knowledge package's quotation syntax
+% does, so that "term" is a reference — and an active quote inside the Lua string
+% literals below is passed to Lua as a macro call rather than a delimiter, which
+% fails at run time with a bare `unexpected symbol near '\'`. Catcodes are fixed
+% when a definition is *read*, so the guard has to be here, not at the call.
+\edef\reflowtexRestoreQuote{\catcode`\noexpand\"=\the\catcode`\"\relax}
+\catcode`\"=12\relax
+% The replacements are *defined* here and only swapped in inside the hook.
+% Nothing with a parameter token may be written inside \AtBeginDocument: the
+% hook system stores that code in a token list rather than a macro body, so `##`
+% is not reduced to `#` there and the definitions would be read with doubled
+% parameters.
+\newcount\reflowtexLinkCount
+\newcount\reflowtexAnchorCount
+\makeatletter
+% An empty, zero-sized box. A box rather than a kern or a whatsit so it survives
+% as an ordinary list item the serializer can find by attribute, and zero-sized
+% so it can neither show anything nor shift anything around it.
+\newbox\reflowtexAnchorBox
+\def\reflowtex@anchorbox{%
+  \setbox\reflowtexAnchorBox=\hbox{}%
+  \wd\reflowtexAnchorBox=0pt \ht\reflowtexAnchorBox=0pt \dp\reflowtexAnchorBox=0pt
+  \box\reflowtexAnchorBox}
+% #1 is the saved original macro, #2 the label.
+%
+% One reference macro often prints through another — \eqref is (\ref{...}) — and
+% the inner call would otherwise stamp the number with an id of its own, cutting
+% the parentheses off from the digits they belong to. The outermost reference is
+% the one the reader means, so an already-stamped group is left alone. An unset
+% LuaTeX attribute reads as a large negative sentinel, hence the >0 test.
+\def\reflowtex@wrapref#1#2{%
+  \ifnum\attribute909>0
+    #1{#2}%
+  \else
+    \global\advance\reflowtexLinkCount by 1
+    \directlua{Serializer.note_link(\the\reflowtexLinkCount, "\luaescapestring{#2}")}%
+    \begingroup\attribute909=\reflowtexLinkCount\relax #1{#2}\endgroup
+  \fi}
+\DeclareRobustCommand{\reflowtex@newref}[1]{\reflowtex@wrapref\reflowtex@ref{#1}}
+\DeclareRobustCommand{\reflowtex@neweqref}[1]{\reflowtex@wrapref\reflowtex@eqref{#1}}
+\DeclareRobustCommand{\reflowtex@newautoref}[1]{\reflowtex@wrapref\reflowtex@autoref{#1}}
+\DeclareRobustCommand{\reflowtex@newnameref}[1]{\reflowtex@wrapref\reflowtex@nameref{#1}}
+\DeclareRobustCommand{\reflowtex@newcref}[1]{\reflowtex@wrapref\reflowtex@cref{#1}}
+\DeclareRobustCommand{\reflowtex@newCref}[1]{\reflowtex@wrapref\reflowtex@Cref{#1}}
+% A destination the author wrote out in full. Hooked at hyperref's own
+% \hyper@linkurl rather than at \href or \url: by the time hyperref calls it,
+% the address has already been read with the catcodes a URL needs (% and # are
+% ordinary there), so what arrives is the finished string. Re-reading the
+% argument at \href would corrupt exactly the addresses that need the care.
+\def\reflowtex@newlinkurl#1#2{%
+  \ifnum\attribute909>0
+    \reflowtex@linkurl{#1}{#2}%
+  \else
+    \global\advance\reflowtexLinkCount by 1
+    \directlua{Serializer.note_link_url(\the\reflowtexLinkCount,
+      "\luaescapestring{#2}")}%
+    \begingroup\attribute909=\reflowtexLinkCount\relax
+      \reflowtex@linkurl{#1}{#2}%
+    \endgroup
+  \fi}
+% Record and place the marker *before* delegating: packages that layer on \label
+% — cleveref, knowledge — scan ahead from it for an optional argument, and
+% anything left after the delegated call can be swallowed by that lookahead.
+\DeclareRobustCommand{\reflowtex@newlabel@}[1]{%
+  \global\advance\reflowtexAnchorCount by 1
+  \directlua{Serializer.note_label(\the\reflowtexAnchorCount, "\luaescapestring{#1}")}%
+  \begingroup\attribute910=\reflowtexAnchorCount\relax
+    \reflowtex@anchorbox
+  \endgroup
+  \reflowtex@label{#1}}
+% Installed at \begin{document}, and this hook is declared after the user
+% preamble so it runs after theirs: hyperref redefines \ref itself at
+% \begin{document}, and a preamble-time redefinition is simply overwritten.
+% The label is captured here, at the call site, rather than taken from
+% hyperref's anchor: under `hypertexnames=false` the anchor is an opaque
+% counter, while the label is what a publishing toolchain can still match
+% against the labels other chapters define.
+\AtBeginDocument{%
+  \let\reflowtex@ref\ref     \let\ref\reflowtex@newref
+  \@ifundefined{eqref}{}{\let\reflowtex@eqref\eqref \let\eqref\reflowtex@neweqref}%
+  \@ifundefined{autoref}{}{\let\reflowtex@autoref\autoref
+                           \let\autoref\reflowtex@newautoref}%
+  \@ifundefined{nameref}{}{\let\reflowtex@nameref\nameref
+                           \let\nameref\reflowtex@newnameref}%
+  % cleveref's \cref/\Cref take a comma-separated list; the whole printed run
+  % becomes one link to the first label named, which is where it would jump.
+  \@ifundefined{cref}{}{\let\reflowtex@cref\cref \let\cref\reflowtex@newcref}%
+  \@ifundefined{Cref}{}{\let\reflowtex@Cref\Cref \let\Cref\reflowtex@newCref}%
+  \@ifundefined{hyper@linkurl}{}{\let\reflowtex@linkurl\hyper@linkurl
+                                 \let\hyper@linkurl\reflowtex@newlinkurl}%
+  \let\reflowtex@label\label \let\label\reflowtex@newlabel@
+  % A \label inside a display never reaches \label: amsmath swaps in
+  % \label@in@display, which only stores the name and replays it later through
+  % \ltx@label — a copy of \label taken when amsmath was loaded, long before
+  % this hook runs. Redirect that copy as well, or every equation label is lost.
+  \@ifundefined{ltx@label}{}{\let\ltx@label\reflowtex@newlabel@}}
+\makeatother
+\reflowtexRestoreQuote
+
+% ── Footnote capture ─────────────────────────────────────────────────────────
+% Install this after the user preamble: packages such as hyperref legitimately
+% replace \@footnotemark, and wrapping an earlier definition would be lost.
+% TeX places the marker in the paragraph but sends its body to an insertion.
+% Give both halves one document-local id; separate attributes keep the body's
+% own leading number from recursively acting as another tooltip source.
+\makeatletter
+\newcount\reflowtexFootnoteCount
+\newcount\reflowtexCurrentFootnote
+\let\reflowtexOrigFootnotemark\@footnotemark
+\def\@footnotemark{%
+  \global\advance\reflowtexFootnoteCount by 1
+  \global\reflowtexCurrentFootnote=\reflowtexFootnoteCount
+  \begingroup\attribute906=\reflowtexCurrentFootnote\relax
+    \reflowtexOrigFootnotemark
+  \endgroup}
+\let\reflowtexOrigFootnotetext\@footnotetext
+\long\def\@footnotetext#1{%
+  \begingroup\attribute907=\reflowtexCurrentFootnote\relax
+    \reflowtexOrigFootnotetext{#1}%
+  \endgroup}
+\makeatother
 
 \begin{document}
 %%CONTENT%%

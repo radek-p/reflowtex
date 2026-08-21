@@ -4,10 +4,11 @@ This stage turns a LaTeX snippet into `output.json`, the finished node list.
 
 - **`template.tex`** wraps each snippet. It sets up the fonts, the classic
   Computer Modern fraction geometry, the serializer, the TikZ picture capture, and
-  the shipout hook — then substitutes two markers the pipeline fills in: the
-  caller's preamble and the snippet body. All the infrastructure is loaded
-  *before* the preamble, so a preamble can `\usepackage` and `\usetikzlibrary` on
-  top of it and override the default fonts.
+  then substitutes two markers the pipeline fills in: the
+  caller's preamble and the snippet body. Dependencies are loaded before the
+  preamble, while wrappers that must see package redefinitions are installed
+  after it. A preamble can `\usepackage` and `\usetikzlibrary` on top and override
+  the default fonts.
 - **`serializer.lua`** walks LuaTeX's node list and writes `output.json`.
 
 ## Placeholders
@@ -23,12 +24,24 @@ avoid spelling them out.
 | Hook | Purpose |
 |---|---|
 | `\directlua{dofile("serializer.lua")}` | loads the node-list exporter |
-| `\pgfincludeexternalgraphics` (wrapped) | stamps each externalised TikZ picture with an id and records its file via `Serializer.note_picture`, so the picture node can later be matched to its PDF |
-| `shipout/before` → `Serializer.shipout` | gives the serializer the finished page so it learns the document order of paragraphs and displays (displays never reach `pre_linebreak_filter`) |
+| `\tikzpicture` / `\endtikzpicture` (wrapped) | captures the completed box to a private job-PDF page and leaves a metric-identical picture placeholder; low-level users such as `tikz-cd` work without source externalisation |
+| `buildpage_filter` → `capture_flow` | copies main-vertical-list contributions before pagination and presents zero-height originals to the page builder, preserving document order without page boundaries |
 
-If you replace the template, preserve these three hooks — the encode stage relies
-on them (a missing picture hook, in particular, makes drawings vanish with no
-other symptom).
+If you replace the template, preserve the serializer and picture hooks — the
+encode stage relies on them (a missing picture hook, in particular, makes
+drawings vanish with no other symptom).
+
+This is not implemented by setting `\vsize=\maxdimen`: that would merely move
+the automatic break to TeX's finite dimension limit. The serializer keeps an
+unmodified copy of the flow and zeroes the top-level vertical dimensions seen by
+the page builder. Explicit source breaks such as `\newpage` may still trigger a
+shipout, but they do not divide or alter the captured flow.
+
+Footnotes arrive as `ins` nodes rather than as children of the paragraph that
+contains their marker. The template gives the marker and insertion a shared id;
+the flow walker stores the insertion as a separate `footnotes` content stream,
+and the browser renders that stream in a tooltip/popover from the marker. It is
+not appended to the pageless main stream.
 
 ## output.json shape (informal)
 
@@ -41,6 +54,7 @@ other symptom).
   //   { "kind": "display",   "box": {…} }  → a display (\[..\], align*) drawn as-is
   //   { "kind": "vspace",    "amount": sp} → explicit vertical space (see below)
   "content":    [ … ],
+  "footnotes":  [ { "id": N, "content": [ … ] }, … ],
   "pictures":   [ … ]                                // filled in by the encode stage
 }
 ```

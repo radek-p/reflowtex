@@ -317,5 +317,9 @@ def collect_glyph_requirements(output_jsons) -> dict[str, dict[int, int]]:
         for item in data.get('content', []):
             if 'box' in item:
                 walk(item['box'].get('children', []), font_map)
+        for footnote in data.get('footnotes', []):
+            for item in footnote.get('content', []):
+                if 'box' in item:
+                    walk(item['box'].get('children', []), font_map)
 
     return requirements

@@ -55,6 +55,10 @@ def intern_glyph_metrics(doc: dict) -> None:
     for it in doc.get('content', []):
         if it.get('box'):
             walk([it['box']])
+    for footnote in doc.get('footnotes', []):
+        for it in footnote.get('content', []):
+            if it.get('box'):
+                walk([it['box']])
     doc['glyph_metrics'] = table
 
 
@@ -92,6 +96,12 @@ def build_document(data: dict) -> L.Document:
         'paragraphs': data.get('paragraphs', []),
         'content': data.get('content', []),
         'pictures': data.get('pictures', []),
+        'footnotes': data.get('footnotes', []),
+        'source_width': data.get('source_width'),
+        'display_model': data.get('display_model'),
+        # Lua writes an empty table as [], so these are always lists.
+        'links': data.get('links', []),
+        'anchors': data.get('anchors', []),
     }
     intern_glyph_metrics(doc)
     out = L.Document()

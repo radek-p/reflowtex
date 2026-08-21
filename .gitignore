@@ -1,0 +1,7 @@
+.idea/
+build/
+private/
+.venv/
+__pycache__/
+scratchpad.md
+book-to-compile/

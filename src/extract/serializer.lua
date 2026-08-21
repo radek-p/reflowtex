@@ -117,21 +117,85 @@ local function handle_colorstack(n)
 end
 
 -- ── Pictures ──────────────────────────────────────────────────────────────
--- An externalised tikzpicture arrives as a rule node of subtype 2 (an image)
--- carrying TeX's own width/height/depth. The node cannot name its own file,
--- so template.tex stamps attribute 902 on it and records the id → filename
--- here; the two are joined when the node is serialized. prebuild.py then
--- converts each PDF to SVG.
+-- Ordinary \includegraphics images arrive as subtype-2 rule nodes; captured
+-- TikZ drawings arrive as empty hboxes with the same metrics as the original.
+-- Neither node can name its source, so template.tex stamps a document-local id
+-- and records the corresponding PDF/page metadata here.
 
 local PIC_ATTR    = 902
 local CITE_ATTR   = 903   -- glyphs of a citation number \lrcite{...}
 local CITETGT_ATTR = 904  -- glyphs of a bibliography label [n]
+local FOOTNOTE_MARK_ATTR = 906 -- glyphs of the superscript marker
+local FOOTNOTE_INS_ATTR  = 907 -- the matching insertion node
+local TIKZ_PIC_ATTR      = 908 -- placeholder hbox for an internally captured TikZ page
+-- A cross-reference is stamped on *every* glyph of its printed text rather than
+-- marked by boundary nodes, because the browser re-breaks the paragraph: a
+-- start/end pair would have to be re-paired per line, and a reference split
+-- across a line break would lose half of itself. An attribute rides on each
+-- glyph wherever it lands, so the whole reference stays one link.
+local LINK_ATTR          = 909 -- glyphs of a \ref/\eqref/\autoref's printed text
+local ANCHOR_ATTR        = 910 -- the zero-size box \label leaves behind
 local RULE_IMAGE  = 2
 local picture_files = {}
+local source_width = 0
+-- id → the label a reference points at / the label defined at a marker. Both are
+-- document-local ids; the names only have to be resolved by whoever knows how
+-- this document is published, which is not us.
+local link_labels  = {}
+local anchor_labels = {}
 
 Serializer = Serializer or {}
+-- A reference's destination is recorded as the *label* the author wrote, not as
+-- hyperref's generated anchor name: the label is what the rest of the toolchain
+-- can still recognise, and with `hypertexnames=false` the anchor name is an
+-- opaque counter that means nothing outside this one compilation.
+-- amsmath replays a display's label through \ltx@label after the display is
+-- finished, and what arrives there still carries the brace group it was stored
+-- in. A label can never legitimately be brace-wrapped, so unwrap one layer.
+local function clean_label(label)
+    return (tostring(label):match("^{(.*)}$")) or label
+end
+function Serializer.note_link(id, label)
+    -- cleveref's \cref takes a comma-separated list and prints one run for all
+    -- of them; jumping to the first is what following that run would do.
+    label = clean_label(label):match("^[^,]*")
+    link_labels[id] = { label = label }
+end
+-- An address the author wrote out in full. Nothing to resolve, so it is stored
+-- as-is; it arrives here already processed by hyperref, with the catcode games
+-- a URL needs already played out.
+function Serializer.note_link_url(id, url)
+    link_labels[id] = { url = tostring(url) }
+end
+function Serializer.note_label(id, label)
+    anchor_labels[id] = clean_label(label)
+end
+
+function Serializer.note_source_width(sp)
+    source_width = tonumber(sp) or 0
+end
 function Serializer.note_picture(id, file)
-    picture_files[id] = file
+    picture_files[id] = { file = file, externalized = true }
+end
+
+function Serializer.note_captured_picture(id, page)
+    picture_files[id] = {
+        file = tex.jobname .. ".pdf",
+        page = page,
+        generated = true,
+    }
+end
+
+function Serializer.note_graphic(id, file, options)
+    local resolved = kpse.find_file(file)
+    if not resolved and not file:match("%.[^/]+$") then
+        resolved = kpse.find_file(file .. ".pdf")
+    end
+    picture_files[id] = {
+        file = resolved or file,
+        page = tonumber(options:match("page%s*=%s*{?(%d+)")) or 1,
+        externalized = false,
+    }
 end
 
 -- ── Transforms ────────────────────────────────────────────────────────────
@@ -230,6 +294,8 @@ local function serialize_nodelist(head)
                 -- bibliography [n] label. The browser links the two.
                 cite       = node.get_attribute(n, CITE_ATTR),
                 citetarget = node.get_attribute(n, CITETGT_ATTR),
+                footnote   = node.get_attribute(n, FOOTNOTE_MARK_ATTR),
+                link       = node.get_attribute(n, LINK_ATTR),
             }
 
         elseif t == "glue" then
@@ -267,16 +333,19 @@ local function serialize_nodelist(head)
             }
 
         elseif t == "rule" and n.subtype == RULE_IMAGE then
-            -- An externalised picture. Keep TeX's metrics — they are what lets
-            -- the picture behave as an ordinary box everywhere — and carry the
-            -- source file across for prebuild.py to turn into SVG.
+            -- An included or externally supplied picture. Keep TeX's metrics —
+            -- they are what lets the picture behave as an ordinary box
+            -- everywhere — and carry the source file into the encode stage.
             local id = node.get_attribute(n, PIC_ATTR)
+            local picture = id and picture_files[id] or nil
             cur[#cur + 1] = {
                 type   = "picture",
                 width  = n.width,
                 height = n.height,
                 depth  = n.depth,
-                file   = id and picture_files[id] or nil,
+                file   = picture and picture.file or nil,
+                page   = picture and picture.page or nil,
+                externalized = picture and picture.externalized or nil,
             }
 
         elseif t == "rule" then
@@ -301,6 +370,24 @@ local function serialize_nodelist(head)
                 replace = sub(n.replace),
             }
 
+        elseif (t == "hlist" or t == "vlist")
+                and node.get_attribute(n, TIKZ_PIC_ATTR) then
+            -- template.tex replaced a completed, non-externalised TikZ box by
+            -- this metric-identical placeholder after shipping a copy as a
+            -- private page of the job PDF. Do not descend into the empty box;
+            -- join it to that page by its document-local id.
+            local id = node.get_attribute(n, TIKZ_PIC_ATTR)
+            local picture = picture_files[id]
+            cur[#cur + 1] = {
+                type   = "picture",
+                width  = n.width,
+                height = n.height,
+                depth  = n.depth,
+                file   = picture and picture.file or nil,
+                page   = picture and picture.page or nil,
+                generated = picture and picture.generated or nil,
+            }
+
         elseif t == "hlist" or t == "vlist" then
             -- Recurse into children; include shift for superscript/subscript boxes.
             -- glue_set/sign/order are TeX's pre-computed box glue setting: the PDF
@@ -315,6 +402,13 @@ local function serialize_nodelist(head)
                 glue_set   = n.glue_set,
                 glue_sign  = n.glue_sign,
                 glue_order = n.glue_order,
+                -- \label typesets nothing, so it has no position of its own.
+                -- template.tex leaves an empty, zero-sized box where it stood;
+                -- that box flows with the text through line breaking, so where
+                -- it comes to rest is where the label belongs. No special node
+                -- kind is needed — it is an ordinary box that happens to be
+                -- empty, and it draws and advances nothing either way.
+                anchor     = node.get_attribute(n, ANCHOR_ATTR),
                 children   = n.head and serialize_nodelist(n.head) or {},
             }
 
@@ -432,6 +526,23 @@ local function para_align()
     return nil                      -- justified (default)
 end
 
+-- Remove the empty boxes \label left behind, once their positions have been
+-- recorded. Only top-level ones: a marker nested inside a box is already inside
+-- something TeX has finished building, where it can no longer affect anything.
+local function strip_anchor_markers(head)
+    local n = head
+    while n do
+        local nxt = n.next
+        if (node.type(n.id) == "hlist" or node.type(n.id) == "vlist")
+                and node.get_attribute(n, ANCHOR_ATTR) then
+            head = node.remove(head, n)
+            node.free(n)
+        end
+        n = nxt
+    end
+    return head
+end
+
 local function capture_paragraph(head, groupcode)
     local idx = #all_paragraphs + 1
     local indent, width = para_band()
@@ -446,12 +557,111 @@ local function capture_paragraph(head, groupcode)
         nodes  = serialize_nodelist(head),
     }
     stamp(head, idx)
+    -- The captured copy above already holds every \label marker at its exact
+    -- position, so the markers have done their job and are now taken back out
+    -- of the list TeX is about to break. They are boxes, and a box interrupts
+    -- the run of glyphs LuaTeX hyphenates: leaving one in mid-sentence costs
+    -- the surrounding word its hyphenation points and re-breaks the paragraph.
+    -- This callback runs before line breaking and before hyphenation, so
+    -- removing them here means marking a label changes nothing TeX produces.
+    head = strip_anchor_markers(head)
     return head
 end
 
--- ── Shipout walk: the ordered content stream ──────────────────────────────
--- Text is re-breakable and comes from the captures above; displays are rigid
--- and must be taken in their finished form. Only the page walk knows the
+-- ── Pageless main vertical list ───────────────────────────────────────────
+-- LuaTeX's page builder cannot be given a genuinely infinite \vsize: every TeX
+-- dimension is capped at \maxdimen. Instead, copy each contribution before the
+-- page builder consumes it, then zero only the vertical extent of the original
+-- top-level nodes. The preserved copy retains TeX's real geometry; the page
+-- builder sees a non-empty page whose height never grows, so delayed writes
+-- still execute during normal (final or explicitly requested) shipouts.
+local flow_head, flow_tail
+-- Keep this distinct from the public node annotations above. In particular,
+-- 904 belongs to bibliography targets; reusing it here can make a contribution
+-- look as if it has already been copied when an attribute happens to propagate
+-- onto its top-level box.
+local FLOW_ATTR = 905
+
+local function append_flow(n)
+    n.prev, n.next = flow_tail, nil
+    if flow_tail then flow_tail.next = n else flow_head = n end
+    flow_tail = n
+end
+
+local function capture_flow()
+    local head = tex.lists.contrib_head
+    if not head then return end
+
+    -- The kernel's spacing macros read back the vertical list's tail:
+    -- \addvspace/\addpenalty/\endtrivlist test \lastskip (and \unpenalty can
+    -- pop a penalty to reach the glue behind it) to merge an environment's
+    -- \topsep with the one the previous environment already contributed —
+    -- that is what keeps a lemma→proof boundary at one \topsep, not two.
+    -- Zeroing that glue in place makes those reads see 0.0pt, the merge
+    -- silently no-ops, and every \addvspace-mediated boundary records its
+    -- skip twice. Only the trailing run of discardables (glue/kern/penalty
+    -- with no box after them) is reachable this way — \lastbox is illegal in
+    -- outer vertical mode, so a box shields everything before it. Keep that
+    -- run's dimensions real, and balance the page total with one negative
+    -- kern inserted *before* the run: interior, hence unreachable, and
+    -- pre-stamped so it never enters the pageless copy.
+    local tail = nil
+    for n in node.traverse(head) do
+        local t = node.type(n.id)
+        if t == "glue" or t == "kern" or t == "penalty" then
+            if not tail then tail = n end
+        else
+            tail = nil
+        end
+    end
+
+    local trailing_sp = 0
+    local in_tail = false
+    for n in node.traverse(head) do
+        -- Held-over material can be offered again after an explicit page break.
+        -- Stamp the original so the pageless copy contains every node once.
+        if not node.get_attribute(n, FLOW_ATTR) then
+            append_flow(node.copy(n))
+            node.set_attribute(n, FLOW_ATTR, 1)
+        end
+
+        if n == tail then in_tail = true end
+        -- These are the only top-level node dimensions which advance TeX's
+        -- page total. Children remain intact so delayed writes still ship.
+        local t = node.type(n.id)
+        if in_tail then
+            -- Left readable; a later capture finds these interior (a box has
+            -- arrived behind them) and zeroes them then. Their real extent is
+            -- cancelled by the compensating kern below, so the page total
+            -- never sees them either way.
+            if t == "glue" then
+                trailing_sp = trailing_sp + (n.width or 0)
+            elseif t == "kern" then
+                trailing_sp = trailing_sp + (n.kern or 0)
+            end
+        elseif t == "hlist" or t == "vlist" or t == "rule" then
+            n.height, n.depth = 0, 0
+        elseif t == "glue" then
+            n.width, n.stretch, n.shrink = 0, 0, 0
+        elseif t == "kern" then
+            n.kern = 0
+        elseif t == "ins" then
+            n.height = 0
+        end
+    end
+
+    if trailing_sp ~= 0 then
+        local k = node.new("kern")
+        k.kern = -trailing_sp
+        node.set_attribute(k, FLOW_ATTR, 1)
+        tex.lists.contrib_head = node.insert_before(head, tail, k)
+    end
+end
+
+-- ── Flow walk: the ordered content stream ─────────────────────────────────
+-- Text is re-breakable and comes from the captures above; displays are taken in
+-- their finished form. The encoder may later attach width derivatives recovered
+-- from matching several finished trees. Only the vertical-list walk knows the
 -- document order of the two, so it produces a stream of references:
 --
 --   {kind="paragraph", para=N}   → render all_paragraphs[N], re-broken
@@ -483,8 +693,8 @@ local GLUE_USERSKIP = 0
 -- the ink correctly within it. So we record that band and let the renderer
 -- centre *it*, preserving everything TeX decided inside.
 --
--- \displaywidth itself is long gone by shipout, but it does not need to be
--- captured: TeX derives it from the enclosing paragraph's shape (TeX82 §1145
+-- \displaywidth itself is long gone by the vertical-list walk, but it does not
+-- need to be captured: TeX derives it from the enclosing paragraph's shape (TeX82 §1145
 -- — with no \parshape and no \hangindent, \displaywidth = \hsize and
 -- \displayindent = 0; otherwise both come from \parshape). Since every
 -- paragraph already records its \parshape band, a display simply inherits the
@@ -497,95 +707,72 @@ local GLUE_USERSKIP = 0
 -- than observing it.
 
 local content   = {}
+local footnotes = {}
 local seen_para = {}
 
 -- amsmath leaves an empty paragraph behind after an alignment (a zero-content
--- fire that exists only to close the display group). It has no glyphs, so it
--- would render as an empty line; skip such paragraphs entirely.
-local function has_glyphs(nodes)
+-- fire that exists only to close the display group). Skip those, but retain a
+-- paragraph whose only visible node is a picture: \mypic commonly expands to
+-- exactly such a paragraph.
+local function has_visible_nodes(nodes)
     for _, n in ipairs(nodes) do
-        if n.type == "glyph" then return true end
-        if n.children and has_glyphs(n.children) then return true end
-        if n.replace and has_glyphs(n.replace) then return true end
+        if n.type == "glyph" or n.type == "picture" then return true end
+        if n.children and has_visible_nodes(n.children) then return true end
+        if n.replace and has_visible_nodes(n.replace) then return true end
     end
     return false
 end
 
-local function emit_vspace(sp)
-    if sp and sp ~= 0 and #content > 0 then
-        content[#content + 1] = { kind = "vspace", amount = sp }
+local function emit_vspace(out, sp)
+    if sp and sp ~= 0 and #out > 0 then
+        out[#out + 1] = { kind = "vspace", amount = sp }
     end
 end
 
 -- The band of the most recent paragraph; displays inherit it.
 local cur_band = { indent = 0, width = 0 }
 
-local function walk_page(head, pending)
+local function walk_flow(head, pending, out)
+    out = out or content
     for n in node.traverse(head) do
         local t = node.type(n.id)
-        if t == "hlist" and n.subtype == HL_LINE then
+        if (t == "hlist" or t == "vlist") and node.get_attribute(n, ANCHOR_ATTR) then
+            -- A \label written straight after \sectioning (the usual place) is
+            -- executed in vertical mode, so its marker box joins the vertical
+            -- list instead of a paragraph and never reaches serialize_nodelist.
+            -- Emit it into the content stream, where it lands between the two
+            -- items it was written between — which is exactly the position a
+            -- section label is meant to name.
+            out[#out + 1] = { kind = "anchorpoint",
+                              anchor = node.get_attribute(n, ANCHOR_ATTR) }
+        elseif t == "hlist" and n.subtype == HL_LINE then
             local p = find_para(n)
             if p then
                 cur_band.indent = all_paragraphs[p].indent
                 cur_band.width  = all_paragraphs[p].width
             end
-            if p and not seen_para[p] and has_glyphs(all_paragraphs[p].nodes) then
+            if p and not seen_para[p] and has_visible_nodes(all_paragraphs[p].nodes) then
                 seen_para[p] = true
-                if not pending.body_seen then
-                    -- First body line on this page: the glue above it is page
-                    -- furniture — the top margin, the running header, and \headsep —
-                    -- which TeX discards at the top of a page. We shipout-walk whole
-                    -- pages and concatenate them, so discard it here too; otherwise
-                    -- it surfaces as a ~40pt gap at every page break in the reflowed
-                    -- output (16pt top margin + 25pt \headsep, say).
-                    pending.body_seen = true
-                    -- One exception: if the previous page ended with a display, its
-                    -- \belowdisplayskip was discarded at the break along with the
-                    -- furniture. In the reflowed (pageless) output the display and
-                    -- this paragraph are adjacent, so restore that skip — TeX's own
-                    -- parameter, not a guessed constant — or they abut too tightly.
-                    if content[#content] and content[#content].kind == "display" then
-                        emit_vspace(content[#content].below_skip or 0)
-                    end
-                elseif content[#content] and content[#content].kind == "display" then
+                if out[#out] and out[#out].kind == "display" then
                     -- Abutting a display, keep TeX's full glue: above/belowdisplayskip
                     -- carries the display's spacing.
-                    emit_vspace(pending.sp)
+                    emit_vspace(out, pending.sp)
                 else
                     -- Between text paragraphs keep only explicit vspace: baselineskip
                     -- leading is re-derived per line, but a \vspace or a section's
                     -- before/after skip must survive.
-                    emit_vspace(pending.explicit)
+                    emit_vspace(out, pending.explicit)
                 end
-                content[#content + 1] = { kind = "paragraph", para = p }
+                out[#out + 1] = { kind = "paragraph", para = p }
             end
             pending.sp = 0
             pending.explicit = 0
         elseif t == "hlist" and (n.subtype == HL_EQUATION or n.subtype == HL_ALIGNMENT) then
-            if pending.body_seen then
-                emit_vspace(pending.sp)
-            elseif content[#content] and content[#content].kind == "paragraph" then
-                -- Display first on a page after a paragraph on the previous page:
-                -- its \abovedisplayskip was discarded with the furniture at the
-                -- break. Restore it (the symmetric case to belowdisplayskip above).
-                emit_vspace(param_dimen("abovedisplayskip"))
-            elseif content[#content] and content[#content].kind == "display" then
-                -- Two displays split by a page break (no glyph-bearing paragraph
-                -- between them, so they are adjacent in the stream). In continuous
-                -- flow TeX separates them by \belowdisplayskip + \abovedisplayskip;
-                -- both were discarded at the break (one as the page-bottom breakpoint
-                -- glue, the other as top-of-page furniture), so without this the two
-                -- displays abut. Restore the pair so the join matches unbroken flow.
-                emit_vspace((content[#content].below_skip or 0) + param_dimen("abovedisplayskip"))
-            end
-            pending.body_seen = true
+            emit_vspace(out, pending.sp)
             pending.sp = 0
             pending.explicit = 0
-            content[#content + 1] = {
+            out[#out + 1] = {
                 kind = "display",
-                -- \belowdisplayskip in force here, so a page break that discards it
-                -- (see the paragraph branch) can restore TeX's own value.
-                below_skip = param_dimen("belowdisplayskip"),
                 -- The band this display occupies, and where TeX put the box
                 -- inside it. display_shift is carried out here rather than on
                 -- the box because in a vertical list shift means a horizontal
@@ -608,7 +795,20 @@ local function walk_page(head, pending)
                 },
             }
         elseif t == "vlist" then
-            walk_page(n.head, pending)
+            walk_flow(n.head, pending, out)
+        elseif t == "ins" then
+            -- A footnote is not part of the pageless main stream. Retain its
+            -- fully typeset paragraphs/displays in a separate stream and link
+            -- it to the superscript marker stamped by template.tex. Keeping
+            -- ContentItems (rather than flattening text) preserves inline math,
+            -- colours, citations, and the ordinary browser reflow machinery.
+            local id = node.get_attribute(n, FOOTNOTE_INS_ATTR)
+            if not id or id == 0 then id = #footnotes + 1 end
+            local fn_content = {}
+            local saved_band = { indent = cur_band.indent, width = cur_band.width }
+            walk_flow(n.head, { sp = 0, explicit = 0 }, fn_content)
+            cur_band = saved_band
+            footnotes[#footnotes + 1] = { id = id, content = fn_content }
         elseif t == "glue" then
             pending.sp = (pending.sp or 0) + (n.width or 0)
             if n.subtype == GLUE_USERSKIP then
@@ -622,21 +822,17 @@ end
 
 Serializer = Serializer or {}   -- note_picture already added a table above; do not clobber it
 
-function Serializer.shipout(boxnum)
-    local b = tex.box[boxnum]
-    if not b then
-        texio.write_nl("serializer: shipout box " .. tostring(boxnum) .. " is nil")
-        return
-    end
-    walk_page(b.head, { sp = 0, explicit = 0, body_seen = false })
-end
-
 local function write_output()
+    walk_flow(flow_head, { sp = 0, explicit = 0 })
     local f = assert(io.open("output.json", "w"))
     f:write(json_encode({
+        source_width = source_width,
         fonts      = used_fonts,
         paragraphs = all_paragraphs,
         content    = content,
+        footnotes  = footnotes,
+        links      = link_labels,
+        anchors    = anchor_labels,
     }))
     f:close()
     local n_disp = 0
@@ -644,9 +840,10 @@ local function write_output()
         if it.kind == "display" then n_disp = n_disp + 1 end
     end
     texio.write_nl(string.format(
-        "serializer: wrote output.json (%d paragraph(s), %d item(s) in stream, %d display(s))",
-        #all_paragraphs, #content, n_disp))
+        "serializer: wrote output.json (%d paragraph(s), %d item(s) in stream, %d display(s), %d footnote(s))",
+        #all_paragraphs, #content, n_disp, #footnotes))
 end
 
 luatexbase.add_to_callback("pre_linebreak_filter",   capture_paragraph, "capture_paragraph")
+luatexbase.add_to_callback("buildpage_filter",       capture_flow,      "capture_flow")
 luatexbase.add_to_callback("finish_pdffile",         write_output,       "write_output")

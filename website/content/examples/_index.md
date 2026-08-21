@@ -2,6 +2,20 @@
 title: Examples
 ---
 
+## Reflow TeX in the wild
+
+{{< latex >}}
+Two complete documents -- a book and a research paper -- are already published
+on the open web with Reflow\,\TeX{}. They are the best place to see it at work
+on real, long, theorem-heavy material; the snippets further down show the
+individual pieces.
+{{< /latex >}}
+
+- [**Transducers**](https://mimuw.edu.pl/~bojan/books/transducer) — a book by Mikołaj Bojańczyk
+- [**Scoped MSO, Register Automata, and Expressions: Equivalence over Data Words**](https://radekp.com/scoped-mso-svg/) — a paper by Radosław Piórkowski
+
+## Demo snippets
+
 {{< latex >}}
 Each block below is a real \texttt{.tex} snippet from the repository's
 \texttt{examples/demo/} set -- the \emph{same} sources the vanilla and Hugo
@@ -32,4 +46,3 @@ above.
 {{< /latex >}}
 
 <p class="demo-link"><a href="{{< siteurl "testmath/" >}}">Open the full testmath.tex demo →</a></p>
-

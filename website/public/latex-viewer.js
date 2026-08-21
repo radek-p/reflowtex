@@ -11,9 +11,15 @@
 (function () {
 'use strict';
 
+// document.currentScript is only valid during this script's own synchronous
+// top-level execution — it reads as null from inside any callback (DOMContent-
+// Loaded handlers, event listeners, …), so anything that needs it later must
+// capture it now.
+const SCRIPT_URL = document.currentScript?.src;
+
 // Version marker for cache diagnosis: logs the ?v= content hash the page
-// requested, and stamps <html data-latex-viewer> when colour maps install.
-const BUILD = (document.currentScript?.src.match(/v=([a-f0-9]+)/) || [])[1] || 'unversioned';
+// requested, and stamps <html data-latex-viewer> once the viewer initialises.
+const BUILD = (SCRIPT_URL?.match(/v=([a-f0-9]+)/) || [])[1] || 'unversioned';
 console.log(`[latex-viewer] build ${BUILD}`);
 
 // ── Fixed rendering constants ─────────────────────────────────────────────────
@@ -24,7 +30,6 @@ const RUNNING_RULE = -1073741824;
 
 // ── KP algorithm defaults (overridable per-block via data attributes) ─────────
 
-const DEFAULT_BLEED_PX               = 10;
 const DEFAULT_ALIGN                  = 'justify'; // 'justify' | 'left' | 'right' | 'center'
 
 const DEFAULT_LINE_PENALTY           = 10;
@@ -40,6 +45,8 @@ const DEFAULT_MAX_EXPAND             = 0.02;
 const DEFAULT_MAX_SHRINK             = 0.02;
 const DEFAULT_MIN_GAP                = 16;   // pt
 const DEFAULT_PAD                    = 2;    // pt (only when spacing > min gap)
+const DEFAULT_DISPLAY_MIN_SPACE      = 10;   // pt; 0 allows affine gaps to reach zero
+const DEFAULT_DISPLAY_OVERFLOW_TOLERANCE = 2; // px; ignores rounding/tiny ink overhang
 const DEFAULT_USE_PROTRUSION         = true;
 const DEFAULT_USE_EXPANSION          = true;
 const DEFAULT_WIDTH_PT               = 400;
@@ -47,89 +54,53 @@ const DEFAULT_WIDTH_PT               = 400;
 const RIGHT_PROTRUSION = { 44:0.7,46:0.7,58:0.5,59:0.5,45:0.5,8208:0.5,8722:0.5,33:0.3,63:0.3 };
 const LEFT_PROTRUSION  = { 40:0.3,8220:0.7,8216:0.7 };
 
-// ── Colour substitution maps ─────────────────────────────────────────────────
-// Displayed values per theme, keyed by the colour LaTeX produced (lowercase
-// hex). Colours not listed render as-is. Each non-light theme is matched by
-// its class name on <html>; adding a theme = a new key here plus a class the
-// page switcher can set. Rendering uses CSS custom properties, so theme
-// switches restyle already-rendered SVG without any re-rendering.
+// ── Colour maps (optional, page-supplied) ────────────────────────────────────
+// reflowtex ships no palette of its own — colour substitution is entirely
+// optional and driven by data an integration embeds on the page, so this file
+// stays document-agnostic. A block opts in with [data-color-map="<name>"],
+// naming one entry of an optional page-supplied JSON island:
 //
-// '#000000' is special: it is the DEFAULT text colour (the serializer omits
-// colour on black glyphs, so they carry no inline fill). When a theme maps
-// it, all default-coloured LaTeX text uses that value; when absent, default
-// text falls back to the page's currentColor (as in the dark theme, where
-// the page already provides a light text colour).
-const COLOR_MAPS = {
-    light: {
-        '#000000': '#333333',   // default text → dark grey, easier on the eyes
-    },
-    dark: {
-        '#000000': '#e7e5e4',   // default text → lighter grey (stone-200)
-        '#ff0000': '#ff7b72',   // red   → softer red readable on dark
-        '#0000ff': '#79c0ff',   // blue  → lighter blue readable on dark
-        // lipicsGray is a *muted* accent: dark grey on the paper's white. On a
-        // near-black page the same role needs the mirror image — a grey lifted
-        // well clear of the background (7.2:1) but still dimmer than the body
-        // text, so it stays an accent. The faint cool cast of the original is
-        // kept.
-        '#4f4f54': '#9c9ca3',   // lipicsGray → lifted cool grey
-        // lipicsYellow is a highlight *drawn under text*, so it is the one
-        // colour that must be read against the default text rather than the
-        // page. Left bright it scores 1.26:1 against this theme's near-white
-        // text — the paper gets away with it only because its text is black
-        // (8:1). Dimmed to the brightest amber that still clears 4.5:1 (4.98),
-        // so it stays recognisably yellow. The other themes keep dark text on
-        // it and need no override.
-        '#fcc712': '#7a5c00',   // lipicsYellow → dark amber, readable under text
-    },
-    sepia: {
-        '#000000': '#453a26',   // default text → dark warm brown
-        '#ff0000': '#c02d0c',   // red   → vivid rust, clearly not text
-        '#0000ff': '#155e97',   // blue  → strong cool blue, clearly not text
-        '#4f4f54': '#544f45',   // lipicsGray → same darkness, warmed to the page
-    },
-    contrast: {
-        '#000000': '#000000',   // default text → true black
-        '#ff0000': '#b30000',   // red   → darker for contrast on white
-        '#0000ff': '#0000b3',   // blue  → darker for contrast on white
-        // No lipicsGray override: the class's own #4f4f54 already scores 8.2:1
-        // on white. The entry that used to be here existed only to darken the
-        // washed-out grey this pipeline had before.
-    },
-};
-
-// The page background behind a LaTeX block, per theme. TeX has no notion of the
-// page's colour, so `white` in a drawing does not mean the colour white — it
-// means "the paper", i.e. whatever the reader sees behind the figure. Pinning it
-// to #ffffff is right only by coincidence on a white page and turns into white
-// blobs on a dark one.
+//   <script id="latex-color-maps" type="application/json">
+//     { "<name>": {
+//         "colors": { "<theme>": { "<tex-hex>": "<displayed-hex>", … }, … },
+//         "tints":  { "<baked-hex>": ["<base-hex>", <percent>], … }
+//     }, … }
+//   </script>
 //
-// These track the page: <main> inherits the body's background, which the theme
-// classes set (see assets/css/main.css and layouts/_default/baseof.html). If the
-// page's palette changes, these must follow.
-const PAGE_BG = {
-    light:    '#fafaf9',   // body bg-stone-50
-    dark:     '#0c0a09',   // body dark:bg-stone-950
-    sepia:    '#f4ecd8',   // html.sepia body
-    contrast: '#ffffff',   // html.contrast body
-};
-
-// Colours TeX produced by mixing a base colour into the page: `red!20!white` is
-// red at 20% over the paper. TeX resolves that to flat RGB at compile time, so
-// what arrives is #ffcccc with no trace of how it was built — and a tint of a
-// white page is unreadable on a dark one. Re-deriving the mix at runtime keeps
-// the intent: a tint follows both its base colour and the current background.
+// colors — flat per-theme substitution, keyed by the hex TeX/tikz produced;
+//   colours not listed render as-is. Each non-light theme is matched by a
+//   class name on <html> (see this file's README's Theming section); adding a
+//   theme to a map is just a new key here plus a class the page switcher sets.
+//   Rendering reads these through CSS custom properties, so a theme switch
+//   restyles already-rendered SVG with no re-render.
 //
-// This is not the same as opacity, and must not be reimplemented with it: these
-// fills are opaque on purpose, because they mask the drawing underneath.
+//   '#000000' is special: it is the DEFAULT text colour (the serializer omits
+//   colour on black glyphs, so they carry no inline fill). Mapping it in a
+//   theme recolours all default-coloured text there; leaving it unmapped
+//   falls back to the page's currentColor, which is why basic dark mode keeps
+//   working even for a block with no colour map at all. '#ffffff' is special
+//   too, but is not something a map needs to set: it always tracks
+//   --latex-page-bg (see below), because a flat white fill in a TikZ/PDF
+//   picture means "the paper", not a deliberate colour choice — true with or
+//   without a colour map, so it's a fixed default rather than map data.
 //
-// Each entry is  baked-hex: [base colour, percentage of base].
-const TINTS = {
-    '#ffcccc': ['#ff0000', 20],   // red!20!white         — live intervals, scopes
-    '#ccccff': ['#0000ff', 20],   // blue!20!white        — live intervals, scopes
-    '#fef4d0': ['#fcc712', 20],   // lipicsYellow!20!white — scopes
-    '#808080': ['#000000', 50],   // black!50!white       — muted labels
-};
+// tints — colours TeX produced by mixing a base colour into the page, e.g.
+//   `red!20!white` is red at 20% over the paper. TeX resolves that to flat
+//   RGB at compile time, so what arrives is a baked hex with no trace of how
+//   it was built — and a tint of a *white* page reads wrong on a dark one.
+//   Re-deriving the mix at runtime, against whatever --latex-page-bg
+//   currently is, keeps the intent: a tint follows both its base colour and
+//   the current background. This is not the same as opacity, and must not be
+//   reimplemented with it — these fills are opaque on purpose, masking the
+//   drawing underneath. Each entry is baked-hex: [base-hex, percent-of-base].
+//
+// --latex-page-bg is deliberately not part of this data: TeX has no notion of
+// the page's colour, so it is the *page's* responsibility (its own theme
+// CSS), not a colour map's — e.g. `:root.dark { --latex-page-bg: #0c0a09; }`
+// alongside wherever else that theme sets its background. Unset, it falls
+// back to the CSS `Canvas` system colour, so tints and the viewer's own UI
+// chrome (the display scrollbox, citation popovers) still land somewhere
+// sane with zero configuration.
 
 function colorFill(c) {
     return `var(--latex-color-${c.slice(1)}, ${c})`;
@@ -139,34 +110,40 @@ let colorMapsInstalled = false;
 function installColorMaps() {
     if (colorMapsInstalled) return;
     colorMapsInstalled = true;
-    let css = '';
-    for (const theme of new Set([...Object.keys(COLOR_MAPS), ...Object.keys(PAGE_BG)])) {
-        const decls = Object.entries(COLOR_MAPS[theme] ?? {})
-            .map(([src, dst]) => `  --latex-color-${src.slice(1)}: ${dst};`);
-        if (PAGE_BG[theme]) decls.push(`  --latex-page-bg: ${PAGE_BG[theme]};`);
-        if (decls.length === 0) continue;
-        const sel = theme === 'light' ? ':root' : `:root.${theme}`;
-        css += sel + ' {\n' + decls.join('\n') + '\n}\n';
+    const island = document.getElementById('latex-color-maps');
+    let maps = {};
+    if (island) {
+        try { maps = JSON.parse(island.textContent); }
+        catch (e) { console.error('[latex-viewer] malformed #latex-color-maps JSON', e); }
     }
 
-    // Derived colours. These are theme-independent declarations: every term is
-    // itself a themed variable, so the browser recomputes them on a theme switch
-    // with no re-render. They sit on :root, where the theme classes also live, so
-    // var() resolves against the *same* element's themed values.
-    //
-    // The light theme's own block is a plain :root too, and comes first, so these
-    // must not restate anything COLOR_MAPS sets, or they would win for light only.
-    const derived = ['  --latex-color-ffffff: var(--latex-page-bg);'];
-    for (const [hex, [base, pct]] of Object.entries(TINTS)) {
-        derived.push(`  --latex-color-${hex.slice(1)}: color-mix(in srgb, `
-                   + `var(--latex-color-${base.slice(1)}, ${base}) ${pct}%, `
-                   + `var(--latex-page-bg));`);
+    // TeX has no notion of the page's colour, so a flat white fill in a
+    // TikZ/PDF picture (the paper, not a deliberate colour choice) needs to
+    // track whatever the page's background actually is. True for every
+    // picture regardless of colour map, so — unlike the rest of this
+    // function — this is not map data: it is a fixed, unconditional default,
+    // on :root so a map's own '#ffffff' entry (if any) still wins by
+    // specificity.
+    let css = ':root { --latex-color-ffffff: var(--latex-page-bg, Canvas); }\n';
+    for (const [name, map] of Object.entries(maps)) {
+        const sel = `.latex-block[data-color-map=${JSON.stringify(name)}]`;
+        for (const [theme, entries] of Object.entries(map.colors ?? {})) {
+            const decls = Object.entries(entries)
+                .map(([src, dst]) => `  --latex-color-${src.slice(1)}: ${dst};`);
+            if (decls.length === 0) continue;
+            const scoped = theme === 'light' ? sel : `:root.${theme} ${sel}`;
+            css += scoped + ' {\n' + decls.join('\n') + '\n}\n';
+        }
+        const tintDecls = Object.entries(map.tints ?? {}).map(([hex, [base, pct]]) =>
+            `  --latex-color-${hex.slice(1)}: color-mix(in srgb, `
+          + `var(--latex-color-${base.slice(1)}, ${base}) ${pct}%, `
+          + `var(--latex-page-bg, Canvas));`);
+        if (tintDecls.length) css += sel + ' {\n' + tintDecls.join('\n') + '\n}\n';
     }
-    css += ':root {\n' + derived.join('\n') + '\n}\n';
     // Default-coloured glyphs carry no inline fill; route them through the
-    // '#000000' variable with currentColor as fallback. The html prefix
-    // outranks the page's own `.latex-block svg text` rule regardless of
-    // stylesheet order.
+    // '#000000' variable with currentColor as fallback — works with zero
+    // colour maps installed. The html prefix outranks the page's own
+    // `.latex-block svg text` rule regardless of stylesheet order.
     //
     // Deliberately not 'rect': rules set their fill inline, and this rule's
     // specificity would otherwise reach inside a tikzpicture and repaint every
@@ -206,9 +183,11 @@ function paramsFromEl(el) {
         maxShrink:            num('maxShrink',            DEFAULT_MAX_SHRINK),
         minGapPt:             num('minGap',               DEFAULT_MIN_GAP),
         padPt:                num('pad',                  DEFAULT_PAD),
+        displayMinSpacePt:    num('displayMinSpace',      DEFAULT_DISPLAY_MIN_SPACE),
+        displayOverflowTolerancePx:
+                               num('displayOverflowTolerance', DEFAULT_DISPLAY_OVERFLOW_TOLERANCE),
         useProtrusion:        bool('protrusion',          DEFAULT_USE_PROTRUSION),
         useExpansion:         bool('expansion',           DEFAULT_USE_EXPANSION),
-        bleedPx:              num('bleedPx',              DEFAULT_BLEED_PX),
         align:                alignFromEl(el),
     };
 }
@@ -221,7 +200,14 @@ function paramsFromEl(el) {
 const registeredFontFaces = new Set();
 let   sharedDocType       = null;   // protobuf.js Document type (see loadSchema)
 let   fontUrlMap          = {};     // original font filename → served filename (see loadFontMap)
-let   fontBase            = '/fonts/'; // @font-face src base; override via #latex-font-map[data-fonts-base] for sites served under a subpath (e.g. GitHub Pages project sites)
+// Fonts are deployed beside this script. Resolving from the script URL keeps the
+// viewer portable across a domain root, arbitrary subpaths, and local previews
+// (including a page opened straight off disk over file://, where an absolute
+// '/fonts/'-style path can't resolve at all — see loadFontMap's handling of
+// data-fonts-base below, which must preserve this same resolution).
+let   fontBase            = SCRIPT_URL
+    ? new URL('fonts/', SCRIPT_URL).href
+    : '/fonts/';
 let   fontsPending        = false;  // a face still had to be fetched at first paint (see registerFonts / init)
 
 // Per-block cache so ResizeObserver can re-render without re-decoding.
@@ -339,11 +325,11 @@ const ro = new ResizeObserver(entries => {
 // only once it comes within a viewport of the screen. Which segments those are is
 // tracked by an IntersectionObserver on each segment's own <svg>, i.e. from the
 // real element positions. It is deliberately NOT computed from a running height
-// model: a painted display's actual height includes padding reserved for the ink
-// that overhangs its box (see paintSegment), which such a model cannot predict, so
-// it drifts from the real layout and, near the bottom of a long page, mis-gates
-// segments that are in fact on screen. Observing the elements has no such drift and
-// costs no per-frame measurement.
+// model: a model would have to reproduce every margin and wrapper detail of the
+// real layout (a scrollable display's headroom padding and compensating margins,
+// say — see layoutDocument), so it drifts from it and, near the bottom of a long
+// page, mis-gates segments that are in fact on screen. Observing the elements has
+// no such drift and costs no per-frame measurement.
 //
 // Painting is grow-only: a segment, once painted, is never hidden. Scrolling can
 // only ever add ink, never remove it, so text never vanishes as the page moves. A
@@ -1065,6 +1051,338 @@ function registerCiteSource(el, num) {
 // (a cheap data attribute) so a "jump to entry" affordance can use them later.
 function registerCiteTarget(el, num) { el.dataset.citeTarget = num; }
 
+// ── Cross-references ─────────────────────────────────────────────────────────
+// A \ref stamps every glyph of its printed text with the same document-local id
+// (see template.tex), so a reference is a *set* of glyphs, not one. That is what
+// makes it possible to light the whole reference up on hover even when the
+// browser has broken it across two lines — the pieces never had to stay
+// adjacent, they only have to share an id.
+//
+// Where a label lives is not something this file can know: one LaTeX document
+// may be published as one page or, as a book is, as one page per chapter. So
+// resolution is split. Labels that some block *on this page* defines are
+// resolved here, against what was actually compiled. Everything else is looked
+// up in an optional page-supplied map, which is the only place that knows how
+// this document was carved into URLs. A label in neither is not a link at all:
+// it keeps its text and its ordinary colour, so a reference whose target was
+// never published can never masquerade as something to click.
+let linkMap    = {};        // label → href, from the page (#latex-link-map)
+const pageLabels = new Set();  // labels defined by some block on this page
+const linkTargets = new Map(); // label → the anchor element, once one exists
+let blockSeq = 0;              // per-block prefix, so ids from two blocks differ
+// The directory the viewer was loaded from, which is the site root. Same trick
+// as fontBase, and for the same reason: resolving from the script's own URL is
+// the one thing that is true whether the site is at a domain root, under a
+// subpath, or opened from disk.
+let siteBase = document.currentScript && document.currentScript.src
+    ? new URL('.', document.currentScript.src).href
+    : (typeof location !== 'undefined' ? location.href : '/');
+
+function loadLinkMap() {
+    const el = document.getElementById('latex-link-map');
+    if (!el || !el.textContent.trim()) return;
+    try {
+        const d = JSON.parse(el.textContent);
+        if (d && typeof d === 'object') linkMap = d;
+    } catch { /* leave it empty; references simply stay inert */ }
+}
+
+// Where a link points, as something the browser can navigate to from wherever
+// this page happens to be sitting.
+//
+// The map holds paths relative to the *site root*, not to the server root, and
+// they are resolved against the directory the viewer script itself was loaded
+// from. That is what makes a built site portable: the same files work served at
+// a domain root, served under a subpath, and opened straight off disk over
+// file://, without anything being rewritten between those cases.
+function linkHref(link) {
+    if (!link) return null;
+    if (link.url) return link.url;
+    const label = link.label;
+    if (!label) return null;
+    if (linkTargets.has(label) || pageLabels.has(label)) return '#' + label;
+    const rel = linkMap[label];
+    if (!rel) return null;
+    try { return new URL(rel, siteBase).href; } catch { return rel; }
+}
+
+// Toggle a state class across every glyph of one reference. The group is found
+// by data-link, which is block-scoped, so two references printing the same
+// number stay independent and one that spans a line break still lights up whole.
+function setLinkState(key, cls, on) {
+    if (!key) return;
+    for (const el of document.querySelectorAll(`[data-link="${CSS.escape(key)}"]`))
+        el.classList.toggle(cls, on);
+}
+
+function installLinks() {
+    loadLinkMap();
+    const linkAt = t => (t && t.closest) ? t.closest('[data-link]') : null;
+    let hot = null, held = null;
+
+    document.addEventListener('pointerover', e => {
+        const el = linkAt(e.target), key = el?.dataset.link || null;
+        if (key === hot) return;
+        setLinkState(hot, 'latex-link-hover', false);
+        hot = key;
+        setLinkState(hot, 'latex-link-hover', true);
+    }, { passive: true });
+    document.addEventListener('pointerout', e => {
+        if (linkAt(e.relatedTarget)?.dataset.link === hot) return;
+        setLinkState(hot, 'latex-link-hover', false); hot = null;
+    }, { passive: true });
+
+    // Pressed state is its own class so a page can colour press differently from
+    // hover. Released globally, not on the glyph, or a drag off the reference
+    // would leave it stuck looking pressed.
+    document.addEventListener('pointerdown', e => {
+        held = linkAt(e.target)?.dataset.link || null;
+        setLinkState(held, 'latex-link-active', true);
+    }, { passive: true });
+    const release = () => { setLinkState(held, 'latex-link-active', false); held = null; };
+    document.addEventListener('pointerup', release, { passive: true });
+    document.addEventListener('pointercancel', release, { passive: true });
+
+    document.addEventListener('click', e => {
+        const el = linkAt(e.target);
+        const href = el && el.dataset.linkHref;
+        if (!href) return;
+        e.preventDefault();
+        const local = el.dataset.linkLabel && linkTargets.get(el.dataset.linkLabel);
+        if (local) {
+            local.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Leave the fragment in the address bar so the position is
+            // shareable and the back button behaves, without a second jump.
+            history.pushState(null, '', href);
+        } else {
+            window.location.href = href;
+        }
+    });
+
+    // Keyboard: a reference is focusable (see registerLinkGlyph), so Enter and
+    // Space must do what a click does.
+    document.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const el = linkAt(e.target);
+        if (!el) return;
+        e.preventDefault();
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+}
+
+// Tag one glyph of a reference. Only a reference we can actually resolve is
+// marked — an unresolvable one is left as plain text (see the note above).
+// Attached once, at element creation, so the reconciler's reuse keeps it.
+function registerLinkGlyph(el, id, cache) {
+    const link = cache.links?.[id - 1];
+    const href = linkHref(link);
+    if (!href) return;
+    el.classList.add('latex-link');
+    el.dataset.link = `${cache.blockKey}:${id}`;
+    el.dataset.linkHref = href;
+    if (link.label) el.dataset.linkLabel = link.label;
+    // One glyph of the reference carries the accessible name and the tab stop;
+    // the rest are decoration, so a screen reader reads "Section 2", not "2 2 2".
+    if (!document.querySelector(`[data-link="${CSS.escape(el.dataset.link)}"]`)) {
+        el.setAttribute('role', 'link');
+        el.setAttribute('tabindex', '0');
+    }
+}
+
+// ── Footnotes ────────────────────────────────────────────────────────────────
+// Footnote bodies are ordinary ContentItem streams stored outside the document's
+// main flow. Hover/focus previews them; click pins the popover for touch users and
+// so links/citations inside the fully rendered LaTeX body remain interactive.
+let footnotePop = null;
+let footnoteBody = null;
+let footnoteArrow = null;
+let pinnedFootnote = null;   // { block, id, anchor } or null
+let hoverFootnote = null;
+
+function installFootnotes() {
+    if (footnotePop) return;
+    const style = document.createElement('style');
+    style.textContent = `
+      .latex-footnote-source { cursor: help; text-decoration: underline dotted;
+        text-underline-offset: .14em; pointer-events: auto; }
+      #latex-footnote-pop { position: fixed; z-index: 2147483000; display: none;
+        width: max-content; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
+        overflow: auto; padding: .65rem .75rem; border: 1px solid color-mix(in srgb,
+        currentColor 28%, transparent); border-radius: .45rem;
+        background: var(--latex-page-bg, Canvas); color: inherit;
+        box-shadow: 0 .5rem 1.6rem rgb(0 0 0 / .24); }
+      #latex-footnote-pop.latex-footnote-open { display: block; }
+      #latex-footnote-pop .latex-footnote-arrow { position: absolute; width: .7rem;
+        height: .7rem; top: -.42rem; transform: rotate(45deg);
+        background: var(--latex-page-bg, Canvas); border-left: 1px solid
+        color-mix(in srgb, currentColor 28%, transparent); border-top: 1px solid
+        color-mix(in srgb, currentColor 28%, transparent); }
+      #latex-footnote-pop.latex-footnote-above .latex-footnote-arrow {
+        top: auto; bottom: -.42rem; transform: rotate(225deg); }
+      #latex-footnote-pop .latex-footnote-content { margin: 0; overflow: visible; }
+      #latex-footnote-pop .latex-footnote-content svg { max-width: 100%; }
+    `;
+    document.head.appendChild(style);
+
+    footnotePop = document.createElement('div');
+    footnotePop.id = 'latex-footnote-pop';
+    footnotePop.setAttribute('role', 'tooltip');
+    footnoteArrow = document.createElement('div');
+    footnoteArrow.className = 'latex-footnote-arrow';
+    footnoteBody = document.createElement('div');
+    footnoteBody.className = 'latex-block latex-footnote-content';
+    footnotePop.append(footnoteArrow, footnoteBody);
+    document.body.appendChild(footnotePop);
+
+    const sourceAt = t => (t && t.closest) ? t.closest('[data-footnote]') : null;
+    document.addEventListener('pointerover', e => {
+        if (pinnedFootnote) return;
+        const el = sourceAt(e.target);
+        if (el) openFootnote(el, false);
+    });
+    document.addEventListener('pointerout', e => {
+        if (pinnedFootnote) return;
+        const from = sourceAt(e.target);
+        if (!from) return;
+        const to = sourceAt(e.relatedTarget);
+        if (!to || to.dataset.footnote !== from.dataset.footnote) closeFootnote();
+    });
+    document.addEventListener('focusin', e => {
+        if (!pinnedFootnote) {
+            const el = sourceAt(e.target);
+            if (el) openFootnote(el, false);
+        }
+    });
+    document.addEventListener('focusout', e => {
+        if (!pinnedFootnote && !footnotePop.contains(e.relatedTarget)) closeFootnote();
+    });
+    document.addEventListener('click', e => {
+        const el = sourceAt(e.target);
+        if (el) {
+            e.preventDefault();
+            const block = el.closest('[data-nodelist-b64]');
+            const id = el.dataset.footnote;
+            if (pinnedFootnote && pinnedFootnote.block === block && pinnedFootnote.id === id) {
+                closeFootnote();
+            } else {
+                openFootnote(el, true);
+            }
+        } else if (pinnedFootnote && !footnotePop.contains(e.target)) {
+            closeFootnote();
+        }
+    });
+    document.addEventListener('keydown', e => {
+        const el = sourceAt(e.target);
+        if (el && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            openFootnote(el, true);
+        } else if (e.key === 'Escape' && (pinnedFootnote || hoverFootnote)) {
+            closeFootnote();
+        }
+    });
+    const reposition = () => {
+        const active = pinnedFootnote || hoverFootnote;
+        if (active) positionFootnote(active.anchor);
+    };
+    const reflow = () => {
+        const active = pinnedFootnote || hoverFootnote;
+        if (active) {
+            renderFootnote(active.block, active.id);
+            positionFootnote(active.anchor);
+        }
+    };
+    window.addEventListener('scroll', reposition, { passive: true });
+    window.addEventListener('resize', reflow);
+}
+
+function footnoteGroupRect(el) {
+    const id = el.dataset.footnote;
+    const same = e => e && e.dataset && e.dataset.footnote === id;
+    const kin = [el];
+    for (let p = el.previousElementSibling; same(p); p = p.previousElementSibling) kin.push(p);
+    for (let n = el.nextElementSibling; same(n); n = n.nextElementSibling) kin.push(n);
+    let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+    for (const k of kin) {
+        const b = glyphScreenRect(k);
+        L = Math.min(L, b.left); T = Math.min(T, b.top);
+        R = Math.max(R, b.right); B = Math.max(B, b.bottom);
+    }
+    return isFinite(L) ? { left:L, top:T, right:R, bottom:B, width:R-L, height:B-T }
+                       : el.getBoundingClientRect();
+}
+
+function renderFootnote(block, id) {
+    const data = blockData.get(block);
+    if (!data) return false;
+    const note = (data.doc.footnotes || []).find(f => String(f.id) === String(id));
+    if (!note) return false;
+    data.footnoteCaches = data.footnoteCaches || new Map();
+    let fc = data.footnoteCaches.get(String(id));
+    if (!fc) {
+        fc = { bcs:null, dom:null, layout:null, stats:null };
+        data.footnoteCaches.set(String(id), fc);
+    }
+    const widthPx = Math.min(420, Math.max(220, document.documentElement.clientWidth - 32));
+    const noteDoc = {
+        paragraphs: data.doc.paragraphs,
+        content: note.content,
+        pictures: data.doc.pictures,
+        glyph_metrics: data.doc.glyph_metrics,
+        // A footnote's displays are modelled by the pipeline exactly as the
+        // body's are, and their derivatives are per scaled point *of the measure
+        // they were compiled at* — so the popover has to carry that measure
+        // across or it would evaluate them against a width of zero.
+        source_width: data.doc.source_width,
+    };
+    footnoteBody.style.width = widthPx + 'px';
+    footnoteBody.replaceChildren(layoutDocument(
+        data.fontInfo, noteDoc, widthPx / ZOOM, data.params, fc));
+    paintDocument(data.fontInfo, fc);
+    return true;
+}
+
+function positionFootnote(anchor) {
+    const r = footnoteGroupRect(anchor);
+    const gap = 9, vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    const pw = footnotePop.offsetWidth, ph = footnotePop.offsetHeight;
+    const cx = r.left + r.width / 2;
+    const left = Math.max(8, Math.min(cx - pw / 2, vw - pw - 8));
+    const above = (r.bottom + gap + ph > vh) && (r.top - gap - ph > 0);
+    const rawTop = above ? r.top - ph - gap : r.bottom + gap;
+    const top = Math.max(8, Math.min(rawTop, vh - ph - 8));
+    footnotePop.classList.toggle('latex-footnote-above', above);
+    footnotePop.style.left = left + 'px';
+    footnotePop.style.top = top + 'px';
+    const box = footnotePop.getBoundingClientRect();
+    footnoteArrow.style.left = Math.max(12, Math.min(box.width - 12, cx - box.left)) + 'px';
+}
+
+function openFootnote(anchor, pin) {
+    const block = anchor.closest('[data-nodelist-b64]');
+    const id = anchor.dataset.footnote;
+    if (!block || !renderFootnote(block, id)) return;
+    footnotePop.classList.add('latex-footnote-open');
+    footnotePop.classList.toggle('latex-footnote-pinned', pin);
+    positionFootnote(anchor);
+    const active = { block, id, anchor };
+    if (pin) { pinnedFootnote = active; hoverFootnote = null; }
+    else hoverFootnote = active;
+}
+
+function closeFootnote() {
+    pinnedFootnote = null; hoverFootnote = null;
+    if (footnotePop) footnotePop.classList.remove(
+        'latex-footnote-open', 'latex-footnote-pinned', 'latex-footnote-above');
+}
+
+function registerFootnoteSource(el, id) {
+    el.classList.add('latex-footnote-source');
+    el.dataset.footnote = id;
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-describedby', 'latex-footnote-pop');
+}
+
 // ── SVG renderer ──────────────────────────────────────────────────────────────
 
 function svgEl(tag, attrs) {
@@ -1119,7 +1437,7 @@ function affineMul(m1, m2) {
             a1*e2 + c1*f2 + e1,  b1*e2 + d1*f2 + f1];
 }
 
-function reconcileSink(byNode, used, stats) {
+function reconcileSink(byNode, used, stats, cache) {
     let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
     const stack = [];
 
@@ -1180,6 +1498,8 @@ function reconcileSink(byNode, used, stats) {
                 // at creation, so reflow (which reuses the element) keeps them.
                 if (n.cite)       registerCiteSource(el, n.cite);
                 if (n.citetarget) registerCiteTarget(el, n.citetarget);
+                if (n.footnote)   registerFootnoteSource(el, n.footnote);
+                if (n.link)       registerLinkGlyph(el, n.link, cache);
                 byNode.set(n, el); stats.created++;
             } else {
                 el.setAttribute('x', x); el.setAttribute('y', y); stats.repositioned++;
@@ -1251,8 +1571,8 @@ function reconcileSink(byNode, used, stats) {
             place(auxParent, lastRect, el, isNew);
             used.add(el); lastRect = el;
         },
-        // A precompiled tikzpicture. Its markup never changes, so reflowing is
-        // only ever a new transform — the drawing itself is built once.
+        // A precompiled TikZ box or included PDF page. Its markup never changes,
+        // so reflowing is only a new transform — the drawing is built once.
         picture(n, x, y) {
             let el = byNode.get(n), isNew = !el;
             const pic = n.pic;
@@ -1411,9 +1731,14 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
                 else if(ratio<0&&(n.shrink_order||0)===fillOrder&&n.shrink>0) w+=ratio*n.shrink;
                 if(n.leader) renderLeaders(fontInfo,sink,n,x,baselineY,w);
                 if(n.subtype===13) sink.space(n, x, baselineY);
+                if(sink.gap) sink.gap(n,'width',x,w*SP_TO_PX);
                 x+=w*SP_TO_PX; break;
             }
-            case 'kern':  x+=n.kern*(1+expandRatio)*SP_TO_PX; break;
+            case 'kern':{
+                const w=n.kern*(1+expandRatio)*SP_TO_PX;
+                if(sink.gap) sink.gap(n,'kern',x,w);
+                x+=w; break;
+            }
             case 'picture':{
                 // The picture fills its TeX box exactly; the box is what makes
                 // it behave like any other box in text, math or an align row.
@@ -1435,7 +1760,11 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
                 break;
             }
             case 'disc':  x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,expandRatio,0,runH,runD); break;
-            case 'math':  x+=n.surround*SP_TO_PX; break;
+            case 'math':{
+                const w=n.surround*SP_TO_PX;
+                if(sink.gap) sink.gap(n,'surround',x,w);
+                x+=w; break;
+            }
             case 'hlist':{
                 const{ratio:hr,fillOrder:hfo}=hlistGlueRatio(n);
                 renderNodes(fontInfo,sink,n.children,x,baselineY+(n.shift??0)*SP_TO_PX,hr,0,hfo,n.height,n.depth);
@@ -1460,13 +1789,11 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
 //   paragraph → Knuth-Plass re-breaks it at the reader's width, many lines
 //   display   → one line whose single node is TeX's finished box
 //
-// Displays are never re-broken or re-packed: TeX already set their glue at
-// compile time, and replaying that verbatim is what keeps \hfill, \rlap,
-// \mathclap and alignment tabskips faithful to the PDF (re-packing would
-// silently activate glue TeX deliberately left slack). The only freedom taken
-// is horizontal placement: the box is centred at the reader's width, or
-// pinned to the left edge and allowed to overflow when it does not fit — the
-// container scrolls in that case.
+// Displays are not re-broken or re-packed. The pipeline recovers sparse affine
+// width derivatives by matching complete display trees from three increasingly
+// wide TeX runs, and those finished dimensions are evaluated at the reader's
+// width. The renderer never guesses which node is a gap or activates glue which
+// TeX deliberately left slack.
 //
 // Split into two phases so far-from-viewport blocks can be sized without being
 // drawn: layoutDocument runs KP + line spacing and sets the svg's dimensions
@@ -1490,11 +1817,74 @@ function contentStream(doc) {
 // segment list is stable across reflows and every element stays reusable.
 const HL_ALIGNMENT = 4;   // hlist subtype: one row of an alignment
 
+// Anchor markers that ended up *inside* what was typeset — a \label written
+// mid-sentence, or one amsmath replayed into a display's own box. Their exact
+// pen position is known but not useful: an anchor is a scroll destination, and
+// the segment is the smallest thing worth scrolling to. Walked once per
+// paragraph/box ever, since neither the tree nor the answer changes with width.
+const anchorIdsCache = new WeakMap();
+function anchorIdsOf(key, roots) {
+    let ids = anchorIdsCache.get(key);
+    if (ids) return ids;
+    ids = [];
+    (function walk(ns) {
+        for (const n of ns || []) {
+            if (n.anchor) ids.push(n.anchor);
+            walk(n.children); walk(n.pre); walk(n.post); walk(n.replace);
+            if (n.leader) walk([n.leader]);
+        }
+    })(roots);
+    anchorIdsCache.set(key, ids);
+    return ids;
+}
+
+// A \begin{center}\includegraphics..\end{center}-style figure — a paragraph
+// whose only ink is one or more pictures, no running text. \mypic in the
+// transducers book is the motivating case, but the test is structural (picture
+// present, no glyph present) so it holds for any front end's plain centred
+// figure. Such a paragraph gets its own segment (isFigure, below) so a picture
+// wider than the column can pan independently instead of bleeding into the
+// margin, the same reasoning that gives every display its own scroll box.
+// Cached per paragraph object, since segmentsOf reruns on every reflow.
+const figureParaCache = new WeakMap();
+function isFigureParagraph(para) {
+    let v = figureParaCache.get(para);
+    if (v !== undefined) return v;
+    let hasPicture = false, hasGlyph = false;
+    (function walk(ns) {
+        for (const n of ns || []) {
+            if (n.type === 'picture') hasPicture = true;
+            else if (n.type === 'glyph') hasGlyph = true;
+            walk(n.children); walk(n.pre); walk(n.post); walk(n.replace);
+            if (n.leader) walk([n.leader]);
+        }
+    })(para.nodes);
+    v = hasPicture && !hasGlyph;
+    figureParaCache.set(para, v);
+    return v;
+}
+
 function segmentsOf(doc) {
     const segs = [];
+    const pendingAnchors = [];
+    const own = (seg, ids) => { if (ids.length) (seg.anchors ||= []).push(...ids); };
     let text = null, gap = 0;
     for (const item of contentStream(doc)) {
         if (item.kind === 'vspace') { gap = item.amount * SP_TO_PX; continue; }
+        if (item.kind === 'anchorpoint') {
+            // A label that stood between two items — nearly always straight
+            // after a sectioning command, which is why it is in vertical mode
+            // at all. Attach it to the item it *followed*, so jumping to it
+            // lands on the heading rather than below it.
+            //
+            // Deliberately does not close the open text run or consume `gap`:
+            // segmentation must depend only on what is typeset, or adding a
+            // label would split a merged paragraph run and change its leading.
+            const owner = segs[segs.length - 1];
+            if (owner) (owner.anchors ||= []).push(item.anchor);
+            else pendingAnchors.push(item.anchor);
+            continue;
+        }
         if (item.kind === 'display') {
             // Consecutive alignment rows are the rows of one align/gather, and
             // must be laid out together: they share a single offset so their
@@ -1508,11 +1898,24 @@ function segmentsOf(doc) {
             } else {
                 segs.push({ kind: 'display', isAlign, rows: [{ item, gap: 0 }], gapBefore: gap });
             }
+            own(segs[segs.length - 1], anchorIdsOf(item.box, item.box.children));
             text = null; gap = 0;
             continue;
         }
         const para = doc.paragraphs[item.para - 1];
         if (!para) continue;
+        if (isFigureParagraph(para)) {
+            // Never merges with neighbouring prose (own(...) + closing the run
+            // below), for the same reason a display never does: it needs its own
+            // scroll box, and a shared one would let an oversized figure drag
+            // perfectly-fitting text out of view with it.
+            const fig = { kind: 'text', isFigure: true,
+                          items: [{ index: item.para, para }], gapBefore: gap };
+            segs.push(fig);
+            own(fig, anchorIdsOf(para, para.nodes));
+            text = null; gap = 0;
+            continue;
+        }
         // Consecutive paragraphs normally merge into one text segment and stack
         // with adaptive leading. An explicit vspace before this paragraph (from
         // \vspace, or a section heading's before/after skip) breaks that merge:
@@ -1520,8 +1923,11 @@ function segmentsOf(doc) {
         // the space TeX asked for (segment boxes stack baseline-to-baseline).
         if (!text || gap) { text = { kind: 'text', items: [], gapBefore: gap }; segs.push(text); }
         text.items.push({ index: item.para, para });
+        own(text, anchorIdsOf(para, para.nodes));
         gap = 0;
     }
+    // A label before anything was typeset has nothing to trail, so it leads.
+    if (pendingAnchors.length && segs.length) own(segs[0], pendingAnchors);
     return segs;
 }
 
@@ -1531,6 +1937,13 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
     const widthSp  = Math.round(widthPt * 65536);
     const columnPx = widthPt * ZOOM;
     const lines = [], lrp = [], meta = [];
+    // Right edge of the widest line's ink, tracked alongside the loop below.
+    // columnPx-only would be wrong for a figure segment (see isFigureParagraph):
+    // its one line is an unbreakable, unshrinkable box that is exactly as wide
+    // as the source picture, so an oversized one is genuinely wider than the
+    // column rather than merely mis-measured. Harmless for ordinary text, whose
+    // segment W is never read (only isFigure's mount logic consults it).
+    let maxRightPx = columnPx;
 
     for (const { index, para } of seg.items) {
         let bcs = cache.bcs.get(index);
@@ -1570,11 +1983,21 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
             const er    = p.useExpansion ? ratio * p.maxExpand : 0;
             const protX = -(p.useProtrusion ? ln.leftProtrusion * SP_TO_PX : 0);
             const natSp = sumWidthSp(ln.nodes);
+            const natPx = natSp * SP_TO_PX;
             let x0, fillRatio = 0, fillOrder = 0;
-            if (ratio < 0) {
+            if (ratio < 0 || natPx > availPx) {
+                // ratio<0 is not a reliable proxy for "too wide to fit" on its
+                // own: kpBreak's ratio falls back to exactly 0 (not negative)
+                // when a line is overfull but every glue order has zero
+                // shrinkability to report a shrink ratio against — exactly
+                // \begin{center}'s infinite-stretch, zero-shrink centring
+                // glue. Left unguarded, the center/right branch below computes
+                // a negative x0 for any centred figure wider than the column,
+                // drawing it into negative SVG coordinates: still positioned
+                // correctly relative to nothing, but visibly detached to the
+                // left of the column instead of flush with its left edge.
                 x0 = protX;  // squeezed to fit — same position as justified
             } else {
-                const natPx = natSp * SP_TO_PX;
                 switch (align) {
                     case 'right':  x0 = availPx - natPx; break;
                     case 'center': x0 = (availPx - natPx) / 2; break;
@@ -1590,25 +2013,18 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
                     if (slackSp > 0) { fillRatio = slackSp / fi.stretch; fillOrder = fi.order; x0 = protX; }
                 }
             }
+            maxRightPx = Math.max(maxRightPx, x0 + indentPx + natPx);
             lines.push(ln);
             lrp.push({ ratio, er, x0: x0 + indentPx, fillRatio, fillOrder });
             meta.push(lineMeta);
         }
     }
-    return { lines, lrp, meta, W: Math.ceil(columnPx) };
+    return { lines, lrp, meta, W: Math.ceil(maxRightPx) };
 }
 
-// Where a box's ink actually starts and ends, in the box's own coordinates.
-//
-// A display's width says nothing about where its ink is: \[..\] carries its
-// centring in the box's shift, amsmath bakes an align* row's centring into
-// leading glue (140pt of it, hidden behind a negative backup cell), and
-// numbered equations use frozen kerns. All of that was computed for the
-// compiled \displaywidth and is meaningless at the reader's width. Measuring
-// the ink sidesteps every one of those cases without special-casing any.
-//
-// This drives the real renderNodes with a sink that records instead of
-// drawing, so the measurement cannot drift from what actually gets painted.
+// Where a box's ink ends, used only to size its horizontal scroll area.
+// Placement comes exclusively from TeX's (possibly affine-evaluated) geometry;
+// ink bounds must never feed back into centring or alignment.
 function inkExtentOf(fontInfo, box) {
     let min = Infinity, max = -Infinity;
     // Transform-aware: under a rotation it is the box's *height* that spans x,
@@ -1641,95 +2057,190 @@ function inkExtentOf(fontInfo, box) {
     return isFinite(min) ? { min, max } : { min: 0, max: 0 };
 }
 
-// A numbered display equation is packed by TeX to the full \displaywidth as
-// [kern, body(#6), kern, number(#7)]: the equation centred in the band and its
-// number flushed to the right margin. Because the whole thing is one rigid box,
-// the re-centring below would count the number as ink and shove the equation
-// left of centre. LuaTeX marks the number box with hlist subtype 7
-// (equationnumber), so it can be lifted out exactly rather than guessed at.
-// Returns the body (a shallow copy of the box with the number and its gap kern
-// removed, its width shrunk to what remains) and the number box, or null.
-const HL_EQNUMBER = 7;
-function splitEquationNumber(box) {
-    const ch = box.children;
-    if (!ch || ch.length < 2) return null;
-    const last = ch[ch.length - 1];
-    if (!(last.type === 'hlist' && last.subtype === HL_EQNUMBER)) return null;
-    let cut = ch.length - 1;                                     // drop the number…
-    if (cut > 0 && (ch[cut-1].type === 'kern' || ch[cut-1].type === 'glue')) cut--;  // …and its gap
-    const children = ch.slice(0, cut);
-    // The advance after the body must reflect only what is left, not the original
-    // full-width box, or the trailing spacer/number would land a whole band away.
-    const bodyBox = { ...box, children, width: sumWidthSp(children) };
-    return { bodyBox, numberBox: last };
-}
-
-// Lay a display segment out: rigid boxes, never re-broken or re-packed. The
-// only freedom taken is where the group as a whole sits horizontally.
-function layoutDisplaySegment(fontInfo, seg, widthPt) {
-    const columnPx = widthPt * ZOOM;
-    const diPx = (seg.rows[0].item.display_indent || 0) * SP_TO_PX;
-
-    // A lone centred equation with a number: re-centre the body at the reader's
-    // width and pin the number to the right margin independently, so widening the
-    // column keeps the equation centred and the number at the edge. Only when the
-    // body actually fits — an overflowing equation falls through to the generic
-    // left-pin path, which keeps TeX's box (number and all) intact and scrollable.
-    if (seg.rows.length === 1) {
-        const split = splitEquationNumber(seg.rows[0].item.box);
-        if (split) {
-            const availW  = columnPx - diPx;
-            const bodyInk = inkExtentOf(fontInfo, split.bodyBox);
-            const numInk  = inkExtentOf(fontInfo, split.numberBox);
-            const bodyW   = bodyInk.max - bodyInk.min;
-            const xBody   = diPx + (availW - bodyW) / 2 - bodyInk.min;   // body ink centred
-            const xNum    = diPx + availW - numInk.max;                  // number ink flush right
-            const spacer  = xNum - (xBody + split.bodyBox.width * SP_TO_PX);
-            if (bodyW <= availW && spacer >= 0) {
-                return {
-                    lines: [{ nodes: [
-                        split.bodyBox,
-                        { type: 'kern', kern: spacer / SP_TO_PX },
-                        split.numberBox,
-                    ], ratio: 0, fitness: 2, leftProtrusion: 0 }],
-                    lrp:  [{ ratio: 0, er: 0, x0: xBody }],
-                    gaps: [null],
-                    W:    Math.ceil(columnPx),
-                };
-            }
+// Evaluate sparse affine geometry recovered from several increasingly wide
+// LuaTeX compilations. This is deliberately oblivious to display type:
+// equation, \[...\], align, gather, multline, and package-defined displays all
+// arrive as the same recursively matched finished node tree.
+const AFFINE_NODE_FIELDS = [
+    'width', 'height', 'depth', 'stretch', 'shrink', 'kern', 'shift',
+    'glue_set', 'surround', 'm_a', 'm_b', 'm_c', 'm_d',
+];
+const AFFINE_CHILD_LISTS = ['children', 'pre', 'post', 'replace'];
+function affineDisplayNode(n, deltaSp) {
+    let out = n, changed = false;
+    const edit = () => { if (!changed) { out = { ...n }; changed = true; } };
+    for (const field of AFFINE_NODE_FIELDS) {
+        const rate = n[`${field}_rate`];
+        if (rate !== undefined) {
+            edit();
+            out[field] = (n[field] || 0) + rate * deltaSp;
         }
     }
+    for (const key of AFFINE_CHILD_LISTS) {
+        if (!n[key]?.length) continue;
+        const children = n[key].map(child => affineDisplayNode(child, deltaSp));
+        if (children.some((child, i) => child !== n[key][i])) {
+            edit(); out[key] = children;
+        }
+    }
+    if (n.leader) {
+        const leader = affineDisplayNode(n.leader, deltaSp);
+        if (leader !== n.leader) { edit(); out.leader = leader; }
+    }
+    return out;
+}
 
+function affineDisplayItem(item, deltaSp) {
+    const out = { ...item, box: affineDisplayNode(item.box, deltaSp) };
+    for (const field of ['display_width', 'display_indent', 'display_shift']) {
+        const rate = item[`${field}_rate`];
+        if (rate !== undefined) out[field] = (item[field] || 0) + rate * deltaSp;
+    }
+    return out;
+}
+
+// Which of a display's affine gaps must keep a minimum, and which may close.
+//
+// The finished tree holds two kinds of horizontal space that shrink with the
+// measure, and they are not the same thing. Space with ink on *both* sides is
+// internal: it separates two pieces of the formula — the gap between an align's
+// columns, or between the last column and its equation number — and closing it
+// would run them together, so it stops at the configurable minimum. Space with
+// ink on only one side is outer: the centring glue of an align row, the margin
+// left of a short display. It belongs to the column, not to the formula, and
+// may close completely. Squeezing it to nothing is exactly right — a display
+// should be as narrow as its own ink before it starts to scroll.
+//
+// The test is geometric, not structural, so it holds for whatever tree TeX
+// produced rather than for the environments we happened to think of: place the
+// display with the renderer's own traversal, note where ink lands and where each
+// floor-bearing gap lands, then ask whether ink falls on both sides of the gap.
+// It reads only the compiled tree, so it is computed once per display and cached
+// — the answer cannot change with the reader's width.
+const displayGapKinds = new WeakMap();   // display item → Map(node → {field: isInternal})
+
+function classifyDisplayGaps(fontInfo, item) {
+    const cached = displayGapKinds.get(item);
+    if (cached) return cached;
+    const kinds = new Map();
+    const gaps = [];
+    let inkMin = Infinity, inkMax = -Infinity;
+    const ink = (x, w) => {
+        if (x < inkMin) inkMin = x;
+        if (x + w > inkMax) inkMax = x + w;
+    };
+    renderNodes(fontInfo, {
+        beginLine() {},
+        // A gap's kind is about horizontal neighbours, and a transform's children
+        // advance the pen untransformed (see renderNodes), so the plain pen
+        // positions are the ones to compare. No matrix bookkeeping is needed.
+        beginTransform() {}, endTransform() {},
+        glyph(n, x)         { ink(x, gW(n) * SP_TO_PX); },
+        space()             {},
+        // Zero-width rules never reach this sink (renderNodes skips them), so a
+        // strut — which is exactly that — correctly does not count as ink.
+        rule(n, x, y, w)    { ink(x, w); },
+        picture(n, x)       { ink(x, n.width * SP_TO_PX); },
+        gap(n, field, x, w) { if (n[`${field}_floor`]) gaps.push({ n, field, x1: x, x2: x + w }); },
+    }, [item.box], 0, 0, 0, 0, 0);
+
+    // Ink that ends within a scaled point of a gap's edge abuts it. TeX's own
+    // dimensions are integral scaled points, so anything finer is arithmetic
+    // noise from accumulating two different sums to the same place — and an
+    // equation number, whose box is pulled back onto its own right edge, lands
+    // exactly there.
+    const ABUT = SP_TO_PX;
+    for (const g of gaps) {
+        const internal = inkMin <= g.x1 + ABUT && inkMax >= g.x2 - ABUT;
+        let fields = kinds.get(g.n);
+        if (!fields) kinds.set(g.n, fields = {});
+        fields[g.field] = internal;
+    }
+    displayGapKinds.set(item, kinds);
+    return kinds;
+}
+
+// The narrowest measure this node's gaps may be evaluated at. Only nodes the
+// classifier saw are considered, which is what keeps the floor to genuine gaps:
+// a box's `width` also carries a rate, but a box is not space — it is however
+// wide its contents came out — so it never fences off a measure of its own.
+function affineFloorWidthNode(n, sourceWidthSp, floorSp, kinds) {
+    let minimum = 0;
+    const fields = kinds.get(n);
+    if (fields) {
+        for (const field of ['width', 'kern', 'surround']) {
+            const rate = n[`${field}_rate`];
+            if (fields[field] === undefined || !(rate > 0)) continue;
+            const floor = fields[field] ? floorSp : 0;
+            minimum = Math.max(minimum,
+                sourceWidthSp + (floor - (n[field] || 0)) / rate);
+        }
+    }
+    for (const key of AFFINE_CHILD_LISTS) {
+        for (const child of n[key] || []) {
+            minimum = Math.max(minimum, affineFloorWidthNode(child, sourceWidthSp, floorSp, kinds));
+        }
+    }
+    if (n.leader) minimum = Math.max(minimum, affineFloorWidthNode(n.leader, sourceWidthSp, floorSp, kinds));
+    return minimum;
+}
+
+function affineFloorWidthItem(fontInfo, item, sourceWidthSp, floorSp) {
+    const kinds = classifyDisplayGaps(fontInfo, item);
+    let minimum = affineFloorWidthNode(item.box, sourceWidthSp, floorSp, kinds);
+    // display_shift places the whole display inside the column — centring for an
+    // ordinary display, a fixed indent under fleqn. That is outer space by
+    // construction: there is no ink on its far side to protect, so it closes to
+    // zero and the display sits flush left before it starts to scroll.
+    if (item.display_shift_floor && item.display_shift_rate > 0) {
+        minimum = Math.max(minimum,
+            sourceWidthSp - (item.display_shift || 0) / item.display_shift_rate);
+    }
+    // Never freeze *wider* than the measure the tree was compiled at. A gap that
+    // was already below the minimum when TeX set it would otherwise ask for a
+    // wider display than TeX itself produced; at the compiled width TeX's own
+    // layout stands, whatever the minimum would prefer.
+    return Math.min(minimum, sourceWidthSp);
+}
+
+// Lay a display segment out. The affine model updates the finished tree's
+// geometry for the reader's width; placement is always the display_shift
+// supplied by TeX — there is no ink-centering fallback. Every row of the segment
+// is evaluated at the same measure, so an alignment's columns stay in step and
+// the display freezes as one at the first gap to reach its floor.
+function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
+    const targetSp = Math.round(widthPt * 65536);
+    const floorSp = Math.max(0, displayModel.minSpacePt) * 65536;
+    const minWidthSp = Math.max(0, ...seg.rows.map(r =>
+        affineFloorWidthItem(fontInfo, r.item, displayModel.sourceWidthSp, floorSp)));
+    const evaluatedSp = Math.max(targetSp, minWidthSp);
+    seg = { ...seg, rows: seg.rows.map(r => ({
+        ...r, item: affineDisplayItem(r.item, evaluatedSp - displayModel.sourceWidthSp),
+    })) };
+    const columnPx = widthPt * ZOOM;
     const rows = seg.rows.map(r => ({
         ...r,
-        // TeX's placement of this row within its band, kept verbatim.
-        shiftPx: ((r.item.display_shift || 0) - (r.item.display_indent || 0)) * SP_TO_PX,
-        ink:     inkExtentOf(fontInfo, r.item.box),
+        x0:  (r.item.display_shift || 0) * SP_TO_PX,
+        ink: inkExtentOf(fontInfo, r.item.box),
     }));
-
-    // One offset for the whole group: rows keep their relative positions, so
-    // an alignment's & columns stay aligned no matter where the group lands.
-    let gMin = Infinity, gMax = -Infinity;
-    for (const r of rows) {
-        gMin = Math.min(gMin, r.shiftPx + r.ink.min);
-        gMax = Math.max(gMax, r.shiftPx + r.ink.max);
-    }
-    const groupW = gMax - gMin;
-    const availW = columnPx - diPx;
-    // Centre the ink when it fits; otherwise pin its left edge to x=0 so none
-    // of it ends up at negative x, where scrolling could never reach it.
-    const offset = groupW <= availW
-        ? diPx + (availW - groupW) / 2 - gMin
-        : -gMin;
-
+    // The surface has to cover the measure the display was evaluated at *and*
+    // whatever ink hangs past it, so a frozen display can be panned to its last
+    // glyph rather than having it clipped by the scroll box.
+    let right = Math.max(columnPx, evaluatedSp * SP_TO_PX);
+    for (const r of rows) right = Math.max(right, r.x0 + r.ink.max);
     return {
         lines: rows.map(r => ({ nodes: [r.item.box], ratio: 0, fitness: 2, leftProtrusion: 0 })),
-        lrp:   rows.map(r => ({ ratio: 0, er: 0, x0: offset + r.shiftPx })),
+        lrp:   rows.map(r => ({ ratio: 0, er: 0, x0: r.x0 })),
         gaps:  rows.map(r => r.gap || null),
-        // Only this segment may grow past the column, and only as far as the
-        // ink truly reaches — so a short display never scrolls.
-        W: Math.ceil(Math.max(columnPx, offset + gMax)),
+        W:     Math.ceil(right),
     };
+}
+
+function updateDisplayOverflowCue(wrap) {
+    const EPS = 1;
+    wrap.classList.toggle('latex-overflow-left', wrap.scrollLeft > EPS);
+    wrap.classList.toggle('latex-overflow-right',
+        wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - EPS);
 }
 
 function layoutDocument(fontInfo, doc, widthPt, p, cache) {
@@ -1741,6 +2252,15 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     cache.metrics = doc.glyph_metrics;
     cache.fontInfo = fontInfo;
     const columnPx = widthPt * ZOOM;
+    const displayModel = {
+        sourceWidthSp: doc.source_width || 0,
+        minSpacePt: p.displayMinSpacePt,
+    };
+    // paintSegment is handed only the cache, so the reference tables and this
+    // block's id prefix travel on it.
+    cache.links   = doc.links   || [];
+    cache.anchors = doc.anchors || [];
+    cache.blockKey = cache.blockKey || `b${++blockSeq}`;
     const minGapPx = p.minGapPt * ZOOM;
     const padPx    = p.padPt    * ZOOM;
 
@@ -1751,14 +2271,15 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
 
     if (!cache.dom) {
         const root = document.createElement('div');
-        cache.dom = { root, segs: [], byNode: new Map(), live: new Set() };
+        cache.dom = { root, segs: [], byNode: new Map(), live: new Set(),
+                      anchors: new Map() };
     }
     const dom = cache.dom;
     dom.root.style.visibility = '';   // may have been hidden while paint was deferred
 
     const laid = segs.map((seg, i) => {
         const geom = seg.kind === 'display'
-            ? layoutDisplaySegment(fontInfo, seg, widthPt)
+            ? layoutDisplaySegment(fontInfo, seg, widthPt, displayModel)
             : layoutTextSegment(fontInfo, seg, widthPt, p, cache);
 
         // Profiles use actual render coords so collision detection matches real ink positions.
@@ -1813,12 +2334,29 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         svg.style.cssText = 'display:block;overflow:visible;font-weight:normal;font-style:normal';
         dom.segs.push({ svg, wrap: null, pairs: [] });
     }
+
     dom.root.replaceChildren();
     laid.forEach((L, i) => {
         const s = dom.segs[i];
-        s.svg.setAttribute('width', L.W);
+        // Do not create a scrollbar for scaled-point rounding or a tiny italic
+        // overhang. A bare SVG uses the column as its viewport and overflow:
+        // visible lets that ink bleed naturally without scaling the display.
+        const tolerancePx = Math.max(0, p.displayOverflowTolerancePx || 0);
+        // A figure paragraph (isFigureParagraph) is exactly one unbreakable,
+        // unshrinkable picture box, so it can overflow the column precisely the
+        // way a display can — and gets the same scroll-box treatment.
+        const scrollable = L.seg.kind === 'display' || L.seg.isFigure;
+        const overflows = scrollable && L.W > columnPx + tolerancePx;
+        // columnPx unless genuinely overflowing: an ordinary (non-scrollable)
+        // text segment's own L.W is now real ink width (see layoutTextSegment),
+        // not always exactly columnPx — a paragraph with, say, one line 0.3px
+        // narrower than another must still get the *same* surface as every
+        // other non-overflowing segment, or adjacent paragraphs visibly render
+        // at slightly different widths.
+        const surfaceW = overflows ? L.W : columnPx;
+        s.svg.setAttribute('width', surfaceW);
         s.svg.setAttribute('height', L.H);
-        s.svg.setAttribute('viewBox', `0 0 ${L.W} ${L.H}`);
+        s.svg.setAttribute('viewBox', `0 0 ${surfaceW} ${L.H}`);
 
         // Only a display that genuinely overflows gets a scroll box, because a
         // scroll box is also a *clipping* box: CSS forces overflow-y to 'auto'
@@ -1826,15 +2364,22 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         // letting the other bleed. Ink that legitimately hangs outside its box
         // — accents, protrusion, delimiter overshoot — would be cut off. So a
         // display that fits is mounted bare and can bleed freely; only one that
-        // must pan pays for it, and its wrapper is padded to spare the bleed.
-        const overflows = L.seg.kind === 'display' && L.W > columnPx;
+        // must pan pays for it, and its wrapper gets a little self-cancelling
+        // headroom for the bleed (see the margin block below).
         let mount = s.svg;
         if (overflows) {
-            if (!s.wrap) s.wrap = document.createElement('div');
-            s.wrap.className = 'latex-display';
+            if (!s.wrap) {
+                s.wrap = document.createElement('div');
+                s.wrap.addEventListener('scroll', () => updateDisplayOverflowCue(s.wrap),
+                                        { passive: true });
+            }
+            // It genuinely exceeds the column, so show a right cue immediately.
+            // Later paint/scroll measurements refine both directional classes.
+            s.wrap.classList.add('latex-display', 'latex-overflow-right');
             if (s.svg.parentNode !== s.wrap) s.wrap.replaceChildren(s.svg);
             mount = s.wrap;
         } else if (s.wrap && s.svg.parentNode === s.wrap) {
+            s.wrap.classList.remove('latex-overflow-left', 'latex-overflow-right');
             s.svg.remove();          // no longer overflowing: shed the scroll box
         }
         // Between two text segments TeX inserts interline (baselineskip) glue on
@@ -1848,9 +2393,50 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
             margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
         }
         s.svg.style.marginTop = '';
-        if (s.wrap) s.wrap.style.marginTop = '';
-        mount.style.marginTop = margin ? `${margin}px` : '';
+        if (s.wrap) { s.wrap.style.marginTop = ''; s.wrap.style.marginBottom = ''; }
+        if (mount === s.wrap) {
+            // A scroll box clips (overflow-x forces overflow-y), so give the ink
+            // a little vertical headroom — but reserve no space for it: the
+            // margins take the padding straight back, so a wrapped display
+            // occupies exactly the vertical band the bare SVG would, and a small
+            // overshoot (accents, delimiter overshoot) overlaps the adjacent
+            // glue the same way it does in print. Fixed rather than measured:
+            // getBBox on SVG text reports the font's ascent/descent box, not
+            // glyph ink, and the converted CM faces carry ascents far beyond any
+            // outline — padding by that phantom measure visibly inflated the
+            // space around every scrollable display.
+            const BLEED_PAD = 6;
+            mount.style.paddingTop    = `${BLEED_PAD}px`;
+            mount.style.paddingBottom = `${BLEED_PAD}px`;
+            mount.style.marginTop     = `${margin - BLEED_PAD}px`;
+            mount.style.marginBottom  = `${-BLEED_PAD}px`;
+        } else {
+            mount.style.marginTop = margin ? `${margin}px` : '';
+        }
+        // Scroll destinations for the labels this segment owns. Their own
+        // element rather than an id on the segment: a segment can own several
+        // labels, and an element has only one id. Zero height, so it takes part
+        // in nothing — scroll-margin-top is left to the page, which is the only
+        // thing that knows whether it has a sticky header.
+        for (const id of L.seg.anchors || []) {
+            const label = cache.anchors[id - 1];
+            if (!label) continue;
+            let a = dom.anchors.get(label);
+            if (!a) {
+                a = document.createElement('div');
+                a.className = 'latex-anchor';
+                a.id = label;
+                dom.anchors.set(label, a);
+                linkTargets.set(label, a);
+            }
+            dom.root.appendChild(a);
+        }
         dom.root.appendChild(mount);
+        if (overflows) {
+            // Initial layout may still be detached from the document. Check in
+            // the next frame, after the wrapper has a meaningful clientWidth.
+            requestAnimationFrame(() => updateDisplayOverflowCue(s.wrap));
+        }
     });
 
     cache.layout = { laid };
@@ -1873,7 +2459,7 @@ function paintSegment(fontInfo, cache, i) {
     const s   = dom.segs[i];
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
     const used  = new Set();
-    const sink  = reconcileSink(dom.byNode, used, stats);
+    const sink  = reconcileSink(dom.byNode, used, stats, cache);
 
     // Grow/shrink the pool of per-line group pairs. Detached pairs are kept for
     // later regrowth; their stale children are swept by the live set.
@@ -1912,19 +2498,14 @@ function paintSegment(fontInfo, cache, i) {
     s.painted = true;
     s.dirty = false;
 
-    // A display in a scroll box pays a price: overflow-x:auto forces overflow-y to
-    // auto as well, so ink hanging above/below the nominal box (accents, deep
-    // subscripts, delimiter overshoot) is clipped. Measure the painted ink (getBBox
-    // is 1:1 since the viewBox matches width/height) and pad the wrapper by exactly
-    // the vertical overshoot, so the display shows in full and still pans.
+    // Overflow cues only. The wrapper's vertical geometry — the headroom padding
+    // and the margins that take it back — is fixed at layout time (see
+    // layoutDocument). Measuring painted ink here with getBBox was a trap: for
+    // SVG text it returns the font's ascent/descent box, not the glyph outlines,
+    // so the wrapper was padded for phantom overshoot and every scrollable
+    // display carried visibly inflated space above and below.
     if (s.wrap && s.svg.parentNode === s.wrap) {
-        let bb;
-        try { bb = s.svg.getBBox(); } catch { bb = null; }
-        if (bb) {
-            const BASE_PAD = 4, pad = v => Math.round(Math.max(0, v) + BASE_PAD) + 'px';
-            s.wrap.style.paddingTop    = pad(-bb.y);
-            s.wrap.style.paddingBottom = pad((bb.y + bb.height) - L.H);
-        }
+        updateDisplayOverflowCue(s.wrap);
     }
 }
 
@@ -1953,6 +2534,9 @@ function resolvePictures(doc) {
     };
     for (const p of doc.paragraphs) walk(p.nodes);
     for (const it of doc.content || []) if (it.box) walk(it.box.children || []);
+    for (const f of doc.footnotes || []) {
+        for (const it of f.content || []) if (it.box) walk(it.box.children || []);
+    }
 }
 
 // The page embeds latex.proto as base64 text; parse it at runtime into a
@@ -1976,11 +2560,17 @@ function loadSchema() {
 function loadFontMap() {
     const el = document.getElementById('latex-font-map');
     if (!el) return;
-    // Optional base for @font-face URLs. Defaults to the site root ('/fonts/');
-    // a site served under a subpath (GitHub Pages project site, reverse proxy)
-    // sets this to the right prefix so fonts don't 404.
+    // Optional override for where @font-face URLs resolve from — a relative
+    // value (e.g. 'fonts/') is resolved against the script's own URL, same as
+    // the default above, so it stays file://-safe; an absolute one (a scheme,
+    // or a leading '/') is used as-is, e.g. to point at a CDN. Malformed input
+    // (or no SCRIPT_URL to resolve a relative one against) leaves the default.
     const base = el.getAttribute('data-fonts-base');
-    if (base) fontBase = base.endsWith('/') ? base : base + '/';
+    if (base) {
+        const withSlash = base.endsWith('/') ? base : base + '/';
+        try { fontBase = new URL(withSlash, SCRIPT_URL).href; }
+        catch { /* keep the default */ }
+    }
     if (!el.textContent.trim()) return;
     try { fontUrlMap = JSON.parse(el.textContent); }
     catch { fontUrlMap = {}; }
@@ -2003,6 +2593,11 @@ async function initBlock(el) {
     const t0        = performance.now();
     const doc       = decodeBlock(nodelistB64);
     resolvePictures(doc);
+    // Declare this block's labels before anything of it is painted, so its own
+    // references resolve without needing the page map at all. Blocks initialise
+    // in order, so a reference to a label defined by a *later* block on the same
+    // page still needs the map — which for a site that ships one, it has.
+    for (const label of doc.anchors || []) pageLabels.add(label);
     const t1        = performance.now();
     const fontsData = Object.fromEntries(doc.fonts.map(f => [String(f.id), f]));
     const fontInfo  = await registerFonts(fontsData);
@@ -2044,6 +2639,8 @@ async function init() {
     const tStart = performance.now();
     installColorMaps();
     installCitations();
+    installFootnotes();
+    installLinks();
     loadSchema();
     loadFontMap();
 

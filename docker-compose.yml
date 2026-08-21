@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Standalone use (no VS Code / Dev Containers needed):
+#   docker compose run --rm reflowtex make check
+#   docker compose run --rm --service-ports reflowtex make serve
+services:
+  reflowtex:
+    build: .
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      # .venv holds compiled extensions (protobuf, fonttools) built for the
+      # container's Linux/glibc target. Bind-mounting it straight from the repo
+      # would make it fight with a host-native .venv (macOS/Mach-O) every time
+      # you switch between running `make` in and out of the container — each
+      # side sees the other's venv as broken and silently recreates it. A named
+      # volume mounted on top of that one path keeps it container-only.
+      - reflowtex-venv:/workspace/.venv
+    ports:
+      - "8000:8000"   # examples/demo (make serve), vanilla integration
+      - "1313:1313"   # website/ dev server (hugo server / build.sh server)
+    command: bash
+    tty: true
+    stdin_open: true
+
+volumes:
+  reflowtex-venv:

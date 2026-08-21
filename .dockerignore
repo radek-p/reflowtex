@@ -1,0 +1,9 @@
+.git
+.idea
+.venv
+build
+website/public
+website/resources
+website/.hugo_build.lock
+website/.reflowtex-build
+**/__pycache__

@@ -1,8 +1,8 @@
 % SPDX-License-Identifier: AGPL-3.0-or-later
 \section*{A TikZ picture}
-A TikZ picture is externalised to a PDF, converted to inline SVG, and placed back
-in the text as a box with \TeX{}'s own metrics --- so it can sit anywhere a box
-can, here as a displayed automaton inside an \texttt{align*}:
+A completed TikZ box is captured to a tightly sized PDF page, converted to
+inline SVG, and placed back in the text with \TeX{}'s own metrics --- so it can
+sit anywhere a box can, here as a displayed automaton inside an \texttt{align*}:
 \begin{align*}
 \begin{tikzpicture}[>=Stealth, baseline=(q0.base), thick]
   \node[draw, circle] (q0) at (0,0) {$q_0$};
@@ -13,3 +13,12 @@ can, here as a displayed automaton inside an \texttt{align*}:
   \draw[->, red]  (q1) to[bend left=40] node[below] {$a$} (q0);
 \end{tikzpicture}
 \end{align*}
+
+The same box-level capture supports front ends such as \texttt{tikz-cd} without
+requiring PGF source externalisation:
+\[
+\begin{tikzcd}
+  A^* \arrow[r, bend left, "f"] \arrow[r, bend right, "g"']
+    & B^* \arrow[r, hookrightarrow, "\iota"] & \mathbb{R}
+\end{tikzcd}
+\]

@@ -7,14 +7,15 @@
 % Those 8-bit fonts have no OpenType form, so the pipeline converts them to web
 % OTFs addressed via PUA (src/encode/t1_convert.py) — this demo exercises that.
 %
-% The build substitutes two placeholders (each is the word PREAMBLE or CONTENT
-% wrapped in double percent signs, not spelled literally here so the plain-text
+% The build substitutes three placeholders (the names below are not wrapped in
+% double percent signs, so the plain-text
 % replace does not rewrite this comment):
 %   - the PREAMBLE marker → testmath.tex's own preamble, documentclass and all,
 %     used verbatim so the document's setup is untouched;
 %   - the CONTENT marker  → testmath.tex's document body.
+%   - the WIDTH-EXTRA-SP marker → additive display-sampling width in sp.
 %
-% The serializer and its shipout hook are the only things added, injected *after*
+% The serializer is the only thing added, injected *after*
 % the document's preamble so nothing in it is overridden.
 
 % ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
@@ -39,11 +40,63 @@
   end
 }
 
+% The directive above cannot reach one font: the *default* text face,
+% \TU/lmr/m/n/10. LuaLaTeX loads it while the format is built (that is
+% where "PRELOADED" fonts come from), long before this document exists, so it
+% was resolved under the default precedence -- and NFSS keeps reusing that
+% definition for every later \selectfont. Nearly every block is set in it.
+% Drop the NFSS identifier of each OpenType face loaded so far and re-select,
+% so the default face is looked up again under the precedence just set. A
+% fresh load of any *other* face was never affected. Backslashes are built
+% with string.char so TeX does not tokenize them inside \directlua.
+\directlua{
+  local bs = string.char(92)
+  for id, f in font.each() do
+    local ident = tex.fontidentifier(id)
+    if ident and ident:sub(1, 4) == bs .. "TU/" then
+      texio.write_nl("reflowtex: re-resolving preloaded font " .. ident)
+      tex.print(bs .. "expandafter" .. bs .. "let" .. bs .. "csname "
+                .. ident:sub(2) .. bs .. "endcsname" .. bs .. "relax")
+    end
+  end
+}
+\selectfont
+
 %%PREAMBLE%%
 
 % ── reflowtex node-list serializer (the only addition to the document) ────────
 \directlua{dofile("serializer.lua")}
-\AddToHook{shipout/before}{\directlua{Serializer.shipout(\the\numexpr\ShipoutBox\relax)}}
+
+% Match the default template's generic display-geometry sampling hook while
+% leaving testmath's own class, packages, and classic fonts untouched.
+\newdimen\reflowtexWidthExtra
+\reflowtexWidthExtra=%%WIDTH-EXTRA-SP%%sp\relax
+\AtBeginDocument{%
+  \ifdim\reflowtexWidthExtra>0pt
+    \advance\textwidth by \reflowtexWidthExtra
+    \hsize=\textwidth
+    \linewidth=\textwidth
+    \columnwidth=\textwidth
+  \fi
+  \directlua{Serializer.note_source_width(\number\textwidth)}}
+
+% Link each footnote's in-text marker to its separately captured insertion.
+\makeatletter
+\newcount\reflowtexFootnoteCount
+\newcount\reflowtexCurrentFootnote
+\let\reflowtexOrigFootnotemark\@footnotemark
+\def\@footnotemark{%
+  \global\advance\reflowtexFootnoteCount by 1
+  \global\reflowtexCurrentFootnote=\reflowtexFootnoteCount
+  \begingroup\attribute906=\reflowtexCurrentFootnote\relax
+    \reflowtexOrigFootnotemark
+  \endgroup}
+\let\reflowtexOrigFootnotetext\@footnotetext
+\long\def\@footnotetext#1{%
+  \begingroup\attribute907=\reflowtexCurrentFootnote\relax
+    \reflowtexOrigFootnotetext{#1}%
+  \endgroup}
+\makeatother
 
 \begin{document}
 %%CONTENT%%

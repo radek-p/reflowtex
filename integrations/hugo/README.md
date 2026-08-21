@@ -74,6 +74,33 @@ Named preambles let blocks share macros/packages. Put them in
 `latex-preambles/<name>.tex` and reference one with `preamble="<name>"`; editing
 a preamble recompiles the blocks that use it.
 
+Named colour maps let blocks share a recolouring palette (see
+[src/viewer/README.md](../../src/viewer/README.md)'s Theming section for what
+they can express). Put them in `latex-color-maps/<name>.json` and reference one
+with `color-map="<name>"`:
+
+```markdown
+{{</* latex file="intro.tex" preamble="book" color-map="my-book-colors" */>}}
+```
+
+Unlike a preamble, a colour map is not part of what gets compiled — it's read
+by the browser at render time — so it must be repeated on every shortcode call
+that wants it, even multiple calls referencing the same `file="…"`.
+
+An inline block can register itself as a named lookup the same way a
+`file="…"` ref does, via `as="<name>"`, for a snippet with no natural `.tex`
+file of its own that another template still wants to find by name later — a
+page's own short title, or a handful of one-line labels a sidebar looks up
+from every page:
+
+```markdown
+{{</* latex preamble="book" as="menu-01-introduction.tex" */>}}\noindent Introduction{{</* /latex */>}}
+```
+
+One `.md` page of nothing but such blocks (`render = "never"` in its front
+matter keeps it out of the site) replaces what would otherwise need a whole
+`--demos-dir` of tiny single-purpose files, one per label.
+
 ## What prebuild.py generates
 
 | Path | Contents | Commit? |
@@ -81,6 +108,7 @@ a preamble recompiles the blocks that use it.
 | `data/latex_blocks/<hash>.json` | one compiled block (base64 protobuf) | optional |
 | `data/latex_schema.json` | the schema the browser parses | optional |
 | `data/latex_files.json` | `file="…"` → block-hash map for the shortcode | optional |
+| `data/latex_color_maps.json` | `name` → parsed colour-map JSON, for every `color-map="…"` in use | optional |
 | `static/fonts/*.otf` | provisioned + cmap-patched fonts | optional |
 | `static/{latex-viewer.js,protobuf.min.js}` | viewer scripts | no |
 | `.reflowtex-build/<hash>/` | per-block LaTeX build artefacts | no |
@@ -91,6 +119,6 @@ installation on the deploy host.
 
 ## Requirements
 
-The build host needs the Reflow TeX pipeline prerequisites: `lualatex`, `dvisvgm`,
-`protoc`, and the Python packages in `../../src/encode/requirements.txt`. See the
+The build host needs the Reflow TeX pipeline prerequisites: `lualatex`, `gs`,
+`dvisvgm`, `protoc`, and the Python packages in `../../src/encode/requirements.txt`. See the
 [top-level README](../../README.md).

@@ -11,14 +11,26 @@ embed them at build time. Run it before `hugo` / `hugo server`:
 SITE_DIR defaults to the current directory. It is expected to look like a normal
 Hugo site:
 
-    <site>/content/**/*.md          scanned for {{< latex >}}…{{< /latex >}}
-    <site>/latex-preambles/<n>.tex  optional named preambles (preamble="<n>")
-    <site>/latex-fonts/*.otf        optional repo-shipped fonts (not in TeX)
+    <site>/content/**/*.md            scanned for {{< latex >}}…{{< /latex >}}
+    <site>/latex-preambles/<n>.tex    optional named preambles (preamble="<n>")
+    <site>/latex-color-maps/<n>.json  optional named colour maps (color-map="<n>")
+    <site>/latex-fonts/*.otf          optional repo-shipped fonts (not in TeX)
+
+An inline block can also carry as="name" to register itself in the same
+file→key lookup a file="name" ref would (data/latex_files.json) — for content
+that has no natural .tex file of its own (a page's own short title, a handful
+of one-line labels some sidebar template looks up from every page, …) but
+that another template still wants to find later by name. A page of nothing
+but such blocks, marked `render = "never"` in its front matter, replaces what
+would otherwise need a whole --demos-dir of many tiny single-purpose files —
+one .md file with N inline blocks instead of N .tex files plus N file refs to
+them.
 
 and this writes:
 
     <site>/data/latex_blocks/<key>.json   {nodelist_b64, content_hash}
     <site>/data/latex_schema.json         {schema_b64}
+    <site>/data/latex_color_maps.json     {name: <parsed color-map JSON>, …}
     <site>/static/fonts/*.otf             provisioned + cmap-patched fonts
     <site>/.reflowtex-build/<key>/          per-block build artefacts (git-ignore)
 
@@ -45,9 +57,21 @@ from pipeline import Pipeline, content_key   # noqa: E402
 # The file ref shares one .tex source with other integrations (e.g. the vanilla
 # demo); prebuild resolves it against --demos-dir and records name → key so the
 # shortcode can look it up without reading across directories itself.
+#
+# An inline block can also carry as="name" to register under that same
+# files_map, for content with nowhere more natural to live as its own file —
+# e.g. a page's own short title, or a handful of one-line labels a sidebar
+# needs to look up from every page — without needing a whole --demos-dir
+# entry (and a file="…" ref to it) per snippet. Purely a lookup-table
+# registration: as="…" plays no part in what gets compiled or how, so an
+# inline block with no other page rendering it directly (a dedicated
+# `render = "never"` page collecting several, say) is exactly what file refs
+# already do for shared .tex sources, minus the extra file per snippet.
 BLOCK_RE = re.compile(r'\{\{<\s*latex((?![^>]*\bfile=)[^>]*?)>\}\}(.*?)\{\{<\s*/latex\s*>\}\}', re.DOTALL)
 FILEREF_RE = re.compile(r'\{\{<\s*latex\s+([^>]*?)/>\}\}')
 PREAMBLE_ATTR_RE = re.compile(r'preamble="([^"]+)"')
+COLOR_MAP_ATTR_RE = re.compile(r'color-map="([^"]+)"')
+AS_ATTR_RE = re.compile(r'as="([^"]+)"')
 FILE_ATTR_RE = re.compile(r'file="([^"]+)"')
 HASH_RE = re.compile(r'^[0-9a-f]{16}$')
 
@@ -60,14 +84,23 @@ def _resolve_preamble(name: str, preamble_dir: Path) -> str:
 
 
 def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
-    """Scan all markdown for latex blocks.
+    r"""Scan all markdown for latex blocks.
 
-    Returns (blocks, files_map):
-      blocks    {key: (content, preamble)}   — everything to compile
-      files_map {"name.tex": key}            — for file-ref shortcode lookups
+    Returns (blocks, files_map, block_pages, color_map_names):
+      blocks          {key: (content, preamble)}   — everything to compile
+      files_map       {"name.tex": key}            — for file-ref shortcode lookups,
+                      plus any inline block that registered itself via as="…"
+      block_pages     {key: "sub/page.md"}         — which page each block sits on,
+                      content-dir-relative, so a ``\label`` compiled inside a block can
+                      be turned into a URL by the only layer that knows about URLs
+      color_map_names {"name", …}                  — every color-map="…" referenced;
+                      unlike preamble, a colour map never affects compilation (it's a
+                      browser-rendering concern), so it plays no part in a block's key
     """
     blocks: dict[str, tuple[str, str]] = {}
     files_map: dict[str, str] = {}
+    block_pages: dict[str, str] = {}
+    color_map_names: set[str] = set()
 
     # File refs share the demos dir's own preamble.tex (if present).
     demos_preamble = ''
@@ -83,6 +116,13 @@ def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
             preamble = _resolve_preamble(pm.group(1), preamble_dir) if pm else ''
             key = content_key(inner.strip(), preamble)
             blocks[key] = (inner.strip(), preamble)
+            block_pages.setdefault(key, path.relative_to(content_dir).as_posix())
+            cm = COLOR_MAP_ATTR_RE.search(attrs or '')
+            if cm:
+                color_map_names.add(cm.group(1))
+            am = AS_ATTR_RE.search(attrs or '')
+            if am:
+                files_map[am.group(1)] = key
 
         for m in FILEREF_RE.finditer(text):
             attrs = m.group(1)
@@ -101,8 +141,25 @@ def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
             key = content_key(content.strip(), preamble)
             blocks[key] = (content.strip(), preamble)
             files_map[name] = key
+            block_pages.setdefault(key, path.relative_to(content_dir).as_posix())
+            cm = COLOR_MAP_ATTR_RE.search(attrs or '')
+            if cm:
+                color_map_names.add(cm.group(1))
 
-    return blocks, files_map
+    return blocks, files_map, block_pages, color_map_names
+
+
+def _resolve_color_maps(names: set[str], color_map_dir: Path) -> dict:
+    maps = {}
+    for name in sorted(names):
+        cfile = color_map_dir / f'{name}.json'
+        if not cfile.exists():
+            sys.exit(f'ERROR: color-map "{name}" not found at {cfile}')
+        try:
+            maps[name] = json.loads(cfile.read_text(encoding='utf-8'))
+        except json.JSONDecodeError as e:
+            sys.exit(f'ERROR: color-map "{name}" ({cfile}) is not valid JSON: {e}')
+    return maps
 
 
 def prune_stale(data_dir: Path, build_root: Path, live: set[str]) -> None:
@@ -131,14 +188,16 @@ def main() -> None:
     args = ap.parse_args()
 
     site: Path = args.site.resolve()
-    content_dir  = site / 'content'
-    preamble_dir = site / 'latex-preambles'
-    data_dir     = site / 'data' / 'latex_blocks'
-    schema_file  = site / 'data' / 'latex_schema.json'
-    files_file   = site / 'data' / 'latex_files.json'
-    fonts_dir    = site / 'static' / 'fonts'
-    local_fonts  = site / 'latex-fonts'
-    build_root   = site / '.reflowtex-build'
+    content_dir    = site / 'content'
+    preamble_dir   = site / 'latex-preambles'
+    color_map_dir  = site / 'latex-color-maps'
+    data_dir       = site / 'data' / 'latex_blocks'
+    schema_file    = site / 'data' / 'latex_schema.json'
+    files_file     = site / 'data' / 'latex_files.json'
+    color_maps_file = site / 'data' / 'latex_color_maps.json'
+    fonts_dir      = site / 'static' / 'fonts'
+    local_fonts    = site / 'latex-fonts'
+    build_root     = site / '.reflowtex-build'
 
     demos_dir = args.demos_dir.resolve() if args.demos_dir else None
     if demos_dir is None and (site / 'latex-src').is_dir():
@@ -163,10 +222,16 @@ def main() -> None:
     for asset in ('latex-viewer.js', 'protobuf.min.js'):
         shutil.copy(REFLOWTEX_ROOT / 'src' / 'viewer' / asset, static / asset)
 
-    blocks, files_map = scan_content(content_dir, preamble_dir, demos_dir)
+    blocks, files_map, block_pages, color_map_names = scan_content(
+        content_dir, preamble_dir, demos_dir)
     # The path→key map lets the shortcode resolve file="…" without reading the
     # source itself. Always (re)write it, even if empty, so a removed ref clears.
     files_file.write_text(json.dumps(files_map, indent=2, sort_keys=True))
+    # Same idea for colour maps: only the ones actually referenced by a
+    # color-map="…" attribute are read from <site>/latex-color-maps/ and
+    # embedded, so an unused or removed map doesn't linger in the output.
+    color_maps_file.write_text(json.dumps(
+        _resolve_color_maps(color_map_names, color_map_dir), indent=2, sort_keys=True))
     if not blocks:
         print('No {{< latex >}} blocks found.')
         return
@@ -194,6 +259,22 @@ def main() -> None:
     # right file. Always (re)written so a changed hash propagates.
     (site / 'data' / 'latex_font_map.json').write_text(
         json.dumps(pipe.font_map(), indent=2, sort_keys=True))
+
+    # label → the content page whose block defines it. The labels come out of the
+    # same compilation that produced the blocks, so this cannot drift from what
+    # was actually typeset the way scanning the sources for \label would. Turning
+    # a page into a URL is left to the template: permalinks, slugs and front
+    # matter are Hugo's business, not ours.
+    link_map: dict[str, str] = {}
+    for key, page in sorted(block_pages.items()):
+        out_json = build_root / key / 'output.json'
+        if not out_json.exists():
+            continue
+        for label in json.loads(out_json.read_text()).get('anchors', []):
+            link_map.setdefault(label, page)
+    (site / 'data' / 'latex_link_map.json').write_text(
+        json.dumps(link_map, indent=2, sort_keys=True))
+    print(f'link-map: {len(link_map)} label(s) across {len(set(link_map.values()))} page(s)')
 
     if args.prune:
         print('prune:')

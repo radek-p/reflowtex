@@ -29,7 +29,7 @@ enum NodeType {
   disc      = 6;
   penalty   = 7;
   math      = 8;
-  picture   = 9;   // an externalised tikzpicture, drawn from precompiled SVG
+  picture   = 9;   // a captured TikZ box or included PDF, drawn from precompiled SVG
   transform = 10;  // \rotatebox and friends: a matrix applied to `children`
 }
 
@@ -77,6 +77,49 @@ message Node {
   // depth are interned there (the same box repeats across thousands of glyphs)
   // and referenced here instead of stored inline. Only glyphs use this.
   optional uint32   metrics       = 32;
+
+  // glyph: unique footnote id. The matching body is stored separately in
+  // Document.footnotes and shown by the browser as a tooltip/popover.
+  optional uint32   footnote      = 33;
+
+  // Per-scaled-point derivatives recovered from several wide compilations.
+  // Only fields which actually vary are present. The viewer evaluates them at
+  // its current column width; all node kinds share this one generic mechanism.
+  optional double width_rate    = 34;
+  optional double height_rate   = 35;
+  optional double depth_rate    = 36;
+  optional double stretch_rate  = 37;
+  optional double shrink_rate   = 38;
+  optional double kern_rate     = 39;
+  optional double shift_rate    = 40;
+  optional double glue_set_rate = 41;
+  optional double surround_rate = 42;
+  optional double m_a_rate      = 43;
+  optional double m_b_rate      = 44;
+  optional double m_c_rate      = 45;
+  optional double m_d_rate      = 46;
+  // This horizontal field was nonnegative throughout the accepted samples;
+  // the viewer may impose its configurable positive floor before scrolling.
+  optional bool width_floor    = 47;
+  optional bool kern_floor     = 48;
+  optional bool surround_floor = 49;
+
+  // glyph: the cross-reference this glyph is part of — a 1-based index into
+  // Document.links. Every glyph a \ref printed carries the same id, so a
+  // reference stays one link however the browser re-breaks the line it sits on.
+  optional uint32 link   = 50;
+  // hlist: an empty, zero-sized box marking where a \label stood — a 1-based
+  // index into Document.anchors. The box is ordinary in every other respect.
+  optional uint32 anchor = 51;
+}
+
+// What one link points at. Exactly one field is set: `label` for a cross
+// reference inside this document (which only the publishing site can turn into a
+// URL — see Document.links), `url` for a destination the author wrote out in
+// full, which needs no resolving.
+message Link {
+  optional string label = 1;
+  optional string url   = 2;
 }
 
 // One distinct glyph box (width/height/depth in sp), referenced by Node.metrics.
@@ -86,9 +129,9 @@ message GlyphMetrics {
   optional int32 depth  = 3;
 }
 
-// A precompiled tikzpicture. `svg` is the markup inside the wrapping <g> (ids
-// namespaced, colours rewritten to CSS custom properties). vb_w/vb_h are the
-// source viewBox, scaled by the renderer to the node's TeX width.
+// A precompiled TikZ box or included PDF page. `svg` is the markup inside the
+// wrapping <g> (ids namespaced, colours rewritten to CSS custom properties).
+// vb_w/vb_h are the source viewBox, scaled to the node's TeX width.
 message Picture {
   optional string svg  = 1;
   optional double vb_w = 2;
@@ -120,6 +163,9 @@ enum ItemKind {
   paragraph = 0;
   display   = 1;
   vspace    = 2;
+  // A \label that stood between two items rather than inside one — the usual
+  // case, since \label follows a sectioning command in vertical mode.
+  anchorpoint = 3;
 }
 
 message ContentItem {
@@ -133,6 +179,18 @@ message ContentItem {
   optional int32 display_width  = 5;
   optional int32 display_indent = 6;
   optional int32 display_shift  = 7;
+  optional double display_width_rate  = 8;
+  optional double display_indent_rate = 9;
+  optional double display_shift_rate  = 10;
+  optional bool display_shift_floor = 11;
+
+  // anchorpoint: 1-based index into Document.anchors.
+  optional uint32 anchor = 12;
+}
+
+message Footnote {
+  optional uint32      id      = 1;
+  repeated ContentItem content = 2;
 }
 
 message Document {
@@ -141,4 +199,17 @@ message Document {
   repeated ContentItem  content       = 3;
   repeated Picture      pictures      = 4;
   repeated GlyphMetrics glyph_metrics = 5;  // interned glyph boxes; see Node.metrics
+  repeated Footnote     footnotes      = 6;
+  // Width at which the stored display geometry was compiled. `display_model`
+  // says that rate fields were verified against a stable three-sample window.
+  optional int32        source_width   = 7;
+  optional bool         display_model  = 8;
+
+  // The label each cross-reference points at, and the label each anchor marks,
+  // as the author wrote them. Resolving a label to a URL is deliberately not
+  // done here: only the site publishing these blocks knows what page a label
+  // ended up on. See the DOM contract in src/viewer/README.md.
+  reserved 9;                          // was: repeated string links
+  repeated string       anchors        = 10;
+  repeated Link         links          = 11;
 }

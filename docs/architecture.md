@@ -24,29 +24,79 @@ what lets a paragraph reflow without giving up fidelity.
 
 ### 1. Extract (`src/extract`)
 
-`template.tex` wraps each snippet and loads `serializer.lua`, which walks LuaTeX's
-node list at `shipout` and writes `output.json`: paragraphs and display boxes as
-trees of glyph/glue/kern/rule/hlist/vlist/… nodes, plus a font table. TikZ
-pictures are externalised to per-picture PDFs (they are opaque drawing operators,
-not something we reproduce).
+`template.tex` wraps each snippet and loads `serializer.lua`, which copies LuaTeX's
+main-vertical-list contributions before pagination and writes `output.json`:
+paragraphs and display boxes as trees of glyph/glue/kern/rule/hlist/vlist/…
+nodes, plus a font table. A completed TikZ box is copied to a tightly sized
+private page in the job PDF and replaced in the captured flow by a
+metric-identical picture placeholder. This works for ordinary `tikzpicture` and
+front ends such as `tikz-cd`; their PDF drawing operators are opaque to the node
+renderer and are not reproduced individually.
 
-The template sets up everything the pipeline depends on — the serializer, the
-picture-capture hook, the shipout hook — *before* substituting the caller's
-preamble, so a preamble is free to load its own packages and TikZ libraries on
-top. Fonts and the classic Computer Modern fraction geometry are defaults a
-preamble can override.
+The template loads the serializer and TikZ before substituting the caller's
+preamble, so the preamble can add packages and TikZ libraries on top. It installs
+the final picture and footnote wrappers after the preamble, ensuring package
+redefinitions are observed. Fonts and the classic Computer Modern fraction
+geometry are defaults a preamble can override.
+
+The extraction stream is genuinely pageless rather than a `\maxdimen`-tall
+page. The serializer retains a copy with the real geometry while zeroing only
+the top-level vertical dimensions presented to the page builder. Consequently
+ordinary content never reaches the page-height threshold, without inheriting
+TeX's finite dimension limit; explicit `\newpage` commands can still ship a
+page, but do not split the retained stream.
+
+Footnote insertions are collected into separate content streams. Their in-text
+markers carry matching ids, allowing the viewer to reflow the fully typeset
+footnote (including mathematics and citations) inside an accessible hover/focus
+popover instead of assigning it an artificial location in the pageless flow.
+
+Display-bearing snippets are sampled at additive widths
+`W`, `W + 128pt`, `W + 256pt`, …. The pipeline matches the complete finished
+display trees, not environment-specific boxes or glues. A sliding three-sample
+window must have identical topology and affine geometry for every corresponding
+field. If it does not, the smallest width is rejected and sampling continues at
+the next wider measure. Two samples determine all per-field `a W + b` laws
+simultaneously; the third verifies them (up to scaled-point rounding). This is
+generic across `equation`, `\[...\]`, `align`, `gather`, `multline`, nested
+alignment environments, and package-defined displays whose finished topology is
+stable. The accepted tree stores sparse derivatives only for fields that vary, and marks
+which of them are *gaps* — a glue's set width, a kern, a math node's surround —
+as opposed to box widths, which are whatever their contents came to.
+
+At runtime each gap that stayed nonnegative across the accepted samples is
+classified by where the ink around it falls. A gap with ink on both sides is
+internal to the formula: it separates an align's columns, or an equation from its
+number, and closing it would run the two together, so it stops at
+`data-display-min-space` (10pt by default). A gap with ink on one side only is
+outer — centring glue, or the display's own `display_shift` in the column — and
+closes all the way to zero, so a display is never held wider than its own ink.
+The classification is geometric rather than environment-specific, and is computed
+once per display from the compiled tree.
+
+Every row of one alignment is evaluated at a single measure, so its columns stay
+in step; the display freezes as one at the first gap to reach its floor, never
+narrower than its ink and never wider than the measure it was compiled at, and
+becomes horizontally scrollable. Reflow TeX does not reproduce amsmath's
+print-oriented fallback of moving an equation number onto another line.
 
 ### 2. Encode (`src/encode`)
 
-Three transforms run on `output.json` before it is encoded:
+After display-width modelling, three transforms run on `output.json` before it
+is encoded:
 
 - **strip** nodes the schema/renderer don't model (colour-stack whatsits, etc.);
 - **normalise glyph addressing** — some glyphs LuaTeX places (GSUB variants,
   combining accents, unencoded variants) can't be addressed by their Unicode
   codepoint in the served font, so they are rewritten to private-use codepoints
   and the served font's cmap is patched to match;
-- **convert pictures** — each externalised PDF becomes inline SVG (ids prefixed
-  per picture, colours mapped to CSS custom properties for theming).
+- **convert pictures** — each captured TikZ page or included PDF page becomes
+  inline SVG (ids prefixed per picture, colours mapped to CSS custom properties
+  for theming). Ghostscript first normalises ordinary included PDFs to DeviceRGB:
+  Figma encodes all its fills with ICC `scn`, which current `dvisvgm` otherwise
+  drops and renders as black. An exact white or legacy fill-less full-viewBox page
+  rectangle is then removed wherever it occurs in the page group. Generated TikZ
+  pages are deliberately exempt from both operations.
 
 Then `encode_pb.py` serialises the result to Protocol Buffers against
 `schema/latex.proto`, interning per-glyph metrics into a shared table (see

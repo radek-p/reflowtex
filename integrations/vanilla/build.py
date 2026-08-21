@@ -15,8 +15,9 @@ its contents are prepended to every snippet's preamble (shared macros, packages,
 fonts). Repo-local OTF fonts (faces not installed into TeX) go in a `fonts/`
 subdirectory of the snippets dir, or pass --local-fonts.
 
-Serve the output at the site root (the viewer loads fonts from /fonts/):
-    python -m http.server -d site
+Self-contained: open site/index.html straight off disk, or serve it any way
+you like (python -m http.server -d site works too) — fonts resolve relative
+to latex-viewer.js's own URL, wherever that ends up.
 """
 
 import argparse
@@ -54,10 +55,12 @@ def main() -> None:
     ap.add_argument('--source-url', default=DEFAULT_SOURCE_URL,
                     help='URL of the published source (AGPL-3.0 §13 source offer '
                          'shown in the page footer)')
-    ap.add_argument('--fonts-base', default='/fonts/',
-                    help="URL prefix @font-face fetches fonts from (default "
-                         "'/fonts/'; use a relative value like 'fonts/' to serve "
-                         'the page under a subpath)')
+    ap.add_argument('--fonts-base', default='fonts/',
+                    help="URL prefix @font-face fetches fonts from — relative "
+                         "(default 'fonts/') resolves against latex-viewer.js's "
+                         'own URL, which works unmodified from a subpath, a '
+                         "different domain, or straight off disk over file://; "
+                         'pass an absolute URL (e.g. a CDN) to override that')
     ap.add_argument('-j', '--jobs', type=int, default=1,
                     help='snippets to compile in parallel (default: 1)')
     ap.add_argument('--local-fonts', type=Path, default=None,

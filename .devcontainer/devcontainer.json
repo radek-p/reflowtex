@@ -1,0 +1,36 @@
+{
+  "name": "Reflow TeX",
+  "build": {
+    "context": "..",
+    "dockerfile": "../Dockerfile"
+  },
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "mounts": [
+    // .venv gets its own volume, not the bind mount above: it holds compiled
+    // extensions (protobuf, fonttools) built for the container's Linux/glibc
+    // target, which would collide with a host-native macOS .venv every time
+    // you rebuild outside the container otherwise (see docker-compose.yml).
+    "source=reflowtex-venv,target=/workspace/.venv,type=volume"
+  ],
+  "postCreateCommand": "make venv",
+  "forwardPorts": [8000, 1313],
+  "portsAttributes": {
+    "8000": {
+      "label": "reflowtex demo (make serve)",
+      "onAutoForward": "notify"
+    },
+    "1313": {
+      "label": "website dev server (hugo server --bind 0.0.0.0)",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "James-Yu.latex-workshop"
+      ]
+    }
+  }
+}
