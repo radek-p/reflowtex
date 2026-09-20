@@ -272,6 +272,7 @@ class Pipeline:
                 output_jsons.append(json.loads(d.read_text()))
         reqs = self._fonts_mod.collect_glyph_requirements(output_jsons)
         self.fonts.patch(reqs)
+        self.fonts.verify(reqs)
 
     def font_map(self) -> dict[str, str]:
         """{original filename → served filename} after patch_fonts(). The viewer

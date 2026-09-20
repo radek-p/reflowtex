@@ -273,6 +273,45 @@ class Fonts:
                   f'{"y" if len(added) == 1 else "ies"} added, renamed)')
 
 
+    # ── verification ─────────────────────────────────────────────────────────
+    def verify(self, requirements: dict[str, dict[int, int]]) -> None:
+        """Fail the build if any glyph a block references cannot be drawn from
+        the font that will be served for it.
+
+        Every codepoint in `requirements` must have a cmap entry in its served
+        font. A miss means the browser would render nothing for that glyph —
+        silently, since @font-face has no per-glyph fallback — which is exactly
+        the failure that should never reach a deployed page. (It happens, for
+        instance, when LuaTeX resolved a font to a different build of the same
+        face than the one kpsewhich serves: the glyph indices disagree, every
+        glyph is PUA-rewritten, and the served font has none of the codes.)
+        """
+        if _TTFont is None or not requirements:
+            return
+        problems = []
+        for filename, cp_gindex in requirements.items():
+            if not cp_gindex:
+                continue
+            served = self.served.get(filename, filename)
+            font_path = self.output_dir / served
+            if not font_path.exists():
+                problems.append(f'{filename}: not provisioned (nothing to serve)')
+                continue
+            cmap = set()
+            for t in _TTFont(font_path)['cmap'].tables:
+                cmap.update(t.cmap)
+            missing = sorted(cp for cp in cp_gindex if cp not in cmap)
+            if missing:
+                sample = ', '.join(f'U+{cp:05X}' for cp in missing[:5])
+                more = f' … (+{len(missing) - 5})' if len(missing) > 5 else ''
+                problems.append(f'{filename} (served as {served}): {len(missing)} '
+                                f'referenced codepoint(s) missing from its cmap: {sample}{more}')
+        if problems:
+            raise SystemExit('ERROR: served fonts cannot draw every glyph the blocks '
+                             'reference — the page would render blanks:\n  '
+                             + '\n  '.join(problems))
+
+
 def fonts_of(data: dict) -> dict:
     """The font map of an output.json, tolerating the empty-table ambiguity.
 
