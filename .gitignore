@@ -4,4 +4,5 @@ private/
 .venv/
 __pycache__/
 scratchpad.md
-book-to-compile/
+.DS_Store
+.vscode/
