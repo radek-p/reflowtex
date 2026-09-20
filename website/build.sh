@@ -28,7 +28,9 @@ if [ -x "$VENV/bin/python3" ] && "$VENV/bin/python3" -c 'import sys; sys.exit(0 
 else
   BASE_PYTHON="$("$REPO/scripts/find_python.sh")"
   echo "Creating $VENV with $BASE_PYTHON ($("$BASE_PYTHON" --version))"
-  rm -rf "$VENV"
+  # Empty it rather than remove it: in the container .venv is a mount point
+  # (a named volume, see docker-compose.yml), which cannot be unlinked.
+  if [ -d "$VENV" ]; then find "$VENV" -mindepth 1 -delete; else rm -rf "$VENV"; fi
   "$BASE_PYTHON" -m venv "$VENV"
 fi
 PYTHON="$VENV/bin/python3"

@@ -13,7 +13,19 @@ its prose is set through the reflowtex pipeline itself — the page is its own d
 `build.sh` vendors the shortcode and viewer partial from `../integrations/hugo`,
 runs `prebuild.py` (which needs the pipeline prerequisites — `lualatex`,
 `dvisvgm`, `protoc`, and the Python deps; see the repo `Makefile`'s `check`
-target), then runs Hugo. Everything it generates is git-ignored.
+target), then runs Hugo. Everything it generates is git-ignored, `public/`
+included: the deployed site is built in CI, never committed.
+
+The reproducible way to build it is inside the project container, which is
+also what CI does:
+
+```sh
+docker compose run --rm reflowtex make website          # incremental
+docker compose run --rm reflowtex make website-clean    # everything from scratch
+```
+
+`./build.sh server` rewrites `public/` with dev-server URLs while it runs;
+that is fine, since `public/` is not tracked.
 
 ## What's here
 
@@ -40,7 +52,9 @@ Set these to the real values (all currently placeholders):
 
 ## Deploy
 
-`.github/workflows/deploy.yml` (at the repo root) builds and publishes to GitHub
-Pages on push to the default branch. Because `prebuild.py` runs a real TeX pass,
-the workflow installs the TeX toolchain — that's the slow step; see the comments
-in the workflow for the trade-offs.
+`.github/workflows/hugo.yml` (at the repo root) runs on every push to `main`:
+it builds the project container image (cached between runs), runs
+`make website` inside it, and publishes `website/public` to GitHub Pages.
+The per-block build tree and the multi-pass testmath demo are cached
+between runs, so only blocks whose content changed are recompiled. TeX Live
+is pinned by image digest in the `Dockerfile`; bump it deliberately.

@@ -1,4 +1,5 @@
-# Hugo output
+# Hugo output — public/ is built in CI (see README.md), never committed.
+/public/
 /resources/
 .hugo_build.lock
 

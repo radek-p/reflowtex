@@ -135,6 +135,8 @@ See [docs/architecture.md](docs/architecture.md) for the why, and
 | [`integrations/jekyll/`](integrations/jekyll/) | Jekyll integration (planned — see its README) |
 | [`examples/demo/`](examples/demo/) | the snippets `make demo` renders |
 | [`examples/testmath/`](examples/testmath/) | AMS' `testmath.tex` rendered with classic CM fonts (`make testmath-demo`) |
+| [`tests/linebreak/`](tests/linebreak/) | paragraph-breaking fixtures: captures TeX's exact breaks for byte-for-byte comparison |
+| [`website/`](website/) | the project site; built in CI inside the container and deployed to GitHub Pages |
 | [`docs/`](docs/) | architecture and format notes |
 
 ## Using it in a project

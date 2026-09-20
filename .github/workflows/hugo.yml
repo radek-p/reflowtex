@@ -1,20 +1,58 @@
 name: Deploy website
 
+# Builds the site inside the project's own container image (a real TeX
+# toolchain, pinned) and publishes the result to GitHub Pages. Nothing under
+# website/public is committed: what is deployed is exactly what this job built.
+
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
+jobs:
+  build:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Same image the container workflow verifies; layers come from the
+      # Actions cache, so this is seconds unless the Dockerfile changed.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: reflowtex:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The pipeline is incremental by content hash: restoring the previous
+      # run's per-block build tree and the (slow, multi-pass) testmath demo
+      # means only blocks whose content changed are recompiled.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            website/.reflowtex-build
+            website/data/latex_blocks
+            website/static/testmath
+          key: website-blocks-${{ hashFiles('src/**', 'examples/**', 'website/content/**', 'website/latex-preambles/**', 'integrations/hugo/**', 'Dockerfile') }}
+          restore-keys: |
+            website-blocks-
+
+      - name: Build the site in the container
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace reflowtex:ci \
+            bash -lc 'make website'
 
       - uses: actions/configure-pages@v5
 
@@ -22,4 +60,12 @@ jobs:
         with:
           path: website/public
 
-      - uses: actions/deploy-pages@v4
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

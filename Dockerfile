@@ -12,7 +12,9 @@
 # hand for a new package) needs write access to. This matches the upstream
 # texlive/texlive image's own default rather than adding a sudo/chown layer on
 # top of it.
-FROM texlive/texlive:latest-basic
+# Pinned by digest so every build (CI included) uses the same TeX Live; bump
+# it deliberately and rebuild the website when you do.
+FROM texlive/texlive:latest-basic@sha256:d54587cc7093dee8cc41c3a6317a37eb33164baf89f7ef9ad7b2f798e8997c58
 
 # ── LaTeX packages ───────────────────────────────────────────────────────────
 # src/extract/template.tex always loads mathtools, amssymb and fontspec, and
@@ -30,6 +32,7 @@ RUN tlmgr update --self && \
       unicode-math \
       lm-math \
       pgf \
+      tikz-cd \
       xcolor \
       dvisvgm && \
     tlmgr path add
