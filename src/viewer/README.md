@@ -119,6 +119,28 @@ Style the three states with `--latex-link`, `--latex-link-hover` and
 `--latex-link-active`; give `.latex-anchor` a `scroll-margin-top` if your page
 has a sticky header.
 
+## Plugging in another paragraph breaker
+
+The viewer breaks paragraphs with its own Knuth–Plass implementation. A page
+can substitute another one — a TeX engine's line-breaking code compiled to
+WebAssembly, say — by defining, before or after the viewer loads:
+
+```js
+window.reflowtexBreak = function (nodes, availSp, params, helpers) {
+  // return [{nodes, ratio, fitness, leftProtrusion}, …] or null
+};
+```
+
+It is called for every paragraph on every layout with the paragraph's node
+list, the available width in scaled points, the block's Knuth–Plass
+parameters, and `helpers` (`gW/gH/gD` glyph-metric accessors, `align`, and
+the paragraph's `bskip`/`lskip`). Return the lines in the same shape the
+built-in breaker produces, or `null` to decline for this paragraph, in which
+case the built-in breaker runs. A line flagged `exact: true` carries a
+TeX-exact glue ratio, and the viewer then applies no glyph expansion of its
+own on top of it. Dispatch a `resize` event once an asynchronously loaded
+breaker becomes ready, so already-painted blocks re-lay out with it.
+
 ## Theming (optional)
 
 reflowtex ships no colour palette of its own — a block with no `data-color-map`

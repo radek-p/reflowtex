@@ -1975,12 +1975,29 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
         const availSp  = Math.max(1, widthSp - indentSp);
         const availPx  = columnPx - indentPx;
 
-        for (const ln of kpBreak(bcs, para.nodes, availSp, p)) {
+        // Pluggable breaker. A page may install an alternative paragraph
+        // breaker as window.reflowtexBreak(nodes, availSp, params, helpers)
+        // — e.g. a TeX engine's own line-breaking code compiled to WebAssembly.
+        // It returns the same line objects kpBreak does ([{nodes, ratio,
+        // fitness, leftProtrusion}]), or null to decline (module still
+        // loading, unsupported paragraph), in which case the built-in
+        // Knuth–Plass runs. Everything below is agnostic to which breaker ran.
+        // A line flagged `exact: true` carries a TeX-exact glue ratio whose
+        // stretch pool holds no glyph expandability, so the viewer's own
+        // expansion is not applied on top of it.
+        const ext = typeof window !== 'undefined' && typeof window.reflowtexBreak === 'function'
+            ? window.reflowtexBreak(para.nodes, availSp, p, {
+                  gW, gH, gD, align,
+                  bskip: para.baselineskip || 0,
+                  lskip: para.lineskip || 0,
+              })
+            : null;
+        for (const ln of (ext || kpBreak(bcs, para.nodes, availSp, p))) {
             // For non-justified modes: allow glue shrink (ratio<0) but never stretch.
             // When the line must shrink, rendering and positioning are identical to justify.
             // The alignment offset only applies to lines whose natural width fits the column.
             const ratio = justify ? ln.ratio : Math.min(0, ln.ratio);
-            const er    = p.useExpansion ? ratio * p.maxExpand : 0;
+            const er    = (p.useExpansion && !ln.exact) ? ratio * p.maxExpand : 0;
             const protX = -(p.useProtrusion ? ln.leftProtrusion * SP_TO_PX : 0);
             const natSp = sumWidthSp(ln.nodes);
             const natPx = natSp * SP_TO_PX;

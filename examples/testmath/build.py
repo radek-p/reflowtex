@@ -70,6 +70,11 @@ def main() -> None:
                          'the page under a subpath)')
     ap.add_argument('--source-url', default=DEFAULT_SOURCE_URL,
                     help='published-source URL for the AGPL-3.0 footer')
+    ap.add_argument('--extra-script', action='append', default=[], metavar='FILE',
+                    help='copy FILE next to the page and load it after latex-viewer.js '
+                         '(repeatable) — e.g. a script installing an alternative '
+                         'paragraph breaker via window.reflowtexBreak; any sibling '
+                         'files it needs (a .wasm module, say) must be copied by hand')
     args = ap.parse_args()
     out: Path = args.out
 
@@ -89,6 +94,11 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     shutil.copy(SRC / 'viewer' / 'latex-viewer.js', out / 'latex-viewer.js')
     shutil.copy(SRC / 'viewer' / 'protobuf.min.js', out / 'protobuf.min.js')
+    extra_tags = ''
+    for extra in args.extra_script:
+        extra = Path(extra)
+        shutil.copy(extra, out / extra.name)
+        extra_tags += f'\n<script src="{html.escape(extra.name, quote=True)}"></script>'
 
     block = (f'<div class="latex-block" '
              f'data-nodelist-b64="{base64.b64encode(blob).decode()}"></div>')
@@ -99,6 +109,9 @@ def main() -> None:
             .replace('{{FONTS_BASE}}', html.escape(args.fonts_base, quote=True))
             .replace('{{SOURCE_URL}}', html.escape(args.source_url, quote=True))
             .replace('{{BLOCKS}}', block))
+    if extra_tags:
+        page = page.replace('<script src="latex-viewer.js"></script>',
+                            '<script src="latex-viewer.js"></script>' + extra_tags)
     (out / 'index.html').write_text(page, encoding='utf-8')
 
     print(f'reflowtex: wrote {out / "index.html"}')
