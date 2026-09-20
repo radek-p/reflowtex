@@ -12,24 +12,22 @@ re-flows it in the browser. You author LaTeX; the toolchain does the rest.
 
 {{< latex >}}
 A working \TeX{} installation (\texttt{lualatex}, \texttt{dvisvgm}),
-\texttt{protoc}, and Python 3.10+ with the packages in
+\texttt{protoc}, and Python 3.9+ with the packages in
 \texttt{src/encode/requirements.txt}. Run \texttt{make check} to verify them, or
 \texttt{make venv} to set up just the Python side -- it creates a project-local
-\texttt{.venv} and installs into it, picking a Python 3.10+ interpreter
-automatically even when the system \texttt{python3} is older.
+\texttt{.venv} and installs into it; macOS's bundled \texttt{python3} is
+recent enough.
 {{< /latex >}}
 
 **macOS** (Homebrew):
 
 ```sh
-brew install protobuf python
+brew install protobuf
 brew install --cask mactex-no-gui
 ```
 
 {{< latex >}}
-On macOS the system \texttt{python3} is often 3.9, which is too old
--- \texttt{brew install python} above provides a 3.1x the build will pick up on
-its own. And Ghostscript 10.01 and later dropped the PDF interpreter
+On macOS, Ghostscript 10.01 and later dropped the PDF interpreter
 \texttt{dvisvgm} depends on for converting TikZ pictures; if TikZ blocks fail
 with a page-count error, install \texttt{mutool} as the fallback:
 {{< /latex >}}

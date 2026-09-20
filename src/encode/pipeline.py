@@ -20,6 +20,8 @@ Requires: lualatex, Ghostscript (gs), dvisvgm, protoc on PATH; the Python packag
 requirements.txt (protobuf, fonttools).
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import json

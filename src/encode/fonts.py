@@ -29,6 +29,8 @@ without it, provisioning still works but glyphs the served font cannot address b
 codepoint will be wrong. Install it with `pip install fonttools`.
 """
 
+from __future__ import annotations
+
 import hashlib
 import os
 import shutil

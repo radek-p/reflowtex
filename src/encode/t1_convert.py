@@ -40,6 +40,8 @@ real glyph at those codepoints to collide with.
 fontTools is required (t1Lib for parsing, fontBuilder for emitting). Without it,
 convert() is unavailable and the caller keeps the metric-box fallback.
 """
+from __future__ import annotations
+
 import hashlib
 import subprocess
 from pathlib import Path

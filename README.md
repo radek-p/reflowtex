@@ -162,7 +162,7 @@ The build pipeline shells out to a real TeX toolchain:
 - **Ghostscript** (`gs`) — normalises ICC-coloured included PDFs before SVG conversion
 - **dvisvgm** — converts captured TikZ pages and included PDFs to SVG
 - **protoc** — the Protocol Buffers compiler (`apt install protobuf-compiler`)
-- **Python 3.10+** with the packages in
+- **Python 3.9+** (macOS's bundled `python3` qualifies) with the packages in
   [`src/encode/requirements.txt`](src/encode/requirements.txt), installed into a
   project-local virtualenv — `make venv` creates `.venv/` and installs them; every
   other `make` target (and `website/build.sh`) depends on it, so this happens

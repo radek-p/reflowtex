@@ -31,11 +31,11 @@ help:
 
 # Python deps live in a project-local virtualenv, not the system interpreter.
 # Everything below depends on this and calls $(PYTHON), so `make demo` etc. set
-# it up on first use — no manual `pip install` needed. Needs Python 3.10+ (see
-# scripts/find_python.sh); rebuilds the venv if it's missing or was created
-# with a too-old interpreter (e.g. macOS's bundled 3.9 python3).
+# it up on first use — no manual `pip install` needed. Needs Python 3.9+ (see
+# scripts/find_python.sh — macOS's bundled python3 qualifies); rebuilds the
+# venv if it's missing or was created with a too-old interpreter.
 venv:
-	@if [ -x $(VENV)/bin/python3 ] && $(VENV)/bin/python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then \
+	@if [ -x $(VENV)/bin/python3 ] && $(VENV)/bin/python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then \
 	  : ; \
 	else \
 	  py="$$(./scripts/find_python.sh)" || exit 1; \

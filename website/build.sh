@@ -19,11 +19,11 @@ DEMOS="$REPO/examples/demo"                     # shared snippets for examples/
 
 # Python deps (protobuf, fonttools) live in the repo-root virtualenv, not the
 # system interpreter. `make venv` (in $REPO) creates it; build it here too so
-# this script works standalone. Needs Python 3.10+ (src/encode uses bare
-# `X | None` union syntax) — macOS's bundled /usr/bin/python3 is often 3.9, so
+# this script works standalone. Needs Python 3.9+ (the floor of the protobuf
+# and fonttools packages; macOS's bundled /usr/bin/python3 qualifies), so
 # rebuild the venv if it's missing or was created with a too-old interpreter.
 VENV="$REPO/.venv"
-if [ -x "$VENV/bin/python3" ] && "$VENV/bin/python3" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+if [ -x "$VENV/bin/python3" ] && "$VENV/bin/python3" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
   :
 else
   BASE_PYTHON="$("$REPO/scripts/find_python.sh")"

@@ -38,6 +38,8 @@ Copy layouts/shortcodes/latex.html and layouts/partials/reflowtex-viewer.html fr
 this directory into your site's layouts/ (see README.md).
 """
 
+from __future__ import annotations
+
 import argparse
 import base64
 import json
