@@ -1,0 +1,36 @@
+# tests/linebreak — paragraph-breaking fixtures
+
+Ground truth for test (a) of the test suite: does a paragraph breaker pick
+**exactly** the lines TeX picks?
+
+`capture.lua` hooks LuaTeX's `pre_linebreak_filter` and
+`post_linebreak_filter` during an ordinary `lualatex` run and writes one
+fixture per paragraph the engine breaks:
+
+| File | Content |
+|---|---|
+| `par-NNNN.txt` | the exact input of the breaker: the 27 `\hsize`-and-friends parameters, every `(font, char)` glyph metric the paragraph uses, and the post-hyphenation, post-ligature node list ending in `\parfillskip` |
+| `par-NNNN.expected` | what the engine produced: each line as an `hlist` with its `glue_set` (as exact float bits), `glue_sign`/`glue_order`, its children, the interline glue and penalties between lines, and the resulting `prev_depth` / `prev_graf` |
+
+Both halves are written in one canonical text format, and a breaker under
+test must re-serialize its own result the same way so the comparison is a
+byte-for-byte file diff — no tolerance, no parsing. The format's source of
+truth is `capture.lua` itself.
+
+## Capturing
+
+```sh
+cd <directory with the document>
+REFLOWTEX_FIXDIR=fixtures lualatex -interaction=nonstopmode \
+  '\directlua{dofile("path/to/capture.lua")}\input{testmath.tex}'
+```
+
+Capture at several `\textwidth` settings to exercise the second pass and
+hyphenated breaks; 150–500 pt plus the document default is a good matrix.
+
+## Status
+
+Only the capture side lives here today. The runner that replays fixtures
+through the viewer's breaker (and, once it ships, through an engine's own
+line-breaking code compiled to WebAssembly) is the next step of the test
+suite; until then, fixtures are consumed by tooling outside this repository.
