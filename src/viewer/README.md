@@ -126,6 +126,26 @@ Style the three states with `--latex-link`, `--latex-link-hover` and
 `--latex-link-active`; give `.latex-anchor` a `scroll-margin-top` if your page
 has a sticky header.
 
+## What a resize costs
+
+Painting is lazy: a segment (a run of paragraphs, or one display) gets its SVG
+glyphs placed only when it comes within a viewport of the screen, and a resize
+repaints the visible segments at once and the rest as they scroll into view.
+
+Layout is cached per segment. Each segment remembers, for every width it has
+been laid out at, the geometry its neighbours need — height, first ascent,
+last depth — and keeps the full layout for the last three widths. Heights are
+taken to be monotone in the width, so once two observed widths give the same
+height, every width between them is answered from the cache. On a resize, a
+segment near the viewport is always laid out for real; one that is off screen
+is laid out only if its geometry is not cached, otherwise its layout is
+*deferred* and runs the moment it scrolls into view. Dragging a window edge
+therefore re-breaks the paragraphs on screen and little else; returning to a
+recent width re-breaks nothing. If a deferred segment's real height turns out
+to differ from the cached one, the content below it moves at that moment and
+the cache is corrected. The console line printed on each re-render reports
+how many segments were laid out, reused, or deferred.
+
 ## Plugging in another paragraph breaker
 
 The viewer breaks paragraphs with its own Knuth–Plass implementation. A page

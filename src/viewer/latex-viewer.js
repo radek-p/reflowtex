@@ -250,7 +250,8 @@ function reflowBlock(el) {
     const tp = performance.now();
     const repainted = paintVisibleNow(data.fontInfo, data.cache);
     const st = data.cache.stats || {};
-    console.log(`[latex-viewer] re-render at ${newWidth.toFixed(0)}pt: layout ${(tp - t0).toFixed(1)} ms, paint ${(performance.now() - tp).toFixed(1)} ms (${repainted} visible segment(s); ${st.repositioned||0} repositioned, ${st.created||0} created)`);
+    const ls = data.cache.layoutStats || {};
+    console.log(`[latex-viewer] re-render at ${newWidth.toFixed(0)}pt: layout ${(tp - t0).toFixed(1)} ms, paint ${(performance.now() - tp).toFixed(1)} ms (${repainted} visible segment(s); ${st.repositioned||0} repositioned, ${st.created||0} created; segments: ${ls.computed||0} laid out, ${ls.reused||0} reused, ${ls.deferred||0} deferred to scroll)`);
     return true;
 }
 
@@ -2260,6 +2261,94 @@ function updateDisplayOverflowCue(wrap) {
         wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - EPS);
 }
 
+// Size and position one segment's element for layout L: the <svg> surface, the
+// scroll box a display that overflows the column needs, and the space above it,
+// which depends on the previous segment's last depth. Returns what to mount.
+// Shared by layoutDocument and materializeSegment; L may be a deferred layout
+// (geometry from the height cache, no lines yet).
+function sizeSegment(s, L, prev, columnPx, p) {
+    // Do not create a scrollbar for scaled-point rounding or a tiny italic
+    // overhang. A bare SVG uses the column as its viewport and overflow:
+    // visible lets that ink bleed naturally without scaling the display.
+    const tolerancePx = Math.max(0, p.displayOverflowTolerancePx || 0);
+    // A figure paragraph (isFigureParagraph) is exactly one unbreakable,
+    // unshrinkable picture box, so it can overflow the column precisely the
+    // way a display can — and gets the same scroll-box treatment.
+    const scrollable = L.seg.kind === 'display' || L.seg.isFigure;
+    const overflows = scrollable && L.W > columnPx + tolerancePx;
+    // columnPx unless genuinely overflowing: an ordinary (non-scrollable)
+    // text segment's own L.W is now real ink width (see layoutTextSegment),
+    // not always exactly columnPx — a paragraph with, say, one line 0.3px
+    // narrower than another must still get the *same* surface as every
+    // other non-overflowing segment, or adjacent paragraphs visibly render
+    // at slightly different widths.
+    const surfaceW = overflows ? L.W : columnPx;
+    s.svg.setAttribute('width', surfaceW);
+    s.svg.setAttribute('height', L.H);
+    s.svg.setAttribute('viewBox', `0 0 ${surfaceW} ${L.H}`);
+
+    // Only a display that genuinely overflows gets a scroll box, because a
+    // scroll box is also a *clipping* box: CSS forces overflow-y to 'auto'
+    // once overflow-x is set, and there is no way to scroll one axis while
+    // letting the other bleed. Ink that legitimately hangs outside its box
+    // — accents, protrusion, delimiter overshoot — would be cut off. So a
+    // display that fits is mounted bare and can bleed freely; only one that
+    // must pan pays for it, and its wrapper gets a little self-cancelling
+    // headroom for the bleed (see the margin block below).
+    let mount = s.svg;
+    if (overflows) {
+        if (!s.wrap) {
+            s.wrap = document.createElement('div');
+            s.wrap.addEventListener('scroll', () => updateDisplayOverflowCue(s.wrap),
+                                    { passive: true });
+        }
+        // It genuinely exceeds the column, so show a right cue immediately.
+        // Later paint/scroll measurements refine both directional classes.
+        s.wrap.classList.add('latex-display', 'latex-overflow-right');
+        if (s.svg.parentNode !== s.wrap) s.wrap.replaceChildren(s.svg);
+        mount = s.wrap;
+    } else if (s.wrap && s.svg.parentNode === s.wrap) {
+        s.wrap.classList.remove('latex-overflow-left', 'latex-overflow-right');
+        s.svg.remove();          // no longer overflowing: shed the scroll box
+    }
+    // Between two text segments TeX inserts interline (baselineskip) glue on
+    // top of any explicit \vspace, exactly as it does between the lines of a
+    // paragraph. Reproduce it so a heading sits the LaTeX distance above its
+    // body — and independently of the heading's descender depth, since the
+    // glue absorbs that. Displays keep their own captured spacing.
+    let margin = L.gapBefore || 0;
+    if (prev && L.seg.kind === 'text' && prev.seg.kind === 'text' && L.firstMeta) {
+        margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
+    }
+    s.svg.style.marginTop = '';
+    if (s.wrap) { s.wrap.style.marginTop = ''; s.wrap.style.marginBottom = ''; }
+    if (mount === s.wrap) {
+        // A scroll box clips (overflow-x forces overflow-y), so give the ink
+        // a little vertical headroom — but reserve no space for it: the
+        // margins take the padding straight back, so a wrapped display
+        // occupies exactly the vertical band the bare SVG would, and a small
+        // overshoot (accents, delimiter overshoot) overlaps the adjacent
+        // glue the same way it does in print. Fixed rather than measured:
+        // getBBox on SVG text reports the font's ascent/descent box, not
+        // glyph ink, and the converted CM faces carry ascents far beyond any
+        // outline — padding by that phantom measure visibly inflated the
+        // space around every scrollable display.
+        const BLEED_PAD = 6;
+        mount.style.paddingTop    = `${BLEED_PAD}px`;
+        mount.style.paddingBottom = `${BLEED_PAD}px`;
+        mount.style.marginTop     = `${margin - BLEED_PAD}px`;
+        mount.style.marginBottom  = `${-BLEED_PAD}px`;
+    } else {
+        mount.style.marginTop = margin ? `${margin}px` : '';
+    }
+    // Scroll destinations for the labels this segment owns. Their own
+    // element rather than an id on the segment: a segment can own several
+    // labels, and an element has only one id. Zero height, so it takes part
+    // in nothing — scroll-margin-top is left to the page, which is the only
+    // thing that knows whether it has a sticky header.
+    return { mount, overflows };
+}
+
 function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // Point the glyph-metrics reader at this document's table, and stash it on the
     // cache so paintDocument (which is handed only the cache) reads the same one.
@@ -2294,7 +2383,7 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     const dom = cache.dom;
     dom.root.style.visibility = '';   // may have been hidden while paint was deferred
 
-    const laid = segs.map((seg, i) => {
+    const layoutOne = (seg, i) => {
         const geom = seg.kind === 'display'
             ? layoutDisplaySegment(fontInfo, seg, widthPt, displayModel)
             : layoutTextSegment(fontInfo, seg, widthPt, p, cache);
@@ -2340,10 +2429,26 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         // parameters so a text→text join can add TeX's interline glue (see below).
         return { ...geom, seg, profiles, baselineYs, H, firstAscent, lastDepth,
                  firstMeta: (geom.meta && geom.meta[0]) || null, gapBefore: seg.gapBefore || 0 };
-    });
+    };
 
+    // ── Layout cache ──────────────────────────────────────────────────────────
+    // A reflow used to re-break every paragraph, though only the segments near
+    // the viewport are ever painted at the new width; the rest were laid out for
+    // one number, their height, which sets the block's height and the page's
+    // scroll geometry. Now each segment remembers, per width, the geometry its
+    // neighbours need (height, first ascent, last depth, surface width), and the
+    // full layout for the last few widths. A segment's height is taken to be
+    // monotone in the width — the same height at two widths means the same
+    // height everywhere between them — so once two observed widths agree, every
+    // width in that interval is answered from the cache. A segment that is not
+    // near the viewport and whose geometry is cached is then not laid out at all:
+    // its layout is *deferred*, and materializeSegment runs it the moment
+    // something needs its lines (a paint, once it scrolls into view). Should the
+    // real height differ from the cached one, the page adjusts then and the
+    // observation is corrected, so the assumption only ever costs a shift, never
+    // a wrong render. Segments near the viewport are always laid out for real.
     // The per-segment elements persist across renders; only contents reconcile.
-    while (dom.segs.length < laid.length) {
+    while (dom.segs.length < segs.length) {
         // xmlns:xlink is declared so a picture's `<use xlink:href=…>` (dvisvgm
         // emits the xlink form) resolves once its markup is injected via innerHTML.
         const svg = svgEl('svg', { xmlns:'http://www.w3.org/2000/svg', 'xmlns:xlink':'http://www.w3.org/1999/xlink' });
@@ -2352,89 +2457,33 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         dom.segs.push({ svg, wrap: null, pairs: [] });
     }
 
+    const paramsKey = JSON.stringify(p);
+    cache.layoutCtx = { layoutOne, segs, widthPt, p, columnPx, paramsKey };
+    const stats = cache.layoutStats = { computed: 0, reused: 0, deferred: 0, materialized: 0 };
+    const laid = segs.map((seg, i) => {
+        const s = dom.segs[i];
+        const hc = segLayoutCache(s, paramsKey);
+        const exact = hc.exact.get(widthPt);
+        if (exact) { stats.reused++; return { ...exact, seg }; }
+        if (!s.intersecting) {
+            const g = cachedGeometry(hc, widthPt);
+            if (g) {
+                stats.deferred++;
+                return { seg, deferred: true, lines: [], H: g.H, W: g.W, firstAscent: g.firstAscent,
+                         lastDepth: g.lastDepth, firstMeta: g.firstMeta, gapBefore: seg.gapBefore || 0 };
+            }
+        }
+        const L = layoutOne(seg, i);
+        rememberLayout(hc, widthPt, L);
+        stats.computed++;
+        return L;
+    });
+
     dom.root.replaceChildren();
     laid.forEach((L, i) => {
         const s = dom.segs[i];
-        // Do not create a scrollbar for scaled-point rounding or a tiny italic
-        // overhang. A bare SVG uses the column as its viewport and overflow:
-        // visible lets that ink bleed naturally without scaling the display.
-        const tolerancePx = Math.max(0, p.displayOverflowTolerancePx || 0);
-        // A figure paragraph (isFigureParagraph) is exactly one unbreakable,
-        // unshrinkable picture box, so it can overflow the column precisely the
-        // way a display can — and gets the same scroll-box treatment.
-        const scrollable = L.seg.kind === 'display' || L.seg.isFigure;
-        const overflows = scrollable && L.W > columnPx + tolerancePx;
-        // columnPx unless genuinely overflowing: an ordinary (non-scrollable)
-        // text segment's own L.W is now real ink width (see layoutTextSegment),
-        // not always exactly columnPx — a paragraph with, say, one line 0.3px
-        // narrower than another must still get the *same* surface as every
-        // other non-overflowing segment, or adjacent paragraphs visibly render
-        // at slightly different widths.
-        const surfaceW = overflows ? L.W : columnPx;
-        s.svg.setAttribute('width', surfaceW);
-        s.svg.setAttribute('height', L.H);
-        s.svg.setAttribute('viewBox', `0 0 ${surfaceW} ${L.H}`);
-
-        // Only a display that genuinely overflows gets a scroll box, because a
-        // scroll box is also a *clipping* box: CSS forces overflow-y to 'auto'
-        // once overflow-x is set, and there is no way to scroll one axis while
-        // letting the other bleed. Ink that legitimately hangs outside its box
-        // — accents, protrusion, delimiter overshoot — would be cut off. So a
-        // display that fits is mounted bare and can bleed freely; only one that
-        // must pan pays for it, and its wrapper gets a little self-cancelling
-        // headroom for the bleed (see the margin block below).
-        let mount = s.svg;
-        if (overflows) {
-            if (!s.wrap) {
-                s.wrap = document.createElement('div');
-                s.wrap.addEventListener('scroll', () => updateDisplayOverflowCue(s.wrap),
-                                        { passive: true });
-            }
-            // It genuinely exceeds the column, so show a right cue immediately.
-            // Later paint/scroll measurements refine both directional classes.
-            s.wrap.classList.add('latex-display', 'latex-overflow-right');
-            if (s.svg.parentNode !== s.wrap) s.wrap.replaceChildren(s.svg);
-            mount = s.wrap;
-        } else if (s.wrap && s.svg.parentNode === s.wrap) {
-            s.wrap.classList.remove('latex-overflow-left', 'latex-overflow-right');
-            s.svg.remove();          // no longer overflowing: shed the scroll box
-        }
-        // Between two text segments TeX inserts interline (baselineskip) glue on
-        // top of any explicit \vspace, exactly as it does between the lines of a
-        // paragraph. Reproduce it so a heading sits the LaTeX distance above its
-        // body — and independently of the heading's descender depth, since the
-        // glue absorbs that. Displays keep their own captured spacing.
-        const prev = laid[i-1];
-        let margin = L.gapBefore || 0;
-        if (i > 0 && L.seg.kind === 'text' && prev.seg.kind === 'text' && L.firstMeta) {
-            margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
-        }
-        s.svg.style.marginTop = '';
-        if (s.wrap) { s.wrap.style.marginTop = ''; s.wrap.style.marginBottom = ''; }
-        if (mount === s.wrap) {
-            // A scroll box clips (overflow-x forces overflow-y), so give the ink
-            // a little vertical headroom — but reserve no space for it: the
-            // margins take the padding straight back, so a wrapped display
-            // occupies exactly the vertical band the bare SVG would, and a small
-            // overshoot (accents, delimiter overshoot) overlaps the adjacent
-            // glue the same way it does in print. Fixed rather than measured:
-            // getBBox on SVG text reports the font's ascent/descent box, not
-            // glyph ink, and the converted CM faces carry ascents far beyond any
-            // outline — padding by that phantom measure visibly inflated the
-            // space around every scrollable display.
-            const BLEED_PAD = 6;
-            mount.style.paddingTop    = `${BLEED_PAD}px`;
-            mount.style.paddingBottom = `${BLEED_PAD}px`;
-            mount.style.marginTop     = `${margin - BLEED_PAD}px`;
-            mount.style.marginBottom  = `${-BLEED_PAD}px`;
-        } else {
-            mount.style.marginTop = margin ? `${margin}px` : '';
-        }
-        // Scroll destinations for the labels this segment owns. Their own
-        // element rather than an id on the segment: a segment can own several
-        // labels, and an element has only one id. Zero height, so it takes part
-        // in nothing — scroll-margin-top is left to the page, which is the only
-        // thing that knows whether it has a sticky header.
+        const { mount, overflows } = sizeSegment(s, L, laid[i-1], columnPx, p);
+        s.mount = mount;
         for (const id of L.seg.anchors || []) {
             const label = cache.anchors[id - 1];
             if (!label) continue;
@@ -2457,10 +2506,67 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     });
 
     cache.layout = { laid };
-    // Track each segment by its own <svg>, not by a running height model that would
-    // drift from the real layout (see the per-segment painting section).
     observeSegments(cache);
     return dom.root;
+}
+
+// Per-segment cache, keyed by the layout parameters (a change of alignment or of
+// any Knuth–Plass knob starts afresh). `exact` maps a width to its full layout;
+// `obs` is the sorted list of observed widths with the geometry seen there.
+function segLayoutCache(s, key) {
+    if (!s.hc || s.hc.key !== key) s.hc = { key, exact: new Map(), obs: [] };
+    return s.hc;
+}
+const EXACT_LAYOUTS_KEPT = 3;
+
+function rememberLayout(hc, w, L) {
+    hc.exact.set(w, L);
+    if (hc.exact.size > EXACT_LAYOUTS_KEPT) hc.exact.delete(hc.exact.keys().next().value);
+    const o = { w, H: L.H, W: L.W, firstAscent: L.firstAscent, lastDepth: L.lastDepth, firstMeta: L.firstMeta };
+    const obs = hc.obs;
+    let k = 0;
+    while (k < obs.length && obs[k].w < w) k++;
+    if (k < obs.length && obs[k].w === w) obs[k] = o;   // re-observed: the real value wins
+    else obs.splice(k, 0, o);
+}
+
+// Geometry for width w without laying out: an exact observation, or — heights
+// being monotone in width — the interval between two observations of equal
+// height that brackets w (the nearer end supplies the rest of the geometry).
+function cachedGeometry(hc, w) {
+    const obs = hc.obs;
+    let k = 0;
+    while (k < obs.length && obs[k].w < w) k++;
+    if (k < obs.length && obs[k].w === w) return obs[k];
+    if (k === 0 || k === obs.length) return null;
+    const a = obs[k-1], b = obs[k];
+    if (a.H !== b.H) return null;
+    return (w - a.w <= b.w - w) ? a : b;
+}
+
+// Run the deferred layout of segment i now (its lines are needed), size its
+// element for the real geometry, and fix the spacing of the segment below it,
+// which depends on this one's last depth. If the real height differs from the
+// cached one, the following content simply moves; the observation is replaced.
+function materializeSegment(cache, i) {
+    const laid = cache.layout && cache.layout.laid;
+    const L = laid && laid[i];
+    if (!L || !L.deferred) return;
+    const ctx = cache.layoutCtx;
+    useGlyphMetrics(cache.metrics);
+    const s = cache.dom.segs[i];
+    const real = ctx.layoutOne(ctx.segs[i], i);
+    rememberLayout(segLayoutCache(s, ctx.paramsKey), ctx.widthPt, real);
+    laid[i] = real;
+    const remount = (seg, R, prev) => {
+        const { mount, overflows } = sizeSegment(seg, R, prev, ctx.columnPx, ctx.p);
+        if (seg.mount && mount !== seg.mount) seg.mount.replaceWith(mount);
+        seg.mount = mount;
+        if (overflows) requestAnimationFrame(() => updateDisplayOverflowCue(seg.wrap));
+    };
+    remount(s, real, laid[i-1]);
+    if (laid[i+1]) remount(cache.dom.segs[i+1], laid[i+1], real);
+    if (cache.layoutStats) cache.layoutStats.materialized++;
 }
 
 // Paint one segment: reconcile its lines' glyphs into its own <svg>. The reconcile
@@ -2470,6 +2576,7 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
 // possible (see observeSegments / paintVisibleNow): a long document only pays the
 // DOM cost for the segments that have been on screen, not for all of them at once.
 function paintSegment(fontInfo, cache, i) {
+    materializeSegment(cache, i);     // a deferred layout is only ever run here
     useGlyphMetrics(cache.metrics);   // a paint may run after another block laid out
     const dom = cache.dom;
     const L   = cache.layout.laid[i];
