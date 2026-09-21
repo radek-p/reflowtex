@@ -94,14 +94,14 @@ def main() -> None:
     # Each snippet owns its heading (a \section, if any), so no HTML heading is
     # added here — the block is one self-contained rendering.
     jobs = [(content_key(p.read_text(encoding='utf-8'), preamble),
-             p.read_text(encoding='utf-8'), preamble)
+             p.read_text(encoding='utf-8'), preamble, p.name)
             for p in snippets]
     # Compile (optionally in parallel), then assemble blocks in filename order.
     blobs = pipe.compile_many(jobs, jobs=args.jobs)
     pipe.patch_fonts()
 
     blocks_html = []
-    for key, _content, _pre in jobs:
+    for key, _content, _pre, _name in jobs:
         b64 = base64.b64encode(blobs[key]).decode()
         blocks_html.append(f'<div class="latex-block" data-nodelist-b64="{b64}"></div>')
 

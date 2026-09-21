@@ -111,9 +111,14 @@ class Pipeline:
 
     # ── one snippet ─────────────────────────────────────────────────────────────
     def compile(self, content: str, preamble: str = '', key: str | None = None,
-                passes: int = 1) -> bytes:
+                passes: int = 1, name: str | None = None) -> bytes:
         """Compile one snippet → protobuf blob (bytes). Also writes build/<key>/
         (input.tex, output.json, nodelist.pb) and provisions its fonts.
+
+        `name` is how the caller knows the snippet — a filename, a page and line —
+        and is what progress lines and errors are labelled with, alongside the
+        key (which is also the build directory's name). It never affects the
+        build itself.
 
         passes>1 runs lualatex repeatedly in the same build dir so the .aux round-
         trip resolves \\ref/\\pageref/\\cite (a self-contained snippet needs only
@@ -122,6 +127,7 @@ class Pipeline:
         import encode_pb
 
         key = key or content_key(content, preamble)
+        label = f'{name} ({key})' if name else key
         build_dir = self.build_root / key
         build_dir.mkdir(parents=True, exist_ok=True)
         # A caller may have configured PGF externalisation with this conventional
@@ -158,7 +164,7 @@ class Pipeline:
         while True:
             width_extra_sp = sample_index * DISPLAY_SAMPLE_STEP_SP
             write_input(width_extra_sp)
-            self._run_lualatex(build_dir, key, passes if sample_index == 0 else 1)
+            self._run_lualatex(build_dir, label, passes if sample_index == 0 else 1)
             data = json.loads((build_dir / 'output.json').read_text())
             if not display_model.has_displays(data):
                 break
@@ -168,7 +174,7 @@ class Pipeline:
                          f'a positive source width (is {WIDTH_EXTRA_MARK} and the '
                          f'Serializer.note_source_width hook missing?)')
             if samples and reported_width <= int(samples[-1].get('source_width', 0)):
-                sys.exit(f'ERROR: display sample width did not increase for block {key}: '
+                sys.exit(f'ERROR: display sample width did not increase for block {label}: '
                          f'{samples[-1].get("source_width")}, {reported_width}')
             samples.append(data)
             if len(samples) >= 3:
@@ -176,17 +182,17 @@ class Pipeline:
                 if ok:
                     data = display_model.attach_model(samples[-3], samples[-2], samples[-1])
                     (build_dir / 'output.json').write_text(json.dumps(data))
-                    print(f'  {key}: display model stable at '
+                    print(f'  {label}: display model stable at '
                           f'{samples[-3]["source_width"] / 65536:g}, '
                           f'{samples[-2]["source_width"] / 65536:g}, '
                           f'{samples[-1]["source_width"] / 65536:g} pt')
                     break
                 rejected = samples[-3]['source_width'] / 65536
-                print(f'  {key}: rejected display sample at {rejected:g} pt: {reason}')
+                print(f'  {label}: rejected display sample at {rejected:g} pt: {reason}')
                 samples = samples[-2:]
             if int(data.get('source_width', 0)) + DISPLAY_SAMPLE_STEP_SP >= TEX_MAX_DIMEN_SP:
                 sys.exit(f'ERROR: no stable affine display topology before \\maxdimen '
-                         f'for block {key}')
+                         f'for block {label}')
             sample_index += 1
 
         n_pictures  = transforms.convert_pictures(data, build_dir)
@@ -203,13 +209,13 @@ class Pipeline:
             if n_rewritten: bits.append(f'rewrote {n_rewritten} glyph(s) to PUA')
             if n_legacy:    bits.append(f'converted legacy fonts, {n_legacy} glyph(s) to PUA')
             if n_pictures:  bits.append(f'converted {n_pictures} picture(s)')
-            print(f'  {key}: ' + ', '.join(bits))
+            print(f'  {label}: ' + ', '.join(bits))
 
         blob = encode_pb.build_document(data).SerializeToString()
         (build_dir / 'nodelist.pb').write_bytes(blob)
         return blob
 
-    def _run_lualatex(self, build_dir: Path, key: str, passes: int = 1) -> None:
+    def _run_lualatex(self, build_dir: Path, label: str, passes: int = 1) -> None:
         # TikZ capture itself no longer invokes a sub-run. Keep shell escape for
         # compatibility with caller preambles that already relied on it. Repeated
         # passes reuse the build dir's .aux, so references resolve; the last
@@ -224,7 +230,7 @@ class Pipeline:
         log = build_dir / 'input.log'
         if not output_json.exists():
             detail = log.read_text() if log.exists() else result.stdout + result.stderr
-            sys.exit(f'ERROR: lualatex failed for block {key}:\n{detail[-3000:]}')
+            sys.exit(f'ERROR: lualatex failed for block {label}:\n{detail[-3000:]}')
 
         # A TeX error is fatal even though nonstopmode carried on and produced a
         # node list, because what it produces is a *repaired* document rather than
@@ -234,23 +240,24 @@ class Pipeline:
                   if l.startswith('! ')]
         if errors:
             uniq = list(dict.fromkeys(errors))
-            sys.exit(f'ERROR: lualatex reported {len(errors)} error(s) for block {key} '
+            sys.exit(f'ERROR: lualatex reported {len(errors)} error(s) for block {label} '
                      f'(nonstopmode continued, so the node list would be silently wrong):\n'
                      + '\n'.join(f'  {e}' for e in uniq[:10])
                      + f'\n  see {log}')
 
     # ── batch helpers ───────────────────────────────────────────────────────────
-    def compile_many(self, snippets: list[tuple[str, str, str]], jobs: int = 1) -> dict[str, bytes]:
-        """Compile [(key, content, preamble), …] across a thread pool (lualatex
-        releases the GIL). Returns {key: blob}. Raises on the first failure."""
+    def compile_many(self, snippets: list[tuple], jobs: int = 1) -> dict[str, bytes]:
+        """Compile [(key, content, preamble[, name]), …] across a thread pool
+        (lualatex releases the GIL). Returns {key: blob}. Raises on the first
+        failure. `name` labels the snippet in output (see compile)."""
         if not snippets:
             return {}
         jobs = max(1, min(jobs, len(snippets)))
         results: dict[str, bytes] = {}
 
         def one(job):
-            key, content, preamble = job
-            return key, self.compile(content, preamble, key=key)
+            key, content, preamble, *rest = job
+            return key, self.compile(content, preamble, key=key, name=rest[0] if rest else None)
 
         if jobs > 1:
             # Warm the shared luaotfload font cache with one block before fanning

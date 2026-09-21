@@ -85,11 +85,27 @@ def _resolve_preamble(name: str, preamble_dir: Path) -> str:
     return pfile.read_text(encoding='utf-8')
 
 
+def _block_name(page: str, line: int, inner: str, as_name: str | None) -> str:
+    """How an inline block is referred to in progress lines and errors: the page
+    and line it starts on, its as="…" name if it has one, and the first words of
+    its text — a line number alone is a poor handle once the page has been
+    edited, while a few words of the block are recognisable at a glance."""
+    excerpt = ' '.join(inner.split())
+    if len(excerpt) > 48:
+        excerpt = excerpt[:47].rstrip() + '…'
+    name = f'{page}:{line}'
+    if as_name:
+        name += f' as="{as_name}"'
+    return f'{name} "{excerpt}"'
+
+
 def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
     r"""Scan all markdown for latex blocks.
 
     Returns (blocks, files_map, block_pages, color_map_names):
-      blocks          {key: (content, preamble)}   — everything to compile
+      blocks          {key: (content, preamble, name)} — everything to compile;
+                      name is where the block was authored (page:line, or the
+                      referenced .tex file), for progress lines and errors
       files_map       {"name.tex": key}            — for file-ref shortcode lookups,
                       plus any inline block that registered itself via as="…"
       block_pages     {key: "sub/page.md"}         — which page each block sits on,
@@ -99,7 +115,7 @@ def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
                       unlike preamble, a colour map never affects compilation (it's a
                       browser-rendering concern), so it plays no part in a block's key
     """
-    blocks: dict[str, tuple[str, str]] = {}
+    blocks: dict[str, tuple[str, str, str]] = {}
     files_map: dict[str, str] = {}
     block_pages: dict[str, str] = {}
     color_map_names: set[str] = set()
@@ -117,12 +133,15 @@ def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
             pm = PREAMBLE_ATTR_RE.search(attrs or '')
             preamble = _resolve_preamble(pm.group(1), preamble_dir) if pm else ''
             key = content_key(inner.strip(), preamble)
-            blocks[key] = (inner.strip(), preamble)
-            block_pages.setdefault(key, path.relative_to(content_dir).as_posix())
+            page = path.relative_to(content_dir).as_posix()
+            line = text.count('\n', 0, m.start()) + 1
+            am = AS_ATTR_RE.search(attrs or '')
+            blocks.setdefault(key, (inner.strip(), preamble,
+                                    _block_name(page, line, inner, am.group(1) if am else None)))
+            block_pages.setdefault(key, page)
             cm = COLOR_MAP_ATTR_RE.search(attrs or '')
             if cm:
                 color_map_names.add(cm.group(1))
-            am = AS_ATTR_RE.search(attrs or '')
             if am:
                 files_map[am.group(1)] = key
 
@@ -141,7 +160,7 @@ def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
             pm = PREAMBLE_ATTR_RE.search(attrs or '')
             preamble = _resolve_preamble(pm.group(1), preamble_dir) if pm else demos_preamble
             key = content_key(content.strip(), preamble)
-            blocks[key] = (content.strip(), preamble)
+            blocks.setdefault(key, (content.strip(), preamble, name))
             files_map[name] = key
             block_pages.setdefault(key, path.relative_to(content_dir).as_posix())
             cm = COLOR_MAP_ATTR_RE.search(attrs or '')
@@ -239,12 +258,12 @@ def main() -> None:
         return
 
     stale = []
-    for key, (content, preamble) in blocks.items():
+    for key, (content, preamble, name) in blocks.items():
         out = data_dir / f'{key}.json'
         if not args.force and out.exists() and json.loads(out.read_text()).get('content_hash') == key:
-            print(f'  {key}: up to date')
+            print(f'  {name} ({key}): up to date')
             continue
-        stale.append((key, content, preamble))
+        stale.append((key, content, preamble, name))
 
     if stale:
         print(f'reflowtex: compiling {len(stale)} block(s)…')
@@ -252,7 +271,7 @@ def main() -> None:
         for key, blob in blobs.items():
             (data_dir / f'{key}.json').write_text(json.dumps(
                 {'nodelist_b64': base64.b64encode(blob).decode(), 'content_hash': key}, indent=2))
-            print(f'  {key}: done ({len(blob)} bytes)')
+            print(f'  {blocks[key][2]} ({key}): done ({len(blob)} bytes)')
 
     print('font-patch:')
     pipe.patch_fonts()

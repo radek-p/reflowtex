@@ -87,7 +87,8 @@ def main() -> None:
                     fonts_dir=out / 'fonts',
                     template=HERE / 'template.tex')
     print(f'reflowtex: compiling testmath.tex ({PASSES} passes so cross-references resolve) …')
-    blob = pipe.compile(body, preamble=preamble, key='testmath', passes=PASSES)
+    blob = pipe.compile(body, preamble=preamble, key='testmath', passes=PASSES,
+                        name='testmath.tex')
     pipe.patch_fonts()
     print(f'  OK ({len(blob)} bytes)')
 
