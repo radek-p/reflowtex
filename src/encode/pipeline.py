@@ -222,6 +222,7 @@ class Pipeline:
                          f'for block {label}')
             sample_index += 1
 
+        n_dropped   = transforms.drop_unreferenced_paragraphs(data)
         n_pictures  = transforms.convert_pictures(data, build_dir)
         n_stripped  = transforms.strip_unsupported_nodes(data)
         # Legacy fonts first: it sets 'unknown' fonts' filenames to the OTFs it
@@ -229,9 +230,10 @@ class Pipeline:
         # see real files rather than warning on 'unknown'.
         n_legacy    = transforms.normalise_legacy_font_addressing(data, self.fonts)
         n_rewritten = transforms.normalise_glyph_addressing(data, self.fonts)
-        if n_stripped or n_rewritten or n_pictures or n_legacy:
+        if n_stripped or n_rewritten or n_pictures or n_legacy or n_dropped:
             (build_dir / 'output.json').write_text(json.dumps(data))
             bits = []
+            if n_dropped:   bits.append(f'dropped {n_dropped} unreferenced paragraph(s)')
             if n_stripped:  bits.append(f'stripped {n_stripped} node(s)')
             if n_rewritten: bits.append(f'rewrote {n_rewritten} glyph(s) to PUA')
             if n_legacy:    bits.append(f'converted legacy fonts, {n_legacy} glyph(s) to PUA')

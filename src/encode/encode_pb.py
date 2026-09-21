@@ -88,11 +88,20 @@ def fill(msg, d: dict) -> None:
                 setattr(msg, k, v)
 
 
+def _font_entry(fid: str, f: dict) -> dict:
+    entry = {'id': int(fid), 'name': f['name'], 'size_sp': f['size_sp'], 'filename': f['filename']}
+    # Microtypography the serializer recorded (see FontInfo in latex.proto);
+    # older output.json files simply lack the keys.
+    for key in ('quad', 'expand_stretch', 'expand_shrink', 'expand_step', 'codes'):
+        if key in f:
+            entry[key] = f[key]
+    return entry
+
+
 def build_document(data: dict) -> L.Document:
     doc = {
         # fonts is a map keyed by id in output.json; the wire form is a list.
-        'fonts': [{'id': int(k), 'name': f['name'], 'size_sp': f['size_sp'], 'filename': f['filename']}
-                  for k, f in data['fonts'].items()],
+        'fonts': [_font_entry(k, f) for k, f in data['fonts'].items()],
         'paragraphs': data.get('paragraphs', []),
         'content': data.get('content', []),
         'pictures': data.get('pictures', []),

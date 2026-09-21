@@ -4,6 +4,7 @@
 
 Three passes, each returning a count of what it changed:
 
+  * drop_unreferenced_paragraphs — forget captured paragraphs no stream item uses.
   * strip_unsupported_nodes   — drop nodes the schema/renderer do not model.
   * normalise_glyph_addressing — rewrite glyphs the served font cannot address by
                                  their Unicode codepoint to a private-use code.
@@ -28,6 +29,55 @@ def _all_content_items(data: dict):
     yield from data.get('content', [])
     for footnote in data.get('footnotes', []):
         yield from footnote.get('content', [])
+
+
+def _remap_font_codes(data: dict, remap: dict) -> None:
+    """Keep each font's per-character protrusion/expansion codes (FontInfo.codes,
+    keyed by the glyph's `char`) in step with a rewrite of glyph chars.
+
+    `remap` is {font id (str): {source char: {chars it now appears as}}},
+    collected by the rewriting walk. TeX keyed the codes by the character code
+    the glyph had at typesetting time; after a rewrite the same character can
+    live under several codes (its base glyph keeps the codepoint, a variant
+    moves to the PUA), and each of them must carry the entry, or a protruding
+    comma stops protruding the moment it is a script-size variant."""
+    for fid, table in remap.items():
+        info = fonts_of(data).get(fid)
+        codes = info.get('codes') if info else None
+        if not codes:
+            continue
+        out, seen = [], set()
+        for entry in codes:
+            for target in sorted(table.get(entry['char'], {entry['char']})):
+                if target not in seen:
+                    out.append({**entry, 'char': target})
+                    seen.add(target)
+        info['codes'] = out
+
+
+# ── Unreferenced paragraphs ──────────────────────────────────────────────────
+# Every paragraph LuaTeX breaks is captured, including ones that never reach
+# the flow: amsmath's empty paragraph after an alignment, and the tiny test
+# paragraphs a package sets in a box while probing a font (microtype breaks
+# one or two glyphs per font it configures, several hundred over a document).
+# The stream references paragraphs by index, so renumber after dropping.
+
+
+def drop_unreferenced_paragraphs(data: dict) -> int:
+    paragraphs = data.get('paragraphs', [])
+    used = set()
+    for item in _all_content_items(data):
+        if 'para' in item:
+            used.add(int(item['para']))
+    if len(used) == len(paragraphs):
+        return 0
+    keep = sorted(i for i in used if 1 <= i <= len(paragraphs))
+    renumber = {old: new for new, old in enumerate(keep, start=1)}
+    data['paragraphs'] = [paragraphs[i - 1] for i in keep]
+    for item in _all_content_items(data):
+        if 'para' in item:
+            item['para'] = renumber[int(item['para'])]
+    return len(paragraphs) - len(keep)
 
 
 # ── Unsupported nodes ────────────────────────────────────────────────────────
@@ -106,6 +156,7 @@ def normalise_glyph_addressing(data: dict, fonts) -> int:
     font_files = {fid: info['filename'] for fid, info in fonts_of(data).items()}
     fonts.provision(set(font_files.values()))
     rewritten = 0
+    remap: dict[str, dict[int, set]] = {}
 
     def needs_pua(cp: int, gi: int, lookup) -> bool:
         if cp >= PUA_BASE:                        # already normalised
@@ -126,6 +177,7 @@ def normalise_glyph_addressing(data: dict, fonts) -> int:
                     if needs_pua(cp, gi, lookup):
                         n['char'] = PUA_BASE + gi
                         rewritten += 1
+                    remap.setdefault(str(n.get('font', '')), {}).setdefault(cp, set()).add(n['char'])
             for k in ('children', 'replace', 'pre', 'post', 'nobreak'):
                 if k in n:
                     walk(n[k])
@@ -139,6 +191,7 @@ def normalise_glyph_addressing(data: dict, fonts) -> int:
     for item in _all_content_items(data):
         if 'box' in item:
             walk(item['box'].get('children', []))
+    _remap_font_codes(data, remap)
     return rewritten
 
 
@@ -201,6 +254,9 @@ def normalise_legacy_font_addressing(data: dict, fonts) -> int:
     for item in _all_content_items(data):
         if 'box' in item:
             walk(item['box'].get('children', []))
+    # The slot → codepoint map is total per font, so the codes follow it directly.
+    _remap_font_codes(data, {fid: {slot: {cp} for slot, cp in addressing.items()}
+                             for fid, addressing in rewrite.items()})
     return rewritten
 
 

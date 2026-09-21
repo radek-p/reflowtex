@@ -163,19 +163,34 @@ WebAssembly, say — by defining, before or after the viewer loads:
 
 ```js
 window.reflowtexBreak = function (nodes, availSp, params, helpers) {
-  // return [{nodes, ratio, fitness, leftProtrusion}, …] or null
+  // return [{nodes, ratio, fitness, leftProtrusion, exact?, expand?}, …] or null
 };
 ```
 
 It is called for every paragraph on every layout with the paragraph's node
 list, the available width in scaled points, the block's Knuth–Plass
-parameters, and `helpers` (`gW/gH/gD` glyph-metric accessors, `align`, and
-the paragraph's `bskip`/`lskip`). Return the lines in the same shape the
-built-in breaker produces, or `null` to decline for this paragraph, in which
-case the built-in breaker runs. A line flagged `exact: true` carries a
-TeX-exact glue ratio, and the viewer then applies no glyph expansion of its
-own on top of it. Dispatch a `resize` event once an asynchronously loaded
-breaker becomes ready, so already-painted blocks re-lay out with it.
+parameters, and `helpers`:
+
+- `gW/gH/gD` — glyph-metric accessors;
+- `align`, `bskip`, `lskip` — the paragraph's alignment and interline glue;
+- `font(id)` — the font's record: `quad` (sp), `expand`
+  (`{stretch, shrink, step}` as `\expandglyphsinfont` set them, thousandths,
+  or `null`) and `codes`, a `Map` from character to `{lp, rp, ef}`
+  (`\lpcode`/`\rpcode` in thousandths of the quad, `\efcode` in thousandths
+  of the width) — what microtype configured when the document was typeset;
+- `adjustSpacing`, `protrudeChars` — the paragraph's `\adjustspacing` and
+  `\protrudechars`.
+
+Return the lines in the same shape the built-in breaker produces, or `null`
+to decline for this paragraph, in which case the built-in breaker runs. A
+line flagged `exact: true` carries a TeX-exact glue ratio, and the viewer
+then applies no glyph expansion of its own on top of it; a line carrying
+`expand` (a fraction, `0.012` = glyphs and font kerns 1.2 % wider) was
+expanded by the breaker itself and is drawn exactly that much wider. A
+`leftProtrusion` in scaled points hangs the line's first glyph into the left
+margin by that much; a negative kern at the line's end does the same on the
+right. Dispatch a `resize` event once an asynchronously loaded breaker
+becomes ready, so already-painted blocks re-lay out with it.
 
 ## Theming (optional)
 

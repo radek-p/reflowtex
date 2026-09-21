@@ -143,6 +143,30 @@ message FontInfo {
   optional string name     = 2;
   optional uint32 size_sp  = 3;
   optional string filename = 4;
+
+  // Microtypography as TeX had it while typesetting — what microtype (or a
+  // preamble using \lpcode, \rpcode and \expandglyphsinfont directly) set on
+  // this font — in TeX's own units, so a breaker running TeX's algorithm
+  // protrudes and expands exactly as TeX did. `quad` (sp) is what protrusion
+  // codes are relative to. expand_* are \expandglyphsinfont's three
+  // arguments (thousandths); all absent = the font does not expand. `codes`
+  // lists only the characters with a non-default code.
+  optional int32     quad           = 5;
+  optional int32     expand_stretch = 6;
+  optional int32     expand_shrink  = 7;
+  optional int32     expand_step    = 8;
+  repeated CharCodes codes          = 9;
+}
+
+// One character's protrusion and expansion codes: lp/rp are \lpcode/\rpcode
+// (thousandths of the font's quad, hanging into the left/right margin), ef is
+// \efcode (thousandths of the character's width; 1000 = expands like the
+// rest of the font).
+message CharCodes {
+  optional int32 char = 1;
+  optional int32 lp   = 2;
+  optional int32 rp   = 3;
+  optional int32 ef   = 4;
 }
 
 message Paragraph {
@@ -157,6 +181,14 @@ message Paragraph {
   // (\raggedright), or "right" (\raggedleft). Absent = justified (the default),
   // so the paragraph inherits the block's --latex-align.
   optional string align = 6;
+
+  // \adjustspacing and \protrudechars in force when TeX broke the paragraph
+  // (LuaTeX's meaning: 0 = off, 1 = applied when a line is set, 2 = also
+  // inside the line breaker; microtype sets both to 2). They say whether the
+  // FontInfo expansion and protrusion codes were in use. Absent = 0.
+  // (Field 7 is kept free for the paragraph's band width.)
+  optional int32 adjust_spacing = 8;
+  optional int32 protrude_chars = 9;
 }
 
 enum ItemKind {

@@ -462,6 +462,18 @@ async function registerFonts(fontsData) {
             // A font with no OTF to load: its glyphs are drawn as metric boxes
             // (see the sink's glyph handler) so the missing ink is visible.
             unresolved: !f.filename || f.filename === 'unknown',
+            // Microtypography as TeX had it (FontInfo in latex.proto): the
+            // quad protrusion is relative to, \expandglyphsinfont's three
+            // arguments (null = the font does not expand), and per-character
+            // \lpcode/\rpcode/\efcode for the characters that have any. Handed
+            // to an external breaker through the hook's helpers; the built-in
+            // breaker keeps its own protrusion table and expansion limits.
+            quad:   f.quad || 0,
+            expand: (f.expand_stretch || f.expand_shrink)
+                        ? { stretch: f.expand_stretch || 0, shrink: f.expand_shrink || 0,
+                            step: f.expand_step || 0 }
+                        : null,
+            codes:  new Map((f.codes || []).map(c => [c.char, c])),
         };
     }
 
@@ -807,7 +819,7 @@ function lineProfile(fontInfo, nodes, xStart, ratio, expandRatio) {
                     items.push({x1:x,x2:x+w,h,d}); x+=w; break;
                 }
                 case 'glue':{let w=n.width; if(r>0&&!(n.stretch_order||0)&&n.stretch>0)w+=r*n.stretch; else if(r<0&&!(n.shrink_order||0)&&n.shrink>0)w+=r*n.shrink; x+=w*SP_TO_PX; break;}
-                case 'kern': x+=n.kern*(1+er)*SP_TO_PX; break;
+                case 'kern': x+=n.kern*((n.subtype||0)===0?1+er:1)*SP_TO_PX; break;
                 case 'disc': x=walk(n.replace,x,0,er); break;
                 case 'math': x+=n.surround*SP_TO_PX; break;
                 case 'picture':{
@@ -1736,7 +1748,10 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
                 x+=w*SP_TO_PX; break;
             }
             case 'kern':{
-                const w=n.kern*(1+expandRatio)*SP_TO_PX;
+                // Expansion stretches the font's own kerns (subtype 0) with the
+                // glyphs, as an expanded font copy would; an explicit \kern,
+                // an accent kern or an italic correction keeps its width.
+                const w=n.kern*((n.subtype||0)===0?1+expandRatio:1)*SP_TO_PX;
                 if(sink.gap) sink.gap(n,'kern',x,w);
                 x+=w; break;
             }
@@ -1985,12 +2000,20 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
         // Knuth–Plass runs. Everything below is agnostic to which breaker ran.
         // A line flagged `exact: true` carries a TeX-exact glue ratio whose
         // stretch pool holds no glyph expandability, so the viewer's own
-        // expansion is not applied on top of it.
+        // expansion is not applied on top of it; a line carrying `expand` (a
+        // fraction: 0.012 = glyphs 1.2 % wider) was expanded by the breaker
+        // itself, exactly that much. The helpers also hand over what TeX had
+        // for microtypography — each font's protrusion/expansion codes and
+        // the paragraph's \adjustspacing/\protrudechars — so an engine can
+        // apply them as TeX did.
         const ext = typeof window !== 'undefined' && typeof window.reflowtexBreak === 'function'
             ? window.reflowtexBreak(para.nodes, availSp, p, {
                   gW, gH, gD, align,
                   bskip: para.baselineskip || 0,
                   lskip: para.lineskip || 0,
+                  font: fid => fontInfo[String(fid)] || null,
+                  adjustSpacing: para.adjust_spacing || 0,
+                  protrudeChars: para.protrude_chars || 0,
               })
             : null;
         for (const ln of (ext || kpBreak(bcs, para.nodes, availSp, p))) {
@@ -1998,7 +2021,8 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
             // When the line must shrink, rendering and positioning are identical to justify.
             // The alignment offset only applies to lines whose natural width fits the column.
             const ratio = justify ? ln.ratio : Math.min(0, ln.ratio);
-            const er    = (p.useExpansion && !ln.exact) ? ratio * p.maxExpand : 0;
+            const er    = ln.expand !== undefined ? ln.expand
+                        : (p.useExpansion && !ln.exact) ? ratio * p.maxExpand : 0;
             const protX = -(p.useProtrusion ? ln.leftProtrusion * SP_TO_PX : 0);
             const natSp = sumWidthSp(ln.nodes);
             const natPx = natSp * SP_TO_PX;

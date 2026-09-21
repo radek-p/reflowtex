@@ -66,6 +66,68 @@ local function note_font(font_id)
     }
 end
 
+-- The characters each font was used for, so the microtypography pass below
+-- only has to look those up.
+local used_chars = {}
+
+local function note_char(font_id, ch)
+    local t = used_chars[font_id]
+    if not t then
+        t = {}
+        used_chars[font_id] = t
+    end
+    t[ch] = true
+end
+
+-- ── Protrusion and expansion ──────────────────────────────────────────────
+-- microtype (or a preamble using \lpcode, \rpcode and \expandglyphsinfont
+-- directly) configures these on the engine's *internal* font structures after
+-- the font is loaded. font.getfont returns the table the font was defined
+-- from, which never learns of them; font.getcopy rebuilds a table from the
+-- internal structure and does. So they are read once per font at the very end,
+-- when everything is set, for the characters the document actually used.
+-- Units are TeX's own: lp/rp are \lpcode/\rpcode (thousandths of the font's
+-- quad), ef is \efcode (thousandths of the character's width, 1000 = like the
+-- rest of the font), stretch/shrink/step are \expandglyphsinfont's three
+-- arguments (thousandths). A breaker given these reproduces TeX's protruded
+-- and expanded lines exactly; the viewer's own breaker keeps its own tables.
+local function round_int(v)
+    return math.floor((v or 0) + 0.5)
+end
+
+local function annotate_fonts()
+    if not font.getcopy then return end
+    for id, info in pairs(used_fonts) do
+        local ok, f = pcall(font.getcopy, id)
+        if ok and type(f) == "table" then
+            local params = f.parameters or {}
+            info.quad = round_int(params.quad or params[6] or f.size or 0)
+            if (f.stretch or 0) ~= 0 or (f.shrink or 0) ~= 0 then
+                info.expand_stretch = f.stretch or 0
+                info.expand_shrink  = f.shrink or 0
+                info.expand_step    = f.step or 0
+            end
+            local chars = f.characters or {}
+            local cs = {}
+            for c in pairs(used_chars[id] or {}) do cs[#cs + 1] = c end
+            table.sort(cs)
+            local codes = {}
+            for _, c in ipairs(cs) do
+                local ch = chars[c]
+                if ch then
+                    local lp = ch.left_protruding or 0
+                    local rp = ch.right_protruding or 0
+                    local ef = ch.expansion_factor or 1000
+                    if lp ~= 0 or rp ~= 0 or ef ~= 1000 then
+                        codes[#codes + 1] = { char = c, lp = lp, rp = rp, ef = ef }
+                    end
+                end
+            end
+            if #codes > 0 then info.codes = codes end
+        end
+    end
+end
+
 -- ── Colour tracking ───────────────────────────────────────────────────────
 -- xcolor's \color emits pdf_colorstack whatsits (push/pop/set with a PDF
 -- colour operator string). We simulate the stack during the document-order
@@ -279,6 +341,7 @@ local function serialize_nodelist(head)
 
         elseif t == "glyph" then
             note_font(n.font)
+            note_char(n.font, n.char)
             local fdata = font.getfont(n.font)
             local cinfo = fdata and fdata.characters and fdata.characters[n.char]
             cur[#cur + 1] = {
@@ -553,6 +616,12 @@ local function capture_paragraph(head, groupcode)
         baselineskip  = param_dimen("baselineskip"),
         lineskip      = param_dimen("lineskip"),
         lineskiplimit = param_dimen("lineskiplimit"),
+        -- \adjustspacing and \protrudechars as the paragraph builder saw them
+        -- (microtype sets both to 2). They select whether the font expansion
+        -- and protrusion codes recorded per font (see annotate_fonts) are
+        -- applied, and whether inside the breaker or only when a line is set.
+        adjust_spacing = tex.adjustspacing or 0,
+        protrude_chars = tex.protrudechars or 0,
         align  = para_align(),
         nodes  = serialize_nodelist(head),
     }
@@ -824,6 +893,7 @@ Serializer = Serializer or {}   -- note_picture already added a table above; do 
 
 local function write_output()
     walk_flow(flow_head, { sp = 0, explicit = 0 })
+    annotate_fonts()
     local f = assert(io.open("output.json", "w"))
     f:write(json_encode({
         source_width = source_width,

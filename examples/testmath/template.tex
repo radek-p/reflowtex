@@ -64,6 +64,18 @@
 
 %%PREAMBLE%%
 
+% ── Character protrusion and font expansion ──────────────────────────────────
+% Loaded after the document's preamble (which never asked for it) so the demo
+% shows what a microtypographically set document looks like when re-broken in
+% the browser. Its effect on the extraction: microtype sets \lpcode/\rpcode and
+% \expandglyphsinfont on every text font it configures, and \protrudechars/
+% \adjustspacing for the paragraph builder; the serializer records all of that
+% (FontInfo.codes/expand_*, Paragraph.protrude_chars/adjust_spacing), so a
+% breaker running TeX's own algorithm reproduces the same lines.
+\makeatletter
+\@ifpackageloaded{microtype}{}{\usepackage{microtype}}
+\makeatother
+
 % ── reflowtex node-list serializer (the only addition to the document) ────────
 \directlua{dofile("serializer.lua")}
 

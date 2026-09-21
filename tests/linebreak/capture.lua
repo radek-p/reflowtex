@@ -46,7 +46,15 @@ local function ser_list(out, head)
   for n, id in node.traverse(head) do
     local t = node.type(id)
     if t == "glyph" then
-      out[#out+1] = string.format("glyph %d %d %d", n.subtype or 0, n.font, n.char)
+      -- A fourth field, present only when non-zero: the expansion factor
+      -- (millionths) hz gave the glyph when its line was set. Zero for every
+      -- glyph of an unexpanded document, so those fixtures are unchanged.
+      local ex = n.expansion_factor or 0
+      if ex ~= 0 then
+        out[#out+1] = string.format("glyph %d %d %d %d", n.subtype or 0, n.font, n.char, ex)
+      else
+        out[#out+1] = string.format("glyph %d %d %d", n.subtype or 0, n.font, n.char)
+      end
     elseif t == "glue" then
       out[#out+1] = string.format("glue %d %d %d %d %d %d", n.subtype or 0,
         n.width or 0, n.stretch or 0, n.stretch_order or 0,
@@ -127,24 +135,50 @@ local function collect_chars(used, head)
   end
 end
 
+-- Protrusion (\lpcode/\rpcode) and expansion (\efcode, \expandglyphsinfont)
+-- are set on the engine's internal font after loading — by microtype, say —
+-- and font.getfont's table, the one the font was defined from, never sees
+-- them; font.getcopy rebuilds a table from the internal structure. One copy
+-- per font is kept: the codes are in place before the first paragraph that
+-- uses the font is broken, and do not change afterwards.
+local font_copies = {}
+
+local function font_table(f)
+  local fnt = font_copies[f]
+  if fnt == nil then
+    fnt = (font.getcopy and font.getcopy(f)) or font.getfont(f) or font.fonts[f] or false
+    font_copies[f] = fnt
+  end
+  return fnt or nil
+end
+
 local function ser_fonts(out, used)
   local fids = {}
   for f in pairs(used) do fids[#fids+1] = f end
   table.sort(fids)
   for _, f in ipairs(fids) do
-    local fnt = font.getfont(f) or font.fonts[f]
+    local fnt = font_table(f)
     local chars = fnt and fnt.characters or {}
-    out[#out+1] = string.format("F %d", f)
+    local params = fnt and fnt.parameters or {}
+    -- F font quad stretch shrink step: the quad (sp) protrusion is relative
+    -- to, and \expandglyphsinfont's arguments (thousandths; 0 0 0 = none)
+    out[#out+1] = string.format("F %d %d %d %d %d", f,
+      int(params.quad or params[6] or (fnt and fnt.size) or 0),
+      fnt and fnt.stretch or 0, fnt and fnt.shrink or 0, fnt and fnt.step or 0)
     local cs = {}
     for c in pairs(used[f]) do cs[#cs+1] = c end
     table.sort(cs)
     for _, c in ipairs(cs) do
       local ch = chars[c]
       if ch then
-        out[#out+1] = string.format("C %d %d %d %d %d", f, c,
-          int(ch.width), int(ch.height), int(ch.depth))
+        -- C font char width height depth lp rp ef (lp/rp in thousandths of
+        -- the quad, ef in thousandths of the width; 0 0 1000 = plain)
+        out[#out+1] = string.format("C %d %d %d %d %d %d %d %d", f, c,
+          int(ch.width), int(ch.height), int(ch.depth),
+          ch.left_protruding or 0, ch.right_protruding or 0,
+          ch.expansion_factor or 1000)
       else
-        out[#out+1] = string.format("C %d %d 0 0 0 MISSING", f, c)
+        out[#out+1] = string.format("C %d %d 0 0 0 0 0 1000 MISSING", f, c)
       end
     end
   end
