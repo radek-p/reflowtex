@@ -11,7 +11,8 @@ python build.py <snippets-dir> -o site/
 python -m http.server -d site        # then open http://localhost:8000
 ```
 
-Serve at the **site root**: the viewer loads fonts from `/fonts/`.
+Serve the output directory from anywhere — a domain root, a subpath, or a
+page opened straight from disk: fonts resolve relative to `latex-viewer.js`.
 
 ## Input
 
@@ -48,6 +49,11 @@ site/
 
 `index.html` and the assets are self-contained; everything under `_build/` is
 scratch you can delete.
+
+Serve it compressed: GitHub Pages and most static hosts gzip or brotli
+transparently, and it matters here — the inline node lists and the viewer
+shrink about three-fold in transit. No precompressed sidecar files are
+emitted, since such hosts ignore them and simple dev servers cannot serve them.
 
 ## Embedding blocks in your own HTML
 

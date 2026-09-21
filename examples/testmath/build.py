@@ -30,7 +30,7 @@ SRC = LT / 'src'
 VANILLA = LT / 'integrations' / 'vanilla'
 sys.path.insert(0, str(SRC / 'encode'))
 
-from pipeline import Pipeline                   # noqa: E402
+from pipeline import Pipeline, viewer_script                   # noqa: E402
 
 DEFAULT_OUT = LT / 'build' / 'testmath-site'
 # AGPL-3.0 §13 source offer shown in the page footer (see the vanilla template).
@@ -93,7 +93,7 @@ def main() -> None:
     print(f'  OK ({len(blob)} bytes)')
 
     out.mkdir(parents=True, exist_ok=True)
-    shutil.copy(SRC / 'viewer' / 'latex-viewer.js', out / 'latex-viewer.js')
+    shutil.copy(viewer_script(), out / 'latex-viewer.js')
     shutil.copy(SRC / 'viewer' / 'protobuf.min.js', out / 'protobuf.min.js')
     extra_tags = ''
     for extra in args.extra_script:

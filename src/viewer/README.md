@@ -5,6 +5,13 @@ and no dependency beyond `protobuf.min.js`, which must load first (it exposes th
 global `protobuf`). Both files are framework-agnostic — the integrations just
 arrange the DOM below.
 
+> **`latex-viewer.min.js`** is the same file minified (about a third of the
+> size, a third again over gzip). The integrations ship it *as* `latex-viewer.js`
+> whenever its header records the SHA-256 of the current source, and fall back
+> to the source otherwise, so the served name and the DOM contract never change.
+> After editing the viewer, maintainers run `make minify-viewer` (needs Node;
+> site builders do not) to regenerate it.
+
 > **`protobuf.min.js`** is [protobuf.js](https://github.com/protobufjs/protobuf.js)
 > v8.7.1, vendored (BSD-3-Clause — see [THIRD-PARTY-LICENSES.md](../../THIRD-PARTY-LICENSES.md)).
 > It is committed so the browser side needs no Node and works offline. Refresh it

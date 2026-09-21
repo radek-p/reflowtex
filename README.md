@@ -20,8 +20,9 @@ TeX set them.
 - **Self-contained.** The data is embedded in the page; no runtime fetches, works
   offline. The only client dependency is a vendored protobuf runtime.
 
-> **Status: alpha.** The core is stable and tested; the integration surface and
-> the on-disk formats may still change. Feedback welcome.
+> **Status: alpha.** The core is stable in daily use, but there is no automated
+> test suite yet (one is being built under [`tests/`](tests/)); the integration
+> surface and the on-disk formats may still change. Feedback welcome.
 
 ## Try it in one command
 
@@ -169,7 +170,7 @@ The build pipeline shells out to a real TeX toolchain:
   automatically. To do it by hand: `python3 -m venv .venv && .venv/bin/pip install
   -r src/encode/requirements.txt`
 
-The **browser** side has no build step and no external dependency beyond the
+The **browser** side needs no build step of its own and no external dependency beyond the
 vendored `protobuf.min.js`.
 
 `make check` verifies all of the above. The [container](#try-it-in-one-command)

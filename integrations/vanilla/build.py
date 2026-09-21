@@ -33,7 +33,7 @@ REFLOWTEX_ROOT = HERE.parent.parent
 SRC = REFLOWTEX_ROOT / 'src'
 sys.path.insert(0, str(SRC / 'encode'))
 
-from pipeline import Pipeline, content_key  # noqa: E402
+from pipeline import Pipeline, content_key, viewer_script  # noqa: E402
 
 PAGE_TEMPLATE = HERE / 'page.template.html'
 
@@ -106,7 +106,7 @@ def main() -> None:
         blocks_html.append(f'<div class="latex-block" data-nodelist-b64="{b64}"></div>')
 
     out.mkdir(parents=True, exist_ok=True)
-    shutil.copy(SRC / 'viewer' / 'latex-viewer.js', out / 'latex-viewer.js')
+    shutil.copy(viewer_script(), out / 'latex-viewer.js')
     shutil.copy(SRC / 'viewer' / 'protobuf.min.js', out / 'protobuf.min.js')
 
     import json

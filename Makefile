@@ -9,11 +9,12 @@ DEMO_OUT := build/demo-site
 # Pinned version of the vendored browser runtime (src/viewer/protobuf.min.js).
 # Bump this and run `make vendor-protobuf` to update it.
 PROTOBUFJS_VERSION := 8.7.1
+TERSER_VERSION     = 5.39.0
 
 VENV := .venv
 PYTHON := $(CURDIR)/$(VENV)/bin/python3
 
-.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check clean vendor-protobuf venv
+.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check clean vendor-protobuf venv minify-viewer
 
 help:
 	@echo "Reflow TeX targets:"
@@ -28,6 +29,7 @@ help:
 	@echo "  make website-clean    force a full clean rebuild of website/public (incl. testmath.tex)"
 	@echo "  make clean            remove build artefacts"
 	@echo "  make vendor-protobuf  refresh src/viewer/protobuf.min.js from protobufjs@$(PROTOBUFJS_VERSION)"
+	@echo "  make minify-viewer    regenerate src/viewer/latex-viewer.min.js (maintainers; after editing the viewer)"
 
 # Python deps live in a project-local virtualenv, not the system interpreter.
 # Everything below depends on this and calls $(PYTHON), so `make demo` etc. set
@@ -108,6 +110,21 @@ vendor-protobuf:
 	cp $$tmp/package/dist/protobuf.min.js src/viewer/protobuf.min.js && \
 	rm -rf $$tmp && \
 	echo "vendored src/viewer/protobuf.min.js from protobufjs@$(PROTOBUFJS_VERSION)"
+
+# Maintainer-only: regenerate the committed minified viewer after editing
+# latex-viewer.js. Integrations ship the minified copy under the name
+# latex-viewer.js when its header records the current source's SHA-256, and
+# fall back to the source (with a warning) when it is stale — so forgetting
+# this step costs bytes, never correctness. Needs npx (Node); site builders
+# do not. terser is pinned like protobufjs above.
+minify-viewer:
+	@src=src/viewer/latex-viewer.js; out=src/viewer/latex-viewer.min.js; \
+	sha=$$(shasum -a 256 $$src | cut -c1-64); \
+	npx --yes terser@$(TERSER_VERSION) $$src --compress --mangle \
+	  --comments '/SPDX-License-Identifier/' -o $$out.tmp && \
+	{ printf '/* reflowtex latex-viewer.js, minified by terser@$(TERSER_VERSION); source sha256 %s */\n' "$$sha"; cat $$out.tmp; } > $$out && \
+	rm -f $$out.tmp && \
+	echo "wrote $$out ($$(wc -c < $$src | tr -d ' ') -> $$(wc -c < $$out | tr -d ' ') bytes)"
 
 clean:
 	rm -rf build

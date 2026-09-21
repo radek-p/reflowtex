@@ -51,7 +51,7 @@ HERE = Path(__file__).resolve().parent
 REFLOWTEX_ROOT = HERE.parent.parent
 sys.path.insert(0, str(REFLOWTEX_ROOT / 'src' / 'encode'))
 
-from pipeline import Pipeline, content_key   # noqa: E402
+from pipeline import Pipeline, content_key, viewer_script   # noqa: E402
 
 # Two ways to write a block:
 #   inline     {{< latex [attrs] >}} …LaTeX… {{< /latex >}}
@@ -240,8 +240,8 @@ def main() -> None:
     import shutil
     static = site / 'static'
     static.mkdir(parents=True, exist_ok=True)
-    for asset in ('latex-viewer.js', 'protobuf.min.js'):
-        shutil.copy(REFLOWTEX_ROOT / 'src' / 'viewer' / asset, static / asset)
+    shutil.copy(viewer_script(), static / 'latex-viewer.js')
+    shutil.copy(REFLOWTEX_ROOT / 'src' / 'viewer' / 'protobuf.min.js', static / 'protobuf.min.js')
 
     blocks, files_map, block_pages, color_map_names = scan_content(
         content_dir, preamble_dir, demos_dir)

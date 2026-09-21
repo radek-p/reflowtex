@@ -53,6 +53,33 @@ DISPLAY_SAMPLE_STEP_SP = 128 * 65536
 TEX_MAX_DIMEN_SP = 1073741823
 
 
+# ── Viewer assets ────────────────────────────────────────────────────────────
+VIEWER_DIR = Path(__file__).resolve().parent.parent / 'viewer'
+
+
+def viewer_script() -> Path:
+    """The latex-viewer.js file an integration should ship: the committed
+    minified copy when it was generated from the current source, otherwise the
+    source itself. The minified file's first line records the SHA-256 of the
+    source it was built from (see `make minify-viewer`), so a stale copy is
+    detected here rather than shipped — forgetting to regenerate it costs
+    bytes, never correctness. Ship it under the name latex-viewer.js either
+    way: the DOM contract, the fonts resolved relative to the script URL, and
+    the ?v= cache-buster all key off that name."""
+    src = VIEWER_DIR / 'latex-viewer.js'
+    minified = VIEWER_DIR / 'latex-viewer.min.js'
+    if minified.exists():
+        import hashlib
+        with minified.open('r', encoding='utf-8') as f:
+            header = f.readline()
+        want = hashlib.sha256(src.read_bytes()).hexdigest()
+        if f'sha256 {want}' in header:
+            return minified
+        print('  viewer: latex-viewer.min.js is stale (source changed since it was '
+              'generated) — shipping the unminified source; run `make minify-viewer`')
+    return src
+
+
 def content_key(content: str, preamble: str = '') -> str:
     """Stable 16-hex cache key for a (content, preamble) pair. Integrations that
     want incremental rebuilds can name each block's artefacts by this."""
