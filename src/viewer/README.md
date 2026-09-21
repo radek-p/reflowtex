@@ -146,6 +146,15 @@ to differ from the cached one, the content below it moves at that moment and
 the cache is corrected. The console line printed on each re-render reports
 how many segments were laid out, reused, or deferred.
 
+The browser's own scroll anchoring survives a reflow: on a window resize the
+content at the top of the viewport stays where it was, as on any ordinary
+page. This depends on how segments are mounted — a spacer for the space
+above, then a plain wrapper holding the `<svg>`, with the spacer, the `<svg>`
+and any display scroll box marked `overflow-anchor: none` so the browser
+anchors on the wrapper, whose style never changes. Pages that style
+`.latex-block svg` should keep `position`, `transform`, margins and padding
+off it and off the wrapper's ancestors, or anchoring is suppressed again.
+
 ## Plugging in another paragraph breaker
 
 The viewer breaks paragraphs with its own Knuth–Plass implementation. A page

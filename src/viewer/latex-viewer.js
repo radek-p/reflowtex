@@ -2320,13 +2320,17 @@ function sizeSegment(s, L, prev, columnPx, p) {
     if (prev && L.seg.kind === 'text' && prev.seg.kind === 'text' && L.firstMeta) {
         margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
     }
-    s.svg.style.marginTop = '';
-    if (s.wrap) { s.wrap.style.marginTop = ''; s.wrap.style.marginBottom = ''; }
+    // The space above the segment lives in its spacer, not in a margin on the
+    // element itself (scroll anchoring again, see layoutDocument).
+    setStyle(s.gap, 'height', `${margin}px`);
+    setStyle(s.svg, 'marginTop', '');
+    if (s.wrap) { setStyle(s.wrap, 'marginTop', ''); setStyle(s.wrap, 'marginBottom', ''); }
     if (mount === s.wrap) {
         // A scroll box clips (overflow-x forces overflow-y), so give the ink
-        // a little vertical headroom — but reserve no space for it: the
-        // margins take the padding straight back, so a wrapped display
-        // occupies exactly the vertical band the bare SVG would, and a small
+        // a little vertical headroom — but reserve no space for it: negative
+        // margins take the padding straight back (the space above the display
+        // itself is in the spacer), so a wrapped display occupies exactly the
+        // vertical band the bare SVG would, and a small
         // overshoot (accents, delimiter overshoot) overlaps the adjacent
         // glue the same way it does in print. Fixed rather than measured:
         // getBBox on SVG text reports the font's ascent/descent box, not
@@ -2334,12 +2338,13 @@ function sizeSegment(s, L, prev, columnPx, p) {
         // outline — padding by that phantom measure visibly inflated the
         // space around every scrollable display.
         const BLEED_PAD = 6;
-        mount.style.paddingTop    = `${BLEED_PAD}px`;
-        mount.style.paddingBottom = `${BLEED_PAD}px`;
-        mount.style.marginTop     = `${margin - BLEED_PAD}px`;
-        mount.style.marginBottom  = `${-BLEED_PAD}px`;
+        setStyle(mount, 'paddingTop', `${BLEED_PAD}px`);
+        setStyle(mount, 'paddingBottom', `${BLEED_PAD}px`);
+        setStyle(mount, 'marginTop', `${-BLEED_PAD}px`);
+        setStyle(mount, 'marginBottom', `${-BLEED_PAD}px`);
+        setStyle(mount, 'overflowAnchor', 'none');
     } else {
-        mount.style.marginTop = margin ? `${margin}px` : '';
+        setStyle(mount, 'marginTop', '');
     }
     // Scroll destinations for the labels this segment owns. Their own
     // element rather than an id on the segment: a segment can own several
@@ -2453,8 +2458,16 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         // emits the xlink form) resolves once its markup is injected via innerHTML.
         const svg = svgEl('svg', { xmlns:'http://www.w3.org/2000/svg', 'xmlns:xlink':'http://www.w3.org/1999/xlink' });
         // Block CSS cascade from prose containers; SVG text uses explicit per-glyph font families.
-        svg.style.cssText = 'display:block;overflow:visible;font-weight:normal;font-style:normal';
-        dom.segs.push({ svg, wrap: null, pairs: [] });
+        // overflow-anchor:none keeps the browser's scroll anchor off the <svg>: its
+        // height attribute changes on every reflow, and a change to the anchor
+        // node's own computed height is a suppression trigger (see the mounting
+        // notes below). The anchor lands on `box` instead, whose style never changes.
+        svg.style.cssText = 'display:block;overflow:visible;font-weight:normal;font-style:normal;overflow-anchor:none';
+        const box = document.createElement('div');
+        box.appendChild(svg);
+        const gap = document.createElement('div');
+        gap.style.cssText = 'height:0px;overflow-anchor:none';
+        dom.segs.push({ svg, box, gap, wrap: null, pairs: [] });
     }
 
     const paramsKey = JSON.stringify(p);
@@ -2479,7 +2492,23 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         return L;
     });
 
-    dom.root.replaceChildren();
+    // ── Mounting, and the browser's scroll anchoring ──────────────────────
+    // When a window resize reflows a page, the browser keeps the content at the
+    // top of the viewport in place (CSS scroll anchoring): it picks the deepest
+    // element partially visible there and, after layout, scrolls so that
+    // element's top edge has not moved. It gives up the moment the anchor
+    // element is removed from the DOM, or its own computed margin, padding or
+    // (in practice) size changes. A reflow here changes every segment's height
+    // and spacing, so the DOM is arranged to keep the anchor on something whose
+    // style is constant: each segment is a spacer (its height carries the
+    // spacing, replacing a margin) followed by a plain `box` holding the <svg>
+    // (or the scroll wrapper of an overflowing display). Spacer, <svg> and
+    // wrapper are excluded from anchor selection with overflow-anchor:none, so
+    // the box — content-sized, never restyled — is what the browser holds on
+    // to; the height changes it must compensate for are then all on siblings
+    // above it, which is exactly the case anchoring handles. The child list is
+    // reconciled in place rather than rebuilt, so nothing is detached.
+    const want = [];
     laid.forEach((L, i) => {
         const s = dom.segs[i];
         const { mount, overflows } = sizeSegment(s, L, laid[i-1], columnPx, p);
@@ -2495,9 +2524,10 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
                 dom.anchors.set(label, a);
                 linkTargets.set(label, a);
             }
-            dom.root.appendChild(a);
+            want.push(a);
         }
-        dom.root.appendChild(mount);
+        if (mount.parentNode !== s.box) s.box.replaceChildren(mount);
+        want.push(s.gap, s.box);
         if (overflows) {
             // Initial layout may still be detached from the document. Check in
             // the next frame, after the wrapper has a meaningful clientWidth.
@@ -2505,10 +2535,29 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         }
     });
 
+    syncChildren(dom.root, want);
     cache.layout = { laid };
     observeSegments(cache);
     return dom.root;
 }
+
+// Make parent's children exactly `want`, in order, touching only what differs:
+// an element already in place is left alone (see the scroll-anchoring notes in
+// layoutDocument), and one that moved is re-inserted before its new successor.
+function syncChildren(parent, want) {
+    let k = 0;
+    for (const el of want) {
+        const cur = parent.childNodes[k];
+        if (cur !== el) parent.insertBefore(el, cur || null);
+        k++;
+    }
+    while (parent.childNodes.length > k) parent.lastChild.remove();
+}
+
+// Write a style property only when it changes: a rewrite with the same value
+// is harmless to layout but an actual change on the anchor element (or one of
+// its ancestors) is what cancels scroll anchoring.
+function setStyle(el, prop, v) { if (el.style[prop] !== v) el.style[prop] = v; }
 
 // Per-segment cache, keyed by the layout parameters (a change of alignment or of
 // any Knuth–Plass knob starts afresh). `exact` maps a width to its full layout;
@@ -2560,7 +2609,7 @@ function materializeSegment(cache, i) {
     laid[i] = real;
     const remount = (seg, R, prev) => {
         const { mount, overflows } = sizeSegment(seg, R, prev, ctx.columnPx, ctx.p);
-        if (seg.mount && mount !== seg.mount) seg.mount.replaceWith(mount);
+        if (mount.parentNode !== seg.box) seg.box.replaceChildren(mount);
         seg.mount = mount;
         if (overflows) requestAnimationFrame(() => updateDisplayOverflowCue(seg.wrap));
     };
