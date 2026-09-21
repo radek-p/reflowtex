@@ -891,6 +891,15 @@ end
 
 Serializer = Serializer or {}   -- note_picture already added a table above; do not clobber it
 
+-- The pageless main vertical list itself: every top-level node TeX
+-- contributed, in order, with its real dimensions, as collected by
+-- capture_flow. For tools that want to ship or measure the galley as one
+-- continuous column (a reference rendering, say) rather than read the
+-- content stream. Complete only once the document has ended.
+function Serializer.flow_head()
+    return flow_head
+end
+
 local function write_output()
     walk_flow(flow_head, { sp = 0, explicit = 0 })
     annotate_fonts()
