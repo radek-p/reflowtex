@@ -748,10 +748,14 @@ end
 local HL_LINE, HL_ALIGNMENT, HL_EQUATION = 1, 4, 6
 -- Vertical glue subtype 0 is userskip: the glue \vskip/\vspace/\addvspace insert,
 -- and the before/after skips \@startsection puts around a section heading. That
--- is *explicit* spacing the author asked for, and it is preserved. Every other
--- subtype here (baselineskip=2, lineskip=1, parskip=3) is interline leading the
--- renderer re-derives per line, so it is dropped between text paragraphs.
+-- is *explicit* spacing the author asked for, and it is preserved. So is
+-- parskip (3): the glue TeX adds at every paragraph start is paragraph
+-- spacing, not leading — zero in article's running text, but inside a list
+-- it is \parsep, and dropping it pulled every item 4pt closer than TeX sets
+-- them. Only baselineskip (2) and lineskip (1) are interline leading the
+-- renderer re-derives per line, so those are dropped between text paragraphs.
 local GLUE_USERSKIP = 0
+local GLUE_PARSKIP  = 3
 
 -- A display's box width is not what it occupies. \[..\] packs at natural
 -- width and is centred by its shift, while amsmath centres an alignment by
@@ -880,7 +884,7 @@ local function walk_flow(head, pending, out)
             footnotes[#footnotes + 1] = { id = id, content = fn_content }
         elseif t == "glue" then
             pending.sp = (pending.sp or 0) + (n.width or 0)
-            if n.subtype == GLUE_USERSKIP then
+            if n.subtype == GLUE_USERSKIP or n.subtype == GLUE_PARSKIP then
                 pending.explicit = (pending.explicit or 0) + (n.width or 0)
             end
         elseif t == "kern" then

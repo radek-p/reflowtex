@@ -522,6 +522,30 @@ function useGlyphMetrics(table) {
 // harness), honour those. The branch outcome is constant for a given document,
 // so it costs nothing measurable.
 const gW = n => n.width  !== undefined ? n.width  : glyphMetrics[n.metrics - 1].width;
+
+// Font expansion as TeX applies it: a line's factor `er` (a fraction) stretches
+// or shrinks a glyph only if its font was given expansion limits
+// (\expandglyphsinfont — microtype sets them on text fonts, never on math
+// fonts), and then scaled by the character's \efcode (‰; 1000 unless listed).
+// A font kern between two glyphs expands with them, by the mean of their
+// codes (LuaTeX's kern_stretch/kern_shrink); one of the two fonts not
+// expanding halves it, as LuaTeX averages the two fonts' limits.
+function glyphExpandScale(fontInfo, n, er) {
+    if (!er) return 1;
+    const fi = fontInfo && fontInfo[String(n.font)];
+    if (!fi || !fi.expand) return 1;
+    const c = fi.codes.get(n.char);
+    const ef = c && c.ef !== undefined ? c.ef : 1000;
+    return ef > 0 ? 1 + er * ef / 1000 : 1;
+}
+function kernExpandScale(fontInfo, l, r, er) {
+    if (!er || !l || !r || l.type !== 'glyph' || r.type !== 'glyph') return 1;
+    const fl = fontInfo && fontInfo[String(l.font)], fr = fontInfo && fontInfo[String(r.font)];
+    const ml = fl && fl.expand ? 1 : 0, mr = fr && fr.expand ? 1 : 0;
+    if (!ml && !mr) return 1;
+    const efOf = (fi, n) => { const c = fi && fi.codes && fi.codes.get(n.char); return c && c.ef !== undefined ? c.ef : 1000; };
+    return 1 + er * ((efOf(fl, l) + efOf(fr, r)) / 2 / 1000) * ((ml + mr) / 2);
+}
 const gH = n => n.height !== undefined ? n.height : glyphMetrics[n.metrics - 1].height;
 const gD = n => n.depth  !== undefined ? n.depth  : glyphMetrics[n.metrics - 1].depth;
 
@@ -564,8 +588,11 @@ function sumRigidWidth(nodes) { return nodes.reduce((a, n) => n.type==='glyph' ?
 // The set size of one glue node under a box's packing ratio.
 function setGlue(g, ratio, fillOrder) {
     let w = g.width;
-    if (ratio > 0 && (g.stretch_order || 0) === fillOrder && g.stretch > 0) w += ratio * g.stretch;
-    else if (ratio < 0 && (g.shrink_order || 0) === fillOrder && g.shrink > 0) w += ratio * g.shrink;
+    // Stretch and shrink are signed, and TeX sets a negative one too: amsmath's
+    // multline cancels a fill with \hskip 0pt plus -1fill to push a row's first
+    // line flush left, and any glue of the packing order takes part.
+    if (ratio > 0 && (g.stretch_order || 0) === fillOrder && g.stretch) w += ratio * g.stretch;
+    else if (ratio < 0 && (g.shrink_order || 0) === fillOrder && g.shrink) w += ratio * g.shrink;
     return w;
 }
 
@@ -811,15 +838,16 @@ function kpBreak(bcs, nodes, lineWidthSp, p) {
 function lineProfile(fontInfo, nodes, xStart, ratio, expandRatio) {
     const items=[];
     function walk(ns, x, r, er) {
-        for(const n of ns){
+        for(let i=0;i<ns.length;i++){
+            const n=ns[i];
             switch(n.type){
                 case 'glyph':{
-                    const scale=er!==0?1+er:1, w=gW(n)*scale*SP_TO_PX;
+                    const w=gW(n)*glyphExpandScale(fontInfo,n,er)*SP_TO_PX;
                     const h=gH(n)*SP_TO_PX, d=gD(n)*SP_TO_PX;
                     items.push({x1:x,x2:x+w,h,d}); x+=w; break;
                 }
-                case 'glue':{let w=n.width; if(r>0&&!(n.stretch_order||0)&&n.stretch>0)w+=r*n.stretch; else if(r<0&&!(n.shrink_order||0)&&n.shrink>0)w+=r*n.shrink; x+=w*SP_TO_PX; break;}
-                case 'kern': x+=n.kern*((n.subtype||0)===0?1+er:1)*SP_TO_PX; break;
+                case 'glue':{let w=n.width; if(r>0&&!(n.stretch_order||0)&&n.stretch)w+=r*n.stretch; else if(r<0&&!(n.shrink_order||0)&&n.shrink)w+=r*n.shrink; x+=w*SP_TO_PX; break;}
+                case 'kern': x+=n.kern*((n.subtype||0)===0?kernExpandScale(fontInfo,ns[i-1],ns[i+1],er):1)*SP_TO_PX; break;
                 case 'disc': x=walk(n.replace,x,0,er); break;
                 case 'math': x+=n.surround*SP_TO_PX; break;
                 case 'picture':{
@@ -1721,7 +1749,8 @@ function renderVlistBody(fontInfo, sink, n, vlistX, refY){
 // QED box). Without this the rule is dropped and only the top/bottom edges show.
 function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fillOrder, runH, runD) {
     ratio=ratio||0; expandRatio=expandRatio||0; fillOrder=fillOrder||0; runH=runH||0; runD=runD||0;
-    for(const n of nodes){
+    for(let i=0;i<nodes.length;i++){
+        const n=nodes[i];
         switch(n.type){
             case 'rule':{
                 // In an hlist a rule is a vrule: its width is set, its height/depth
@@ -1734,14 +1763,13 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
                 x+=w*SP_TO_PX; break;
             }
             case 'glyph':{
-                const scale=expandRatio!==0?1+expandRatio:1;
                 sink.glyph(n, x, baselineY, fontInfo[String(n.font)]);
-                x+=gW(n)*scale*SP_TO_PX; break;
+                x+=gW(n)*glyphExpandScale(fontInfo,n,expandRatio)*SP_TO_PX; break;
             }
             case 'glue':{
                 let w=n.width;
-                if(ratio>0&&(n.stretch_order||0)===fillOrder&&n.stretch>0) w+=ratio*n.stretch;
-                else if(ratio<0&&(n.shrink_order||0)===fillOrder&&n.shrink>0) w+=ratio*n.shrink;
+                if(ratio>0&&(n.stretch_order||0)===fillOrder&&n.stretch) w+=ratio*n.stretch;       // signed, as setGlue
+                else if(ratio<0&&(n.shrink_order||0)===fillOrder&&n.shrink) w+=ratio*n.shrink;
                 if(n.leader) renderLeaders(fontInfo,sink,n,x,baselineY,w);
                 if(n.subtype===13) sink.space(n, x, baselineY);
                 if(sink.gap) sink.gap(n,'width',x,w*SP_TO_PX);
@@ -1751,7 +1779,7 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
                 // Expansion stretches the font's own kerns (subtype 0) with the
                 // glyphs, as an expanded font copy would; an explicit \kern,
                 // an accent kern or an italic correction keeps its width.
-                const w=n.kern*((n.subtype||0)===0?1+expandRatio:1)*SP_TO_PX;
+                const w=n.kern*((n.subtype||0)===0?kernExpandScale(fontInfo,nodes[i-1],nodes[i+1],expandRatio):1)*SP_TO_PX;
                 if(sink.gap) sink.gap(n,'kern',x,w);
                 x+=w; break;
             }
