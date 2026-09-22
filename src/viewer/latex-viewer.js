@@ -618,6 +618,12 @@ function vlistGlueRatio(box) {
 function hlistGlueRatio(box) {
     if (box.glue_sign === 1 && box.glue_set > 0) return { ratio:  box.glue_set, fillOrder: box.glue_order || 0 };
     if (box.glue_sign === 2 && box.glue_set > 0) return { ratio: -box.glue_set, fillOrder: box.glue_order || 0 };
+    // A box TeX packed carries glue_set, 0 when it was set at its natural
+    // size — and a natural box can still be wider than its contents: a
+    // sub/superscript box gets \scriptspace added to its width with no node
+    // for it. Measuring such a box would stretch its glue by that surplus;
+    // only a box with no packing information at all is measured.
+    if (box.glue_set !== undefined && box.glue_set !== null) return { ratio: 0, fillOrder: 0 };
     const nodes = box.children;
     let natural = 0;
     const stretch = [0,0,0,0], shrink = [0,0,0,0];
@@ -2089,7 +2095,12 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
                 // stretch is a fixed measure, only the available width varies.
                 const fi = fillInfo(ln.nodes);
                 if (fi.order > 0 && fi.stretch > 0) {
-                    const slackSp = availSp - natSp;
+                    // TeX packs the line with its left margin kern in it, so a
+                    // protruding first character widens the slack by what it
+                    // hangs into the margin — the line still ends at the measure.
+                    // (Its right margin kern, when any, is a kern node in ln.nodes.)
+                    const leftKernSp = p.useProtrusion ? (ln.leftProtrusion || 0) : 0;
+                    const slackSp = availSp - (natSp - leftKernSp);
                     if (slackSp > 0) { fillRatio = slackSp / fi.stretch; fillOrder = fi.order; x0 = protX; }
                 }
             }
@@ -2328,6 +2339,8 @@ function updateDisplayOverflowCue(wrap) {
 // which depends on the previous segment's last depth. Returns what to mount.
 // Shared by layoutDocument and materializeSegment; L may be a deferred layout
 // (geometry from the height cache, no lines yet).
+const onLayoutGrid = px => Math.round(px * 64) / 64;
+
 function sizeSegment(s, L, prev, columnPx, p) {
     // Do not create a scrollbar for scaled-point rounding or a tiny italic
     // overhang. A bare SVG uses the column as its viewport and overflow:
@@ -2345,9 +2358,14 @@ function sizeSegment(s, L, prev, columnPx, p) {
     // other non-overflowing segment, or adjacent paragraphs visibly render
     // at slightly different widths.
     const surfaceW = overflows ? L.W : columnPx;
+    // Heights go on the browser's layout grid (1/64 px in Blink and WebKit)
+    // rounded to nearest: laid out as given, a fractional height is floored
+    // to the grid, and over hundreds of stacked segments those floors add up
+    // to a drift of a few points against TeX's own galley.
+    const H = onLayoutGrid(L.H);
     s.svg.setAttribute('width', surfaceW);
-    s.svg.setAttribute('height', L.H);
-    s.svg.setAttribute('viewBox', `0 0 ${surfaceW} ${L.H}`);
+    s.svg.setAttribute('height', H);
+    s.svg.setAttribute('viewBox', `0 0 ${surfaceW} ${H}`);
 
     // Only a display that genuinely overflows gets a scroll box, because a
     // scroll box is also a *clipping* box: CSS forces overflow-y to 'auto'
@@ -2384,7 +2402,7 @@ function sizeSegment(s, L, prev, columnPx, p) {
     }
     // The space above the segment lives in its spacer, not in a margin on the
     // element itself (scroll anchoring again, see layoutDocument).
-    setStyle(s.gap, 'height', `${margin}px`);
+    setStyle(s.gap, 'height', `${onLayoutGrid(margin)}px`);
     setStyle(s.svg, 'marginTop', '');
     if (s.wrap) { setStyle(s.wrap, 'marginTop', ''); setStyle(s.wrap, 'marginBottom', ''); }
     if (mount === s.wrap) {
