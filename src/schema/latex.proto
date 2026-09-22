@@ -186,9 +186,13 @@ message Paragraph {
   // (LuaTeX's meaning: 0 = off, 1 = applied when a line is set, 2 = also
   // inside the line breaker; microtype sets both to 2). They say whether the
   // FontInfo expansion and protrusion codes were in use. Absent = 0.
-  // (Field 7 is kept free for the paragraph's band width.)
   optional int32 adjust_spacing = 8;
   optional int32 protrude_chars = 9;
+  // The paragraph's measure (\hsize, sp) at Document.source_width. With
+  // `indent` this places the paragraph's band inside the source column: a
+  // quote environment's right margin is source_width - indent - width, and
+  // the viewer keeps both margins when it re-breaks at another width.
+  optional int32 width = 7;
 }
 
 enum ItemKind {

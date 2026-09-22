@@ -2016,8 +2016,18 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
         // negative x and be clipped away.
         const indentSp = para.indent || 0;
         const indentPx = indentSp * SP_TO_PX;
-        const availSp  = Math.max(1, widthSp - indentSp);
-        const availPx  = columnPx - indentPx;
+        // A paragraph's measure can be narrower than the column on the right
+        // too: a quote environment sets \hsize = \textwidth - 2\leftmargin
+        // and the serializer records that width with the left indent. The
+        // right margin is what remains of the source width, and it is as
+        // fixed a measure as the left one, so it narrows the text column the
+        // same way. (At the source width, keeping only the left indent set
+        // a 295pt quote at 320pt: a line TeX had to shrink came out at its
+        // natural width, 22pt wider than in the PDF.)
+        const rightSp  = (cache.sourceWidthSp > 0 && para.width > 0)
+            ? Math.max(0, cache.sourceWidthSp - indentSp - para.width) : 0;
+        const availSp  = Math.max(1, widthSp - indentSp - rightSp);
+        const availPx  = columnPx - indentPx - rightSp * SP_TO_PX;
 
         // Pluggable breaker. A page may install an alternative paragraph
         // breaker as window.reflowtexBreak(nodes, availSp, params, helpers)
@@ -2413,6 +2423,7 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // segment reference — can repaint it (see observeSegments / segIO).
     useGlyphMetrics(doc.glyph_metrics);
     cache.metrics = doc.glyph_metrics;
+    cache.sourceWidthSp = doc.source_width || 0;   // the \hsize the paragraphs' widths refer to
     cache.fontInfo = fontInfo;
     const columnPx = widthPt * ZOOM;
     const displayModel = {
