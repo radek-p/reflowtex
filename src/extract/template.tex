@@ -168,6 +168,28 @@
   \fi
   \directlua{Serializer.note_source_width(\number\textwidth)}}
 
+% TeX picks a display's skips from the line before it: \abovedisplayshortskip
+% and \belowdisplayshortskip when that line ends left of the formula. The
+% renderer re-breaks the line, so it has to make that choice itself. Every
+% display is numbered here, its box stamped with the number, and what TeX
+% decides with — \predisplaysize and the four skips — recorded under it
+% (Serializer.note_display); the serializer puts them on the display item.
+\newcount\reflowtexDisplayCount
+\AtBeginDocument{\everydisplay\expandafter{\the\everydisplay
+  \global\advance\reflowtexDisplayCount by 1
+  \attribute912=\reflowtexDisplayCount
+  \directlua{Serializer.note_display(\the\reflowtexDisplayCount)}}}
+% LaTeX's \addvspace (a theorem's, list's or heading's space above) makes the
+% space since the last box at least its argument, judged on \lastskip. After
+% a display that skip is the below-display glue, which the renderer swaps for
+% its own choice — so it must know the minimum too. Every \addvspace reports
+% the \lastskip it found and what it asked for; the serializer attaches the
+% minimum to the display whose skip it was (Serializer.note_addvspace).
+\let\reflowtexAddvspace\addvspace
+\def\addvspace#1{%
+  \ifvmode\directlua{Serializer.note_addvspace(\number\dimexpr\lastskip\relax, \number\dimexpr#1\relax)}\fi
+  \reflowtexAddvspace{#1}}
+
 % Capture the finished TikZ hbox rather than scanning its source. This also
 % handles front ends such as tikz-cd, which call the low-level \tikzpicture and
 % \endtikzpicture macros and are incompatible with PGF's LaTeX source scanner.

@@ -197,6 +197,7 @@ local TIKZ_PIC_ATTR      = 908 -- placeholder hbox for an internally captured Ti
 -- glyph wherever it lands, so the whole reference stays one link.
 local LINK_ATTR          = 909 -- glyphs of a \ref/\eqref/\autoref's printed text
 local ANCHOR_ATTR        = 910 -- the zero-size box \label leaves behind
+local DISPLAY_ATTR       = 912 -- a display's box: the number Serializer.note_display recorded it under
 local RULE_IMAGE  = 2
 local picture_files = {}
 local source_width = 0
@@ -231,6 +232,85 @@ function Serializer.note_link_url(id, url)
 end
 function Serializer.note_label(id, label)
     anchor_labels[id] = clean_label(label)
+end
+
+-- What TeX had in hand when it opened a display (\everydisplay, template.tex):
+-- \predisplaysize — where the line before the display ends, +2em, or
+-- -\maxdimen when the display began its paragraph — and the four display
+-- skips in force. TeX picks the full pair when the display's left edge is at
+-- or left of that end (TeX §1203), the short pair otherwise. The renderer
+-- re-breaks the line, so it must make that choice itself; see the viewer.
+local display_notes = {}
+local current_display = nil
+-- \addvspace after a display (template.tex): the least space LaTeX asked for
+-- while the display's own below skip was the last thing on the list, by
+-- display number. The viewer takes the larger of that and the skip it sets.
+local addvspace_min = {}
+local below_skip_of
+function Serializer.note_addvspace(lastskip, amount)
+    if current_display then below_skip_of(current_display) end
+    local rec = current_display and display_notes[current_display]
+    if rec and rec.below_used and lastskip == rec.below_used then
+        addvspace_min[current_display] = math.max(addvspace_min[current_display] or 0, amount)
+    end
+end
+function Serializer.note_display(id)
+    current_display = id
+    local function skip(name)
+        local ok, v = pcall(function() return tex[name] end)
+        return (ok and v and v.width) or 0
+    end
+    display_notes[id] = {
+        pre_size    = tex.predisplaysize,
+        above       = skip("abovedisplayskip"),
+        above_short = skip("abovedisplayshortskip"),
+        below       = skip("belowdisplayskip"),
+        below_short = skip("belowdisplayshortskip"),
+        -- the em TeX measures \predisplaysize with: the font current at the $$
+        quad        = (font.getparameters(font.current()) or {}).quad or 0,
+    }
+end
+-- The leading TeX appends the display box with. The box goes onto the
+-- vertical list before the math group closes, so \baselineskip as set
+-- *inside* the display counts — amsmath's \openup\jot in split and
+-- multline, for one. The conversion of the display's own math list runs
+-- at that point, in that group: read the parameters there. An alignment's
+-- outer list is empty and never converted, so its cells' conversions (text
+-- style, inside the same group, after amsmath opened the leading up) stand
+-- in — the display's own conversion, when it comes, has the last word.
+local function note_display_leading(head, style, penalties)
+    local rec = current_display and display_notes[current_display]
+    if rec and (style == "display" or rec.bskip == nil) then
+        local function width(name)
+            local ok, v = pcall(function() return tex[name] end)
+            if not ok or v == nil then return 0 end
+            return type(v) == "number" and v or (v.width or 0)
+        end
+        rec.bskip, rec.lskip, rec.lskiplimit = width("baselineskip"), width("lineskip"), width("lineskiplimit")
+    end
+    return node.mlist_to_hlist(head, style, penalties)
+end
+-- The below skip TeX appended after the display: the first glue after the
+-- display's box on the vertical list, as it stands at the first \addvspace
+-- (\addpenalty may have put a copy of it after a penalty by then, and the
+-- page builder may have moved the earlier part onto the page — the list is
+-- read back from its end, then the page from its end, to the last box).
+below_skip_of = function(id)
+    local rec = display_notes[id]
+    if not rec or rec.below_used ~= nil then return end
+    local function back(head, found)
+        local n = head and node.tail(head)
+        while n do
+            local t = node.type(n.id)
+            if t == "hlist" or t == "vlist" or t == "rule" then return found, true end
+            if t == "glue" then found = n end
+            n = n.prev
+        end
+        return found, false
+    end
+    local g, boxed = back(tex.nest[tex.nest.ptr].head, nil)
+    if not boxed then g = back(tex.lists.page_head, g) end
+    rec.below_used = g and (g.subtype == 5 or g.subtype == 7) and g.width or false
 end
 
 function Serializer.note_source_width(sp)
@@ -756,6 +836,9 @@ local HL_LINE, HL_ALIGNMENT, HL_EQUATION = 1, 4, 6
 -- renderer re-derives per line, so those are dropped between text paragraphs.
 local GLUE_USERSKIP = 0
 local GLUE_PARSKIP  = 3
+local GLUE_LINESKIP, GLUE_BASELINESKIP = 1, 2
+local GLUE_ABOVEDISPLAY, GLUE_BELOWDISPLAY = 4, 5
+local GLUE_ABOVEDISPLAYSHORT, GLUE_BELOWDISPLAYSHORT = 6, 7
 
 -- A display's box width is not what it occupies. \[..\] packs at natural
 -- width and is centred by its shift, while amsmath centres an alignment by
@@ -804,6 +887,11 @@ end
 
 -- The band of the most recent paragraph; displays inherit it.
 local cur_band = { indent = 0, width = 0 }
+-- What the flow last stacked — "line", "blank" (a line with no ink: the
+-- indent box of a paragraph that opens with a display) or "display" — and
+-- the display item the next below-display glue belongs to.
+local last_box = nil
+local last_display = nil
 
 local function walk_flow(head, pending, out)
     out = out or content
@@ -820,6 +908,8 @@ local function walk_flow(head, pending, out)
                               anchor = node.get_attribute(n, ANCHOR_ATTR) }
         elseif t == "hlist" and n.subtype == HL_LINE then
             local p = find_para(n)
+            last_box = (p and has_visible_nodes(all_paragraphs[p].nodes)) and "line" or "blank"
+            pending.interline = nil
             if p then
                 cur_band.indent = all_paragraphs[p].indent
                 cur_band.width  = all_paragraphs[p].width
@@ -844,6 +934,7 @@ local function walk_flow(head, pending, out)
             emit_vspace(out, pending.sp)
             pending.sp = 0
             pending.explicit = 0
+            local note = display_notes[node.get_attribute(n, DISPLAY_ATTR) or -1]
             out[#out + 1] = {
                 kind = "display",
                 -- The band this display occupies, and where TeX put the box
@@ -855,6 +946,25 @@ local function walk_flow(head, pending, out)
                 display_width  = cur_band.width > 0 and cur_band.width or n.width,
                 display_indent = cur_band.indent,
                 display_shift  = n.shift or 0,
+                -- What TeX chose this display's skips with (Serializer.note_display),
+                -- the above skip it did use (part of the vspace before the display;
+                -- display_used_below, set when its glue comes, likewise after), and
+                -- whether a set line of a paragraph stood directly before it.
+                display_pre_size    = note and note.pre_size,
+                display_above       = note and note.above,
+                display_above_short = note and note.above_short,
+                display_below       = note and note.below,
+                display_below_short = note and note.below_short,
+                display_used_above  = pending.above_skip,
+                display_interline_above = pending.interline,
+                display_quad        = note and note.quad,
+                display_baselineskip  = note and note.bskip,
+                display_lineskip      = note and note.lskip,
+                display_lineskiplimit = note and note.lskiplimit,
+                display_after_min   = addvspace_min[node.get_attribute(n, DISPLAY_ATTR) or -1],
+                -- (-\maxdimen: the display opened an empty paragraph, whatever
+                -- the flow holds before it — \noindent$$ after a paragraph)
+                display_after_line  = last_box == "line" and (note == nil or note.pre_size > -1073741823),
                 box  = {
                     type       = "hlist",
                     subtype    = n.subtype,
@@ -867,6 +977,7 @@ local function walk_flow(head, pending, out)
                     children   = n.head and serialize_nodelist(n.head) or {},
                 },
             }
+            last_display = out[#out]; last_box = "display"; pending.above_skip = nil; pending.interline = nil
         elseif t == "vlist" then
             walk_flow(n.head, pending, out)
         elseif t == "ins" then
@@ -879,11 +990,25 @@ local function walk_flow(head, pending, out)
             if not id or id == 0 then id = #footnotes + 1 end
             local fn_content = {}
             local saved_band = { indent = cur_band.indent, width = cur_band.width }
+            local saved_last = last_box
             walk_flow(n.head, { sp = 0, explicit = 0 }, fn_content)
             cur_band = saved_band
+            last_box = saved_last
             footnotes[#footnotes + 1] = { id = id, content = fn_content }
         elseif t == "glue" then
             pending.sp = (pending.sp or 0) + (n.width or 0)
+            if n.subtype == GLUE_ABOVEDISPLAY or n.subtype == GLUE_ABOVEDISPLAYSHORT then
+                pending.above_skip = n.width or 0
+            elseif (n.subtype == GLUE_BELOWDISPLAY or n.subtype == GLUE_BELOWDISPLAYSHORT) and last_display then
+                last_display.display_used_below = n.width or 0
+            elseif n.subtype == GLUE_BASELINESKIP or n.subtype == GLUE_LINESKIP then
+                -- the interline glue TeX put before a box: the display's own
+                -- when it comes next, the next line's after a display
+                pending.interline = n.width or 0
+                if last_box == "display" and last_display and last_display.display_interline_below == nil then
+                    last_display.display_interline_below = n.width or 0
+                end
+            end
             if n.subtype == GLUE_USERSKIP or n.subtype == GLUE_PARSKIP then
                 pending.explicit = (pending.explicit or 0) + (n.width or 0)
             end
@@ -928,5 +1053,8 @@ local function write_output()
 end
 
 luatexbase.add_to_callback("pre_linebreak_filter",   capture_paragraph, "capture_paragraph")
+-- (exclusive in luatexbase: another package's own conversion keeps its place
+-- and the display leading is then not recorded; the viewer falls back)
+pcall(luatexbase.add_to_callback, "mlist_to_hlist", note_display_leading, "note_display_leading")
 luatexbase.add_to_callback("buildpage_filter",       capture_flow,      "capture_flow")
 luatexbase.add_to_callback("finish_pdffile",         write_output,       "write_output")

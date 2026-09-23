@@ -41,7 +41,11 @@ def has_displays(data: dict) -> bool:
 
 
 def _node_topology_error(a: dict, b: dict, path: str) -> str | None:
-    ignored = set(NODE_GEOMETRY) | RATE_KEYS | set(CHILD_LISTS) | {'leader'}
+    # How a box's glue was set is geometry, not identity: a formula TeX had to
+    # shrink to fit beside its number at one measure is set at its natural
+    # width at a wider one, the same tree in both. The affine check on
+    # glue_set still rejects a setting that does not vary affinely.
+    ignored = set(NODE_GEOMETRY) | RATE_KEYS | set(CHILD_LISTS) | {'leader', 'glue_sign', 'glue_order'}
     sa = {k: v for k, v in a.items() if k not in ignored}
     sb = {k: v for k, v in b.items() if k not in ignored}
     if sa != sb:
@@ -187,3 +191,44 @@ def attach_model(oldest: dict, previous: dict, newest: dict) -> dict:
             first_item['display_shift_floor'] = True
     oldest['display_model'] = True
     return oldest
+
+
+def anchor_model(first: dict, previous: dict, newest: dict) -> tuple[dict, int]:
+    """``attach_model`` with the document of record fixed to ``first``: the sample
+    at the width the document was written for, when *that* sample failed the
+    affine check and the stable triple was found further up.
+
+    What breaks the affine law between the document's own width and the wider
+    samples is the width itself: a display skip that turns short, a kern that
+    jumps, a box that shrinks only at the narrower measure. Anchoring the model
+    at the first sample that happened to pass would publish the document as
+    compiled at that wider width — different display skips, different
+    breaks — and the page would not match the document at its own width, which
+    is the one width it is expected to match exactly. So the slopes measured
+    between the two wider samples are attached to ``first`` instead, to every
+    display whose tree has the same shape there as in ``previous``; a display
+    whose shape differs keeps its geometry fixed — it renders as TeX set it and
+    does not reflow. Returns the document and the number of displays left fixed.
+    """
+    xp, xn = int(previous['source_width']), int(newest['source_width'])
+    dx = xn - xp
+    fixed = 0
+    for i, (first_item, old_item, new_item) in enumerate(zip(_display_items(first),
+                                                             _display_items(previous),
+                                                             _display_items(newest))):
+        if _node_topology_error(first_item['box'], old_item['box'], f'display[{i}].box'):
+            fixed += 1
+            continue
+        for field in ITEM_GEOMETRY:
+            delta = new_item.get(field, 0) - old_item.get(field, 0)
+            if delta:
+                first_item[f'{field}_rate'] = delta / dx
+        _attach_node_rates(first_item['box'], old_item['box'], new_item['box'], dx)
+        _mark_node_floors(first_item['box'], old_item['box'], new_item['box'], dx)
+        shifts = (first_item.get('display_shift', 0), old_item.get('display_shift', 0),
+                  new_item.get('display_shift', 0))
+        shift_rate = (shifts[2] - shifts[1]) / dx
+        if shift_rate > 0 and all(v >= 0 for v in shifts):
+            first_item['display_shift_floor'] = True
+    first['display_model'] = True
+    return first, fixed

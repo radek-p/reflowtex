@@ -219,6 +219,43 @@ message ContentItem {
   optional double display_indent_rate = 9;
   optional double display_shift_rate  = 10;
   optional bool display_shift_floor = 11;
+  // display (an equation, not an alignment row): what TeX chose the skips
+  // around it with. TeX uses \abovedisplayskip/\belowdisplayskip when the
+  // display's left edge is at or left of where the line before it ends
+  // (\predisplaysize: that line's last ink + 2em; -\maxdimen when the
+  // display began its paragraph), the short pair otherwise. The viewer
+  // re-breaks that line, so it redoes the choice: display_pre_size is TeX's
+  // value at source_width, display_above .. display_below_short the four
+  // skips in force, display_used_above/below the ones TeX used — they are
+  // components of the vspace items before and after the display, which the
+  // viewer swaps for its own choice — and display_after_line says a set line
+  // of a paragraph stood directly before the display (otherwise
+  // display_pre_size stands as captured).
+  optional int32 display_pre_size    = 14;
+  optional int32 display_above       = 15;
+  optional int32 display_above_short = 16;
+  optional int32 display_below       = 17;
+  optional int32 display_below_short = 18;
+  optional int32 display_used_above  = 19;
+  optional int32 display_used_below  = 20;
+  optional bool  display_after_line  = 21;
+  // the em (quad of the font current at the display) TeX measured
+  // \predisplaysize with, and the interline glue TeX set before the display
+  // and before the line after it (also components of those vspace items):
+  // the viewer sets its own from its line depths.
+  optional int32 display_quad            = 22;
+  optional int32 display_interline_above = 23;
+  optional int32 display_interline_below = 24;
+  // the leading TeX appended the display with — \baselineskip, \lineskip
+  // and \lineskiplimit as set inside the display (amsmath opens them up by
+  // \jot in split and multline), which the interline glue above it follows
+  optional int32 display_baselineskip  = 25;
+  optional int32 display_lineskip      = 26;
+  optional int32 display_lineskiplimit = 27;
+  // the least space LaTeX's \addvspace asked for below the display (a
+  // theorem's or list's \topsep) while the below skip was \lastskip: the
+  // space below is the larger of the skip and this
+  optional int32 display_after_min     = 28;
 
   // anchorpoint: 1-based index into Document.anchors.
   optional uint32 anchor = 12;

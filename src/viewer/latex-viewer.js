@@ -1866,6 +1866,7 @@ function contentStream(doc) {
 // Segmentation depends solely on the content stream, never on width, so the
 // segment list is stable across reflows and every element stays reusable.
 const HL_ALIGNMENT = 4;   // hlist subtype: one row of an alignment
+const HL_EQUATION  = 6;   // hlist subtype: a display that is not an alignment
 
 // Anchor markers that ended up *inside* what was typeset — a \label written
 // mid-sentence, or one amsmath replayed into a display's own box. Their exact
@@ -2110,7 +2111,8 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
             meta.push(lineMeta);
         }
     }
-    return { lines, lrp, meta, W: Math.ceil(maxRightPx) };
+    return { lines, lrp, meta, W: Math.ceil(maxRightPx),
+             preDisplaySizeSp: preDisplaySizeSp(fontInfo, lines, lrp) };
 }
 
 // Where a box's ink ends, used only to size its horizontal scroll area.
@@ -2299,6 +2301,171 @@ function affineFloorWidthItem(fontInfo, item, sourceWidthSp, floorSp) {
 // supplied by TeX — there is no ink-centering fallback. Every row of the segment
 // is evaluated at the same measure, so an alignment's columns stay in step and
 // the display freezes as one at the first gap to reach its floor.
+// The makings of TeX's \predisplaysize for a display that would follow this
+// segment's last line (TeX §1146): w, the line's shift plus the widths of
+// everything up to and including its last piece of ink (a glyph, box, rule
+// or leaders) — \maxdimen when glue set by the line's own ratio lies before
+// that ink, so the end cannot be told, -\maxdimen for a line with no ink —
+// and the quad of the line's last text font, the fallback for the 2em TeX
+// adds (of the font current at the display, which the bundle records).
+// Measured on the line as laid out here, so the choice TeX makes with it
+// (displaySkipsFull) follows the reader's width.
+function preDisplaySizeSp(fontInfo, lines, lrp) {
+    const k = lines.length - 1;
+    if (k < 0) return null;
+    const ln = lines[k], L = lrp[k];
+    const MAX = 1073741823;
+    let x = L.x0, w = null, unknown = false, mathOn = false, font = null, anyFont = null;
+    const found = () => { w = unknown ? MAX : x; };
+    const walk = (ns, glueSet) => {
+        for (let i = 0; i < ns.length; i++) {
+            const n = ns[i];
+            switch (n.type) {
+                case 'glyph':
+                    x += gW(n) * glyphExpandScale(fontInfo, n, L.er) * SP_TO_PX; found();
+                    if (!mathOn) font = n.font;
+                    anyFont = n.font; break;
+                case 'hlist': case 'vlist': case 'picture':
+                    x += (n.width ?? 0) * SP_TO_PX; found(); break;
+                case 'rule':
+                    x += (n.width === RUNNING_RULE ? 0 : (n.width ?? 0)) * SP_TO_PX; found(); break;
+                case 'glue': {
+                    let g = n.width;
+                    const so = n.stretch_order || 0, sho = n.shrink_order || 0;
+                    if (glueSet) {
+                        if (L.ratio > 0 && !so && n.stretch) { g += L.ratio * n.stretch; unknown = true; }
+                        else if (L.ratio < 0 && !sho && n.shrink) { g += L.ratio * n.shrink; unknown = true; }
+                        else if (L.fillRatio > 0 && so === L.fillOrder && n.stretch) unknown = true;
+                    }
+                    x += g * SP_TO_PX;
+                    if (n.leader) found();
+                    break;
+                }
+                case 'kern':
+                    x += n.kern * ((n.subtype || 0) === 0 ? kernExpandScale(fontInfo, ns[i-1], ns[i+1], L.er) : 1) * SP_TO_PX;
+                    break;
+                case 'math': x += (n.surround || 0) * SP_TO_PX; mathOn = n.subtype === 0; break;
+                case 'disc': walk(n.replace || [], false); break;
+            }
+        }
+    };
+    walk(ln.nodes, true);
+    const fi = fontInfo[String(font ?? anyFont)];
+    return { w: w === null ? -MAX : w === MAX ? MAX : Math.round(w / SP_TO_PX), quad: (fi && fi.quad) || 0 };
+}
+
+// Whether TeX would set this display with the full display skips, redone at
+// the reader's width: the full pair when the display's left edge (its shift,
+// plus the kern LuaTeX puts before a numbered formula) is at or left of
+// \predisplaysize, taken from the segment before when a set line stood
+// directly before the display, and as TeX captured it otherwise (a display
+// that opened its paragraph: -\maxdimen, or the indent box's end). An
+// alignment is always set with the full pair. null when the bundle carries
+// no skip data — the captured spacing then stands.
+function displaySkipsFull(L, prev) {
+    const rows = L.seg.rows;
+    const item = rows && rows[0] && rows[0].item;
+    if (!item || item.display_above === undefined || item.display_above === null) return null;
+    // an alignment always gets the full pair (TeX §1206)
+    if (item.box && item.box.subtype === HL_ALIGNMENT) return true;
+    if (!item.box || item.box.subtype !== HL_EQUATION) return null;
+    // At the width the document was set at, TeX's own choice stands: the
+    // measure below follows TeX's to a fraction of a point, and a display
+    // sitting within that of the threshold must not flip where the page is
+    // meant to be the document.
+    if (L.atSourceWidth && item.display_used_above != null) return item.display_used_above === item.display_above;
+    const MAX = 1073741823;
+    const captured = item.display_pre_size ?? 0;
+    const pre = prev && prev.preDisplaySizeSp;
+    let pds = captured;
+    if (item.display_after_line && captured > -MAX && pre) {
+        pds = Math.abs(pre.w) === MAX ? pre.w : pre.w + 2 * (item.display_quad || pre.quad);
+    }
+    const left = L.displayLeftSp ?? (item.display_shift || 0);
+    return left <= pds;
+}
+
+// The change to the space above segment L (px) from redoing the skip choice:
+// the display's own above skip, and the below skip of a display just before
+// L. Records the display's choice on its layout for the segment after it.
+function displaySkipAdjust(L, prev) {
+    let delta = 0;
+    if (L.seg.kind === 'display') {
+        const full = displaySkipsFull(L, prev);
+        L.displayFull = full;
+        if (full !== null) {
+            const it = L.seg.rows[0].item;
+            delta += ((full ? it.display_above : it.display_above_short) - (it.display_used_above || 0)) * SP_TO_PX;
+            // and the interline glue TeX set above the display, redone for
+            // the line now above it and the display's height at this width
+            const meta = it.display_baselineskip != null
+                ? { bskip: it.display_baselineskip * SP_TO_PX, lskip: (it.display_lineskip || 0) * SP_TO_PX,
+                    lskiplimit: (it.display_lineskiplimit || 0) * SP_TO_PX }
+                : (prev && prev.firstMeta);
+            if (it.display_interline_above != null && prev && meta && L.firstAscent != null) {
+                delta += texInterlineGlue(prev.lastDepth, L.firstAscent, meta) - it.display_interline_above * SP_TO_PX;
+            }
+        }
+    }
+    if (prev && prev.seg.kind === 'display' && prev.displayFull !== null && prev.displayFull !== undefined) {
+        const it = prev.seg.rows[prev.seg.rows.length - 1].item;
+        // LaTeX's \addvspace below the display asks for at least display_after_min
+        const floor = it.display_after_min || 0;
+        const below = Math.max(prev.displayFull ? it.display_below : it.display_below_short, floor);
+        delta += (below - Math.max(it.display_used_below || 0, floor)) * SP_TO_PX;
+        if (it.display_interline_below != null && L.firstMeta && L.firstAscent != null) {
+            delta += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta) - it.display_interline_below * SP_TO_PX;
+        }
+    }
+    return delta;
+}
+
+// A numbered equation, as LuaTeX packs it: [kern d][formula][kern][number],
+// z wide, placed by TeX §1199 from the formula's natural width w and the
+// number's e: when formula and number do not both fit (w + e + 1em > z) the
+// formula is shrunk to z − e − 1em if its glue can give that much (a
+// formula that cannot gets its number on a line of its own, which is not
+// modelled: the captured tree stands); then the formula is centred in the
+// measure (d = (z − w)/2) unless the number would overlap it — d < 2e —
+// when it is centred in what is left of the number (d = (z − w − e)/2, or
+// 0 for a formula opening with glue). Each branch is affine in z with the
+// same slope, so the affine model carries whichever branch the source
+// measure was on across the switches; redoing the rule from the evaluated
+// widths puts the formula where TeX puts it at every measure.
+function placeEquationNumber(item) {
+    const b = item.box;
+    if (!b || b.subtype !== HL_EQUATION || !b.children || b.children.length !== 4) return item;
+    const [k0, f0, k1, num] = b.children;
+    if (k0.type !== 'kern' || f0.type !== 'hlist' || k1.type !== 'kern' || num.type !== 'hlist' || num.subtype !== 7) return item;
+    const z = item.display_width || 0, e = num.width || 0;
+    if (!(z > 0) || !(e > 0)) return item;
+    let f = f0, w = 0;
+    const shrink = [0, 0, 0, 0];
+    for (const n of f0.children || []) {
+        w += nodeWidthSp(n);
+        if (n.type === 'glue') shrink[n.shrink_order || 0] += n.shrink || 0;
+    }
+    const q = e + (item.display_quad || 0);       // TeX's math quad at text size
+    if (w + q > z) {
+        const order = shrink[3] ? 3 : shrink[2] ? 2 : shrink[1] ? 1 : 0;
+        if (!(order > 0) && w - shrink[0] + q > z) return item;
+        const target = z - q;
+        f = { ...f0, width: target, glue_sign: 2, glue_order: order,
+              glue_set: shrink[order] > 0 ? Math.min(order > 0 ? Infinity : 1, (w - target) / shrink[order]) : 0 };
+        w = target;
+    } else if (f0.glue_sign || Math.abs((f0.width || 0) - w) > 2) {
+        f = { ...f0, width: w, glue_sign: 0, glue_order: 0, glue_set: 0 };
+    }
+    let d = Math.round((z - w) / 2);
+    if (d < 2 * e) {
+        d = Math.round((z - w - e) / 2);
+        const first = f.children && f.children[0];
+        if (first && first.type === 'glue') d = 0;
+    }
+    const children = [{ ...k0, kern: d }, f, { ...k1, kern: z - w - e - d }, num];
+    return { ...item, box: { ...b, children } };
+}
+
 function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
     const targetSp = Math.round(widthPt * 65536);
     const floorSp = Math.max(0, displayModel.minSpacePt) * 65536;
@@ -2306,7 +2473,7 @@ function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
         affineFloorWidthItem(fontInfo, r.item, displayModel.sourceWidthSp, floorSp)));
     const evaluatedSp = Math.max(targetSp, minWidthSp);
     seg = { ...seg, rows: seg.rows.map(r => ({
-        ...r, item: affineDisplayItem(r.item, evaluatedSp - displayModel.sourceWidthSp),
+        ...r, item: placeEquationNumber(affineDisplayItem(r.item, evaluatedSp - displayModel.sourceWidthSp)),
     })) };
     const columnPx = widthPt * ZOOM;
     const rows = seg.rows.map(r => ({
@@ -2324,6 +2491,11 @@ function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
         lrp:   rows.map(r => ({ ratio: 0, er: 0, x0: r.x0 })),
         gaps:  rows.map(r => r.gap || null),
         W:     Math.ceil(right),
+        // the display's left edge at this width, for displaySkipsFull: the
+        // shift plus the kern LuaTeX opens a numbered formula's box with
+        displayLeftSp: (rows[0].item.display_shift || 0)
+            + ((c => c && c.type === 'kern' ? (c.kern || 0) : 0)((rows[0].item.box.children || [])[0])),
+        atSourceWidth: Math.abs(evaluatedSp - displayModel.sourceWidthSp) < 32768,
     };
 }
 
@@ -2402,6 +2574,7 @@ function sizeSegment(s, L, prev, columnPx, p) {
     }
     // The space above the segment lives in its spacer, not in a margin on the
     // element itself (scroll anchoring again, see layoutDocument).
+    margin += displaySkipAdjust(L, prev);
     setStyle(s.gap, 'height', `${onLayoutGrid(margin)}px`);
     setStyle(s.svg, 'marginTop', '');
     if (s.wrap) { setStyle(s.wrap, 'marginTop', ''); setStyle(s.wrap, 'marginBottom', ''); }
@@ -2564,7 +2737,8 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
             if (g) {
                 stats.deferred++;
                 return { seg, deferred: true, lines: [], H: g.H, W: g.W, firstAscent: g.firstAscent,
-                         lastDepth: g.lastDepth, firstMeta: g.firstMeta, gapBefore: seg.gapBefore || 0 };
+                         lastDepth: g.lastDepth, firstMeta: g.firstMeta, gapBefore: seg.gapBefore || 0,
+                         preDisplaySizeSp: g.preDisplaySizeSp, displayLeftSp: g.displayLeftSp, atSourceWidth: g.atSourceWidth };
             }
         }
         const L = layoutOne(seg, i);
@@ -2652,7 +2826,8 @@ const EXACT_LAYOUTS_KEPT = 3;
 function rememberLayout(hc, w, L) {
     hc.exact.set(w, L);
     if (hc.exact.size > EXACT_LAYOUTS_KEPT) hc.exact.delete(hc.exact.keys().next().value);
-    const o = { w, H: L.H, W: L.W, firstAscent: L.firstAscent, lastDepth: L.lastDepth, firstMeta: L.firstMeta };
+    const o = { w, H: L.H, W: L.W, firstAscent: L.firstAscent, lastDepth: L.lastDepth, firstMeta: L.firstMeta,
+                preDisplaySizeSp: L.preDisplaySizeSp, displayLeftSp: L.displayLeftSp, atSourceWidth: L.atSourceWidth };
     const obs = hc.obs;
     let k = 0;
     while (k < obs.length && obs[k].w < w) k++;

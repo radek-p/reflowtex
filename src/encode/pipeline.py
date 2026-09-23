@@ -187,6 +187,7 @@ class Pipeline:
         # upward. Text-only snippets retain the ordinary single compilation.
         import display_model
         samples = []
+        first_sample = None            # the document at its own width
         sample_index = 0
         while True:
             width_extra_sp = sample_index * DISPLAY_SAMPLE_STEP_SP
@@ -195,6 +196,8 @@ class Pipeline:
             data = json.loads((build_dir / 'output.json').read_text())
             if not display_model.has_displays(data):
                 break
+            if first_sample is None:
+                first_sample = data
             reported_width = int(data.get('source_width', 0))
             if reported_width <= 0:
                 sys.exit(f'ERROR: display-bearing template {self.template} did not report '
@@ -207,12 +210,20 @@ class Pipeline:
             if len(samples) >= 3:
                 ok, reason = display_model.check_samples(*samples[-3:])
                 if ok:
-                    data = display_model.attach_model(samples[-3], samples[-2], samples[-1])
+                    widths = (f'{samples[-3]["source_width"] / 65536:g}, '
+                              f'{samples[-2]["source_width"] / 65536:g}, '
+                              f'{samples[-1]["source_width"] / 65536:g} pt')
+                    if samples[-3] is first_sample:
+                        data = display_model.attach_model(samples[-3], samples[-2], samples[-1])
+                        print(f'  {label}: display model stable at {widths}')
+                    else:
+                        # The document's own width fell outside the affine law;
+                        # it is still the width the page must match exactly.
+                        data, fixed = display_model.anchor_model(first_sample, samples[-2], samples[-1])
+                        print(f'  {label}: display model stable at {widths}, anchored at the document\'s '
+                              f'{first_sample["source_width"] / 65536:g} pt'
+                              + (f'; {fixed} display(s) of a different shape there stay fixed' if fixed else ''))
                     (build_dir / 'output.json').write_text(json.dumps(data))
-                    print(f'  {label}: display model stable at '
-                          f'{samples[-3]["source_width"] / 65536:g}, '
-                          f'{samples[-2]["source_width"] / 65536:g}, '
-                          f'{samples[-1]["source_width"] / 65536:g} pt')
                     break
                 rejected = samples[-3]['source_width'] / 65536
                 print(f'  {label}: rejected display sample at {rejected:g} pt: {reason}')
