@@ -2732,8 +2732,12 @@ function displaySkipAdjust(L, prev) {
                 ? { bskip: it.display_baselineskip * SP_TO_PX, lskip: (it.display_lineskip || 0) * SP_TO_PX,
                     lskiplimit: (it.display_lineskiplimit || 0) * SP_TO_PX }
                 : (prev && prev.firstMeta);
+            // A display that opened an empty paragraph (display_after_line
+            // false) had that paragraph's empty line above it, of depth 0,
+            // not the last line of the text before.
             if (it.display_interline_above != null && prev && meta && L.firstAscent != null) {
-                delta += texInterlineGlue(prev.lastDepth, L.firstAscent, meta) - it.display_interline_above * SP_TO_PX;
+                const depthAbove = it.display_after_line ? prev.lastDepth : 0;
+                delta += texInterlineGlue(depthAbove, L.firstAscent, meta) - it.display_interline_above * SP_TO_PX;
             }
         }
     }

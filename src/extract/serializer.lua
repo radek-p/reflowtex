@@ -1092,6 +1092,18 @@ local function walk_flow(head, pending, ctx)
         elseif t == "hlist" and n.subtype == HL_LINE then
             local p = find_para(n)
             last_box = (p and has_visible_nodes(all_paragraphs[p].nodes)) and "line" or "blank"
+            -- A blank line (a paragraph with nothing visible) is not an item,
+            -- but the space down to it and its own height are real space. If
+            -- a display follows — the display opened that empty paragraph, as
+            -- \begin{equation} straight after \par does — they belong to the
+            -- gap above the display (below). Before anything else the blank
+            -- line's space is dropped with it, as ever.
+            if last_box == "blank" then
+                pending.blank_sp = (pending.blank_sp or 0) + (pending.sp or 0)
+                                   + (n.height or 0) + (n.depth or 0)
+            else
+                pending.blank_sp = nil
+            end
             pending.interline = nil
             if p then
                 cur_band.indent = all_paragraphs[p].indent
@@ -1110,8 +1122,10 @@ local function walk_flow(head, pending, ctx)
             end
             reset_pending(pending)
         elseif t == "hlist" and (n.subtype == HL_EQUATION or n.subtype == HL_ALIGNMENT) then
-            place_gap(ctx, stream_attr(n), pending.sp, pending.sp)
+            local gap = (pending.sp or 0) + ((last_box == "blank" and pending.blank_sp) or 0)
+            place_gap(ctx, stream_attr(n), gap, gap)
             reset_pending(pending)
+            pending.blank_sp = nil
             local out = stream_out(ctx, stream_attr(n))
             ctx.last_sid, ctx.last_kind = stream_attr(n), "display"
             local note = display_notes[node.get_attribute(n, DISPLAY_ATTR) or -1]
