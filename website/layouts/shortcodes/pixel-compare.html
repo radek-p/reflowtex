@@ -1,0 +1,160 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The PDF against the browser, measured and shown a tile at a time:
+    {{< pixel-compare >}}
+  Reads data/pixel_compare.json (the manifest the comparison writes) for the
+  table and the tile list; the pictures are static/pixel-compare/<strip>/
+  {heat,pdf,browser}-<k>.webp, each --tile-pt points of the document at full
+  resolution, loaded only when shown. ▲ and ▼ step through the document; the
+  bar under the controls has one cell per tile, darker where more rows differ.
+*/ -}}
+{{- $d := hugo.Data.pixel_compare -}}
+{{- $base := "pixel-compare/" | relURL -}}
+{{- with $d -}}
+<style>
+  /* Plain colours per theme (the site's html classes), not color-mix():
+     older Safari drops a color-mix with currentColor or a calc() share. */
+  .pxc { margin: 1.5rem 0 2.5rem;
+    --pxc-line: rgba(0, 0, 0, .22); --pxc-idle: rgba(0, 0, 0, .13);
+    --pxc-hover: rgba(0, 0, 0, .06); --pxc-on: rgba(47, 44, 205, .15); }
+  html.dark .pxc {
+    --pxc-line: rgba(255, 255, 255, .26); --pxc-idle: rgba(255, 255, 255, .15);
+    --pxc-hover: rgba(255, 255, 255, .08); --pxc-on: rgba(157, 155, 255, .24); }
+  .pxc-table { border-collapse: collapse; font-size: .92rem; margin: 0 0 1.75rem; width: 100%; }
+  .pxc-table th, .pxc-table td { padding: .35rem .6rem; border-bottom: 1px solid var(--pxc-line); text-align: right; }
+  .pxc-table th:first-child, .pxc-table td:first-child { text-align: left; }
+  .pxc-table thead th { font-weight: 600; }
+  .pxc-table tr.pxc-sub th { text-align: left; font-weight: 600; padding-top: 1.1rem; }
+  .pxc-table td.pxc-note { opacity: .65; font-size: .85rem; }
+  .pxc-controls { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: center; margin-bottom: .6rem; }
+  .pxc-seg { display: inline-flex; border: 1px solid var(--pxc-line); border-radius: 8px; overflow: hidden; }
+  .pxc-seg button { font: inherit; font-size: .9rem; color: inherit; background: none; border: 0; padding: .35rem .8rem; cursor: pointer; }
+  .pxc-seg button + button { border-left: 1px solid var(--pxc-line); }
+  .pxc-seg button[aria-pressed="true"] { background: var(--pxc-on); font-weight: 600; }
+  .pxc-seg button:not([aria-pressed="true"]):hover { background: var(--pxc-hover); }
+  .pxc-map { display: flex; gap: 2px; height: 14px; margin: 0 0 .6rem; }
+  .pxc-map button { position: relative; flex: 1; min-width: 0; border: 0; padding: 0; cursor: pointer;
+    border-radius: 2px; background: var(--pxc-idle); }
+  .pxc-map button::after { content: ""; position: absolute; inset: 0; border-radius: inherit;
+    background: #e5484d; opacity: var(--w, 0); }
+  .pxc-map button[aria-current="true"] { outline: 2px solid var(--lt-accent, currentColor); outline-offset: 1px; }
+  .pxc-step { display: block; width: 100%; font: inherit; font-size: .9rem; color: inherit; cursor: pointer;
+    background: none; border: 1px solid var(--pxc-line); border-radius: 8px; padding: .4rem; margin: .4rem 0; }
+  .pxc-step:disabled { opacity: .35; cursor: default; }
+  .pxc-frame { position: relative; background: #fff; border: 1px solid var(--pxc-line); border-radius: 4px; overflow: hidden; }
+  .pxc-frame img { display: block; width: 100%; height: auto; image-rendering: auto; }
+  .pxc-frame a { display: block; }
+  .pxc-caption { font-size: .85rem; margin: .35rem 0 0; opacity: .7; }
+  @media (max-width: 640px) { .pxc-table { font-size: .8rem; } .pxc-table th, .pxc-table td { padding: .3rem .35rem; } }
+</style>
+<div class="pxc" data-base="{{ $base }}">
+<table class="pxc-table">
+  <thead><tr><th></th>{{ range $d.strips }}<th>{{ .hsize_pt }} pt column</th>{{ end }}</tr></thead>
+  <tbody>
+    <tr><td>Glyphs in the PDF</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 0 .glyphs.strip }}</td>{{ end }}</tr>
+    <tr><td>… found in the browser, same line, within 0.7 pt</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 0 .glyphs.matched }}</td>{{ end }}</tr>
+    <tr><td>Text lines with no glyph more than 0.1 pt out sideways</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 0 .glyphs.lines_within_0_1pt }} of {{ lang.FormatNumber 0 .glyphs.lines }}</td>{{ end }}</tr>
+    <tr><td>Largest error of any glyph found, across</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 2 .glyphs.horizontal_largest_pt }} pt</td>{{ end }}</tr>
+    <tr><td>Largest error of any glyph found, down</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 2 .glyphs.vertical_largest_pt }} pt</td>{{ end }}</tr>
+    <tr><td>Height of the document, PDF / browser</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 1 (div .pixels.strip_rows .ppp) }} / {{ lang.FormatNumber 1 (div .pixels.browser_rows .ppp) }} pt</td>{{ end }}</tr>
+    <tr><td>Pixel rows compared ({{ (index $d.strips 0).ppp }} px per point)</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 0 .pixels.strip_rows }}</td>{{ end }}</tr>
+    <tr><td>… identical, up to 1 % of pixels</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 0 .pixels.equal }}</td>{{ end }}</tr>
+    <tr><td>… differing in place (rasterisation)</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 0 .pixels.differing }}</td>{{ end }}</tr>
+    <tr><td>… the same ink moved sideways</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 0 .pixels.shifted }}</td>{{ end }}</tr>
+    <tr><td>… with no counterpart on the other side</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 0 .pixels.unmatched }}</td>{{ end }}</tr>
+    <tr><td>Pixels differing by more than half</td>{{ range $d.strips }}<td>{{ lang.FormatNumber 3 (mul 100 .pixels.strong_share) }} %</td>{{ end }}</tr>
+    {{- with (index $d.strips 0).pixels_fine }}
+    <tr class="pxc-sub"><th colspan="{{ add 1 (len $d.strips) }}">Both drawn {{ (index $d.strips 0).fine_factor }} times finer, then averaged down to {{ (index $d.strips 0).ppp }} px per point</th></tr>
+    <tr><td>Pixel rows identical, up to 1 % of pixels</td>{{ range $d.strips }}<td>{{ with .pixels_fine }}{{ lang.FormatNumber 0 .equal }}{{ end }}</td>{{ end }}</tr>
+    <tr><td>… differing in place (rasterisation)</td>{{ range $d.strips }}<td>{{ with .pixels_fine }}{{ lang.FormatNumber 0 .differing }}{{ end }}</td>{{ end }}</tr>
+    <tr><td>… the same ink moved sideways</td>{{ range $d.strips }}<td>{{ with .pixels_fine }}{{ lang.FormatNumber 0 .shifted }}{{ end }}</td>{{ end }}</tr>
+    <tr><td>… with no counterpart on the other side</td>{{ range $d.strips }}<td>{{ with .pixels_fine }}{{ lang.FormatNumber 0 .unmatched }}{{ end }}</td>{{ end }}</tr>
+    <tr><td>Pixels differing by more than half</td>{{ range $d.strips }}<td>{{ with .pixels_fine }}{{ lang.FormatNumber 3 (mul 100 .strong_share) }} %{{ end }}</td>{{ end }}</tr>
+    {{- end }}
+  </tbody>
+</table>
+
+<div class="pxc-controls">
+  <span class="pxc-seg" role="group" aria-label="Column width">
+    {{- range $i, $s := $d.strips }}<button type="button" data-strip="{{ $i }}">{{ $s.hsize_pt }} pt</button>{{ end -}}
+  </span>
+  <span class="pxc-seg" role="group" aria-label="Picture">
+    <button type="button" data-mode="heat">Differences</button>{{ with (index $d.strips 0).pixels_fine }}<button type="button" data-mode="fine">Drawn finer</button>{{ end }}<button type="button" data-mode="pdf">PDF</button><button type="button" data-mode="browser">Browser</button>
+  </span>
+</div>
+<div class="pxc-map" aria-label="Where rows are out of place"></div>
+<button type="button" class="pxc-step" data-dir="-1">▲ Previous {{ $d.tile_pt }} pt</button>
+<div class="pxc-frame"><a target="_blank" rel="noopener"><img alt=""></a></div>
+<p class="pxc-caption" aria-live="polite"></p>
+<button type="button" class="pxc-step" data-dir="1">▼ Next {{ $d.tile_pt }} pt</button>
+<script type="application/json" class="pxc-data">{{ $d | jsonify | safeJS }}</script>
+</div>
+<script>
+(function () {
+  const root = document.currentScript.previousElementSibling;
+  const data = JSON.parse(root.querySelector('.pxc-data').textContent);
+  const base = root.dataset.base;
+  const img = root.querySelector('.pxc-frame img'), link = root.querySelector('.pxc-frame a');
+  const caption = root.querySelector('.pxc-caption'), map = root.querySelector('.pxc-map');
+  const prev = root.querySelector('[data-dir="-1"]'), next = root.querySelector('[data-dir="1"]');
+  const names = { heat: 'Differences', fine: 'Differences, drawn finer and averaged down', pdf: 'PDF (LuaTeX)', browser: 'Browser' };
+  // the counts behind the bar and the caption: the run whose picture is shown
+  const counts = t => (mode === 'fine' && t.fine) ? t.fine : t.heat;
+  let s = 0, k = 0, mode = 'heat';
+  const url = (si, ki, m) => `${base}${data.strips[si].id}/${m}-${ki}.webp`;
+  function drawMap() {
+    const st = data.strips[s];
+    // coloured by rows out of place – ink moved, or a line with no
+    // counterpart. Rows that differ in place (rasterisation) are in every
+    // tile, and so are blank rows paired a row apart (the two renderers
+    // round a line to different pixel rows).
+    const moved = t => counts(t).shifted + counts(t).unmatched;
+    const worst = Math.max(1, ...st.tiles.map(moved));
+    map.textContent = '';
+    st.tiles.forEach((t, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.style.setProperty('--w', (moved(t) ? 0.25 + 0.75 * Math.sqrt(moved(t) / worst) : 0).toFixed(3));
+      b.title = t.y0_pt != null ? `${Math.round(t.y0_pt)}–${Math.round(t.y1_pt)} pt: ${moved(t)} rows out of place` : '';
+      b.addEventListener('click', () => { k = i; show(); });
+      map.appendChild(b);
+    });
+  }
+  function show() {
+    const st = data.strips[s], t = st.tiles[k];
+    img.src = url(s, k, mode);
+    img.width = st.width_px; img.height = (mode === 'heat' || mode === 'fine') ? counts(t).rows : t.rows;
+    link.href = img.src;
+    caption.textContent = `${names[mode]}, ${st.hsize_pt} pt column: part ${k + 1} of ${st.tiles.length}` +
+      (t.y0_pt != null ? `, ${Math.round(t.y0_pt)}–${Math.round(t.y1_pt)} pt down the document` : '') +
+      `. Of ${counts(t).rows} pixel rows, ${counts(t).differing} differ in place and ${counts(t).shifted + counts(t).unmatched} are out of place.`;
+    prev.disabled = k === 0; next.disabled = k === st.tiles.length - 1;
+    root.querySelectorAll('[data-strip]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.strip === s)));
+    root.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    map.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-current', String(i === k)));
+    // the neighbours, and the other pictures of this part, ahead of a click
+    for (const [ki, m] of [[k + 1, mode], [k - 1, mode], [k, 'pdf'], [k, 'browser'], [k, 'heat'], [k, 'fine']])
+      if (ki >= 0 && ki < st.tiles.length && (m !== 'fine' || st.pixels_fine)) new Image().src = url(s, ki, m);
+  }
+  function step(dir) {
+    const n = data.strips[s].tiles.length;
+    k = Math.max(0, Math.min(n - 1, k + dir));
+    show();
+  }
+  prev.addEventListener('click', () => step(-1));
+  next.addEventListener('click', () => step(1));
+  root.querySelectorAll('[data-strip]').forEach(b => b.addEventListener('click', () => {
+    const y = data.strips[s].tiles[k].y0_pt || 0;
+    s = +b.dataset.strip;
+    // stay near the same place in the document
+    const ts = data.strips[s].tiles;
+    k = Math.max(0, ts.findIndex(t => t.y1_pt != null && t.y1_pt > y));
+    drawMap(); show();
+  }));
+  root.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode; drawMap(); show(); }));
+  drawMap(); show();
+})();
+</script>
+{{- else -}}
+<p><em>No comparison data (data/pixel_compare.json).</em></p>
+{{- end -}}

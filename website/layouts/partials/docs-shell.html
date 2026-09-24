@@ -11,7 +11,7 @@
 {{- range $docs.Sections.ByWeight -}}
   {{- range .Pages.ByWeight -}}{{- $order = $order | append . -}}{{- end -}}
 {{- end -}}
-{{- range $docs.RegularPages.ByWeight -}}{{- $order = $order | append . -}}{{- end -}}
+{{- range $docs.RegularPages.ByWeight -}}{{- if not .Params.hideInNav -}}{{- $order = $order | append . -}}{{- end -}}{{- end -}}
 {{- with site.GetPage "/about" -}}{{- $order = $order | append . -}}{{- end -}}
 {{- $here := . -}}
 {{- $idx := -1 -}}
@@ -62,24 +62,32 @@
 {{- end }}
 
 {{- define "partials/docs-nav.html" -}}
+{{- /* One list, one rhythm: every group open, its pages on a rail under its
+       title. The home page is the documentation's introduction, so it
+       opens the first group, as it opens the previous/next order. Pages
+       directly under docs/ (Showcase) and About close the list as a last
+       block without a title. A page with hideInNav (testmath.tex, reached
+       from Showcase) is left out, and the page it sits under – by URL –
+       stays marked while it is read. */ -}}
 <nav class="docs-nav">
-  {{- /* The home page is the documentation's introduction. */}}
-  <a href="{{ site.Home.RelPermalink }}"{{ if eq site.Home.RelPermalink .here.RelPermalink }} aria-current="page"{{ end }}>Introduction</a>
-  {{- range .docs.Sections.ByWeight }}
-  <p class="docs-nav-group">{{ .Title }}</p>
+  {{- range $i, $g := .docs.Sections.ByWeight }}
+  <p class="docs-nav-group">{{ $g.Title }}</p>
   <ul>
-    {{- range .Pages.ByWeight }}
+    {{- if eq $i 0 }}
+    <li><a href="{{ site.Home.RelPermalink }}"{{ if eq site.Home.RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>Introduction</a></li>
+    {{- end }}
+    {{- range $g.Pages.ByWeight }}
     <li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a></li>
     {{- end }}
   </ul>
   {{- end }}
-  {{- /* Pages directly under docs/ (Showcase): plain links after the
-         groups, like Introduction before them. */}}
-  {{- range .docs.RegularPages.ByWeight }}
-  <a class="docs-nav-top" href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a>
-  {{- end }}
-  {{- with site.GetPage "/about" }}
-  <a class="docs-nav-top" href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a>
-  {{- end }}
+  <ul class="docs-nav-end">
+    {{- range .docs.RegularPages.ByWeight }}{{ if not .Params.hideInNav }}
+    <li><a href="{{ .RelPermalink }}"{{ if or (eq .RelPermalink $.here.RelPermalink) (and $.here.Params.hideInNav (hasPrefix $.here.RelPermalink .RelPermalink)) }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a></li>
+    {{- end }}{{ end }}
+    {{- with site.GetPage "/about" }}
+    <li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a></li>
+    {{- end }}
+  </ul>
 </nav>
 {{- end -}}

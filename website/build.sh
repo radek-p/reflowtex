@@ -37,9 +37,11 @@ else
   "$BASE_PYTHON" -m venv "$VENV"
 fi
 PYTHON="$VENV/bin/python3"
-if [ ! -f "$VENV/.deps-installed" ] || [ "$REPO/src/encode/requirements.txt" -nt "$VENV/.deps-installed" ]; then
+PAGELESS="$REPO/tools/pageless-pdf"               # the pageless PDF (Tools › Pageless PDF)
+if [ ! -f "$VENV/.deps-installed" ] || [ "$REPO/src/encode/requirements.txt" -nt "$VENV/.deps-installed" ] \
+   || [ "$PAGELESS/requirements.txt" -nt "$VENV/.deps-installed" ]; then
   "$VENV/bin/pip" install --upgrade pip
-  "$VENV/bin/pip" install -r "$REPO/src/encode/requirements.txt"
+  "$VENV/bin/pip" install -r "$REPO/src/encode/requirements.txt" -r "$PAGELESS/requirements.txt"
   touch "$VENV/.deps-installed"
 fi
 
@@ -57,7 +59,20 @@ cp "$REPO/src/inspector/inspector.js" "$REPO/src/inspector/inspector.css" "$REPO
 # shellcheck disable=SC2086
 "$PYTHON" "$HUGO_INT/prebuild.py" "$SITE" --demos-dir "$DEMOS" --demos-dir "$TESTMATH" --demos-dir "$BOOK" --demos-dir "$SYMBOL" ${PREBUILD_ARGS:-}
 
-# 3. Build (or serve) the static site.
+# 3. testmath.tex as a pageless PDF, for the Tools page (one page as tall as
+#    the document). Rebuilt only when the document, its template or the tool
+#    changed.
+PL_OUT="$SITE/.reflowtex-build/pageless-testmath"
+PL_PDF="$SITE/static/pageless/testmath.pdf"
+if [ ! -f "$PL_PDF" ] || [ -n "$(find "$TESTMATH/testmath.tex" "$TESTMATH/template.tex" "$PAGELESS" \
+      "$REPO/src/extract/serializer.lua" -newer "$PL_PDF" -type f 2>/dev/null | head -1)" ]; then
+  "$PYTHON" "$PAGELESS/pageless.py" "$TESTMATH/testmath.tex" --template "$TESTMATH/template.tex" \
+      --passes 3 -o "$PL_OUT"
+  mkdir -p "$(dirname "$PL_PDF")"
+  cp "$PL_OUT/pageless.pdf" "$PL_PDF"
+fi
+
+# 4. Build (or serve) the static site.
 if [ "${1:-}" = "server" ]; then
   shift
   exec hugo server --source "$SITE" "$@"

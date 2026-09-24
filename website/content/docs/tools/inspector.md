@@ -22,7 +22,7 @@ glue} in the reading options.
 {{< /latex >}}
 
 {{< inspector-demo >}}
-{{< latex >}}
+{{< latex preamble="microtype" >}}
 \noindent The golden ratio $\varphi = \frac{1+\sqrt{5}}{2}$ is the
 positive root of $x^2 = x + 1$, and its continued fraction is all ones:
 \[
@@ -57,6 +57,14 @@ its words is stretched or shrunk to fit whatever width it is given.
   not.
 \item[A reflow.] Make the window narrower. The lines re-break, and the
   open rows follow.
+\item[Fonts and glyphs.] Switch to \emph{Resources} and choose a font. The
+  table shows every glyph in its file and marks the ones the page uses.
+  Hover a glyph to outline where it is used; select it to see it drawn in
+  the box \TeX{} gave it. Search by the character, its code point
+  (\texttt{U+03C6}) or its name: try \texttt{phi} in \texttt{cmmi10}.
+\item[Pictures and footnotes.] \emph{Resources} also lists the page's
+  pictures, its streams (a footnote opens its popover from there, and the
+  popover's boxes appear in the tree), and its links and labels.
 \end{description}
 
 \section*{On your own pages}

@@ -8,7 +8,7 @@ build:
   list: never
 ---
 
-{{< latex >}}
+{{< latex preamble="microtype" >}}
 \fontsize{15}{20}\selectfont
 Reflow\,\TeX{} shows \LaTeX{} documents in the browser. \TeX{} typesets
 the text and formulas such as $e^{i\pi}+1=0$; the browser breaks each

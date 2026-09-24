@@ -16,3 +16,6 @@
 \patchcmd{\@sect}{\begingroup #6}{\begingroup #6\raggedright}{}{}
 \patchcmd{\@ssect}{\begingroup #4}{\begingroup #4\raggedright}{}{}
 \makeatother
+% Character protrusion and font expansion, as in the PDF: the viewer
+% protrudes and expands as the document says, and only then.
+\usepackage{microtype}

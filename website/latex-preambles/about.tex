@@ -8,7 +8,7 @@
   \noindent\IfValueT{#1}{{\small\scshape #1}\par\smallskip\noindent}%
   {\LARGE\bfseries #2\par}\@afterindentfalse\@afterheading}
 \makeatother
-% About: hyperref for the links to the repository.
+% About and Showcase: hyperref for their links (the repository, the papers).
 \usepackage{hyperref}
 % Section headings ragged right: at a narrow measure a heading breaks onto
 % several lines, and the standard classes would justify them. Only the
@@ -18,3 +18,6 @@
 \patchcmd{\@sect}{\begingroup #6}{\begingroup #6\raggedright}{}{}
 \patchcmd{\@ssect}{\begingroup #4}{\begingroup #4\raggedright}{}{}
 \makeatother
+% Character protrusion and font expansion, as in the PDF: the viewer
+% protrudes and expands as the document says, and only then.
+\usepackage{microtype}

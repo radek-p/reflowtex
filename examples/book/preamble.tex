@@ -5,6 +5,9 @@
 % preamble.tex by itself.) A real book class, so \chapter works and numbers
 % theorems and equations per chapter.
 \documentclass{book}
+% Character protrusion and font expansion, as in the PDF: the viewer
+% protrudes and expands as the document says, and only then.
+\usepackage{microtype}
 \usepackage{amsthm}
 \newtheorem{theorem}{Theorem}[chapter]
 \usepackage[boxed]{reflowtex}

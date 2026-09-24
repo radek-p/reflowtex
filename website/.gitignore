@@ -22,3 +22,5 @@
 # Vendored from integrations/hugo by build.sh (single source of truth lives there).
 /layouts/shortcodes/latex.html
 /layouts/partials/reflowtex-viewer.html
+# testmath.tex as a pageless PDF, built into static/ by build.sh (Tools › Pageless PDF).
+/static/pageless/
