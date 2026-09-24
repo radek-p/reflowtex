@@ -10,3 +10,11 @@
 \makeatother
 % About: hyperref for the links to the repository.
 \usepackage{hyperref}
+% Section headings ragged right: at a narrow measure a heading breaks onto
+% several lines, and the standard classes would justify them. Only the
+% heading's style changes, not its spacing or font.
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd{\@sect}{\begingroup #6}{\begingroup #6\raggedright}{}{}
+\patchcmd{\@ssect}{\begingroup #4}{\begingroup #4\raggedright}{}{}
+\makeatother

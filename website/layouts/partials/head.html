@@ -64,6 +64,25 @@
   html.dark     { background: #0c0a09; color: #e7e5e4; }
   html.sepia    { background: #f4ecd8; color: #453a26; }
   html.contrast { background: #fff;    color: #000; }
+  /* The one accent colour, used sparingly: links in the typeset text, the
+     current page in the menus, the main call to action, theorem frames,
+     and what the reader drags. Lighter on dark, deeper on paper. */
+  /* Also on anything previewing a theme of its own (data-latex-theme: the
+     themed cards, an example's theme switch), and the variables made from
+     it with them, since a var() resolves where it is declared. */
+  html,          [data-latex-theme="light"]    { --lt-primary: #2f2ccd; --lt-primary-strong: #221f99; }
+  html.dark,     [data-latex-theme="dark"]     { --lt-primary: #9d9bff; --lt-primary-strong: #c3c2ff; }
+  html.sepia,    [data-latex-theme="sepia"]    { --lt-primary: #3431b0; --lt-primary-strong: #25238a; }
+  html.contrast, [data-latex-theme="contrast"] { --lt-primary: #1f1ca8; --lt-primary-strong: #000;    }
+  /* Its light variant, as a background, only in the light theme, and only
+     for theorem frames: the other grey backgrounds stay grey. */
+  html:not(.dark):not(.sepia):not(.contrast), [data-latex-theme="light"] { --latex-theorem-background: #ebebfd; }
+  html.dark, html.sepia, html.contrast,
+  [data-latex-theme="dark"], [data-latex-theme="sepia"], [data-latex-theme="contrast"] { --latex-theorem-background: initial; }
+  html, [data-latex-theme] {
+    --latex-link: var(--lt-primary); --latex-link-hover: var(--lt-primary-strong);
+    --latex-theorem-accent: var(--lt-primary); --lt-outline-accent: var(--lt-primary);
+    --latex-handle-color: var(--lt-primary); }
   body {
     margin: 0; min-height: 100vh; line-height: 1.6;
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -194,7 +213,7 @@
   }
   .docs-nav a:hover { opacity: 1; }
   .docs-nav a[aria-current="page"] {
-    opacity: 1; font-weight: 600; border-left-color: currentColor;
+    opacity: 1; font-weight: 600; border-left-color: var(--lt-primary);
   }
   .docs-nav ul { list-style: none; margin: 0; padding: 0 0 0 0.9rem;
     border-left: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
@@ -242,7 +261,7 @@
   }
   .docs-toc a:hover { opacity: 1; }
   .docs-toc li.open > a { opacity: 0.9; }
-  .docs-toc a.current { opacity: 1; font-weight: 600; border-left-color: currentColor; }
+  .docs-toc a.current { opacity: 1; font-weight: 600; border-left-color: var(--lt-primary); }
   .docs-toc .toc-theorem > a { font-size: 0.8rem; font-style: italic; }
   .latex-anchor { scroll-margin-top: 1.5rem; }
   @media (max-width: 88rem) { .docs-toc { display: none; } }
@@ -407,12 +426,14 @@
      stationary box and nothing below it moves; only the width animates. */
   .hero { margin: 1.5rem 0 1rem; }
   #stage {
-    box-sizing: border-box; width: 100%; max-width: 100%; height: 18rem;
-    padding: 1.6rem 1.75rem; margin: 0;
+    box-sizing: border-box; width: 100%; max-width: 100%; min-height: 12rem;
+    padding: 1.6rem 1.75rem; margin: 0; overflow: hidden;
     background: color-mix(in srgb, currentColor 3%, transparent);
-    display: flex; align-items: center;
   }
-  #hero-flow { width: 100%; overflow: hidden; }
+  /* Centred in the height the script reserves (the paragraph's tallest
+     layout), and gliding there when a breath adds or removes a line. */
+  #hero-flow { width: 100%; transition: transform .6s cubic-bezier(.33, 0, .2, 1); }
+  @media (prefers-reduced-motion: reduce) { #hero-flow { transition: none; } }
   #stage .latex-block { width: 100%; margin: 0 !important; }
   .hero-caption { margin: 1.1rem 0 0; font-size: 0.8rem; opacity: 0.5; max-width: 46rem; }
   .hero .cta { margin-top: 1.4rem; display: flex; gap: 0.7rem; flex-wrap: wrap; }
@@ -425,14 +446,9 @@
   /* The primary button inverts the page: its text colour is the page's
      background, its fill the page's text colour – set per theme, since
      currentColor here would be its own (light) text. */
-  .hero .cta a.primary { background: #333; color: #fafaf9; border-color: transparent; }
-  html.dark     .hero .cta a.primary { background: #e7e5e4; color: #0c0a09; }
-  html.sepia    .hero .cta a.primary { background: #453a26; color: #f4ecd8; }
-  html.contrast .hero .cta a.primary { background: #000; color: #fff; }
-  .hero .cta a.primary:hover { opacity: .88; background: #333; }
-  html.dark     .hero .cta a.primary:hover { background: #e7e5e4; }
-  html.sepia    .hero .cta a.primary:hover { background: #453a26; }
-  html.contrast .hero .cta a.primary:hover { background: #000; }
+  .hero .cta a.primary { background: var(--lt-primary); color: #fff; border-color: transparent; }
+  html.dark .hero .cta a.primary { color: #0c0a09; }
+  .hero .cta a.primary:hover { background: var(--lt-primary-strong); }
   @media (prefers-reduced-motion: reduce) { .hero-caption .motion { display: none; } }
 
   /* ── Home: live LaTeX in a quiet grid ────────────────────────────────────
@@ -492,7 +508,9 @@
     background: currentColor; opacity: 0; transition: opacity .2s ease;
   }
   .resizer:hover .resizer-handle::after, .resizer.dragging .resizer-handle::after { opacity: .35; }
-  .resizer-handle:hover::after, .resizer-handle:focus-visible::after, .resizer.dragging .resizer-handle::after { opacity: .7; }
+  .resizer-handle::after { transition: opacity .2s ease, width .15s ease, left .15s ease, background-color .15s ease; }
+  .resizer-handle:hover::after, .resizer-handle:focus-visible::after, .resizer.dragging .resizer-handle::after {
+    opacity: 1; width: 3px; left: 5.5px; background: var(--lt-primary); }
   @media (hover: none) { .resizer-handle::after { opacity: .3; } }
   @media (prefers-reduced-motion: reduce) { .resizer-body { transition: none; } }
   .card-widths .widths { display: grid; grid-template-columns: 1fr 1.7fr; gap: 3.5rem; align-items: start; margin-top: 1.25rem; }
@@ -500,9 +518,14 @@
   .step, .map-card { padding-top: 1rem; border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
   .map-card { display: block; text-decoration: none; color: inherit; padding-bottom: 1.4rem; transition: border-color .2s ease; }
   .map-card:hover { border-top-color: currentColor; }
-  @media (max-width: 60rem) {
+  /* Two columns where the column is narrow: a narrow window, or a window
+     from 64rem, where the sidebar appears and takes some 23rem of it, up to
+     75rem. The third of three steps then spans both. */
+  @media (max-width: 60rem), (min-width: 64rem) and (max-width: 75rem) {
     #lt-content .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .span-2, .span-3 { grid-column: span 1; } .span-4, .span-6 { grid-column: span 2; }
+    #lt-content .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #lt-content .steps > :nth-child(3):last-child { grid-column: span 2; }
   }
   @media (max-width: 40rem) {
     #lt-content .bento, #lt-content .steps, #lt-content .map { grid-template-columns: 1fr; gap: 1.25rem; }
@@ -526,7 +549,7 @@
   html.contrast { --latex-page-bg: #ffffff; --lt-glass: rgba(255, 255, 255, .92); --lt-seg-on: #ffffff; }
   #lt-reader {
     --lt-hair: color-mix(in srgb, currentColor 16%, transparent);
-    --lt-accent: #0a84ff;
+    --lt-accent: var(--lt-primary);
     position: fixed; z-index: 1000;
     right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
