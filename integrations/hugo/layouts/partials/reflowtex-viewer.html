@@ -173,28 +173,34 @@
   .latex-example-stage { position: relative; max-width: 100%; }
   .latex-example-handle {
     position: absolute; top: 0; bottom: 0; right: -16px; width: 22px;
-    cursor: ew-resize; touch-action: none; outline: none; }
+    cursor: ew-resize; touch-action: none; outline: none; z-index: 30; }
   .latex-example-handle::after {
     content: ''; position: absolute; top: 0; bottom: 0; left: 12px; width: 2px;
-    background: currentColor; opacity: 0; transition: opacity .2s ease; }
+    background: currentColor; opacity: 0;
+    transition: opacity .2s ease, width .15s ease, margin .15s ease, background-color .15s ease; }
   @container (min-width: 52rem) {
     .latex-example-preview { position: relative; }
     .latex-example-stage { position: static; }
-    .latex-example-handle { right: -11px; z-index: 1; }
+    .latex-example-handle { right: -11px; }
     .latex-example-handle::after { left: 9px; }
   }
   .latex-example-split .latex-example-preview { position: relative; }
   .latex-example-split .latex-example-stage { position: static; }
-  .latex-example-split .latex-example-handle { right: -11px; z-index: 1; }
+  .latex-example-split .latex-example-handle { right: -11px; }
   .latex-example-split .latex-example-handle::after { left: 9px; }
   .latex-example-preview:hover .latex-example-handle::after { opacity: .25; }
-  .latex-example-handle:hover::after, .latex-example-handle:focus-visible::after,
-  .latex-resizing .latex-example-handle::after { opacity: .7; }
+  /* Pointed at or dragged: wider, in the site's accent (--latex-handle-color). */
+  /* (more specific than the panel-hover rule, which shows the line faintly) */
+  .latex-example-preview .latex-example-handle:hover::after,
+  .latex-example-preview .latex-example-handle:focus-visible::after,
+  .latex-resizing .latex-example-preview .latex-example-handle::after {
+    opacity: 1; width: 4px; margin-left: -1px; background: var(--latex-handle-color, currentColor); }
   .latex-example-handle::before {
     content: attr(aria-valuetext); position: absolute; top: .6rem; right: 20px;
     font: 500 .68rem/1 ui-sans-serif, system-ui, sans-serif; white-space: nowrap;
-    padding: .2rem .4rem; border-radius: 4px; pointer-events: none;
-    background: color-mix(in srgb, currentColor 10%, transparent);
+    padding: .25rem .45rem; border-radius: 4px; pointer-events: none; z-index: 30;
+    /* Solid, in every theme, so no text beneath shows through. */
+    color: #2b2b2b; background: #e6e6e3; box-shadow: 0 1px 3px rgba(0,0,0,.18);
     opacity: 0; transition: opacity .2s ease; }
   .latex-resizing .latex-example-handle::before,
   .latex-example-handle:focus-visible::before { opacity: 1; }

@@ -70,6 +70,13 @@ instead. The pipeline uses this to serve a **modified** font (one whose cmap it
 patched) under a renamed, content-hashed file, leaving unmodified fonts verbatim.
 Without the island, the original name is used as-is.
 
+If a font file cannot be downloaded, the block still lays out (the metrics
+travel with it) but draws in a stand-in face, and the symbol fonts of
+mathematics may draw nothing. So the viewer shows a bar at the bottom of the
+window naming the fonts, with Reload and Dismiss. Style it with
+`.latex-font-warning`, or switch it off before the viewer runs:
+`window.reflowtex = { fontWarning: false }`.
+
 ## Overflow
 
 A display wider than its column (beyond the configurable rounding tolerance) is

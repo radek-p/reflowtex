@@ -554,7 +554,68 @@ async function registerFonts(fontsData) {
     // are drawn as metric boxes; see the sink). 'serif' is a system family and
     // needs no loading.
     await Promise.allSettled(families.map(fam => document.fonts.load(`12px '${fam}'`)));
+    // A face whose file could not be fetched settles with status 'error'
+    // (load() itself still resolves). Tell the reader, once per page.
+    if (document.fonts) {
+        const failed = [];
+        for (const face of document.fonts) {
+            const fam = String(face.family).replace(/^['"]|['"]$/g, '');
+            if (face.status === 'error' && families.includes(fam)) {
+                const file = Object.keys(fileToFamily).find(k => fileToFamily[k] === fam);
+                // by the font's own name: cmr12, not the served cmr12.reflowtex-dfb1fe6f.otf
+                failed.push(file ? file.replace(/\.otf$/i, '').replace(/\.reflowtex-[0-9a-f]+$/, '') : fam);
+            }
+        }
+        if (failed.length) reportFontFailure(failed);
+    }
     return fontInfo;
+}
+
+// ── A warning when fonts fail ─────────────────────────────────────────────────
+// Without its fonts a block still lays out (the metrics travel with the
+// document) but draws its glyphs in a stand-in face, or not at all for the
+// symbol fonts of mathematics – which a reader cannot tell from a broken page.
+// So a failed download shows a bar at the bottom of the window, as a cookie
+// notice does, naming the fonts and offering a reload. A page may style it
+// (.latex-font-warning) or switch it off: window.reflowtex.fontWarning = false.
+const failedFonts = new Set();
+let fontWarning = null;
+function reportFontFailure(names) {
+    for (const n of names) failedFonts.add(n);
+    if (api.fontWarning === false || !document.body) return;
+    if (!fontWarning) {
+        const st = document.createElement('style');
+        st.textContent = `
+          .latex-font-warning { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+            z-index: 2147483000; box-sizing: border-box; width: min(44rem, calc(100vw - 32px));
+            display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 18px;
+            font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; color: #fff; background: #2b2622;
+            border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.28); }
+          .latex-font-warning p { margin: 0; flex: 1; }
+          .latex-font-warning strong { color: #ffcf8a; }
+          .latex-font-warning button { font: inherit; font-weight: 600; color: inherit; cursor: pointer;
+            border: 1px solid rgba(255,255,255,.35); background: none; border-radius: 8px; padding: 6px 12px; }
+          .latex-font-warning button:hover { background: rgba(255,255,255,.12); }
+          .latex-font-warning button[data-act="close"] { border: 0; padding: 6px 8px; font-size: 18px; line-height: 1; opacity: .8; }
+          @media print { .latex-font-warning { display: none; } }`;
+        document.head.appendChild(st);
+        fontWarning = document.createElement('div');
+        fontWarning.className = 'latex-font-warning';
+        fontWarning.setAttribute('role', 'alert');
+        fontWarning.innerHTML = '<p></p><button type="button" data-act="reload">Reload</button>'
+            + '<button type="button" data-act="close" aria-label="Dismiss">\u00d7</button>';
+        fontWarning.addEventListener('click', e => {
+            const act = e.target.closest('button')?.dataset.act;
+            if (act === 'reload') location.reload();
+            if (act === 'close') fontWarning.hidden = true;
+        });
+        document.body.appendChild(fontWarning);
+    }
+    const list = [...failedFonts];
+    const shown = list.slice(0, 4).join(', ') + (list.length > 4 ? ` and ${list.length - 4} more` : '');
+    fontWarning.querySelector('p').innerHTML = '<strong>Some fonts could not be downloaded</strong> '
+        + `(${shown.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])}). `
+        + 'Text may appear in a stand-in font, and mathematics may be missing.';
 }
 
 // ── Glyph metrics ─────────────────────────────────────────────────────────────
@@ -850,7 +911,11 @@ function kpPass(bcs, lineWidthSp, threshold, allowDisc, p) {
                 const {w,s,z}=lineMetrics(bcs[i],bcJ,p);
                 // A line carrying an infinite-order fill (\hfil from \\, \hfill)
                 // absorbs positive slack instead of justifying: ratio 0, badness 0.
-                const hasFill = bcJ.cumFill>bcs[i].cumFill;
+                // So does every line of a paragraph that is not justified (p.ragged):
+                // \raggedright, \centering and \raggedleft set \rightskip or
+                // \leftskip to 0pt plus 1fil, so any line that fits costs nothing
+                // and TeX takes the fewest lines, hyphenating only when it must.
+                const hasFill = p.ragged || bcJ.cumFill>bcs[i].cumFill;
                 if (bcJ.kind==='end') {
                     const slack=lineWidthSp-w; if(slack<0&&(z===0||(-slack/z)>1)) continue;
                     const ratio=slack<0?slack/z:0, b=ratio<0?badness(-slack,z):0, lp=p.linePenalty+b;
@@ -2391,7 +2456,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
                   protrudeChars: para.protrude_chars || 0,
               })
             : null;
-        for (const ln of (ext || kpBreak(bcs, para.nodes, availSp, p))) {
+        for (const ln of (ext || kpBreak(bcs, para.nodes, availSp, justify ? p : { ...p, ragged: true }))) {
             // For non-justified modes: allow glue shrink (ratio<0) but never stretch.
             // When the line must shrink, rendering and positioning are identical to justify.
             // The alignment offset only applies to lines whose natural width fits the column.
@@ -3242,10 +3307,16 @@ function installStreamStyles() {
         padding: max(2px, calc(var(--latex-box-space) + var(--latex-cap-height) - var(--latex-first-ascent, 0px))) .7rem
                  max(2px, calc(var(--latex-box-space) - var(--latex-last-depth, 0px))) .85rem;
         /* --latex-box-accent / --latex-box-background: set per box (\makeboxed
-           accent=, background=) or by a page; else the kind's defaults. */
+           accent=, background=) or by a page; else the kind's defaults – a
+           page may give theorems a background of their own
+           (--latex-theorem-background), else a tint of their accent. */
         border-left: 3px solid var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
+        background: var(--latex-box-background, var(--latex-theorem-background,
+          color-mix(in srgb, var(--latex-theorem-accent, #2f6fb3) 7%, transparent))); }
+      /* A box with an accent of its own and no background: a tint of that accent. */
+      .latex-stream[data-kind="theorem"][style*="--latex-box-accent"] {
         background: var(--latex-box-background,
-          color-mix(in srgb, var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3)) 7%, transparent)); }
+          color-mix(in srgb, var(--latex-box-accent) 7%, transparent)); }
       .latex-stream[data-kind="proof"] {
         border-left-color: var(--latex-box-accent, var(--latex-proof-accent, #8a8f98));
         background: var(--latex-box-background,
@@ -3271,6 +3342,9 @@ function installStreamStyles() {
       .latex-stream[data-kind="leantheorem"] .latex-lean-switches.latex-lean-hang {
         margin: 0; gap: 2px;
         --lt-accent: var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
+        --lt-bg: var(--latex-box-background, var(--latex-theorem-background,
+          color-mix(in srgb, var(--lt-accent) 7%, transparent))); }
+      .latex-stream[data-kind="leantheorem"] .latex-lean-switches.latex-lean-hang[style*="--latex-box-accent"] {
         --lt-bg: var(--latex-box-background, color-mix(in srgb, var(--lt-accent) 7%, transparent)); }
       /* Borderless in every state, so nothing but colour changes on hover. */
       .latex-lean-switches.latex-lean-hang button,
