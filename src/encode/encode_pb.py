@@ -52,11 +52,16 @@ def intern_glyph_metrics(doc: dict) -> None:
 
     for p in doc.get('paragraphs', []):
         walk(p.get('nodes'))
-    for it in doc.get('content', []):
+    def items(its):
+        for it in its:
+            yield it
+            if it.get('display_wide'):          # a display's wide form (display_model)
+                yield it['display_wide']
+    for it in items(doc.get('content', [])):
         if it.get('box'):
             walk([it['box']])
     for stream in doc.get('streams', []):
-        for it in stream.get('content', []):
+        for it in items(stream.get('content', [])):
             if it.get('box'):
                 walk([it['box']])
     doc['glyph_metrics'] = table

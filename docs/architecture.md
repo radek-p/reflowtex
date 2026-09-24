@@ -110,7 +110,8 @@ is encoded:
 Then `encode_pb.py` serialises the result to Protocol Buffers against
 `schema/latex.proto`, interning per-glyph metrics into a shared table (see
 [binary-format.md](binary-format.md)). `fonts.py` provisions and cmap-patches the
-OTF files the page will serve. `pipeline.py` ties these together into one
+OTF files the page will serve, and subsets the ones it modified (patched or
+converted) to the characters the blocks draw; unmodified fonts are served whole. `pipeline.py` ties these together into one
 `compile(snippet) → bytes` call that the integrations drive.
 
 ### 3. View (`src/viewer`)

@@ -261,6 +261,8 @@ def main() -> None:
     ap.add_argument('--force', action='store_true', help='recompile all blocks')
     ap.add_argument('--prune', action='store_true', help='drop data/build entries no longer in content')
     ap.add_argument('-j', '--jobs', type=int, default=4, help='blocks to compile in parallel')
+    ap.add_argument('--no-font-subset', action='store_true',
+                    help='serve the fonts Reflow TeX modified whole, not cut down to the characters the site uses')
     args = ap.parse_args()
 
     site: Path = args.site.resolve()
@@ -390,7 +392,7 @@ def main() -> None:
         print(f'  batch "{bname}": done ({", ".join(f"{len(b)} bytes" for b in blobs.values())})')
 
     print('font-patch:')
-    pipe.patch_fonts()
+    pipe.patch_fonts(subset=not args.no_font_subset)
     # original → served font filename (a modified font is served renamed +
     # content-hashed); the viewer partial embeds this so @font-face fetches the
     # right file. Always (re)written so a changed hash propagates.

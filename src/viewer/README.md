@@ -46,7 +46,10 @@ viewport.
 | `data-color-map` | name of an entry in the page's `#latex-color-maps` island to recolour this block with (see Theming below); omitted = TeX/tikz colours render as-is |
 | `data-display-min-space` | Minimum space (pt) kept between two pieces of a display – an align's columns, or an equation and its number – as the measure decreases, before the display freezes and scrolls (default `10`; `0` permits zero). A display's *outer* space (centring, margin) is not covered by this and always closes to zero first |
 | `data-display-overflow-tolerance` | Tiny horizontal overhang ignored before adding a display scrollbar (default `2` CSS px) |
-| `data-line-penalty`, `data-adj-demerits`, `data-double-hyphen-demerits`, `data-pretolerance`, `data-tolerance`, `data-tolerance2`, `data-emergency-tolerance`, `data-last-line-min`, `data-last-line-penalty`, `data-max-expand`, `data-max-shrink`, `data-min-gap`, `data-pad`, `data-protrusion`, `data-expansion` | Knuth–Plass knobs (sensible defaults if omitted) |
+| `data-line-penalty`, `data-adj-demerits`, `data-double-hyphen-demerits`, `data-final-hyphen-demerits`, `data-pretolerance`, `data-tolerance`, `data-min-gap`, `data-pad`, `data-protrusion`, `data-expansion` | Knuth–Plass knobs; the defaults are LaTeX's, and the built-in breaker then breaks as LuaTeX does, protruding and expanding by the document's own microtype settings |
+| `data-tex-final-pass` | How a paragraph is broken when nothing fits `data-tolerance`. By default the viewer runs TeX's final pass, and keeps its breaks unless they hold an overfull line (a line that runs past the right edge). Then it tries its gentler fallbacks – `data-tolerance2`, then `data-emergency-tolerance`, which leave a loose line instead – and uses TeX's breaks only if those find nothing. `strict` always keeps TeX's breaks, overfull lines included (to compare with TeX); `false` skips the final pass and goes straight to the fallbacks, then any line |
+| `data-last-line-min`, `data-last-line-penalty` | Not TeX: a last line shorter than this fraction of the measure costs this many demerits (default `0`, off) |
+| `data-max-expand`, `data-max-shrink` | Font expansion for an external breaker's lines that report none of their own |
 
 ## Fonts
 
@@ -67,8 +70,12 @@ A block refers to a font by its *original* name. If the page ships a font map �
 an optional `<script id="latex-font-map" type="application/json">` island of
 `{ "original.otf": "served.otf" }` – the viewer fetches from the served name
 instead. The pipeline uses this to serve a **modified** font (one whose cmap it
-patched) under a renamed, content-hashed file, leaving unmodified fonts verbatim.
-Without the island, the original name is used as-is.
+patched, or a Type 1 font it converted) under a renamed, content-hashed file,
+leaving unmodified fonts verbatim. A modified font is also cut down to the
+characters the site uses: no other site fetches that file, so it need hold
+nothing more. An unmodified one is served whole, so a browser that has it
+cached from another site can use it. Without the island, the original name is
+used as-is.
 
 If a font file cannot be downloaded, the block still lays out (the metrics
 travel with it) but draws in a stand-in face, and the symbol fonts of

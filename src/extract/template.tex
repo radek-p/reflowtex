@@ -347,6 +347,21 @@
       \reflowtex@linkurl{#1}{#2}%
     \endgroup
   \fi}
+% A destination with no scheme – \href{testmath/}{…}, \href{../book/#ch2}{…} –
+% is a relative address on a web page, but hyperref takes it for a local file
+% and turns it into a PDF path (testmath/.pdf). Hooked at \@hyper@linkfile,
+% which still has the address as written (#4) and the anchor after its # (#3).
+\def\reflowtex@newhyperlinkfile file:#1\\#2#3#4{%
+  \ifnum\attribute909>0
+    \reflowtex@hyperlinkfile file:#1\\{#2}{#3}{#4}%
+  \else
+    \global\advance\reflowtexLinkCount by 1
+    \directlua{Serializer.note_link_file(\the\reflowtexLinkCount,
+      "\luaescapestring{#4}", "\luaescapestring{#3}")}%
+    \begingroup\attribute909=\reflowtexLinkCount\relax
+      \reflowtex@hyperlinkfile file:#1\\{#2}{#3}{#4}%
+    \endgroup
+  \fi}
 % Record and place the marker *before* delegating: packages that layer on \label
 % – cleveref, knowledge – scan ahead from it for an optional argument, and
 % anything left after the delegated call can be swallowed by that lookahead.
@@ -377,6 +392,8 @@
   \@ifundefined{Cref}{}{\let\reflowtex@Cref\Cref \let\Cref\reflowtex@newCref}%
   \@ifundefined{hyper@linkurl}{}{\let\reflowtex@linkurl\hyper@linkurl
                                  \let\hyper@linkurl\reflowtex@newlinkurl}%
+  \@ifundefined{@hyper@linkfile}{}{\let\reflowtex@hyperlinkfile\@hyper@linkfile
+                                   \let\@hyper@linkfile\reflowtex@newhyperlinkfile}%
   \let\reflowtex@label\label \let\label\reflowtex@newlabel@
   % A \label inside a display never reaches \label: amsmath swaps in
   % \label@in@display, which only stores the name and replays it later through

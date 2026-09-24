@@ -239,6 +239,12 @@ end
 function Serializer.note_link_url(id, url)
     link_labels[id] = { url = tostring(url) }
 end
+-- A relative address (\href without a scheme, which hyperref would make a
+-- file link): kept as written, with its anchor, for the page to resolve.
+function Serializer.note_link_file(id, file, name)
+    file, name = tostring(file), tostring(name or "")
+    link_labels[id] = { url = (name ~= "") and (file .. "#" .. name) or file }
+end
 -- Not a destination but a control (\webaction in reflowtex.sty): the
 -- glyphs trigger `action` in the page instead of navigating.
 function Serializer.note_link_action(id, action)

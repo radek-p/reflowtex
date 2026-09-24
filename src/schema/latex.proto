@@ -293,6 +293,14 @@ message ContentItem {
   // theorem's or list's \topsep) while the below skip was \lastskip: the
   // space below is the larger of the skip and this
   optional int32 display_after_min     = 28;
+  // A display TeX set another way at the document's width than at wider
+  // ones (amsmath moved its tag, or had no room to centre the body): from
+  // display_wide_from (sp of \textwidth) on, the viewer draws display_wide
+  // instead – that wider compilation's item, its *_rate fields anchored at
+  // display_wide_width rather than at Document.source_width.
+  optional ContentItem display_wide       = 30;
+  optional int32       display_wide_from  = 31;
+  optional int32       display_wide_width = 32;
 
   // anchorpoint: 1-based index into Document.anchors.
   optional uint32 anchor = 12;

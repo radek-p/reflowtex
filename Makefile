@@ -107,7 +107,7 @@ vendor-protobuf:
 	@tmp=$$(mktemp -d); \
 	npm pack protobufjs@$(PROTOBUFJS_VERSION) --pack-destination $$tmp --silent >/dev/null && \
 	tar -xzf $$tmp/protobufjs-$(PROTOBUFJS_VERSION).tgz -C $$tmp && \
-	cp $$tmp/package/dist/protobuf.min.js src/viewer/protobuf.min.js && \
+	sed '/^\/\/# sourceMappingURL=/d' $$tmp/package/dist/protobuf.min.js > src/viewer/protobuf.min.js && \
 	rm -rf $$tmp && \
 	echo "vendored src/viewer/protobuf.min.js from protobufjs@$(PROTOBUFJS_VERSION)"
 

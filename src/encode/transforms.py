@@ -29,9 +29,15 @@ def _all_content_items(data: dict):
     bodies, \\begin{webstream} blocks). Streams nest by reference – a
     stream item names another stream – so one flat pass over the streams table
     reaches every item exactly once."""
-    yield from data.get('content', [])
+    def with_wide(items):
+        for item in items:
+            yield item
+            # a display's wide form (display_model.wide_variants) is drawn too
+            if item.get('display_wide'):
+                yield item['display_wide']
+    yield from with_wide(data.get('content', []))
     for stream in data.get('streams', []):
-        yield from stream.get('content', [])
+        yield from with_wide(stream.get('content', []))
 
 
 def _remap_font_codes(data: dict, remap: dict) -> None:

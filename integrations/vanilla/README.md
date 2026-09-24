@@ -43,7 +43,7 @@ site/
 ├── index.html          the page (schema + all blocks embedded)
 ├── latex-viewer.js     the renderer
 ├── protobuf.min.js     its only dependency
-├── fonts/              provisioned + cmap-patched OTF files
+├── fonts/              provisioned OTF files (modified ones cmap-patched + subset)
 └── _build/             per-snippet build artefacts (inspect on failure)
 ```
 

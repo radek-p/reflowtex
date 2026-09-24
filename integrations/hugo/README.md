@@ -159,7 +159,7 @@ matter keeps it out of the site) replaces what would otherwise need a whole
 | `data/latex_schema.json` | the schema the browser parses | optional |
 | `data/latex_files.json` | `file="…"` → block-hash map for the shortcode | optional |
 | `data/latex_color_maps.json` | `name` → parsed colour-map JSON, for every `color-map="…"` in use | optional |
-| `static/fonts/*.otf` | provisioned + cmap-patched fonts | optional |
+| `static/fonts/*.otf` | provisioned fonts; the ones Reflow TeX modified are cmap-patched and subset to the site's characters (`--no-font-subset` serves them whole) | optional |
 | `static/{latex-viewer.js,protobuf.min.js}` | viewer scripts | no |
 | `.reflowtex-build/<hash>/` | per-block LaTeX build artefacts | no |
 

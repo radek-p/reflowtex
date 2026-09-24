@@ -242,18 +242,18 @@ class Pipeline:
         if doc:
             class_line, doc_preamble, content = doc
             template_text, n = TEMPLATE_CLASS_RE.subn(lambda m: class_line, template_text, count=1)
-            if not n:
-                sys.exit(f'ERROR: template {self.template} has no \\documentclass line '
-                         f'for the complete document {label} to replace')
-            preamble = doc_preamble + ('\n' + preamble if preamble else '')
+            # A template without a class line of its own (examples/testmath's)
+            # takes the class as part of the preamble.
+            preamble = ('' if n else class_line + '\n') + doc_preamble + ('\n' + preamble if preamble else '')
         else:
             # A preamble may bring its own class (\documentclass{book} for a
             # book's chapters): it replaces the template's, as a complete
             # document's does.
             m = _DOCCLASS_RE.search(preamble)
             if m:
-                template_text = TEMPLATE_CLASS_RE.sub(lambda _: m.group(0).strip(), template_text, count=1)
-                preamble = preamble[:m.start()] + preamble[m.end():]
+                template_text, n = TEMPLATE_CLASS_RE.subn(lambda _: m.group(0).strip(), template_text, count=1)
+                if n:       # a template without a class line keeps it in the preamble
+                    preamble = preamble[:m.start()] + preamble[m.end():]
 
         def write_input(width_extra_sp: int) -> None:
             tex = (template_text
@@ -311,9 +311,21 @@ class Pipeline:
                         # The document's own width fell outside the affine law;
                         # it is still the width the page must match exactly.
                         data, fixed = display_model.anchor_model(first_sample, samples[-2], samples[-1])
+                        # Displays set another way at the document's width get
+                        # the wider regime as a second form, from the width TeX
+                        # switches at – found by compiling in between.
+                        x0 = int(first_sample['source_width'])
+
+                        def probe(w: int) -> dict:
+                            write_input(w - x0)
+                            self._run_lualatex(build_dir, label, 1)
+                            return json.loads((build_dir / 'output.json').read_text())
+
+                        n_wide, n_probes = display_model.wide_variants(data, samples[-2], samples[-1], probe)
                         print(f'  {label}: display model stable at {widths}, anchored at the document\'s '
                               f'{first_sample["source_width"] / 65536:g} pt'
-                              + (f'; {fixed} display(s) of a different shape there stay fixed' if fixed else ''))
+                              + (f'; {n_wide} display(s) set another way there get a wide form '
+                                 f'({n_probes} more compilation(s) to find where)' if n_wide else ''))
                     (build_dir / 'output.json').write_text(json.dumps(data))
                     break
                 rejected = samples[-3]['source_width'] / 65536
@@ -436,15 +448,34 @@ class Pipeline:
                 results[k] = blob
         return results
 
-    def patch_fonts(self, output_jsons=None) -> None:
-        """Add missing cmap entries to the served fonts. Call once after all
-        snippets are compiled. Without an explicit list it scans build_root."""
+    def patch_fonts(self, output_jsons=None, subset: bool = True) -> None:
+        """Add missing cmap entries to the served fonts, and cut the ones this
+        pipeline modified down to the characters the blocks use (unless
+        `subset` is false; see Fonts.subset). Call once after all snippets are
+        compiled – the subsets hold what all of them draw. Without an explicit
+        list it scans build_root."""
+        import encode_pb
+        import latex_pb2
         if output_jsons is None:
             output_jsons = []
             for d in sorted(self.build_root.glob('*/output.json')):
                 output_jsons.append(json.loads(d.read_text()))
+            # the blocks as encoded – what the viewer draws (see drawn_codepoints)
+            docs = []
+            for p in sorted(self.build_root.glob('*/nodelist.pb')):
+                doc = latex_pb2.Document()
+                doc.ParseFromString(p.read_bytes())
+                docs.append(doc)
+        else:
+            docs = [encode_pb.build_document(d) for d in output_jsons]
         reqs = self._fonts_mod.collect_glyph_requirements(output_jsons)
+        drawn, slot_fonts = self._fonts_mod.drawn_codepoints(docs)
         self.fonts.patch(reqs)
+        if subset:
+            self.fonts.subset(drawn, whole=slot_fonts)
+        # every code point the blocks reach a font by must be in the file served
+        for fname, cps in drawn.items():
+            reqs.setdefault(fname, {}).update({cp: None for cp in cps if cp not in reqs.get(fname, {})})
         self.fonts.verify(reqs)
 
     def font_map(self) -> dict[str, str]:

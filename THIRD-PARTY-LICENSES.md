@@ -79,7 +79,8 @@ verbatim under its original name, and serves any font it **modifies** (the cmap
 patching some glyphs need) under a *renamed*, content-hashed file — e.g.
 `NewCMMath-Regular.reflowtex-1a2b3c4d.otf`, with a marker added to the font's
 internal name records too. So a modified font never masquerades as the upstream
-original, as the GUST/OFL licenses ask. You still need to carry each font's own
+original, as the GUST/OFL licenses ask. A modified font is also subset to the
+characters the site uses; its name records, and so that marker, are kept. You still need to carry each font's own
 license/notice with a deployed site; which fonts appear depends on your documents.
 The defaults in `src/extract/template.tex` are:
 

@@ -47,11 +47,12 @@ const DEFAULT_ALIGN                  = 'justify'; // 'justify' | 'left' | 'right
 const DEFAULT_LINE_PENALTY           = 10;
 const DEFAULT_ADJ_DEMERITS           = 10000;
 const DEFAULT_DOUBLE_HYPHEN_DEMERITS = 10000;
+const DEFAULT_FINAL_HYPHEN_DEMERITS  = 5000;
 const DEFAULT_PRETOLERANCE           = 100;
 const DEFAULT_TOLERANCE              = 200;
 const DEFAULT_TOLERANCE_2            = 500;
 const DEFAULT_EMERGENCY_TOLERANCE    = 10000;
-const DEFAULT_LAST_LINE_MIN          = 0.25;
+const DEFAULT_LAST_LINE_MIN          = 0;      // off: TeX has no such rule
 const DEFAULT_LAST_LINE_PENALTY      = 100000;
 const DEFAULT_MAX_EXPAND             = 0.02;
 const DEFAULT_MAX_SHRINK             = 0.02;
@@ -204,6 +205,7 @@ function paramsFromEl(el) {
         linePenalty:          num('linePenalty',          DEFAULT_LINE_PENALTY),
         adjDemerits:          num('adjDemerits',          DEFAULT_ADJ_DEMERITS),
         doubleHyphenDemerits: num('doubleHyphenDemerits', DEFAULT_DOUBLE_HYPHEN_DEMERITS),
+        finalHyphenDemerits:  num('finalHyphenDemerits',  DEFAULT_FINAL_HYPHEN_DEMERITS),
         pretolerance:         num('pretolerance',         DEFAULT_PRETOLERANCE),
         tolerance:            num('tolerance',            DEFAULT_TOLERANCE),
         tolerance2:           num('tolerance2',           DEFAULT_TOLERANCE_2),
@@ -219,6 +221,9 @@ function paramsFromEl(el) {
                                num('displayOverflowTolerance', DEFAULT_DISPLAY_OVERFLOW_TOLERANCE),
         useProtrusion:        bool('protrusion',          DEFAULT_USE_PROTRUSION),
         useExpansion:         bool('expansion',           DEFAULT_USE_EXPANSION),
+        // true: TeX's final pass unless it sets an overfull line; 'strict':
+        // TeX's, overfull lines too; false: the viewer's fallbacks (see kpBreak)
+        texFinalPass:         'texFinalPass' in d ? (d.texFinalPass === 'strict' ? 'strict' : d.texFinalPass !== 'false') : true,
         align:                alignFromEl(el),
     };
 }
@@ -787,23 +792,185 @@ function hlistGlueRatio(box) {
 
 // ── Protrusion ────────────────────────────────────────────────────────────────
 
-function findLastGlyph(nodes, idx)  { for(let k=idx-1;k>=0;k--){ const n=nodes[k]; if(n.type==='kern'||n.type==='penalty') continue; return n.type==='glyph'?n:null; } return null; }
-function findFirstGlyph(nodes, idx) { for(let k=idx;k<nodes.length;k++){ const n=nodes[k]; if(n.type==='kern'||n.type==='penalty'||n.type==='local_par') continue; return n.type==='glyph'?n:null; } return null; }
-function rightProtrusionOf(g) { return g ? (RIGHT_PROTRUSION[g.char]||0)*gW(g) : 0; }
-function leftProtrusionOf(g)  { return g ? (LEFT_PROTRUSION [g.char]||0)*gW(g) : 0; }
+// What LuaTeX steps over looking for the character at a line's edge
+// (cp_skipable): penalties, empty glue, a font kern or an empty one, a math
+// node without surround, an empty discretionary. An italic correction or an
+// explicit kern stops the search, so the character before it does not hang.
+function protSkipable(n) {
+    switch (n.type) {
+        case 'penalty': case 'local_par': return true;
+        case 'glue':    return !n.width && !n.stretch && !n.shrink;
+        case 'kern':    return !n.kern || (n.subtype || 0) === 0;
+        case 'math':    return !n.surround;
+        case 'disc':    return !(n.pre || []).length && !(n.post || []).length && !(n.replace || []).length;
+        default:        return false;
+    }
+}
+// The character at the right edge of nodes[0..idx), as LuaTeX's
+// find_protchar_right finds it: stepping back over what protSkipable allows,
+// into a box to its last character, and over a box with nothing in it but
+// such things (an anchor, an empty \hbox).
+function findLastGlyph(nodes, idx) {
+    for (let k=idx-1;k>=0;k--) {
+        const n=nodes[k];
+        if (protSkipable(n)) continue;
+        if (n.type==='hlist') {
+            const kids=n.children||[];
+            if (kids.every(protSkipable)) continue;
+            return findLastGlyph(kids, kids.length);
+        }
+        return n.type==='glyph'?n:null;
+    }
+    return null;
+}
+// The character at the left edge from nodes[idx], as find_protchar_left
+// finds it: past empty boxes, then over what protSkipable allows, into a box
+// to its first character – but a box with nothing to protrude ends the
+// search there.
+function findFirstGlyph(nodes, idx) {
+    let k=idx;
+    const emptyBox = n => n.type==='hlist' && !(n.children||[]).length && !n.width && !n.height && !n.depth;
+    while (k<nodes.length-1 && emptyBox(nodes[k])) k++;
+    for (;k<nodes.length;k++) {
+        const n=nodes[k];
+        if (protSkipable(n)) continue;
+        if (n.type==='hlist' && (n.children||[]).length) return findFirstGlyph(n.children, 0);
+        return n.type==='glyph'?n:null;
+    }
+    return null;
+}
+
+// TeX's round_xn_over_d: x·n/d rounded half away from zero, in integers.
+function roundXnOverD(x, n, d) {
+    const s = x < 0 ? -1 : 1;
+    return s * Math.floor((Math.abs(x) * n + Math.floor(d / 2)) / d);
+}
+
+// How far a character hangs into the margin. A bundle that records the
+// fonts' quads carries what TeX had: the character's \lpcode/\rpcode in
+// thousandths of its font's quad (LuaTeX's char_pw), and only when the
+// paragraph was set with \protrudechars on – so a document without microtype
+// does not protrude at all, just as in its PDF. An older bundle without that
+// information keeps the viewer's own table of hanging punctuation.
+function protrusionOf(fontInfo, para, g, left) {
+    if (!g) return 0;
+    const fi = fontInfo && fontInfo[String(g.font)];
+    if (fi && fi.quad > 0) {
+        if (!(para && para.protrude_chars > 0)) return 0;
+        const c = fi.codes && fi.codes.get(g.char);
+        const code = c ? (left ? c.lp : c.rp) || 0 : 0;
+        return code ? roundXnOverD(fi.quad, code, 1000) : 0;
+    }
+    return ((left ? LEFT_PROTRUSION : RIGHT_PROTRUSION)[g.char] || 0) * gW(g);
+}
+
+// ── Font expansion in the breaker ────────────────────────────────────────────
+
+// LuaTeX's char_stretch/char_shrink and kern_stretch/kern_shrink: how much a
+// glyph, or a font kern between two glyphs, widens (shrink: narrows) at its
+// font's full \expandglyphsinfont limit, in sp, with TeX's rounding.
+function efCodeOf(fi, n) {
+    const c = fi && fi.codes && fi.codes.get(n.char);
+    return c && c.ef !== undefined ? c.ef : 1000;
+}
+function expandLimit(fontInfo, n, shrink) {
+    const fi = fontInfo && fontInfo[String(n.font)];
+    return fi && fi.expand ? (shrink ? fi.expand.shrink : fi.expand.stretch) || 0 : 0;
+}
+function fontStretchSp(fontInfo, ns, i, shrink) {
+    const n = ns[i];
+    if (n.type === 'glyph') {
+        const m = expandLimit(fontInfo, n, shrink);
+        if (!(m > 0) || n.text !== undefined) return 0;
+        const ef = efCodeOf(fontInfo[String(n.font)], n);
+        if (!(ef > 0)) return 0;
+        const w = gW(n);
+        const dw = shrink ? w - roundXnOverD(w, 1000 - m, 1000) : roundXnOverD(w, 1000 + m, 1000) - w;
+        return dw > 0 ? roundXnOverD(dw, ef, 1000) : 0;
+    }
+    if (n.type === 'kern' && (n.subtype || 0) === 0 && n.kern) {
+        const l = ns[i - 1], r = ns[i + 1];
+        if (!l || !r || l.type !== 'glyph' || r.type !== 'glyph') return 0;
+        const m = Math.trunc((expandLimit(fontInfo, l, shrink) + expandLimit(fontInfo, r, shrink)) / 2);
+        if (!m) return 0;
+        const w = n.kern, d = roundXnOverD(w, shrink ? 1000 - m : 1000 + m, 1000);
+        const e = Math.trunc((efCodeOf(fontInfo[String(l.font)], l) + efCodeOf(fontInfo[String(r.font)], r)) / 2);
+        const x = shrink ? w - d : d - w;
+        return e === 1000 ? x : roundXnOverD(x, e, 1000);
+    }
+    return 0;
+}
+
+// \expandglyphsinfont's limits and step for a paragraph (LuaTeX insists they
+// are the same for every font in it), or null when nothing in it expands.
+function paragraphExpansion(fontInfo, nodes) {
+    const walk = ns => {
+        for (const n of ns || []) {
+            if (n.type === 'glyph') {
+                const fi = fontInfo && fontInfo[String(n.font)];
+                if (fi && fi.expand && fi.expand.step > 0) return fi.expand;
+            } else if (n.type === 'disc') {
+                const e = walk(n.pre) || walk(n.post) || walk(n.replace);
+                if (e) return e;
+            }
+        }
+        return null;
+    };
+    return walk(nodes);
+}
 
 // ── Knuth-Plass: break candidates ────────────────────────────────────────────
 
-// cumGlyphW and the disc *GlyphW fields hold *expandable* width
-// (expandableSp), which lineMetrics turns into the line's expansion stretch.
-function buildBreakCandidates(nodes, fontInfo) {
-    const bcs = [{
-        kind:'start', nodeIdx:-1, penalty:0,
-        preW:0, postW:0, replaceW:0, preGlyphW:0, postGlyphW:0, replaceGlyphW:0,
-        spaceW:0, spaceS:0, spaceZ:0, cumW:0, cumS:0, cumZ:0, cumGlyphW:0, cumFill:0,
-        rightProtrusion:0, leftProtrusion:leftProtrusionOf(findFirstGlyph(nodes,0)),
-    }];
-    let cumW=0, cumS=0, cumZ=0, cumGlyphW=0, cumFill=0;
+// Nodes after which glue is a legal breakpoint (TeX's precedes_break, plus
+// the viewer's own drawn-box kinds).
+const PRECEDES_BREAK = new Set(['glyph', 'hlist', 'vlist', 'rule', 'disc', 'wdisc', 'picture', 'widget', 'transform']);
+
+// Every candidate carries the running totals up to its node: natural width
+// (cumW), finite stretch and shrink (cumS, cumZ), infinite fills (cumFill),
+// *expandable* width (cumGlyphW, per unit of expansion as the renderer
+// applies it – see expandableSp) and TeX's font stretch and shrink at the
+// full expansion limit (cumFS, cumFZ); a discretionary has the same four
+// widths for each of its three lists. `lead*` is what a break there discards
+// at the start of the next line, `trail*` what it drops from the end of this
+// one (TeX breaks *at* an explicit kern or a math node before glue, so they
+// leave with the glue).
+function buildBreakCandidates(nodes, fontInfo, para) {
+    para = para || {};
+    const adjust = para.adjust_spacing || 0;
+    const fsOf = (ns, i, shrink) => adjust > 0 ? fontStretchSp(fontInfo, ns, i, shrink) : 0;
+    const part = ns => {
+        const r = { w: 0, g: 0, fs: 0, fz: 0 };
+        for (let i = 0; i < (ns || []).length; i++) {
+            r.w += nodeWidthSp(ns[i]); r.g += expandableSp(fontInfo, ns, i);
+            r.fs += fsOf(ns, i, false); r.fz += fsOf(ns, i, true);
+        }
+        return r;
+    };
+    const prot = (g, left) => protrusionOf(fontInfo, para, g, left);
+    const NONE = { w: 0, g: 0, fs: 0, fz: 0 };
+    let cumW=0, cumS=0, cumZ=0, cumGlyphW=0, cumFS=0, cumFZ=0, cumFill=0;
+    const cand = (kind, i, penalty, extra) => ({
+        kind, nodeIdx: i, penalty, pre: NONE, post: NONE, replace: NONE,
+        leadW: 0, leadS: 0, leadZ: 0, trailW: 0, trailN: 0,
+        cumW, cumS, cumZ, cumGlyphW, cumFS, cumFZ, cumFill,
+        rightProtrusion: 0, leftProtrusion: 0, ...extra,
+    });
+    // What a break at node i discards after itself: glue, kerns and penalties
+    // up to the next thing that is kept.
+    const lead = from => {
+        let W = 0, S = 0, Z = 0, k = from;
+        for (; k < nodes.length; k++) {
+            const m = nodes[k];
+            if (m.type === 'kern') W += m.kern;
+            else if (m.type === 'glue' && m.subtype !== 15) { W += m.width; S += !m.stretch_order ? m.stretch : 0; Z += !m.shrink_order ? m.shrink : 0; }
+            else if (m.type !== 'penalty') break;
+        }
+        return { leadW: W, leadS: S, leadZ: Z, leftProtrusion: prot(findFirstGlyph(nodes, k), true) };
+    };
+    const bcs = [cand('start', -1, 0, { leftProtrusion: prot(findFirstGlyph(nodes, 0), true) })];
+    bcs.expansion = adjust > 0 ? paragraphExpansion(fontInfo, nodes) : null;
+    bcs.adjustSpacing = bcs.expansion ? adjust : 0;
+    let inMath = false;
 
     for (let i=0; i<nodes.length; i++) {
         const n = nodes[i];
@@ -815,9 +982,12 @@ function buildBreakCandidates(nodes, fontInfo) {
         // stretch>0, as before, gave a centred paragraph (a title, \begin{center})
         // no end candidate at all: kpPass then returned nothing and the greedy
         // fallback emitted no final line, so the whole paragraph vanished whenever
-        // it happened to fit on one line. Key on the subtype instead.
+        // it happened to fit on one line. Key on the subtype instead. The last
+        // line's right protrusion counts only when the line is packed: the
+        // breaker (ext_try_break) has no character to look from at the end.
         if (n.type==='glue' && n.subtype===15) {
-            bcs.push({ kind:'end', nodeIdx:i, penalty:-10000, preW:0,postW:0,replaceW:0, preGlyphW:0,postGlyphW:0,replaceGlyphW:0, spaceW:0,spaceS:0,spaceZ:0, cumW,cumS,cumZ,cumGlyphW,cumFill, rightProtrusion:rightProtrusionOf(findLastGlyph(nodes,i)), leftProtrusion:0 });
+            // (the breaker leaves it out, but the line is packed with it)
+            bcs.push(cand('end', i, -10000, { packRightProtrusion: prot(findLastGlyph(nodes, i), false) }));
             break;
         }
         // A mid-paragraph infinite fill (the \hfil that \\ inserts before its
@@ -829,62 +999,75 @@ function buildBreakCandidates(nodes, fontInfo) {
             cumW+=n.width; cumFill+=1;
             continue;
         }
-        if (n.type==='glue' && n.subtype===13) {
-            bcs.push({ kind:'space', nodeIdx:i, penalty:0, preW:0,postW:0,replaceW:0, preGlyphW:0,postGlyphW:0,replaceGlyphW:0, spaceW:n.width,spaceS:n.stretch,spaceZ:n.shrink, cumW,cumS,cumZ,cumGlyphW,cumFill, rightProtrusion:rightProtrusionOf(findLastGlyph(nodes,i)), leftProtrusion:leftProtrusionOf(findFirstGlyph(nodes,i+1)) });
+        if (n.type==='glue') {
+            // Glue is a legal breakpoint outside maths when what precedes it is
+            // kept at a break (a character, a box, a discretionary) or is a font
+            // kern – so never after a penalty: ~ is \nobreak\ . After an explicit
+            // kern (an italic correction, \,) or a math node TeX breaks at that
+            // node instead, which drops it from the end of the line.
+            const prev = nodes[i-1];
+            let ok = false, trailN = 0;
+            if (!inMath && prev) {
+                if (PRECEDES_BREAK.has(prev.type)) ok = true;
+                else if (prev.type==='kern' && ((prev.subtype||0)===0 || prev.subtype===2)) ok = true;
+                else if ((prev.type==='kern' && (prev.subtype===1 || prev.subtype===3)) || prev.type==='math') { ok = true; trailN = 1; }
+            }
+            if (ok) {
+                const trailW = trailN ? nodeWidthSp(prev) : 0;
+                bcs.push(cand('space', i, 0, { trailW, trailN,
+                    rightProtrusion: prot(findLastGlyph(nodes, i - trailN), false), ...lead(i) }));
+            }
             cumW+=n.width; cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0;
         } else if (n.type==='disc') {
-            const preW=sumWidthSp(n.pre),postW=sumWidthSp(n.post),replaceW=sumWidthSp(n.replace);
-            const preGlyphW=sumExpandableSp(fontInfo,n.pre),postGlyphW=sumExpandableSp(fontInfo,n.post),replaceGlyphW=sumExpandableSp(fontInfo,n.replace);
-            const preGs=n.pre.filter(x=>x.type==='glyph'), postGs=n.post.filter(x=>x.type==='glyph');
-            bcs.push({ kind:'disc', nodeIdx:i, penalty:n.penalty??50, preW,postW,replaceW, preGlyphW,postGlyphW,replaceGlyphW, spaceW:0,spaceS:0,spaceZ:0, cumW,cumS,cumZ,cumGlyphW,cumFill, rightProtrusion:rightProtrusionOf(preGs.length>0?preGs[preGs.length-1]:findLastGlyph(nodes,i)), leftProtrusion:leftProtrusionOf(postGs.length>0?postGs[0]:findFirstGlyph(nodes,i+1)) });
-            cumW+=replaceW; cumGlyphW+=replaceGlyphW;
+            const pre=part(n.pre), post=part(n.post), replace=part(n.replace);
+            const preGs=(n.pre||[]).filter(x=>x.type==='glyph'), postGs=(n.post||[]).filter(x=>x.type==='glyph');
+            // LuaTeX subtypes 0–2 (\discretionary, \-, an explicit hyphen) were in
+            // the source; 3 and up are its own hyphenation.
+            bcs.push(cand('disc', i, n.penalty??50, { pre, post, replace, explicit: (n.subtype||0) <= 2,
+                rightProtrusion: prot(preGs.length>0?preGs[preGs.length-1]:findLastGlyph(nodes,i), false),
+                leftProtrusion: prot(postGs.length>0?postGs[0]:findFirstGlyph(nodes,i+1), true) }));
+            cumW+=replace.w; cumGlyphW+=replace.g; cumFS+=replace.fs; cumFZ+=replace.fz;
         } else if (n.type==='wdisc') {
             // A widget that may be split (see Widgets): one candidate per split,
             // each carrying its own two parts – a discretionary with several
             // pre/post pairs over the one unbroken replacement.
-            const replaceW=sumWidthSp(n.replace);
+            const replace={ ...NONE, w: sumWidthSp(n.replace) };
             for (const o of n.options) {
-                bcs.push({ kind:'disc', nodeIdx:i, penalty:o.penalty, pre:o.pre, post:o.post,
-                           preW:sumWidthSp(o.pre), postW:sumWidthSp(o.post), replaceW,
-                           preGlyphW:0, postGlyphW:0, replaceGlyphW:0, spaceW:0, spaceS:0, spaceZ:0,
-                           cumW,cumS,cumZ,cumGlyphW,cumFill, rightProtrusion:0, leftProtrusion:0 });
+                bcs.push(cand('disc', i, o.penalty, { preNodes: o.pre, postNodes: o.post,
+                    pre: { ...NONE, w: sumWidthSp(o.pre) }, post: { ...NONE, w: sumWidthSp(o.post) }, replace }));
             }
-            cumW+=replaceW;
+            cumW+=replace.w;
         } else if (n.type==='penalty' && n.penalty<10000) {
-            let lgW=0,lgS=0,lgZ=0,firstAfterLG=i+1;
-            for (let k=i+1;k<nodes.length;k++) {
-                const m=nodes[k];
-                if (m.type==='kern') { lgW+=m.kern; firstAfterLG=k+1; }
-                else if (m.type==='glue') { lgW+=m.width; lgS+=!m.stretch_order?m.stretch:0; lgZ+=!m.shrink_order?m.shrink:0; firstAfterLG=k+1; }
-                else break;
-            }
-            bcs.push({ kind:'penalty', nodeIdx:i, penalty:n.penalty, preW:0,postW:0,replaceW:0, preGlyphW:0,postGlyphW:0,replaceGlyphW:0, spaceW:0,spaceS:0,spaceZ:0, cumW,cumS,cumZ,cumGlyphW,cumFill, leadingGlueW:lgW,leadingGlueS:lgS,leadingGlueZ:lgZ, rightProtrusion:rightProtrusionOf(findLastGlyph(nodes,i)), leftProtrusion:leftProtrusionOf(findFirstGlyph(nodes,firstAfterLG)) });
+            bcs.push(cand('penalty', i, n.penalty, { rightProtrusion: prot(findLastGlyph(nodes,i), false), ...lead(i+1) }));
         } else {
+            if (n.type==='math') inMath = (n.subtype||0) === 0;
             cumW+=nodeWidthSp(n);
             cumGlyphW+=expandableSp(fontInfo,nodes,i);
-            if (n.type==='glue') { cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0; }
+            cumFS+=fsOf(nodes,i,false); cumFZ+=fsOf(nodes,i,true);
         }
     }
     return bcs;
 }
 
-function lineStartW(bc)      { if(bc.kind==='start') return 0; if(bc.kind==='space') return bc.cumW+bc.spaceW;   if(bc.kind==='disc') return bc.cumW+bc.replaceW-bc.postW; return bc.cumW+(bc.leadingGlueW||0); }
-function lineEndW(bc)        { if(bc.kind==='disc')  return bc.cumW+bc.preW; return bc.cumW; }
-function lineStartS(bc)      { if(bc.kind==='start') return 0; if(bc.kind==='space') return bc.cumS+bc.spaceS;   if(bc.kind==='penalty') return bc.cumS+(bc.leadingGlueS||0); return bc.cumS; }
-function lineStartZ(bc)      { if(bc.kind==='start') return 0; if(bc.kind==='space') return bc.cumZ+bc.spaceZ;   if(bc.kind==='penalty') return bc.cumZ+(bc.leadingGlueZ||0); return bc.cumZ; }
-function lineStartGlyphW(bc) { if(bc.kind==='start') return 0; if(bc.kind==='space') return bc.cumGlyphW;        if(bc.kind==='disc')    return bc.cumGlyphW+bc.replaceGlyphW-bc.postGlyphW; return bc.cumGlyphW; }
-function lineEndGlyphW(bc)   { if(bc.kind==='disc')  return bc.cumGlyphW+bc.preGlyphW; return bc.cumGlyphW; }
-
-function lineMetrics(bcA, bcB, p) {
-    const protrude = p.useProtrusion ? bcA.leftProtrusion + bcB.rightProtrusion : 0;
-    const w  = lineEndW(bcB) - lineStartW(bcA) - protrude;
-    const s0 = bcB.cumS - lineStartS(bcA);
-    const z0 = bcB.cumZ - lineStartZ(bcA);
-    if (p.useExpansion) {
-        const gW = lineEndGlyphW(bcB) - lineStartGlyphW(bcA);
-        return { w, s: s0+gW*p.maxExpand, z: z0+gW*p.maxShrink };
-    }
-    return { w, s:s0, z:z0 };
+// A line from candidate a to candidate b, as TeX measures it: natural width
+// (w, less the protrusion at both ends), finite glue stretch and shrink
+// (s, z), font stretch and shrink (fs, fz) and the expandable width the
+// renderer's expansion factor acts on (g).
+function lineMetrics(a, b, p) {
+    const protrude = p.useProtrusion ? a.leftProtrusion + b.rightProtrusion : 0;
+    // Where the line starts (after the break at a, less what that break
+    // discards) and ends (at b, with a discretionary's pre-break text).
+    const from = (key, lead) => a[key] + (a.kind==='disc' ? a.replace[lead] - a.post[lead] : 0);
+    const upto = (key, part) => b[key] + (b.kind==='disc' ? b.pre[part] : 0);
+    const on = p.useExpansion !== false;
+    return {
+        w:  upto('cumW', 'w') - b.trailW - from('cumW', 'w') - a.leadW - protrude,
+        s:  b.cumS - a.cumS - a.leadS,
+        z:  b.cumZ - a.cumZ - a.leadZ,
+        g:  on ? upto('cumGlyphW', 'g') - from('cumGlyphW', 'g') : 0,
+        fs: on ? upto('cumFS', 'fs') - from('cumFS', 'fs') : 0,
+        fz: on ? upto('cumFZ', 'fz') - from('cumFZ', 'fz') : 0,
+    };
 }
 
 // The emergency pass (threshold 10000) admits every line, and badness is
@@ -901,18 +1084,52 @@ function rawBadness(shortage, total) {
     return Math.min(1e7, 100 * r * r * r);
 }
 
-function badness(shortage, total) {
-    if (shortage===0) return 0; if (total<=0) return 10000;
-    const r=shortage/total; return Math.min(10000, Math.round(100*r*r*r));
+// TeX's badness, in its own integer arithmetic (§108): about 100·(t/s)³, but
+// the rounding decides where a line crosses the 12 and 99 of the fitness
+// classes and the tolerances, so it has to be TeX's.
+function badness(t, s) {
+    t = Math.round(t); s = Math.round(s);
+    if (t <= 0) return 0;
+    if (s <= 0) return 10000;
+    let r;
+    if (t <= 7230584) r = Math.floor(t * 297 / s);
+    else if (s >= 1663497) r = Math.floor(t / Math.floor(s / 297));
+    else r = t;
+    return r > 1290 ? 10000 : Math.floor((r * r * r + 0x20000) / 0x40000);
+}
+
+// LuaTeX lets font expansion take up a line's shortfall before its glue does
+// (ext_try_break): a line its glyphs can absorb entirely is scored as if half
+// an expansion step were left over, and otherwise only what they cannot absorb
+// is weighed against the glue. LuaTeX's shrinking branch comes out with the
+// sign flipped – a line its glyphs can narrow enough counts as a hair short –
+// and so does this one.
+function expansionShortfall(shortfall, m, ex) {
+    if (!ex || shortfall === 0) return shortfall;
+    if (shortfall > 0 && m.fs > 0)
+        return m.fs > shortfall ? Math.trunc(Math.trunc(m.fs / Math.max(1, Math.trunc(ex.stretch / ex.step))) / 2)
+                                : shortfall - m.fs;
+    if (shortfall < 0 && m.fz > 0)
+        return m.fz > -shortfall ? Math.trunc(Math.trunc(m.fz / Math.max(1, Math.trunc(ex.shrink / ex.step))) / 2)
+                                 : shortfall + m.fz;
+    return shortfall;
 }
 
 // ── KP DP (one pass) ─────────────────────────────────────────────────────────
 
-function kpPass(bcs, lineWidthSp, threshold, allowDisc, p) {
+// With `final` the pass is TeX's last one (§851–§855): a start from which a
+// line has become overfull is dropped for good, and when the only start left
+// dies with nothing feasible found yet, its overfull line is taken anyway at
+// no cost (artificial demerits), so the pass always ends with a paragraph –
+// as a PDF shows it, a line sticking out rather than a very loose one.
+function kpPass(bcs, lineWidthSp, threshold, firstPass, p, final) {
     const N=bcs.length;
     const dp=Array.from({length:N},()=>[null,null,null,null]);
-    dp[0][2]={demerits:0,prev_j:-1,prev_fc:-1,ratio:0,hyphenated:false};
+    const alive=final ? dp.map(()=>[true,true,true,true]) : null;
+    dp[0][2]={demerits:0,prev_j:-1,prev_fc:-1,hyphenated:false};
     let minRejectedBadness=null;
+    // Font expansion enters the breaker only under \adjustspacing=2.
+    const ex = bcs.adjustSpacing > 1 ? bcs.expansion : null;
 
     // A forced break (penalty <= -10000, e.g. from \\) is mandatory: no line may
     // span across it. lastForced[j] is the candidate index of the nearest forced
@@ -922,51 +1139,72 @@ function kpPass(bcs, lineWidthSp, threshold, allowDisc, p) {
 
     for (let j=1;j<N;j++) {
         const bcJ=bcs[j];
-        if (!allowDisc&&bcJ.kind==='disc') continue;
+        // TeX's first pass (\pretolerance) tries no hyphenation, but LuaTeX
+        // has hyphenated already and still offers the discretionaries that
+        // were in the source: explicit hyphens and \-.
+        if (firstPass&&bcJ.kind==='disc'&&!bcJ.explicit) continue;
         if (bcJ.penalty>=10000) continue;
+        const isEnd = bcJ.kind==='end';
+        let feasibleAtJ = false;
+        // Is (i, fc) the only start still in play for a line ending at j?
+        const onlyStart = (i, fc) => {
+            for (let k=Math.max(0,lastForced[j]);k<j;k++) for (let f=0;f<4;f++)
+                if (dp[k][f] && alive[k][f] && !(k===i && f===fc)) return false;
+            return true;
+        };
         for (let i=0;i<j;i++) {
             if (i<lastForced[j]) continue;   // line would span a forced break
             // Two candidates at one node (a widget's alternative splits) are
             // one place: a line may not start and end there.
             if (bcs[i].nodeIdx===bcJ.nodeIdx) continue;
+            let m=null;
             for (let fc_i=0;fc_i<4;fc_i++) {
                 const si=dp[i][fc_i]; if(!si) continue;
-                const {w,s,z}=lineMetrics(bcs[i],bcJ,p);
-                // A line carrying an infinite-order fill (\hfil from \\, \hfill)
-                // absorbs positive slack instead of justifying: ratio 0, badness 0.
-                // So does every line of a paragraph that is not justified (p.ragged):
-                // \raggedright, \centering and \raggedleft set \rightskip or
-                // \leftskip to 0pt plus 1fil, so any line that fits costs nothing
-                // and TeX takes the fewest lines, hyphenating only when it must.
-                const hasFill = p.ragged || bcJ.cumFill>bcs[i].cumFill;
-                if (bcJ.kind==='end') {
-                    const slack=lineWidthSp-w; if(slack<0&&(z===0||(-slack/z)>1)) continue;
-                    const ratio=slack<0?slack/z:0, b=ratio<0?badness(-slack,z):0, lp=p.linePenalty+b;
-                    let d=lp*lp;
-                    // Last-line penalty: penalise if last line is shorter than lastLineMin
-                    if (p.lastLineMin>0 && w<p.lastLineMin*lineWidthSp) d+=p.lastLinePenalty;
-                    const fc_j=(ratio<0&&b>12)?3:2, td=si.demerits+d;
-                    if(!dp[j][fc_j]||td<dp[j][fc_j].demerits) dp[j][fc_j]={demerits:td,prev_j:i,prev_fc:fc_i,ratio,hyphenated:false};
-                    continue;
-                }
-                const slack=lineWidthSp-w;
-                let ratio, b;
-                if(hasFill&&slack>=0){ ratio=0; b=0; }   // fill absorbs the slack
-                else{
-                    if(slack>0) ratio=s>0?slack/s:Infinity; else if(slack<0) ratio=z>0?slack/z:-Infinity; else ratio=0;
-                    if(ratio<-1) continue;
-                    b=badness(Math.abs(slack),slack>=0?s:z);
-                    if(b>threshold) { if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b; continue; }
-                }
-                const fc_j=slack>=0?(b>99?0:b>12?1:2):(b>12?3:2);
-                const bd=threshold>=10000&&!(hasFill&&slack>=0) ? rawBadness(Math.abs(slack),slack>=0?s:z) : b;
-                const lp=p.linePenalty+bd; let d=threshold>=10000 ? lp*lp : (Math.abs(lp)>=10000?100000000:lp*lp);
+                if (final && !alive[i][fc_i]) continue;
+                if (!m) m=lineMetrics(bcs[i],bcJ,p);
+                // A line carrying an infinite-order fill (\hfil from \\, \hfill,
+                // the \parfillskip of the last line) absorbs positive slack
+                // instead of justifying: badness 0. So does every line of a
+                // paragraph that is not justified (p.ragged): \raggedright,
+                // \centering and \raggedleft set \rightskip or \leftskip to 0pt
+                // plus 1fil, so any line that fits costs nothing and TeX takes
+                // the fewest lines, hyphenating only when it must.
+                const hasFill = isEnd || p.ragged || bcJ.cumFill>bcs[i].cumFill;
+                const shortfall = expansionShortfall(lineWidthSp-m.w, m, ex);
+                let b, fc_j;
+                if (shortfall>0) {
+                    if (hasFill) { b=0; fc_j=2; }
+                    else { b=badness(shortfall,m.s); fc_j=b>99?0:b>12?1:2; }
+                } else if (shortfall<0) {
+                    if (-shortfall>m.z) {                         // overfull
+                        if (final) {
+                            alive[i][fc_i] = false;
+                            if (!feasibleAtJ && onlyStart(i, fc_i) && (!dp[j][3] || si.demerits<=dp[j][3].demerits))
+                                dp[j][3]={demerits:si.demerits,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc',overfull:true};
+                        }
+                        continue;
+                    }
+                    b=badness(-shortfall,m.z); fc_j=b>12?3:2;
+                } else { b=0; fc_j=2; }
+                if (b>threshold) { if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b; continue; }
+                feasibleAtJ = true;
+                const emergency = threshold>=10000;
+                const bd = emergency&&!(hasFill&&shortfall>=0) ? rawBadness(Math.abs(shortfall),shortfall>=0?m.s:m.z) : b;
+                const lp=p.linePenalty+bd; let d=emergency ? lp*lp : (Math.abs(lp)>=10000?100000000:lp*lp);
                 if(bcJ.penalty>0) d+=bcJ.penalty*bcJ.penalty;
                 else if(bcJ.penalty>-10000) d-=bcJ.penalty*bcJ.penalty;
+                if(si.hyphenated) {
+                    if(bcJ.kind==='disc') d+=p.doubleHyphenDemerits;
+                    else if(isEnd) d+=p.finalHyphenDemerits;
+                }
                 if(Math.abs(fc_j-fc_i)>1) d+=p.adjDemerits;
-                if(bcJ.kind==='disc'&&si.hyphenated) d+=p.doubleHyphenDemerits;
+                // Not TeX, and off unless a page asks for it: a last line
+                // shorter than lastLineMin of the measure costs lastLinePenalty.
+                if(isEnd && p.lastLineMin>0 && m.w<p.lastLineMin*lineWidthSp) d+=p.lastLinePenalty;
                 const td=si.demerits+d;
-                if(!dp[j][fc_j]||td<dp[j][fc_j].demerits) dp[j][fc_j]={demerits:td,prev_j:i,prev_fc:fc_i,ratio,hyphenated:bcJ.kind==='disc'};
+                // Ties go to the later start, as in TeX (`d <= minimal_demerits`,
+                // scanning the active list in order): the earlier lines longer.
+                if(!dp[j][fc_j]||td<=dp[j][fc_j].demerits) dp[j][fc_j]={demerits:td,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc'};
             }
         }
     }
@@ -974,25 +1212,57 @@ function kpPass(bcs, lineWidthSp, threshold, allowDisc, p) {
     let bestFc=-1, bestD=Infinity;
     for(let fc=0;fc<4;fc++) if(dp[endIdx][fc]&&dp[endIdx][fc].demerits<bestD){bestD=dp[endIdx][fc].demerits;bestFc=fc;}
     if(bestFc===-1) return {breaks:null,minRejectedBadness};
-    const breaks=[]; let j=endIdx,fc=bestFc;
-    while(j>0){breaks.push({bcIdx:j,fc,demerits:dp[j][fc].demerits,ratio:dp[j][fc].ratio});const pj=dp[j][fc].prev_j,pfc=dp[j][fc].prev_fc;j=pj;fc=pfc;}
-    breaks.reverse(); return {breaks,minRejectedBadness};
+    const breaks=[]; let j=endIdx,fc=bestFc,overfull=false;
+    while(j>0){breaks.push({bcIdx:j,fc,demerits:dp[j][fc].demerits});if(dp[j][fc].overfull)overfull=true;const pj=dp[j][fc].prev_j,pfc=dp[j][fc].prev_fc;j=pj;fc=pfc;}
+    // overfull: the final pass set a line it could not shrink to fit
+    breaks.reverse(); return {breaks,minRejectedBadness,overfull};
+}
+
+// Set one line as TeX's hpack does with \adjustspacing: font expansion takes
+// the slack first, as a whole number of steps up to the font's limit (LuaTeX's
+// font_expand_ratio and fix_expand_value), and the glue takes the rest. A
+// filled line (fil glue, a last line with room) neither expands nor stretches.
+// Returns the glue ratio and the line's expansion (a fraction; the renderer
+// widens each glyph by it, times the glyph's \efcode).
+function packLine(bcs, a, b, lineWidthSp, p, hasFill) {
+    const m = lineMetrics(a, b, p);
+    const x = lineWidthSp - m.w + (p.useProtrusion ? b.packRightProtrusion || 0 : 0);
+    if (x === 0 || (hasFill && x > 0)) return { ratio: 0, expand: 0 };
+    let expand = 0, rest = x;
+    const ex = bcs.expansion;
+    const f = x > 0 ? m.fs : m.fz;
+    if (ex && f > 0 && m.g > 0) {
+        const limit = x > 0 ? ex.stretch : ex.shrink;
+        const r = Math.max(-1000, Math.min(1000, Math.round(x * 1000 / f)));   // font_expand_ratio
+        let e = Math.abs(Math.round(r * limit / 1000));
+        if (e > limit) e = limit;
+        else if (ex.step > 1 && e % ex.step) e = ex.step * roundXnOverD(e, 1, ex.step);
+        expand = (x > 0 ? e : -e) / 1000;
+        rest = x - expand * m.g;
+    }
+    // What the expansion leaves goes to the glue. On a filled line (one
+    // shrunk by its fonts, whose steps overshoot) a surplus goes to the fill,
+    // as hpack's second pass gives it, and the spaces keep their width. An
+    // overfull line shrinks its glue fully and no further (glue_set 1).
+    const ratio = rest > 0 ? (hasFill || !(m.s > 0) ? 0 : rest / m.s)
+                : rest < 0 ? (m.z > 0 ? Math.max(-1, rest / m.z) : 0) : 0;
+    return { ratio, expand };
 }
 
 function extractLineNodes(startBC, endBC, nodes) {
     const result=[]; let from;
     if(startBC.kind==='start'){from=0;}
-    else{if(startBC.kind==='disc') for(const pn of (startBC.post||nodes[startBC.nodeIdx].post)) result.push(pn); from=startBC.nodeIdx+1;}
-    // Glue and kern are discarded at a line break, but only at a *break*: at
-    // the very start of a paragraph they are real content. \subparagraph* and
-    // friends make this visible – \@xsect drops the usual \parindent box and
-    // re-inserts the indent as \hskip\parindent glue, which stripping here
-    // would delete from the render while the break candidates still counted
-    // its width, leaving the first line short by exactly the indent.
-    if(startBC.kind!=='start'&&result.length===0){while(from<endBC.nodeIdx&&(nodes[from].type==='glue'||nodes[from].type==='kern'))from++;}
-    const to=endBC.nodeIdx;
+    else{if(startBC.kind==='disc') for(const pn of (startBC.postNodes||nodes[startBC.nodeIdx].post)) result.push(pn); from=startBC.nodeIdx+1;}
+    // Glue, kerns and penalties are discarded at a line break, but only at a
+    // *break*: at the very start of a paragraph they are real content.
+    // \subparagraph* and friends make this visible – \@xsect drops the usual
+    // \parindent box and re-inserts the indent as \hskip\parindent glue, which
+    // stripping here would delete from the render while the break candidates
+    // still counted its width, leaving the first line short by exactly the indent.
+    if(startBC.kind!=='start'&&result.length===0){while(from<endBC.nodeIdx&&(nodes[from].type==='glue'||nodes[from].type==='kern'||nodes[from].type==='penalty'))from++;}
+    const to=endBC.nodeIdx-(endBC.trailN||0);
     for(let i=from;i<to;i++) if(nodes[i].type!=='local_par') result.push(nodes[i]);
-    if(endBC.kind==='disc') for(const pn of (endBC.pre||nodes[endBC.nodeIdx].pre)) result.push(pn);
+    if(endBC.kind==='disc') for(const pn of (endBC.preNodes||nodes[endBC.nodeIdx].pre)) result.push(pn);
     return result;
 }
 
@@ -1000,8 +1270,8 @@ function greedyFallback(bcs, nodes, lineWidthSp, p) {
     const breaks=[]; let s=0;
     for(let j=1;j<bcs.length;j++){
         const {w}=lineMetrics(bcs[s],bcs[j],p);
-        if(bcs[j].kind==='end'){breaks.push({bcIdx:j,fc:2,demerits:0,ratio:0});break;}
-        if(w>lineWidthSp&&j>s+1){breaks.push({bcIdx:j-1,fc:2,demerits:0,ratio:0});s=j-1;}
+        if(bcs[j].kind==='end'){breaks.push({bcIdx:j,fc:2,demerits:0});break;}
+        if(w>lineWidthSp&&j>s+1){breaks.push({bcIdx:j-1,fc:2,demerits:0});s=j-1;}
     }
     return breaks;
 }
@@ -1009,15 +1279,33 @@ function greedyFallback(bcs, nodes, lineWidthSp, p) {
 function kpBreak(bcs, nodes, lineWidthSp, p) {
     let breaks=null;
     if (p.pretolerance >= 0)
-        breaks = kpPass(bcs,lineWidthSp,p.pretolerance,false,p).breaks;
-    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.tolerance,true,p).breaks;
-    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.tolerance2,true,p).breaks;
-    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.emergencyTolerance,true,p).breaks;
+        breaks = kpPass(bcs,lineWidthSp,p.pretolerance,true,p).breaks;
+    // TeX's second pass is its final one (\emergencystretch=0): when nothing
+    // fits, it sets an overfull line. At the width TeX compiled for that is
+    // TeX's own result, but at a narrower one a reader sees words run past
+    // the right edge. So the viewer keeps the final pass's breaks unless they
+    // hold an overfull line, and then tries its gentler passes – looser
+    // tolerances, which leave a loose line instead – falling back on TeX's
+    // breaks only if those find nothing either (a word wider than the
+    // measure). data-tex-final-pass="strict" keeps TeX's breaks always, as a
+    // replay against TeX needs; "false" skips the final pass altogether.
+    let texBreaks=null;
+    if(!breaks) {
+        const r = kpPass(bcs,lineWidthSp,p.tolerance,false,p,!!p.texFinalPass);
+        if (!r.overfull || p.texFinalPass === 'strict') breaks = r.breaks;
+        else texBreaks = r.breaks;
+    }
+    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.tolerance2,false,p).breaks;
+    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.emergencyTolerance,false,p).breaks;
+    if(!breaks) breaks = texBreaks;
     if(!breaks) breaks = greedyFallback(bcs,nodes,lineWidthSp,p);
     const lines=[];
     for(let k=0;k<breaks.length;k++){
         const startBC=k===0?bcs[0]:bcs[breaks[k-1].bcIdx], endBC=bcs[breaks[k].bcIdx];
-        lines.push({nodes:extractLineNodes(startBC,endBC,nodes),ratio:breaks[k].ratio,fitness:breaks[k].fc,leftProtrusion:startBC.leftProtrusion});
+        const hasFill = endBC.kind==='end' || p.ragged || endBC.cumFill>startBC.cumFill;
+        const { ratio, expand } = packLine(bcs, startBC, endBC, lineWidthSp, p, hasFill);
+        const rightProtrusion = (endBC.kind==='end' ? endBC.packRightProtrusion : endBC.rightProtrusion) || 0;
+        lines.push({nodes:extractLineNodes(startBC,endBC,nodes),ratio,expand,fitness:breaks[k].fc,leftProtrusion:startBC.leftProtrusion,rightProtrusion});
     }
     return lines;
 }
@@ -2728,7 +3016,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
     for (const { index, para } of seg.items) {
         itemStarts.push(lines.length);
         let bcs = cache.bcs.get(index);
-        if (!bcs) { bcs = buildBreakCandidates(para.nodes, fontInfo); cache.bcs.set(index, bcs); }
+        if (!bcs) { bcs = buildBreakCandidates(para.nodes, fontInfo, para); cache.bcs.set(index, bcs); }
 
         // Alignment is per paragraph: TeX's \centering/\raggedright/\raggedleft
         // set the paragraph's \leftskip/\rightskip, which the serializer reads and
@@ -2770,7 +3058,9 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
         // breaker as window.reflowtexBreak(nodes, availSp, params, helpers)
         // – e.g. a TeX engine's own line-breaking code compiled to WebAssembly.
         // It returns the same line objects kpBreak does ([{nodes, ratio,
-        // fitness, leftProtrusion}]), or null to decline (module still
+        // fitness, leftProtrusion}]; kpBreak's also carry rightProtrusion,
+        // where a TeX engine returns the right margin kern as a node), or
+        // null to decline (module still
         // loading, unsupported paragraph), in which case the built-in
         // Knuth–Plass runs. Everything below is agnostic to which breaker ran.
         // A line flagged `exact: true` carries a TeX-exact glue ratio whose
@@ -2816,9 +3106,17 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
                 // left of the column instead of flush with its left edge.
                 x0 = protX;  // squeezed to fit – same position as justified
             } else {
+                // TeX's line box holds its margin kerns, so a centred or
+                // right-aligned line is placed by its width less what
+                // protrudes, and its first character then hangs out of that
+                // place by the left protrusion. (A breaker that returns the
+                // right margin kern as a node has it in natPx already; the
+                // built-in one reports it as rightProtrusion.)
+                const lpPx = -protX;
+                const rpPx = p.useProtrusion ? (ln.rightProtrusion || 0) * SP_TO_PX : 0;
                 switch (align) {
-                    case 'right':  x0 = availPx - natPx; break;
-                    case 'center': x0 = (availPx - natPx) / 2; break;
+                    case 'right':  x0 = availPx - natPx + rpPx; break;
+                    case 'center': x0 = (availPx - natPx + lpPx + rpPx) / 2 - lpPx; break;
                     default:       x0 = protX; break;
                 }
                 // A line with an infinite fill and room to spare distributes the
@@ -3137,9 +3435,14 @@ function displaySkipAdjust(L, prev) {
                 : (prev && prev.firstMeta);
             // A display that opened an empty paragraph (display_after_line
             // false) had that paragraph's empty line above it, of depth 0,
-            // not the last line of the text before.
+            // not the last line of the text before – when TeX set one. A
+            // paragraph with nothing in it at all (\noindent, or the indent
+            // box \@doendpe removes after a list or verbatim) gets no line
+            // (§1145), which is what \predisplaysize = -\maxdimen records;
+            // the glue above then comes from the text before, as usual.
             if (it.display_interline_above != null && prev && meta && L.firstAscent != null) {
-                const depthAbove = it.display_after_line ? prev.lastDepth : 0;
+                const blankLine = !it.display_after_line && it.display_pre_size !== -1073741823;
+                const depthAbove = blankLine ? 0 : prev.lastDepth;
                 delta += texInterlineGlue(depthAbove, L.firstAscent, meta) - it.display_interline_above * SP_TO_PX;
             }
         }
@@ -3203,15 +3506,26 @@ function placeEquationNumber(item) {
     return { ...item, box: { ...b, children } };
 }
 
+// The form of a display to draw at a measure, and the width its rates are
+// anchored at. A display TeX set another way at the document's width (amsmath
+// moved its tag, or had no room to centre the body) carries the wider regime
+// as a second form, from the width where TeX switches (display_wide_from).
+function displayForm(item, targetSp, sourceWidthSp) {
+    if (item.display_wide && item.display_wide_from && targetSp >= item.display_wide_from)
+        return { item: item.display_wide, anchorSp: item.display_wide_width || sourceWidthSp };
+    return { item, anchorSp: sourceWidthSp };
+}
+
 function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
     const targetSp = Math.round(widthPt * 65536);
     const floorSp = Math.max(0, displayModel.minSpacePt) * 65536;
-    const minWidthSp = Math.max(0, ...seg.rows.map(r =>
-        affineFloorWidthItem(fontInfo, r.item, displayModel.sourceWidthSp, floorSp)));
+    const forms = seg.rows.map(r => displayForm(r.item, targetSp, displayModel.sourceWidthSp));
+    const minWidthSp = Math.max(0, ...forms.map(f =>
+        affineFloorWidthItem(fontInfo, f.item, f.anchorSp, floorSp)));
     const evaluatedSp = Math.max(targetSp, minWidthSp);
-    const kinds = seg.rows.map(r => classifyDisplayGaps(fontInfo, r.item));   // cached; for api.inspect
-    seg = { ...seg, rows: seg.rows.map(r => ({
-        ...r, item: placeEquationNumber(affineDisplayItem(r.item, evaluatedSp - displayModel.sourceWidthSp)),
+    const kinds = forms.map(f => classifyDisplayGaps(fontInfo, f.item));   // cached; for api.inspect
+    seg = { ...seg, rows: seg.rows.map((r, i) => ({
+        ...r, item: placeEquationNumber(affineDisplayItem(forms[i].item, evaluatedSp - forms[i].anchorSp)),
     })) };
     const columnPx = widthPt * ZOOM;
     const rows = seg.rows.map(r => ({
@@ -3755,6 +4069,18 @@ const isTextLike = kind => kind === 'text' || kind === 'stream';
 
 const onLayoutGrid = px => Math.round(px * 64) / 64;
 
+// Heights and gaps go on that grid one after another down the document, so
+// each is rounded together with what the ones above it lost: the remainder
+// travels on the layout (L.gridCarry, what is left after its box) to the gap
+// below. Rounded one by one, the ±1/128 px of each of some thousand gaps and
+// boxes adds up – a random walk that had testmath's last lines 0.15 pt below
+// TeX's; carried, no line is ever more than half a grid step from its place.
+function onGridCarried(px, carry) {
+    const exact = px + carry;
+    const r = onLayoutGrid(exact);
+    return { r, carry: exact - r };
+}
+
 // A group of alternatives (L.alts, see layoutStreamSegment) is spaced at this
 // level by its first member. Each other member, when it is the one showing,
 // must sit where TeX would have put *it*: its first line's interline glue
@@ -3785,6 +4111,20 @@ function applyAlternativeOffsets(prev, L) {
     }
 }
 
+// Between two text segments TeX inserts interline (baselineskip) glue on
+// top of any explicit \vspace, exactly as it does between the lines of a
+// paragraph. Reproduce it so a heading sits the LaTeX distance above its
+// body – and independently of the heading's descender depth, since the
+// glue absorbs that. Displays keep their own captured spacing.
+function spaceAbove(L, prev) {
+    let margin = L.gapBefore || 0;
+    if (prev && L.seg.kind === 'text' && isTextLike(prev.seg.kind) && L.firstMeta
+        && !(prev.frameBottom && L.gapBefore)) {           // see the stream branch of sizeSegment
+        margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
+    }
+    return margin + displaySkipAdjust(L, prev);
+}
+
 function sizeSegment(s, L, prev, columnPx, p) {
     applyAlternativeOffsets(prev, L);
     if (L.seg.kind === 'stream') {
@@ -3800,7 +4140,9 @@ function sizeSegment(s, L, prev, columnPx, p) {
             margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
         }
         margin += displaySkipAdjust(L, prev);
-        setStyle(s.gap, 'height', `${onLayoutGrid(margin)}px`);
+        const g = onGridCarried(margin, prev?.gridCarry || 0);
+        setStyle(s.gap, 'height', `${g.r}px`);
+        L.gridCarry = g.carry;          // the nested layout sized its own box
         return { mount: s.box.firstElementChild, overflows: false };
     }
     // Do not create a scrollbar for scaled-point rounding or a tiny italic
@@ -3823,7 +4165,12 @@ function sizeSegment(s, L, prev, columnPx, p) {
     // rounded to nearest: laid out as given, a fractional height is floored
     // to the grid, and over hundreds of stacked segments those floors add up
     // to a drift of a few points against TeX's own galley.
-    const H = onLayoutGrid(L.H);
+    // (the gap above, set further down, is rounded first: see onGridCarried)
+    const margin = spaceAbove(L, prev);
+    const gap = onGridCarried(margin, prev?.gridCarry || 0);
+    const box = onGridCarried(L.H, gap.carry);
+    const H = box.r;
+    L.gridCarry = box.carry;
     s.svg.setAttribute('width', surfaceW);
     s.svg.setAttribute('height', H);
     s.svg.setAttribute('viewBox', `0 0 ${surfaceW} ${H}`);
@@ -3852,20 +4199,9 @@ function sizeSegment(s, L, prev, columnPx, p) {
         s.wrap.classList.remove('latex-overflow-left', 'latex-overflow-right');
         s.svg.remove();          // no longer overflowing: shed the scroll box
     }
-    // Between two text segments TeX inserts interline (baselineskip) glue on
-    // top of any explicit \vspace, exactly as it does between the lines of a
-    // paragraph. Reproduce it so a heading sits the LaTeX distance above its
-    // body – and independently of the heading's descender depth, since the
-    // glue absorbs that. Displays keep their own captured spacing.
-    let margin = L.gapBefore || 0;
-    if (prev && L.seg.kind === 'text' && isTextLike(prev.seg.kind) && L.firstMeta
-        && !(prev.frameBottom && L.gapBefore)) {           // see the stream branch above
-        margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
-    }
     // The space above the segment lives in its spacer, not in a margin on the
     // element itself (scroll anchoring again, see layoutDocument).
-    margin += displaySkipAdjust(L, prev);
-    setStyle(s.gap, 'height', `${onLayoutGrid(margin)}px`);
+    setStyle(s.gap, 'height', `${gap.r}px`);
     setStyle(s.svg, 'marginTop', '');
     if (s.wrap) { setStyle(s.wrap, 'marginTop', ''); setStyle(s.wrap, 'marginBottom', ''); }
     if (mount === s.wrap) {

@@ -20,6 +20,11 @@ to happen for every font a compiled block references:
     verbatim under their original name. patch() records the original→served map in
     `self.served`, which the viewer uses to build @font-face.
 
+  * subset – a modified font is then cut down to the characters the blocks
+    draw (see Fonts.subset). It is this site's own file, so nothing else will
+    ever fetch it. An unmodified font is left whole: the same file on every
+    site, which a browser can keep cached across them.
+
 Both are idempotent: a font already present is not re-copied, patching only
 touches files that are actually missing an entry, and the output is byte-
 reproducible (fixed timestamp) so an unchanged font keeps a stable hash.
@@ -298,8 +303,79 @@ class Fonts:
                   f'{"y" if len(added) == 1 else "ies"} added, renamed)')
 
 
+    # ── subsetting ───────────────────────────────────────────────────────────
+    def subset(self, drawn: dict[str, set[int]], whole=frozenset()) -> None:
+        """Cut every font this pipeline modified down to the characters the
+        blocks use. Call after patch(); updates self.served.
+
+        Only a renamed font (NAME.reflowtex-HASH.otf: a converted Type 1 font,
+        or an OpenType font whose cmap patch() extended) is subset. It is this
+        build's own file, fetched by this site alone, so it need hold no more
+        than the site draws. An original is served whole under its own name:
+        the same file on every site that uses it, which a browser caches once.
+
+        The subset keeps every code point in `drawn` (see drawn_codepoints: the
+        site's glyphs as the viewer draws them, private-use ones included) and
+        nothing of the font's layout tables: the
+        viewer shapes nothing, TeX set every glyph and kern. It is named by its
+        own content hash, so it changes name exactly when the characters the
+        site uses change. `whole` names fonts to leave whole all the same: those
+        a \\webtext slot uses, where the page may set any text it likes.
+        """
+        if _TTFont is None or not drawn:
+            return
+        try:
+            from fontTools import subset as _subset
+        except ImportError:
+            return
+        tagged = re.compile(rf'(\.{MODIFIED_TAG}-[0-9a-f]{{8}})+$')
+        for filename, cps in sorted(drawn.items()):
+            served = self.served.get(filename, filename)
+            if f'.{MODIFIED_TAG}-' not in served or not cps:
+                continue                                    # an original, or nothing drawn from it
+            if filename in whole:
+                print(f'  font-subset: {served} kept whole (a \\webtext slot sets text in it)')
+                continue
+            src = self.output_dir / served
+            if not src.exists():
+                continue
+            font = _TTFont(src, recalcTimestamp=False)
+            before = len(font.getGlyphOrder())
+            opts = _subset.Options()
+            opts.layout_features = []                       # no GSUB/GPOS: nothing is shaped
+            opts.name_IDs = ['*']                           # keep the names that say it is modified
+            opts.name_languages = ['*']
+            opts.name_legacy = True
+            opts.notdef_outline = True
+            opts.glyph_names = True                         # a tool can still tell glyphs apart
+            opts.recalc_timestamp = False                   # byte-reproducible → a stable hash
+            sub = _subset.Subsetter(opts)
+            sub.populate(unicodes=cps)
+            sub.subset(font)
+            fd, tmp = tempfile.mkstemp(dir=self.output_dir, prefix=f'.{src.name}.', suffix='.subset')
+            os.close(fd)
+            try:
+                font.save(tmp)
+                os.chmod(tmp, 0o644)
+                digest = hashlib.sha256(Path(tmp).read_bytes()).hexdigest()[:8]
+                name = f'{tagged.sub("", src.stem)}.{MODIFIED_TAG}-{digest}{src.suffix}'
+                os.replace(tmp, self.output_dir / name)
+            except BaseException:
+                Path(tmp).unlink(missing_ok=True)
+                raise
+            after = len(font.getGlyphOrder())
+            size0, size1 = src.stat().st_size, (self.output_dir / name).stat().st_size
+            # A patched font is made afresh from its original on every build, so
+            # the full file goes. A converted one stays: it is what the blocks
+            # name, and the source the next build subsets again.
+            if served != filename and name != served:
+                src.unlink()
+            self.served[filename] = name
+            print(f'  font-subset: {served} → {name} ({after} of {before} glyphs, '
+                  f'{size1 // 1024} KB of {size0 // 1024} KB)')
+
     # ── verification ─────────────────────────────────────────────────────────
-    def verify(self, requirements: dict[str, dict[int, int]]) -> None:
+    def verify(self, requirements: dict[str, dict[int, int] | set[int]]) -> None:
         """Fail the build if any glyph a block references cannot be drawn from
         the font that will be served for it.
 
@@ -335,6 +411,48 @@ class Fonts:
             raise SystemExit('ERROR: served fonts cannot draw every glyph the blocks '
                              'reference – the page would render blanks:\n  '
                              + '\n  '.join(problems))
+
+
+def drawn_codepoints(docs) -> tuple[dict[str, set[int]], set[str]]:
+    """The code points the viewer draws from each font, and the fonts a
+    \\webtext slot sets text in, from encoded documents (latex_pb2.Document).
+
+    These are the documents as served – after the transform pass, which gives
+    a converted Type 1 font's glyphs, and any glyph without a code point of its
+    own, the code points the browser reaches them by – so they are what a
+    served font must hold. ({filename: {codepoint}}, {filename}).
+    """
+    drawn: dict[str, set[int]] = {}
+    slot_fonts: set[str] = set()
+    for doc in docs:
+        files = {f.id: f.filename for f in doc.fonts}
+
+        def walk(nodes):
+            for n in nodes:
+                if n.type == 0 and n.HasField('font'):     # a glyph
+                    fname = files.get(n.font)
+                    if fname:
+                        drawn.setdefault(fname, set()).add(n.char)
+                        if n.slot:
+                            slot_fonts.add(fname)
+                walk(n.children); walk(n.pre); walk(n.post); walk(n.replace)
+                if n.HasField('leader'):
+                    walk([n.leader])
+
+        for para in doc.paragraphs:
+            walk(para.nodes)
+        for item in doc.content:
+            if item.HasField('box'):
+                walk([item.box])
+            if item.HasField('display_wide') and item.display_wide.HasField('box'):
+                walk([item.display_wide.box])     # a display's wide form
+        for stream in doc.streams:
+            for item in stream.content:
+                if item.HasField('box'):
+                    walk([item.box])
+                if item.HasField('display_wide') and item.display_wide.HasField('box'):
+                    walk([item.display_wide.box])
+    return drawn, slot_fonts
 
 
 def fonts_of(data: dict) -> dict:
@@ -381,9 +499,13 @@ def collect_glyph_requirements(output_jsons) -> dict[str, dict[int, int]]:
         for item in data.get('content', []):
             if 'box' in item:
                 walk(item['box'].get('children', []), font_map)
+            if 'box' in item.get('display_wide', {}):     # a display's wide form
+                walk(item['display_wide']['box'].get('children', []), font_map)
         for stream in data.get('streams', []):
             for item in stream.get('content', []):
                 if 'box' in item:
                     walk(item['box'].get('children', []), font_map)
+                if 'box' in item.get('display_wide', {}):
+                    walk(item['display_wide']['box'].get('children', []), font_map)
 
     return requirements
