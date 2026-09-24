@@ -1,0 +1,10 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% The preamble of the example book (website: docs/getting-started/books),
+% where every chapter's block names it: preamble="../examples/book/preamble.tex".
+% (The static-site build, build.py examples/book --batch, takes a directory's
+% preamble.tex by itself.) A real book class, so \chapter works and numbers
+% theorems and equations per chapter.
+\documentclass{book}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}[chapter]
+\usepackage[boxedtheorems]{reflowtex}

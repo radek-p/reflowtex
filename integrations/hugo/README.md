@@ -73,7 +73,9 @@ and the Knuth–Plass knobs:
 `show-source="true"` presents a block as an example: the rendered result beside
 its LaTeX, highlighted, or behind Result / LaTeX tabs when the space is narrow.
 It works for both forms; a file ref's text comes from `data/latex_sources.json`,
-which `prebuild.py` writes. The partial carries the behaviour; style
+which `prebuild.py` writes. The result's right edge is a handle: drag it, or
+focus it and use the arrow keys, to narrow the result and watch it re-break
+(double-click or Home restores the full width). The partial carries the behaviour; style
 `figure.latex-example` to taste (this project's website is an example).
 
 A block that uses `\ref`, `\eqref` or a similar reference command is compiled twice, so the
@@ -94,9 +96,18 @@ the link map):
 ```
 
 All blocks of a batch share one `preamble`, which may start with its own
-`\documentclass` (e.g. `book`). Changing, adding or reordering any part
+`\documentclass` (e.g. `book`). It is a name from `latex-preambles/`, or a
+path to a `.tex` file relative to the site root, which may lie outside the
+site: the website's example book names `../examples/book/preamble.tex`,
+beside its chapters. Changing, adding or reordering any part
 recompiles the whole batch. The vanilla build does the same for a directory
 with `--batch`.
+
+A part may be shown in more than one place — the same `file=` (or the same
+text) twice in one batch. It is still one part of the book, compiled once, at
+the lowest `weight` given to it, and every place shows that result; its labels
+link to the page of that lowest-weight place. The same file in *different*
+batches is compiled once per batch.
 
 Named preambles let blocks share macros/packages. Put them in
 `latex-preambles/<name>.tex` and reference one with `preamble="<name>"`; editing

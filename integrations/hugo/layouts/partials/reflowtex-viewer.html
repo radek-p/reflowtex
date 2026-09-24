@@ -146,11 +146,59 @@
   .latex-example-tabs { display: flex; }
   @container (min-width: 52rem) {
     .latex-example-body, .latex-example-tabs {
-      display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+      display: grid; grid-template-columns: var(--latex-example-cols, minmax(0, 1.2fr) minmax(0, 1fr)); }
     .latex-example-body > .latex-example-preview,
     .latex-example-body > .latex-example-source { display: block !important; }
     .latex-example-tabs [role="tab"] { pointer-events: none; }
   }
+  /* Side by side because the reader dragged the divider: the figure may then
+     be narrower than the container query asks for (it stays side by side),
+     or wider than its column (it reaches into the page's margin, up to the
+     window's edge). A site styling the side-by-side look should give it
+     this selector too. */
+  .latex-example-split .latex-example-body, .latex-example-split .latex-example-tabs {
+    display: grid; grid-template-columns: var(--latex-example-cols); }
+  .latex-example-split .latex-example-body > .latex-example-preview,
+  .latex-example-split .latex-example-body > .latex-example-source { display: block !important; }
+  .latex-example-split .latex-example-tabs [role="tab"] { pointer-events: none; }
+  /* Side by side, the divider between Result and LaTeX is a handle: drag it
+     (or focus it and use the arrow keys) to narrow the result and watch it
+     re-break, narrower or wider; the LaTeX column keeps its width and
+     moves with it, and the frame may widen into the page's margin.
+     Double-click or Home restores the layout. With one panel at a time
+     there is no divider, and the handle is the result's own right edge,
+     standing 6px clear of the text (hyphens and hanging punctuation reach a
+     little past the measure). A line shows on hover, faintly always on
+     touch screens, with the result's width beside it while it changes. */
+  .latex-example-stage { position: relative; max-width: 100%; }
+  .latex-example-handle {
+    position: absolute; top: 0; bottom: 0; right: -16px; width: 22px;
+    cursor: ew-resize; touch-action: none; outline: none; }
+  .latex-example-handle::after {
+    content: ''; position: absolute; top: 0; bottom: 0; left: 12px; width: 2px;
+    background: currentColor; opacity: 0; transition: opacity .2s ease; }
+  @container (min-width: 52rem) {
+    .latex-example-preview { position: relative; }
+    .latex-example-stage { position: static; }
+    .latex-example-handle { right: -11px; z-index: 1; }
+    .latex-example-handle::after { left: 9px; }
+  }
+  .latex-example-split .latex-example-preview { position: relative; }
+  .latex-example-split .latex-example-stage { position: static; }
+  .latex-example-split .latex-example-handle { right: -11px; z-index: 1; }
+  .latex-example-split .latex-example-handle::after { left: 9px; }
+  .latex-example-preview:hover .latex-example-handle::after { opacity: .25; }
+  .latex-example-handle:hover::after, .latex-example-handle:focus-visible::after,
+  .latex-resizing .latex-example-handle::after { opacity: .7; }
+  .latex-example-handle::before {
+    content: attr(aria-valuetext); position: absolute; top: .6rem; right: 20px;
+    font: 500 .68rem/1 ui-sans-serif, system-ui, sans-serif; white-space: nowrap;
+    padding: .2rem .4rem; border-radius: 4px; pointer-events: none;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    opacity: 0; transition: opacity .2s ease; }
+  .latex-resizing .latex-example-handle::before,
+  .latex-example-handle:focus-visible::before { opacity: 1; }
+  @media (hover: none) { .latex-example-handle::after { opacity: .25; } }
 
   .latex-block--missing {
     border: 2px dashed #c00; padding: 0.75em 1em; color: #c00;
@@ -196,6 +244,99 @@
       b.setAttribute('aria-selected', b === tab ? 'true' : 'false');
     });
   });
+  // The Result's width handle (see the CSS above). Side by side it moves the
+  // divider: the Result column takes the new width, the LaTeX column keeps
+  // the width it had, and the figure narrows or widens with them. One panel at a time,
+  // it narrows the result inside its panel.
+  (function () {
+    function parts(h) {
+      var fig = h.closest('figure.latex-example');
+      return { fig: fig, stage: h.parentElement, preview: h.closest('.latex-example-preview'),
+               source: fig.querySelector('.latex-example-source'),
+               split: getComputedStyle(fig.querySelector('.latex-example-body')).display === 'grid' };
+    }
+    function inner(el) {
+      var cs = getComputedStyle(el);
+      return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    }
+    // [least, most, now] in px of the result's width.
+    function range(q) {
+      if (q.split) {
+        var lw = parseFloat(q.fig.dataset.latexWidth) || q.source.getBoundingClientRect().width;
+        // Narrower down to a third of the column; wider up to the window's
+        // right edge, less a 16px gutter, into the page's margin.
+        var frame = q.fig.offsetWidth - q.fig.clientWidth;
+        var room = document.documentElement.clientWidth - 16 - q.fig.getBoundingClientRect().left;
+        return [Math.min(12 * 16, q.fig.parentElement.clientWidth / 3),
+                room - lw - frame, q.preview.getBoundingClientRect().width];
+      }
+      var full = inner(q.preview);
+      return [full * 0.2, full, q.stage.getBoundingClientRect().width];
+    }
+    function setPx(h, px) {
+      var q = parts(h), r = range(q);
+      px = Math.max(r[0], Math.min(r[1], px));
+      if (q.split) {
+        var lw = q.fig.dataset.latexWidth || (q.fig.dataset.latexWidth = q.source.getBoundingClientRect().width);
+        var frame = q.fig.offsetWidth - q.fig.clientWidth;
+        q.fig.classList.add('latex-example-split');
+        q.fig.style.setProperty('--latex-example-cols', px + 'px ' + lw + 'px');
+        q.fig.style.width = (px + +lw + frame) + 'px';
+      } else {
+        q.stage.style.width = px >= r[1] - 0.5 ? '' : (px / r[1] * 100) + '%';
+      }
+      h.setAttribute('aria-valuenow', Math.round(px / r[1] * 100));
+      h.setAttribute('aria-valuetext', Math.round(px) + ' px');
+    }
+    function reset(h) {
+      var q = parts(h);
+      q.fig.classList.remove('latex-example-split');
+      q.fig.style.removeProperty('--latex-example-cols');
+      q.fig.style.width = ''; delete q.fig.dataset.latexWidth;
+      q.stage.style.width = '';
+      var r = range(parts(h));
+      h.setAttribute('aria-valuenow', 100);
+      h.setAttribute('aria-valuetext', Math.round(r[2]) + ' px');
+    }
+    var active = null, from = 0, start = 0, idle = null;
+    function busy(h) {   // show the width label for a moment after a key press
+      var fig = h.closest('figure.latex-example');
+      fig.classList.add('latex-resizing');
+      clearTimeout(idle);
+      idle = setTimeout(function () { if (!active) fig.classList.remove('latex-resizing'); }, 900);
+    }
+    document.addEventListener('pointerdown', function (e) {
+      var h = e.target.closest && e.target.closest('.latex-example-handle');
+      if (!h || e.button > 0) return;
+      active = h; h.setPointerCapture(e.pointerId); e.preventDefault();
+      from = e.clientX; start = range(parts(h))[2];
+      h.closest('figure.latex-example').classList.add('latex-resizing');
+      setPx(h, start);
+    });
+    document.addEventListener('pointermove', function (e) {
+      if (active) setPx(active, start + e.clientX - from);
+    });
+    function end() {
+      if (!active) return;
+      active.closest('figure.latex-example').classList.remove('latex-resizing'); active = null;
+    }
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+    document.addEventListener('dblclick', function (e) {
+      var h = e.target.closest && e.target.closest('.latex-example-handle');
+      if (h) { reset(h); busy(h); }
+    });
+    document.addEventListener('keydown', function (e) {
+      var h = e.target.closest && e.target.closest('.latex-example-handle');
+      if (!h) return;
+      var r = range(parts(h)), step = r[1] * (e.shiftKey ? 0.1 : 0.02);
+      var to = { ArrowLeft: r[2] - step, ArrowDown: r[2] - step, ArrowRight: r[2] + step,
+                 ArrowUp: r[2] + step, End: r[0] }[e.key];
+      if (e.key === 'Home') { e.preventDefault(); reset(h); busy(h); return; }
+      if (to === undefined) return;
+      e.preventDefault(); setPx(h, to); busy(h);
+    });
+  })();
   document.addEventListener('DOMContentLoaded', function () {
     var cls = document.documentElement.classList;
     var page = ['dark', 'sepia', 'contrast'].filter(function (t) { return cls.contains(t); })[0] || 'light';

@@ -92,7 +92,20 @@ HASH_RE = re.compile(r'^[0-9a-f]{16}$')
 REF_RE = re.compile(r'\\(?:eq|auto|c|C|name|page)?ref\*?\{')
 
 
+# Preambles given by path (preamble="….tex"), by that path: their text.
+PATH_PREAMBLES: dict[str, str] = {}
+
+
 def _resolve_preamble(name: str, preamble_dir: Path) -> str:
+    """preamble="name" is <site>/latex-preambles/name.tex; preamble="….tex"
+    is that file, relative to the site root (it may lie outside the site,
+    beside the files a book is made of, say)."""
+    if name.endswith('.tex'):
+        pfile = preamble_dir.parent / name
+        if not pfile.is_file():
+            sys.exit(f'ERROR: preamble "{name}" not found at {pfile.resolve()}')
+        PATH_PREAMBLES[name] = pfile.read_text(encoding='utf-8')
+        return PATH_PREAMBLES[name]
     pfile = preamble_dir / f'{name}.tex'
     if not pfile.exists():
         sys.exit(f'ERROR: preamble "{name}" not found at {pfile}')
@@ -297,6 +310,10 @@ def main() -> None:
         src = next((d / name for d in demos_dirs if (d / name).is_file()), None)
         if src:
             sources[name] = src.read_text(encoding='utf-8')
+    # …and of every preamble given by path, under that path: an inline block's
+    # shortcode hashes it from here (Hugo reads no file outside the site), and
+    # {{< source file="…" >}} can show it.
+    sources.update(PATH_PREAMBLES)
     (site / 'data' / 'latex_sources.json').write_text(
         json.dumps(sources, indent=2, sort_keys=True))
     # Colour maps: every map in <site>/latex-color-maps/ is embedded, not only
@@ -340,6 +357,14 @@ def main() -> None:
     live_batches = set()
     for bname, parts in sorted(batches.items()):
         parts.sort(key=lambda p: (p[0], p[1]))
+        # A part shown in more than one place (the same file, or the same
+        # text, twice in one batch) is one part: compiled once, where its
+        # lowest weight puts it, and every place shows that one result. Its
+        # labels belong to the page of that first occurrence.
+        seen: set[str] = set()
+        parts = [p for p in parts if not (p[2] in seen or seen.add(p[2]))]
+        for p in parts:
+            block_pages[p[2]] = p[1][0]
         preambles = {p[4] for p in parts}
         if len(preambles) > 1:
             sys.exit(f'ERROR: the blocks of batch "{bname}" use different preambles; '

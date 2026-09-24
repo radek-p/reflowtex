@@ -16,6 +16,10 @@
 
   Optional attributes (all forwarded to latex-viewer.js as data-* on the block):
     preamble="name"    use latex-preambles/name.tex (inline form; also hashed)
+    preamble="p.tex"   use the file p.tex, a path relative to the site root —
+                       e.g. "../examples/book/preamble.tex" beside a book's
+                       chapters; for a file ref it replaces its --demos-dir's
+                       preamble.tex
     as="name"          inline form only: also register under this name in
                        hugo.Data.latex_files, as if it were a file="name" ref
     color-map="name"   use latex-color-maps/name.json (see prebuild.py); does
@@ -59,7 +63,12 @@
 {{- else -}}
   {{- $inner := .Inner | strings.TrimSpace -}}
   {{- $pre := "" -}}
-  {{- with .Get "preamble" -}}{{- $pre = os.ReadFile (printf "latex-preambles/%s.tex" .) -}}{{- end -}}
+  {{- with .Get "preamble" -}}
+    {{- /* A path (….tex) may lie outside the site, where Hugo reads nothing:
+           prebuild copies its text into data/latex_sources.json. */ -}}
+    {{- if strings.HasSuffix . ".tex" -}}{{- $pre = index (hugo.Data.latex_sources | default dict) . | default "" -}}
+    {{- else -}}{{- $pre = os.ReadFile (printf "latex-preambles/%s.tex" .) -}}{{- end -}}
+  {{- end -}}
   {{- /* Boundaries must match pipeline.content_key and prebuild.batch_key. */ -}}
   {{- $hashInput := $inner -}}
   {{- if $batch -}}
@@ -90,7 +99,8 @@
   <button type="button" data-latex-theme-choice="{{ $t }}" aria-pressed="false">{{ $t | humanize }}</button>
   {{- end }}
 </div>
-{{- end }}{{ end }}
+{{- end }}
+<div class="latex-example-stage">{{ end }}
 <div class="latex-block{{ with .Get "class" }} {{ . }}{{ end }}"
      data-nodelist-b64="{{ $data.nodelist_b64 }}"
      {{- with .Get "width" }}                  data-latex-width="{{ . }}"{{ end }}
@@ -111,7 +121,9 @@
      {{- with .Get "pad" }}                    data-pad="{{ . }}"{{ end }}
      {{- with .Get "protrusion" }}             data-protrusion="{{ . }}"{{ end }}
      {{- with .Get "expansion" }}              data-expansion="{{ . }}"{{ end }}></div>
-{{- if $showSource }}</div>
+{{- if $showSource }}
+<div class="latex-example-handle" role="slider" tabindex="0" aria-label="Width of the result"
+     aria-valuemin="20" aria-valuemax="100" aria-valuenow="100"></div></div></div>
 <div class="latex-example-source">{{ transform.Highlight $source "latex" }}</div>
 </div></figure>
 {{- end }}
