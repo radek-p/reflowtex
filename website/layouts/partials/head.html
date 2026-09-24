@@ -28,6 +28,7 @@
     function set(w) {
       document.documentElement.setAttribute('data-width', w);
       try { localStorage.setItem(KEY, w); } catch (e) {}
+      window.dispatchEvent(new Event('resize'));
     }
     var saved; try { saved = localStorage.getItem(KEY); } catch (e) {}
     set(saved || 'auto');
@@ -70,16 +71,68 @@
     padding-bottom: 8rem;
   }
   a { color: inherit; }
+  /* ── Code ──────────────────────────────────────────────────────────────
+     Set in Latin Modern Mono, the face \texttt uses in the rendered LaTeX
+     around it (the pipeline serves it in fonts/), on a faint tint of the
+     text colour so it sits on every theme. Colours are chroma's classes
+     (hugo.toml: markup.highlight.noClasses = false), one palette per theme.
+     Code blocks scroll on their own rather than widening the page. */
+  @font-face {
+    font-family: "Latin Modern Mono";
+    src: url("{{ "fonts/lmmono10-regular.otf" | relURL }}") format("opentype");
+    font-display: swap;
+  }
+  :root {
+    --code-kw: #1f5fa8; --code-str: #2a7a3b; --code-com: #7b7f86;
+    --code-num: #a0522d; --code-name: #8a3ab9;
+  }
+  html.dark     { --code-kw: #79c0ff; --code-str: #7ee787; --code-com: #8b949e; --code-num: #ffa657; --code-name: #d2a8ff; }
+  html.sepia    { --code-kw: #155e97; --code-str: #3f6b1f; --code-com: #7d6f55; --code-num: #9a4a14; --code-name: #7a3e8a; }
+  html.contrast { --code-kw: #0000b3; --code-str: #005a00; --code-com: #444444; --code-num: #8a3000; --code-name: #5b0093; }
+  pre, code {
+    font-family: "Latin Modern Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  /* Plain-text blocks (directory trees) need box-drawing characters, which
+     Latin Modern Mono lacks: the system's monospace has them, at one width. */
+  code[data-lang="text"] { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
+  pre {
+    overflow-x: auto;
+    margin: 2rem 0; padding: 1.1rem 1.4rem;
+    font-size: 0.95rem; line-height: 1.5;
+    background: color-mix(in srgb, currentColor 5%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+    border-radius: 6px;
+  }
+  .highlight pre.chroma { background: color-mix(in srgb, currentColor 5%, transparent); }
+  .chroma .k, .chroma .kc, .chroma .kd, .chroma .kn, .chroma .kr, .chroma .kt,
+  .chroma .nb, .chroma .nt { color: var(--code-kw); }
+  .chroma .s, .chroma .s1, .chroma .s2, .chroma .sb, .chroma .sr { color: var(--code-str); }
+  .chroma .c, .chroma .c1, .chroma .cm { color: var(--code-com); font-style: italic; }
+  .chroma .m, .chroma .mi, .chroma .mf, .chroma .mh { color: var(--code-num); }
+  .chroma .nc, .chroma .nf, .chroma .nv, .chroma .na, .chroma .nd { color: var(--code-name); }
+  .chroma .p, .chroma .o { opacity: 0.75; }
+
+  /* A page whose visible title is typeset by LaTeX (front matter
+     latexTitle: true) keeps a real <h1> for screen readers and outlines. */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
 
   /* ── Top nav ─────────────────────────────────────────────────────────────*/
   .site-nav {
     display: flex; align-items: center; gap: 1.2rem;
-    max-width: 64rem; margin: 0 auto; padding: 1rem 1.25rem;
+    /* The docs grid's content width (sidebar 14 + gap 4 + column 64 rem,
+       or with a table of contents 14 + 4 + 46 + 4 + 14): the name starts at
+       the sidebar's edge and the last link ends at the content's. */
+    max-width: calc(82rem + 5rem); box-sizing: border-box; margin: 0 auto; padding: 1rem 2.5rem;
     font-size: 0.9rem;
   }
   .site-nav .brand { font-weight: 700; letter-spacing: 0.01em; text-decoration: none; }
   .site-nav .brand .int { opacity: 0.5; }
   .site-nav .spacer { flex: 1; }
+  @media (max-width: 64rem) { .site-nav { padding: 1rem 1.25rem; } }
+  @media (max-width: 30rem) { .site-nav { gap: 0.9rem; font-size: 0.85rem; } }
   .site-nav a.navlink { text-decoration: none; opacity: 0.72; }
   .site-nav a.navlink:hover { opacity: 1; }
 
@@ -88,11 +141,222 @@
     max-width: 46rem; margin: 2rem auto 5rem; padding: 0 1.25rem;
     zoom: var(--lt-zoom, 1);
   }
-  html[data-width="narrow"] #lt-content { max-width: none; width: 34rem; }
-  html[data-width="normal"] #lt-content { max-width: none; width: 46rem; }
-  html[data-width="wide"]   #lt-content { max-width: none; width: 64rem; }
+  html[data-width-control][data-width="narrow"] #lt-content { max-width: none; width: 34rem; }
+  html[data-width-control][data-width="normal"] #lt-content { max-width: none; width: 46rem; }
+  html[data-width-control][data-width="wide"] #lt-content { max-width: none; width: 64rem; }
   #lt-content h1 { font-weight: 700; line-height: 1.2; }
   #lt-content h2 { font-weight: 650; margin-top: 2.5rem; opacity: 0.85; }
+
+  /* ── Air ─────────────────────────────────────────────────────────────────
+     Generous space between blocks, code and examples: the typeset text is
+     dense by nature, and the page around it should not be. #lt-content in
+     front so these win over the viewer partial's minimal rules. */
+  #lt-content .latex-block { margin: 2rem 0; }
+  #lt-content > .latex-block:first-of-type { margin-top: 0.5rem; }
+
+  /* ── Documentation layout ────────────────────────────────────────────────
+     A sidebar of every docs page beside the reading column; below 64rem it
+     folds into a "Contents" disclosure above the page. */
+  .docs-layout {
+    display: flex; justify-content: center; gap: 4rem;
+    max-width: 90rem; margin: 0 auto; padding: 0 2.5rem;
+  }
+  /* The column is wide enough for an example's Result and LaTeX side by
+     side; prose and code keep a reading measure inside it. */
+  .docs-layout #lt-content { margin: 3rem 0 6rem; padding: 0; flex: 0 1 64rem; min-width: 0; max-width: none; }
+  .docs-layout #lt-content > .latex-block,
+  .docs-layout #lt-content > .highlight,
+  .docs-layout #lt-content > p,
+  .docs-layout #lt-content > ul { max-width: 46rem; }
+  /* The reader's width is a most, never a least: the column gives way when
+     the window (or larger text, since the column is zoomed) leaves less, so
+     the page never scrolls sideways. The document block fills the column. */
+  html[data-width-control][data-width="narrow"] .docs-layout #lt-content { flex: 0 1 34rem; }
+  html[data-width-control][data-width="normal"] .docs-layout #lt-content { flex: 0 1 46rem; }
+  html[data-width-control][data-width="wide"]   .docs-layout #lt-content { flex: 0 1 64rem; }
+  html[data-width-control] .docs-layout #lt-content > .latex-block { max-width: none; }
+  /* A wide display scrolls in a box that peeks into the margins, sized by
+     default as if the column were centred in the window. Here it is not, and
+     the free space either side is at least the layout's padding (2.5rem):
+     peek no further, in unzoomed units, so the page never scrolls sideways. */
+  .docs-layout .latex-display {
+    --latex-display-peek: min(100px, calc(2.5rem / var(--lt-zoom, 1))); }
+  .docs-sidebar {
+    flex: 0 0 14rem; align-self: flex-start;
+    position: sticky; top: 0; max-height: 100vh; overflow-y: auto;
+    padding: 3rem 0 3rem;
+  }
+  .docs-nav { font-size: 0.9rem; line-height: 1.45; }
+  .docs-nav a {
+    display: block; text-decoration: none; opacity: 0.72;
+    padding: 0.32rem 0 0.32rem 0.9rem; margin-left: calc(-0.9rem - 2px);
+    border-left: 2px solid transparent;
+  }
+  .docs-nav a:hover { opacity: 1; }
+  .docs-nav a[aria-current="page"] {
+    opacity: 1; font-weight: 600; border-left-color: currentColor;
+  }
+  .docs-nav ul { list-style: none; margin: 0; padding: 0 0 0 0.9rem;
+    border-left: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+  .docs-nav ul a { margin-left: calc(-0.9rem - 1px); }
+  .docs-nav-group {
+    margin: 2rem 0 0.6rem; font-size: 0.72rem; font-weight: 650;
+    letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.55;
+  }
+  .docs-nav a.docs-nav-top { margin-top: 2rem; }
+  .docs-nav-fold { display: none; }
+  @media (max-width: 64rem) {
+    .docs-layout { flex-direction: column; gap: 0; padding: 0 1.25rem; }
+    .docs-sidebar { display: none; }
+    .docs-nav-fold {
+      display: block; margin: 1.5rem 0 0; padding: 0.7rem 1rem;
+      border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+      border-radius: 8px; font-size: 0.95rem;
+    }
+    .docs-nav-fold summary { cursor: pointer; font-weight: 600; }
+    .docs-nav-fold .docs-nav { padding: 0.5rem 0 0.5rem 0.9rem; }
+    .docs-layout #lt-content { margin-top: 2rem; }
+  }
+
+  /* ── Document table of contents (toc: true; partials/docs-toc.html) ─────
+     The right-hand counterpart of the sidebar: level with the top of the
+     document, then sticky. Only where there is room for three columns. */
+  /* The column holds only the document's reading measure here, and the two
+     side columns are the same width, so the menus sit symmetrically either
+     side of the text. */
+  .docs-layout.has-toc { max-width: 100rem; }
+  .docs-layout.has-toc #lt-content { flex: 0 1 46rem; }
+  .docs-toc { flex: 0 0 14rem; min-width: 0; }
+  .docs-toc nav {
+    position: sticky; top: 3rem; max-height: calc(100vh - 5rem); overflow-y: auto;
+    font-size: 0.85rem; line-height: 1.35; padding: 0 0.25rem 2rem 0;
+    scrollbar-width: thin;
+  }
+  .docs-toc nav .docs-nav-group { margin-top: 0; }
+  .docs-toc ul { list-style: none; margin: 0; padding: 0; }
+  .docs-toc ul ul { display: none; padding-left: 0.85rem; }
+  .docs-toc li.open > ul { display: block; }
+  .docs-toc a {
+    display: block; padding: 0.28rem 0 0.28rem 0.8rem; text-decoration: none;
+    border-left: 2px solid color-mix(in srgb, currentColor 10%, transparent); opacity: 0.66;
+  }
+  .docs-toc a:hover { opacity: 1; }
+  .docs-toc li.open > a { opacity: 0.9; }
+  .docs-toc a.current { opacity: 1; font-weight: 600; border-left-color: currentColor; }
+  .docs-toc .toc-theorem > a { font-size: 0.8rem; font-style: italic; }
+  .latex-anchor { scroll-margin-top: 1.5rem; }
+  @media (max-width: 88rem) { .docs-toc { display: none; } }
+  /* Set by docs-shell.html when the reader's width and text size would not
+     fit between both menus: the contents list gives way to the text. */
+  .docs-layout.toc-gives-way .docs-toc { display: none; }
+
+  /* Previous / next page, at the foot of every docs page. */
+  .docs-pager {
+    display: flex; justify-content: space-between; gap: 1.5rem;
+    margin-top: 5rem; padding-top: 2rem;
+    border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  }
+  .docs-pager a { text-decoration: none; display: flex; flex-direction: column; gap: 0.2rem; font-weight: 600; }
+  .docs-pager a span { font-size: 0.78rem; font-weight: 400; opacity: 0.6; }
+  .docs-pager a.next { text-align: right; margin-left: auto; }
+  .docs-pager a:hover { text-decoration: underline; }
+
+  /* ── Examples (show-source="true"): Result beside LaTeX, or tabs ─────── */
+  #lt-content figure.latex-example {
+    margin: 2.75rem 0; padding: 0; overflow: hidden;
+    border: 1px solid color-mix(in srgb, currentColor 13%, transparent);
+    border-radius: 12px;
+  }
+  .latex-example-tabs {
+    border-bottom: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+    background: color-mix(in srgb, currentColor 3%, transparent);
+  }
+  .latex-example-tabs button {
+    font: inherit; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: inherit; background: none; border: 0;
+    padding: 0.75rem 1.5rem; margin-bottom: -1px; cursor: pointer; text-align: left;
+    opacity: 0.55; border-bottom: 2px solid transparent;
+  }
+  .latex-example-tabs button[aria-selected="true"] { opacity: 1; border-bottom-color: currentColor; }
+  /* A display wider than the preview scrolls in a box that normally peeks
+     into the page margin (--latex-display-peek). Here the "margin" is the
+     frame's padding and, beside it, the LaTeX panel: let the scroll box use
+     the padding and no more, and clip anything past the preview's edge.
+     Only horizontally — overflow-x: clip leaves vertical overhang (accents,
+     tall delimiters) visible, unlike hidden. */
+  .latex-example-preview {
+    padding: 2rem 2.25rem; overflow-x: clip;
+    --lt-example-pad: 2.25rem;
+  }
+  .latex-example-preview .latex-display { --latex-display-peek: var(--lt-example-pad); }
+  /* Theme preview (themes="…" on an example): the Result panel takes the
+     chosen theme's page colours; the viewer recolours the block inside
+     (data-latex-theme). Same palette as the page themes above. */
+  .latex-example-preview[data-latex-theme] { transition: background .15s ease, color .15s ease; }
+  .latex-example-preview[data-latex-theme="light"]    { background: #fafaf9; color: #333333; --latex-page-bg: #fafaf9; }
+  .latex-example-preview[data-latex-theme="dark"]     { background: #0c0a09; color: #e7e5e4; --latex-page-bg: #0c0a09; }
+  .latex-example-preview[data-latex-theme="sepia"]    { background: #f4ecd8; color: #453a26; --latex-page-bg: #f4ecd8; }
+  .latex-example-preview[data-latex-theme="contrast"] { background: #ffffff; color: #000000; --latex-page-bg: #ffffff; }
+  .latex-example-themes {
+    display: inline-flex; gap: 2px; padding: 3px; margin: 0 0 1.5rem;
+    border-radius: 999px; font-size: 0.72rem;
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    background: color-mix(in srgb, currentColor 6%, transparent);
+  }
+  .latex-example-themes button {
+    font: inherit; color: inherit; background: none; border: 0; cursor: pointer;
+    padding: 0.3rem 0.75rem; border-radius: 999px; opacity: 0.7;
+  }
+  .latex-example-themes button:hover { opacity: 1; }
+  .latex-example-themes button[aria-pressed="true"] {
+    opacity: 1; background: color-mix(in srgb, currentColor 16%, transparent);
+  }
+  #lt-content .latex-example-preview > .latex-block { margin: 0; }
+  .latex-example-source pre {
+    margin: 0; border: 0; border-radius: 0; background: transparent;
+    padding: 1.5rem 1.75rem; font-size: 0.86rem;
+    /* Source wraps rather than scrolls: it is read, not copied line by line,
+       and a side panel is narrow. */
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  @container (min-width: 52rem) {
+    .latex-example-tabs button[aria-selected] { opacity: 0.55; border-bottom-color: transparent; }
+    .latex-example-tabs button + button,
+    .latex-example-source {
+      border-left: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+    }
+    .latex-example-source { background: color-mix(in srgb, currentColor 3%, transparent); }
+  }
+  @media (max-width: 40rem) {
+    .latex-example-preview { padding: 1.4rem 1.2rem; --lt-example-pad: 1.2rem; }
+    .latex-example-source pre { padding: 1.2rem; }
+  }
+
+  /* ── Tabs (shortcodes tabs / tab) ──────────────────────────────────────── */
+  #lt-content .tabs {
+    margin: 2.5rem 0; max-width: 46rem;
+    border: 1px solid color-mix(in srgb, currentColor 13%, transparent); border-radius: 12px;
+    overflow: hidden;
+  }
+  .tabs-bar {
+    display: flex; flex-wrap: wrap; overflow-x: auto;
+    border-bottom: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+    background: color-mix(in srgb, currentColor 3%, transparent);
+  }
+  .tabs-bar button {
+    font: inherit; font-size: 0.78rem; color: inherit; background: none; border: 0;
+    padding: 0.7rem 1.2rem; margin-bottom: -1px; cursor: pointer; white-space: nowrap;
+    opacity: 0.6; border-bottom: 2px solid transparent;
+  }
+  .tabs-bar button:hover { opacity: 0.9; }
+  .tabs-bar button[aria-selected="true"] { opacity: 1; border-bottom-color: currentColor; font-weight: 600; }
+  .tabs-panel { padding: 1.75rem 2rem; }
+  .tabs-panel:has(> .highlight:only-child), .tabs-panel:has(> pre) { padding: 0; }
+  .tabs-panel pre { margin: 0; border: 0; border-radius: 0; background: transparent; }
+  #lt-content .tabs-panel > .latex-block { margin: 0; }
+
+  .showcase-list { padding-left: 1.2rem; line-height: 1.7; }
+  .showcase-list li { margin: 0.6rem 0; }
 
   /* ── Feature grid: one column, two on wide screens ───────────────────────*/
   .feature-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem 2.5rem; }
@@ -103,72 +367,209 @@
   .demo-link { margin: 1.5rem 0 0.5rem; }
   .demo-link a {
     display: inline-block; text-decoration: none; font-size: 0.95rem;
-    padding: 0.55rem 1.2rem; border-radius: 999px;
+    padding: 0.5rem 1.1rem; border-radius: 999px;
     border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-    background: color-mix(in srgb, currentColor 8%, transparent);
   }
   .demo-link a:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
 
-  /* ── Hero (the breathing paragraph) ──────────────────────────────────────
-     Sits OUTSIDE #lt-content, so the width/zoom controls (which act on the
-     reading column) never distort the animation. */
-  .hero { text-align: center; padding: 3.5rem 1rem 2.5rem; }
-  .hero .kicker {
-    font-size: 0.8rem; letter-spacing: 0.34em; text-transform: uppercase;
-    opacity: 0.5; font-weight: 600; padding-left: 0.34em;
-  }
-  /* Fixed height reserves the tallest (≈6-line) layout, so the paragraph reflows
-     *inside* a stationary box: the lead above and the tagline/buttons below never
-     move, and nothing on the page below the hero shifts. Only the width is
-     animated (by the JS); the line count changes within this reserved space. On
-     screens too narrow to breathe, the JS switches height back to auto. */
+  /* ── Hero (the breathing paragraph; partials/hero.html) ─────────────────
+     In the page's column, left-aligned with the text. The stage's fixed
+     height reserves the tallest layout, so the paragraph reflows inside a
+     stationary box and nothing below it moves; only the width animates. */
+  .hero { margin: 1.5rem 0 1rem; }
   #stage {
-    box-sizing: border-box; width: min(720px, calc(100vw - 2rem)); height: 18rem;
-    margin: 1.6rem auto 0; padding: 0 clamp(0.5rem, 3vw, 2rem);
-    border-left: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
-    border-right: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
-    display: flex; align-items: center; justify-content: center;
+    box-sizing: border-box; width: 100%; max-width: 100%; height: 18rem;
+    padding: 1.6rem 1.75rem; margin: 0;
+    background: color-mix(in srgb, currentColor 3%, transparent);
+    display: flex; align-items: center;
   }
-  #hero-flow { width: 100%; overflow: hidden; }         /* block is centred in #stage */
-  #stage .latex-block { width: 100%; margin: 0; }
-  .hero .tagline { max-width: 34rem; margin: 1.8rem auto 0; opacity: 0.62; font-size: 0.95rem; }
-  .hero .cta { margin-top: 1.6rem; display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap; }
+  #hero-flow { width: 100%; overflow: hidden; }
+  #stage .latex-block { width: 100%; margin: 0 !important; }
+  .hero-caption { margin: 1.1rem 0 0; font-size: 0.8rem; opacity: 0.5; max-width: 46rem; }
+  .hero .cta { margin-top: 1.4rem; display: flex; gap: 0.7rem; flex-wrap: wrap; }
   .hero .cta a {
-    text-decoration: none; padding: 0.5rem 1.1rem; border-radius: 999px;
-    border: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 0.9rem;
-  }
-  .hero .cta a.primary { background: color-mix(in srgb, currentColor 14%, transparent); }
-  @media (prefers-reduced-motion: reduce) { .hero .tagline .motion { display: none; } }
-
-  /* ── Floating switches (bottom-right), from the vanilla output ───────────*/
-  #lt-switches {
-    position: fixed; right: 1rem; bottom: 1rem; z-index: 1000;
-    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem;
-  }
-  @media (max-width: 34rem) { #lt-switches { flex-direction: column; align-items: flex-end; } }
-  .lt-switch {
-    display: flex; gap: 2px; padding: 3px; border-radius: 999px; font-size: 0.72rem;
-    background: color-mix(in srgb, currentColor 12%, transparent);
+    text-decoration: none; padding: 0.5rem 1.1rem; font-size: 0.88rem;
     border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-    box-shadow: 0 1px 8px color-mix(in srgb, currentColor 14%, transparent);
-    backdrop-filter: blur(6px);
+    transition: background .15s ease;
   }
-  .lt-switch button {
-    border: 0; background: none; color: inherit; cursor: pointer; font: inherit;
-    padding: 0.3rem 0.6rem; border-radius: 999px; opacity: 0.7;
-    letter-spacing: 0.02em; white-space: nowrap;
+  .hero .cta a:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  /* The primary button inverts the page: its text colour is the page's
+     background, its fill the page's text colour — set per theme, since
+     currentColor here would be its own (light) text. */
+  .hero .cta a.primary { background: #333; color: #fafaf9; border-color: transparent; }
+  html.dark     .hero .cta a.primary { background: #e7e5e4; color: #0c0a09; }
+  html.sepia    .hero .cta a.primary { background: #453a26; color: #f4ecd8; }
+  html.contrast .hero .cta a.primary { background: #000; color: #fff; }
+  .hero .cta a.primary:hover { opacity: .88; background: #333; }
+  html.dark     .hero .cta a.primary:hover { background: #e7e5e4; }
+  html.sepia    .hero .cta a.primary:hover { background: #453a26; }
+  html.contrast .hero .cta a.primary:hover { background: #000; }
+  @media (prefers-reduced-motion: reduce) { .hero-caption .motion { display: none; } }
+
+  /* ── Home: live LaTeX in a quiet grid ────────────────────────────────────
+     Typography first: sharp fields of one faint tint, no borders, no
+     shadows, one label style (small caps, set by LaTeX). Steps and the map
+     are plain columns under a hairline. */
+  #lt-content .bento, #lt-content .steps, #lt-content .map {
+    display: grid; gap: 1.5rem; margin: 1.5rem 0 3.5rem;
   }
-  .lt-switch button:hover { opacity: 1; }
-  #zoom-switch button[data-z="reset"] { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; }
-  html[data-width="auto"]     #width-switch button[data-w="auto"],
-  html:not([data-width])      #width-switch button[data-w="auto"],
-  html[data-width="narrow"]   #width-switch button[data-w="narrow"],
-  html[data-width="normal"]   #width-switch button[data-w="normal"],
-  html[data-width="wide"]     #width-switch button[data-w="wide"],
-  html[data-theme="light"]    #theme-switch button[data-t="light"],
-  html[data-theme="dark"]     #theme-switch button[data-t="dark"],
-  html[data-theme="sepia"]    #theme-switch button[data-t="sepia"],
-  html[data-theme="contrast"] #theme-switch button[data-t="contrast"] {
-    opacity: 1; background: color-mix(in srgb, currentColor 18%, transparent);
+  #lt-content .bento { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: dense; }
+  #lt-content .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2.5rem; }
+  #lt-content .map   { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 2.5rem; }
+  .card {
+    position: relative; min-width: 0; box-sizing: border-box;
+    padding: 1.6rem 1.75rem;
+    background: color-mix(in srgb, currentColor 3%, transparent);
   }
+  #lt-content .card .latex-block,
+  #lt-content .step .latex-block,
+  #lt-content .map-card .latex-block { margin: 0; }
+  #lt-content .card .latex-block + .latex-block { margin-top: 1rem; }
+  .span-2 { grid-column: span 2; } .span-3 { grid-column: span 3; }
+  .span-4 { grid-column: span 4; } .span-6 { grid-column: span 6; }
+  /* A card in a theme of its own (the colour maps at work): the page's
+     colours for it, and data-latex-theme makes the viewer recolour the TeX. */
+  .card[data-latex-theme="dark"]  { background: #1c1917; color: #e7e5e4; --latex-page-bg: #1c1917; }
+  .card[data-latex-theme="sepia"] { background: #f4ecd8; color: #453a26; --latex-page-bg: #f4ecd8; }
+  .card[data-latex-theme="light"] { background: #f3f3f2; color: #333333; --latex-page-bg: #f3f3f2; }
+  /* On hover a themed card eases into the light theme and back (the home
+     page's script swaps data-latex-theme): the card and every glyph, rule
+     and picture colour inside it transition together. */
+  .card.theme-hover { transition: background-color .45s ease, color .45s ease; }
+  .card.theme-hover svg, .card.theme-hover svg * { transition: fill .45s ease, stroke .45s ease; }
+  @media (prefers-reduced-motion: reduce) {
+    .card.theme-hover, .card.theme-hover svg, .card.theme-hover svg * { transition: none; } }
+  /* The resizable paragraph: CSS resize, and a slider for touch screens. */
+  /* The resizable paragraph: the tinted field itself is what resizes (like
+     the breathing column above), so the card around it is bare. */
+  .card.card-resize { display: flex; flex-direction: column; padding: 0; background: none; }
+  .resizer {
+    position: relative; width: 100%; min-width: 14rem; max-width: 100%;
+    box-sizing: border-box; padding: 1.6rem 1.75rem;
+    background: color-mix(in srgb, currentColor 3%, transparent);
+  }
+  /* The height follows the text with an ease rather than jumping as lines
+     are added or removed (the script sets it from the text's height). */
+  .resizer-body { overflow: hidden; transition: height .28s ease; }
+  /* The right edge is the handle: a border that appears on hover (always
+     faintly on touch screens), dragged with a pointer or moved with the
+     arrow keys. */
+  .resizer-handle {
+    position: absolute; top: 0; right: -7px; width: 14px; height: 100%;
+    cursor: ew-resize; touch-action: none; outline: none;
+  }
+  .resizer-handle::after {
+    content: ''; position: absolute; top: 0; bottom: 0; left: 6px; width: 2px;
+    background: currentColor; opacity: 0; transition: opacity .2s ease;
+  }
+  .resizer:hover .resizer-handle::after, .resizer.dragging .resizer-handle::after { opacity: .35; }
+  .resizer-handle:hover::after, .resizer-handle:focus-visible::after, .resizer.dragging .resizer-handle::after { opacity: .7; }
+  @media (hover: none) { .resizer-handle::after { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { .resizer-body { transition: none; } }
+  .card-widths .widths { display: grid; grid-template-columns: 1fr 1.7fr; gap: 3.5rem; align-items: start; margin-top: 1.25rem; }
+  #lt-content .card-widths .widths > .latex-block { margin: 0; }
+  .step, .map-card { padding-top: 1rem; border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
+  .map-card { display: block; text-decoration: none; color: inherit; padding-bottom: 1.4rem; transition: border-color .2s ease; }
+  .map-card:hover { border-top-color: currentColor; }
+  @media (max-width: 60rem) {
+    #lt-content .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .span-2, .span-3 { grid-column: span 1; } .span-4, .span-6 { grid-column: span 2; }
+  }
+  @media (max-width: 40rem) {
+    #lt-content .bento, #lt-content .steps, #lt-content .map { grid-template-columns: 1fr; gap: 1.25rem; }
+    .span-2, .span-3, .span-4, .span-6 { grid-column: auto; }
+    .card-widths .widths { grid-template-columns: 1fr; }
+    .card { padding: 1.25rem 1.1rem; }
+  }
+
+  /* ── Reading options (partials/switches.html) ────────────────────────────
+     One round "Aa" button, bottom right, that opens a small panel: text
+     size, colour theme, and — only on pages with widthControl — the
+     column width. A frosted material with the page's own colour per theme
+     (not Canvas, which follows the system's light/dark, not the page's). */
+  /* --latex-page-bg tells the viewer the page's colour per theme: the
+     footnote popover is filled with it, and tints are mixed against it.
+     Without it the viewer falls back to Canvas, which follows the system's
+     light/dark setting rather than this page's theme. */
+  html          { --latex-page-bg: #fafaf9; --lt-glass: rgba(250, 250, 249, .74); --lt-seg-on: #ffffff; }
+  html.dark     { --latex-page-bg: #0c0a09; --lt-glass: rgba(34, 31, 29, .74);    --lt-seg-on: #4a4541; }
+  html.sepia    { --latex-page-bg: #f4ecd8; --lt-glass: rgba(244, 236, 216, .80); --lt-seg-on: #fbf6ea; }
+  html.contrast { --latex-page-bg: #ffffff; --lt-glass: rgba(255, 255, 255, .92); --lt-seg-on: #ffffff; }
+  #lt-reader {
+    --lt-hair: color-mix(in srgb, currentColor 16%, transparent);
+    --lt-accent: #0a84ff;
+    position: fixed; z-index: 1000;
+    right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #lt-reader-button, #lt-reader-panel {
+    background: var(--lt-glass);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    border: .5px solid var(--lt-hair); color: inherit;
+  }
+  #lt-reader-button {
+    width: 44px; height: 44px; border-radius: 50%; padding: 0; cursor: pointer;
+    display: grid; place-items: center;
+    box-shadow: 0 6px 20px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .08);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  #lt-reader-button:hover { box-shadow: 0 8px 26px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .1); }
+  #lt-reader-button:active { transform: scale(.94); }
+  #lt-reader-button[aria-expanded="true"] { transform: scale(.94); }
+  .lt-aa { font-family: ui-serif, "New York", Georgia, serif; line-height: 1; display: flex; align-items: baseline; }
+  .lt-aa span:first-child { font-size: 13px; }
+  .lt-aa span:last-child  { font-size: 19px; }
+  #lt-reader-panel {
+    position: absolute; right: 0; bottom: 56px; width: 272px; padding: 6px;
+    border-radius: 20px; box-sizing: border-box;
+    box-shadow: 0 18px 50px rgb(0 0 0 / .18), 0 2px 6px rgb(0 0 0 / .08);
+    transform-origin: bottom right; animation: lt-pop .22s cubic-bezier(.2, .9, .25, 1.05);
+  }
+  #lt-reader-panel[hidden] { display: none; }
+  @keyframes lt-pop { from { opacity: 0; transform: translateY(6px) scale(.92); } }
+  @media (prefers-reduced-motion: reduce) { #lt-reader-panel { animation: none; } #lt-reader-button { transition: none; } }
+  .lt-row { padding: 10px 8px; }
+  .lt-row + .lt-row { border-top: .5px solid var(--lt-hair); }
+  .lt-row button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .lt-row button:focus-visible, #lt-reader-button:focus-visible { outline: 2px solid var(--lt-accent); outline-offset: 2px; }
+  .lt-caption { font-size: 11px; opacity: .6; margin: 0 0 8px; }
+  /* Text size: small A · percentage · large A, like Safari's reader menu. */
+  .lt-size { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; }
+  .lt-size button { height: 36px; border-radius: 10px; }
+  .lt-size button:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  .lt-size [data-z="out"] { font: 500 14px ui-serif, "New York", Georgia, serif; }
+  .lt-size [data-z="in"]  { font: 500 21px ui-serif, "New York", Georgia, serif; }
+  .lt-size #zoom-level { font-size: 13px; font-variant-numeric: tabular-nums; opacity: .75; }
+  /* Theme: four swatches with names, like Books. */
+  .lt-themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .lt-themes button { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; padding: 2px 0; }
+  .lt-themes button span { opacity: .7; }
+  .lt-themes button[aria-checked="true"] span { opacity: 1; font-weight: 600; }
+  .lt-swatch {
+    width: 34px; height: 34px; border-radius: 50%;
+    box-shadow: inset 0 0 0 .5px rgb(0 0 0 / .22);
+    font-family: ui-serif, "New York", Georgia, serif; font-size: 14px;
+    display: grid; place-items: center; opacity: 1 !important; font-weight: 400 !important;
+  }
+  [data-t="light"]    .lt-swatch { background: #fafaf9; color: #333; }
+  [data-t="dark"]     .lt-swatch { background: #1c1917; color: #e7e5e4; }
+  [data-t="sepia"]    .lt-swatch { background: #f4ecd8; color: #453a26; }
+  [data-t="contrast"] .lt-swatch { background: #fff; color: #000; box-shadow: inset 0 0 0 1.5px #000; }
+  .lt-themes button[aria-checked="true"] .lt-swatch { outline: 2.5px solid var(--lt-accent); outline-offset: 2.5px; }
+  /* Width: an iOS segmented control. */
+  .lt-seg {
+    display: grid; grid-template-columns: repeat(4, 1fr); padding: 2px; gap: 2px;
+    border-radius: 9px; background: color-mix(in srgb, currentColor 9%, transparent);
+  }
+  .lt-seg button { font-size: 12px; padding: 6px 0; border-radius: 7px; opacity: .8; }
+  .lt-seg button[aria-checked="true"] {
+    opacity: 1; font-weight: 600; background: var(--lt-seg-on);
+    box-shadow: 0 1px 3px rgb(0 0 0 / .14), 0 0 0 .5px rgb(0 0 0 / .04);
+  }
+  @media (max-width: 30rem) {
+    #lt-reader-panel { position: fixed; left: 12px; right: 12px; width: auto;
+      bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 56px); }
+  }
+  @media print { #lt-reader { display: none; } }
 </style>

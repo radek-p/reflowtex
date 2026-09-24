@@ -1,0 +1,85 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The documentation area: a sidebar of every docs page, grouped by section
+  (content/docs/<group>/_index.md gives a group its title and weight; the
+  group pages themselves are not rendered), the page, and previous/next links
+  that walk the same order. On a narrow screen the sidebar folds into a
+  "Contents" disclosure above the page.
+*/ -}}
+{{- $docs := site.GetPage "/docs" -}}
+{{- $order := slice site.Home -}}
+{{- range $docs.Sections.ByWeight -}}
+  {{- range .Pages.ByWeight -}}{{- $order = $order | append . -}}{{- end -}}
+{{- end -}}
+{{- range $docs.RegularPages.ByWeight -}}{{- $order = $order | append . -}}{{- end -}}
+{{- with site.GetPage "/about" -}}{{- $order = $order | append . -}}{{- end -}}
+{{- $here := . -}}
+{{- $idx := -1 -}}
+{{- range $i, $p := $order -}}{{- if eq $p.RelPermalink $here.RelPermalink -}}{{- $idx = $i -}}{{- end -}}{{- end -}}
+<div class="docs-layout{{ if .Params.toc }} has-toc{{ end }}">
+  <details class="docs-nav-fold">
+    <summary>Contents</summary>
+    {{ partial "docs-nav.html" (dict "docs" $docs "here" $here) }}
+  </details>
+  <aside class="docs-sidebar" aria-label="Documentation">
+    {{ partial "docs-nav.html" (dict "docs" $docs "here" $here) }}
+  </aside>
+  <main id="lt-content">
+    <h1{{ if .Params.latexTitle }} class="sr-only"{{ end }}>{{ .Title }}</h1>
+    {{ .Content }}
+    <nav class="docs-pager" aria-label="Previous and next page">
+      {{- if gt $idx 0 }}{{ with index $order (sub $idx 1) }}
+      <a class="prev" href="{{ .RelPermalink }}"><span>Previous</span>{{ .LinkTitle }}</a>
+      {{- end }}{{ else }}<span></span>{{ end }}
+      {{- if and (ge $idx 0) (lt (add $idx 1) (len $order)) }}{{ with index $order (add $idx 1) }}
+      <a class="next" href="{{ .RelPermalink }}"><span>Next</span>{{ .LinkTitle }}</a>
+      {{- end }}{{ end }}
+    </nav>
+  </main>
+  {{- if .Params.toc }}{{ partial "docs-toc.html" . }}{{ end }}
+</div>
+{{- if and .Params.toc .Params.widthControl }}
+<script>
+/* The column wants the reader's width at the reader's text size. Where that
+   does not fit beside both menus, the contents list on the right is hidden
+   rather than the text squeezed; below that the column itself gives way. */
+(function () {
+  var lay = document.currentScript.previousElementSibling, html = document.documentElement;
+  var WANT = { auto: 46, narrow: 34, normal: 46, wide: 64 };
+  function fit() {
+    var rem = parseFloat(getComputedStyle(html).fontSize) || 16;
+    var zoom = parseFloat(html.style.getPropertyValue('--lt-zoom')) || 1;
+    var want = (WANT[html.getAttribute('data-width')] || 46) * rem * zoom;
+    var cs = getComputedStyle(lay);
+    var room = lay.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    var menus = 2 * (14 + 4) * rem;              // two side columns and their gaps
+    lay.classList.toggle('toc-gives-way', room < want + menus);
+  }
+  fit();
+  window.addEventListener('resize', fit);
+})();
+</script>
+{{- end }}
+
+{{- define "partials/docs-nav.html" -}}
+<nav class="docs-nav">
+  {{- /* The home page is the documentation's introduction. */}}
+  <a href="{{ site.Home.RelPermalink }}"{{ if eq site.Home.RelPermalink .here.RelPermalink }} aria-current="page"{{ end }}>Introduction</a>
+  {{- range .docs.Sections.ByWeight }}
+  <p class="docs-nav-group">{{ .Title }}</p>
+  <ul>
+    {{- range .Pages.ByWeight }}
+    <li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a></li>
+    {{- end }}
+  </ul>
+  {{- end }}
+  {{- /* Pages directly under docs/ (Showcase): plain links after the
+         groups, like Introduction before them. */}}
+  {{- range .docs.RegularPages.ByWeight }}
+  <a class="docs-nav-top" href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a>
+  {{- end }}
+  {{- with site.GetPage "/about" }}
+  <a class="docs-nav-top" href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a>
+  {{- end }}
+</nav>
+{{- end -}}

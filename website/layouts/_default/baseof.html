@@ -1,6 +1,6 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
 <!doctype html>
-<html lang="{{ site.LanguageCode | default "en" }}">
+<html lang="{{ site.LanguageCode | default "en" }}"{{ if .Params.widthControl }} data-width-control{{ end }}>
 <head>
 {{ partial "head.html" . }}
 </head>

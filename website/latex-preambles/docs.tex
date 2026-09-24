@@ -1,0 +1,7 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% Preamble for the documentation pages (content/docs/): the page title and
+% section headings are typeset by LaTeX like the prose around them.
+% \pagetitle[group]{title}: the group as a small-caps label above the title.
+\NewDocumentCommand\pagetitle{o m}{%
+  \noindent\IfValueT{#1}{{\small\scshape #1}\par\smallskip\noindent}%
+  {\LARGE\bfseries #2\par}}

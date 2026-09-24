@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% Preamble for content/docs/web-first.md: the companion package with boxed
+% theorems (so this page's own theorems and proofs show the style), amsthm,
+% and the kind the page builds as a tutorial.
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem*{claim}{Claim}
+\usepackage[boxedtheorems]{reflowtex}
+
+\NewDocumentCommand\pagetitle{o m}{%
+  \noindent\IfValueT{#1}{{\small\scshape #1}\par\smallskip\noindent}%
+  {\LARGE\bfseries #2\par}}
+\newcommand\cs[1]{\texttt{\textbackslash #1}}
+
+% Tutorial: a kind of our own, with a look and no behaviour.
+\newenvironment{webwarning}
+  {\begin{reflowtexstream}{warning}}
+  {\end{reflowtexstream}}
+
+% Boxed theorems, docs: a boxed copy with its own look.
+\makeboxed[keytheorem]{theorem}[accent=#c2410c, class=key]

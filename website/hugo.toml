@@ -16,6 +16,9 @@ enableInlineShortcodes = true
   # AGPL-3.0 §13 source offer, read by the viewer partial's footer.
   reflowtexSource = "https://github.com/radek-p/reflowtex"
   tagline = "Real LaTeX, set by a genuine TeX run and re-flowed live in the browser."
+  # Colour map every {{< latex >}} block uses unless it names another:
+  # latex-color-maps/site.json, which remaps TeX's colours per theme.
+  latexColorMap = "site"
 
 # The landing copy is rendered through the reflowtex pipeline via {{< latex >}}
 # shortcodes wrapped in a little layout HTML (feature grid, hero), so unsafe
@@ -23,14 +26,19 @@ enableInlineShortcodes = true
 [markup.goldmark.renderer]
   unsafe = true
 
+# Code blocks carry chroma's CSS classes rather than inline colours, so the
+# theme switcher can restyle them (palette in layouts/partials/head.html).
+[markup.highlight]
+  noClasses = false
+
 [menu]
   [[menu.main]]
-    name = "Getting started"
-    pageRef = "/docs"
+    name = "Docs"
+    pageRef = "/docs/getting-started/installation"
     weight = 10
   [[menu.main]]
-    name = "Examples"
-    pageRef = "/examples"
+    name = "Showcase"
+    pageRef = "/docs/showcase"
     weight = 20
   [[menu.main]]
     name = "About"

@@ -33,8 +33,8 @@ that is fine, since `public/` is not tracked.
 |---|---|
 | `content/_index.md` | home copy + feature grid (rendered via `{{< latex >}}`) |
 | `content/hero/` | the headless hero paragraph (breathing-width reflow) |
-| `content/{docs,examples,about}/` | getting-started, live demos, license/about |
-| `static/testmath/` | standalone AMS `testmath.tex` demo (built by `build.sh`, served at `/testmath/`, linked from Examples) |
+| `content/docs/` | the documentation: a sidebar of groups (`getting-started/`, `typesetting/`, `web-first/`) and `showcase.md`, which renders `testmath.tex` |
+| `content/about/` | license and project notes |
 | `layouts/` | base template, home, page layouts, and the hero/nav/switch partials |
 | `layouts/partials/hero.html` | the animated hero (ported from `experiments/26-reflow-tex-hero`) |
 
@@ -55,6 +55,6 @@ Set these to the real values (all currently placeholders):
 `.github/workflows/hugo.yml` (at the repo root) runs on every push to `main`:
 it builds the project container image (cached between runs), runs
 `make website` inside it, and publishes `website/public` to GitHub Pages.
-The per-block build tree and the multi-pass testmath demo are cached
+The per-block build tree (testmath.tex, on the Showcase page, included) is cached
 between runs, so only blocks whose content changed are recompiled. TeX Live
 is pinned by image digest in the `Dockerfile`; bump it deliberately.

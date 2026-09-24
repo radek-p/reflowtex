@@ -1,0 +1,43 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  Tabs: {{< tabs >}} {{< tab "Title" >}}…{{< /tab >}} … {{< /tabs >}}. Use
+  {{% tab %}} for Markdown content (a code fence). The panels are all in the
+  page; a hidden one is display:none, which the viewer handles — a LaTeX
+  block in it is laid out when its tab is opened.
+*/ -}}
+{{- $_ := .Inner -}}
+{{- $tabs := .Scratch.Get "tabs" -}}
+<div class="tabs">
+  <div class="tabs-bar" role="tablist">
+    {{- range $i, $t := $tabs }}
+    <button type="button" role="tab" aria-selected="{{ if eq $i 0 }}true{{ else }}false{{ end }}" data-tab-index="{{ $i }}">{{ $t.title }}</button>
+    {{- end }}
+  </div>
+  {{- range $i, $t := $tabs }}
+  <div class="tabs-panel" role="tabpanel" data-tab-index="{{ $i }}"{{ if ne $i 0 }} hidden{{ end }}>{{ $t.content }}</div>
+  {{- end }}
+</div>
+{{- if not (.Page.Scratch.Get "tabs-script") }}{{ .Page.Scratch.Set "tabs-script" true }}
+<script>
+  function openTab(b) {
+    var box = b.closest('.tabs'), i = b.getAttribute('data-tab-index');
+    box.querySelectorAll(':scope > .tabs-bar [data-tab-index]').forEach(function (x) {
+      x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+    box.querySelectorAll(':scope > .tabs-panel').forEach(function (p) {
+      p.hidden = p.getAttribute('data-tab-index') !== i; });
+  }
+  // A cross-reference into a hidden tab (a batch's other chapter): open that
+  // tab first. Capture phase, so it runs before the viewer's own jump.
+  document.addEventListener('click', function (e) {
+    var ref = e.target.closest && e.target.closest('[data-link-label]');
+    var t = ref && document.getElementById(ref.getAttribute('data-link-label'));
+    var panel = t && t.closest('.tabs-panel[hidden]');
+    if (panel) openTab(panel.closest('.tabs').querySelector(
+      ':scope > .tabs-bar [data-tab-index="' + panel.getAttribute('data-tab-index') + '"]'));
+  }, true);
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('.tabs-bar [data-tab-index]');
+    if (b) openTab(b);
+  });
+</script>
+{{- end }}

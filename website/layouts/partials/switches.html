@@ -1,23 +1,69 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
-{{- /* The reader controls from the vanilla output: content width, zoom (text
-       size), and colour theme. They call the window.__set* / __zoom hooks
-       defined in partials/head.html. */ -}}
-<div id="lt-switches">
-  <nav id="width-switch" class="lt-switch" aria-label="Content width">
-    <button type="button" data-w="auto"   onclick="window.__setWidth('auto')">Auto</button>
-    <button type="button" data-w="narrow" onclick="window.__setWidth('narrow')">Narrow</button>
-    <button type="button" data-w="normal" onclick="window.__setWidth('normal')">Normal</button>
-    <button type="button" data-w="wide"   onclick="window.__setWidth('wide')">Wide</button>
-  </nav>
-  <nav id="zoom-switch" class="lt-switch" aria-label="Text size">
-    <button type="button" data-z="out"   onclick="window.__zoom(-1)" title="Smaller" aria-label="Smaller">&minus;</button>
-    <button type="button" data-z="reset" onclick="window.__zoom(0)"  title="Reset"   aria-label="Reset text size" id="zoom-level">100%</button>
-    <button type="button" data-z="in"    onclick="window.__zoom(1)"  title="Bigger"  aria-label="Bigger">+</button>
-  </nav>
-  <nav id="theme-switch" class="lt-switch" aria-label="Colour theme">
-    <button type="button" data-t="light"    onclick="window.__setTheme('light')">Light</button>
-    <button type="button" data-t="dark"     onclick="window.__setTheme('dark')">Dark</button>
-    <button type="button" data-t="sepia"    onclick="window.__setTheme('sepia')">Sepia</button>
-    <button type="button" data-t="contrast" onclick="window.__setTheme('contrast')">Contrast</button>
-  </nav>
+{{- /*
+  Reading options: one round "Aa" button, bottom right, opening a small
+  panel — text size, colour theme, and on pages with widthControl: true (a
+  full paper) the column width. The width a reader picked is saved like the
+  rest, but only pages that offer the control apply it (<html
+  data-width-control>, see baseof.html). The buttons call the window.__zoom /
+  __setTheme / __setWidth hooks defined in partials/head.html.
+*/ -}}
+<div id="lt-reader">
+  <div id="lt-reader-panel" role="dialog" aria-label="Reading options" hidden>
+    <div class="lt-row lt-size" role="group" aria-label="Text size">
+      <button type="button" data-z="out" aria-label="Smaller text" title="Smaller">A</button>
+      <button type="button" data-z="reset" id="zoom-level" aria-label="Reset text size" title="Reset">100%</button>
+      <button type="button" data-z="in" aria-label="Larger text" title="Larger">A</button>
+    </div>
+    <div class="lt-row lt-themes" role="radiogroup" aria-label="Colour theme">
+      {{- range slice "light" "dark" "sepia" "contrast" }}
+      <button type="button" role="radio" data-t="{{ . }}" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>{{ . | humanize }}</span></button>
+      {{- end }}
+    </div>
+    {{- if .Params.widthControl }}
+    <div class="lt-row">
+      <p class="lt-caption" id="lt-width-label">Text width</p>
+      <div class="lt-seg" role="radiogroup" aria-labelledby="lt-width-label">
+        {{- range slice "auto" "narrow" "normal" "wide" }}
+        <button type="button" role="radio" data-w="{{ . }}" aria-checked="false">{{ . | humanize }}</button>
+        {{- end }}
+      </div>
+    </div>
+    {{- end }}
+  </div>
+  <button type="button" id="lt-reader-button" aria-haspopup="dialog" aria-expanded="false"
+          aria-controls="lt-reader-panel" title="Reading options">
+    <span class="lt-aa" aria-hidden="true"><span>A</span><span>a</span></span>
+    <span class="sr-only">Reading options</span>
+  </button>
 </div>
+<script>
+(function () {
+  var root = document.getElementById('lt-reader');
+  var btn = document.getElementById('lt-reader-button'), panel = document.getElementById('lt-reader-panel');
+  var html = document.documentElement;
+  function sync() {
+    root.querySelectorAll('[data-t]').forEach(function (b) {
+      b.setAttribute('aria-checked', String(html.getAttribute('data-theme') === b.dataset.t)); });
+    root.querySelectorAll('[data-w]').forEach(function (b) {
+      b.setAttribute('aria-checked', String((html.getAttribute('data-width') || 'auto') === b.dataset.w)); });
+  }
+  function open(on) {
+    panel.hidden = !on;
+    btn.setAttribute('aria-expanded', String(on));
+    if (on) { sync(); (panel.querySelector('[aria-checked="true"]') || panel.querySelector('button')).focus(); }
+  }
+  btn.addEventListener('click', function () { open(panel.hidden); });
+  document.addEventListener('pointerdown', function (e) { if (!panel.hidden && !root.contains(e.target)) open(false); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !panel.hidden) { open(false); btn.focus(); } });
+  panel.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.t) window.__setTheme(b.dataset.t);
+    if (b.dataset.w) window.__setWidth(b.dataset.w);
+    if (b.dataset.z) window.__zoom(b.dataset.z === 'out' ? -1 : b.dataset.z === 'in' ? 1 : 0);
+    sync();
+  });
+  sync();
+})();
+</script>

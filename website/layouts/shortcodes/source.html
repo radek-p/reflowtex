@@ -1,0 +1,13 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The source of a LaTeX file the build used, highlighted, so a page shows
+  exactly what was compiled:
+    {{< source file="chapter1.tex" >}}   a --demos-dir file (data/latex_sources.json)
+    {{< source preamble="book" >}}       latex-preambles/book.tex
+  A leading SPDX comment line is left out.
+*/ -}}
+{{- $text := "" -}}
+{{- with .Get "file" }}{{ $text = index (hugo.Data.latex_sources | default dict) . | default "" }}{{ end -}}
+{{- with .Get "preamble" }}{{ $text = os.ReadFile (printf "latex-preambles/%s.tex" .) }}{{ end -}}
+{{- $text = replaceRE `^%\s*SPDX-License-Identifier[^\n]*\n` "" $text | strings.TrimSpace -}}
+{{ transform.Highlight $text "latex" }}

@@ -1,0 +1,12 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% Preamble for the home page's live examples (content/_index.md).
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\usepackage{tikz-cd}
+\usepackage[boxedtheorems]{reflowtex}
+\NewDocumentCommand\pagetitle{o m}{%
+  \noindent\IfValueT{#1}{{\small\scshape #1}\par\smallskip\noindent}%
+  {\LARGE\bfseries #2\par}}
+% A card's title: bold at the text size — the face the page's headings use,
+% so no new style — with a little space before the text.
+\newcommand\cardtitle[1]{\noindent{\bfseries #1}\par\medskip}

@@ -1,22 +1,20 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
-{{- /* The landing hero: one real LaTeX paragraph (compiled by the reflowtex
-       pipeline, content lives in the headless page content/hero/) re-broken live
-       by latex-viewer.js as the column width breathes. Ported from
-       experiments/26-reflow-tex-hero. */ -}}
+{{- /* The breathing paragraph: one real LaTeX paragraph (compiled by the
+       pipeline; its source is the headless page content/hero/) re-broken live by
+       latex-viewer.js as its column breathes, within the width of the page's
+       column. Placed by the hero shortcode. */ -}}
 <section class="hero">
-  <div class="kicker">Reflow&nbsp;TeX</div>
   <div id="stage">
     <div id="hero-flow">
       {{- with site.GetPage "/hero" }}{{ .Content }}{{ end -}}
     </div>
   </div>
-  <p class="tagline">
-    {{ site.Params.tagline }}
-    <span class="motion">The column above is resizing on its own — every frame re-runs the line-breaker.</span>
+  <p class="hero-caption">
+    <span class="motion">This column is resizing itself. Every frame, each line is broken again by the Knuth–Plass algorithm — in your browser.</span>
   </p>
   <div class="cta">
-    <a class="primary" href="{{ "docs" | relURL }}">Get started</a>
-    <a href="{{ "examples" | relURL }}">See examples</a>
+    <a class="primary" href="{{ "docs/getting-started/installation/" | relURL }}">Get started</a>
+    <a href="{{ "docs/showcase/" | relURL }}">See a whole paper</a>
   </div>
 </section>
 
@@ -24,17 +22,15 @@
   (function () {
     var stage = document.getElementById('stage');
     if (!stage) return;
+    var column = document.getElementById('lt-content');
     var reduce  = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var PERIOD  = 17000;                       // one slow breath, ms
     var running = false;
-
-    // Width band. Both edges stay wide enough that the paragraph never exceeds the
-    // ~6 lines the fixed #stage height reserves; below that band we can't breathe.
+    // The width band, inside the page's column: wide enough that the paragraph
+    // never needs more lines than the stage's fixed height reserves.
     function band() {
-      var vw = document.documentElement.clientWidth;
-      var maxW = Math.min(760, vw - 32);
-      var minW = Math.max(310, maxW * 0.62);
-      return { minW: minW, maxW: maxW };
+      var maxW = Math.min(740, column.clientWidth);
+      return { minW: Math.max(320, maxW * 0.6), maxW: maxW };
     }
     function breathe(now) {
       if (!running) return;
@@ -42,18 +38,14 @@
       stage.style.width = (mid + amp * Math.sin((2 * Math.PI * now) / PERIOD)).toFixed(1) + 'px';
       requestAnimationFrame(breathe);
     }
-    // Decide (and re-decide on resize) whether to breathe. When the viewport is too
-    // narrow to breathe — or the reader prefers reduced motion — freeze at full
-    // width with natural height, so the paragraph (which may run longer here) is
-    // never clipped and nothing animates.
     function setup() {
       var b = band(), canBreathe = !reduce && (b.maxW - b.minW) >= 24;
       if (canBreathe) {
-        stage.style.height = '';               // use the CSS-reserved fixed height
+        stage.style.height = '';
         if (!running) { running = true; requestAnimationFrame(breathe); }
       } else {
         running = false;
-        stage.style.width  = 'min(760px, calc(100vw - 2rem))';
+        stage.style.width = '100%';
         stage.style.height = 'auto';
       }
     }

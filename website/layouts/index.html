@@ -1,7 +1,4 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
-{{ define "main" }}
-{{ partial "hero.html" . }}
-<main id="lt-content">
-{{ .Content }}
-</main>
-{{ end }}
+{{- /* The home page is the documentation's introduction: the docs layout, with
+       the sidebar, around content/_index.md (hero, live examples, a map). */ -}}
+{{ define "main" }}{{ partial "docs-shell.html" . }}{{ end }}

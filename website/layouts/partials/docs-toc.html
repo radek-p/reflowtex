@@ -1,0 +1,102 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The right-hand table of contents of a page with toc: true, built from the
+  outline a LaTeX block announces (latex-viewer.js, "reflowtex:outline"):
+  sections, their subsections, and the theorems, lemmas and the like in them.
+  The page's blocks each announce their own outline; the one with the most
+  entries — the document, not the page's own headings — is shown. It starts
+  level with the top of that block and sticks while the block is scrolled
+  through. Only the section being read is open, showing its
+  subsections; only the subsection being read shows its theorems.
+*/ -}}
+<aside class="docs-toc" aria-label="Contents of the document">
+  <nav>
+    <p class="docs-nav-group">Contents</p>
+    <div class="docs-toc-tree"></div>
+  </nav>
+</aside>
+<script>
+(function () {
+  var aside = document.currentScript.previousElementSibling;
+  var nav = aside.querySelector('nav'), tree = aside.querySelector('.docs-toc-tree');
+  var block = null, size = 0, flat = [], scheduled = false, wired = false;
+
+  function label(e) {
+    if (e.kind !== 'theorem') return (e.number ? e.number + ' ' : '') + e.title;
+    var m = /^(.*?)( \(.*\))?$/.exec(e.title);           // "Theorem (Main)"
+    return m[1] + (e.number ? ' ' + e.number : '') + (m[2] || '');
+  }
+  function build(entries) {
+    flat = [];
+    var root = { kids: [] }, sec = null, sub = null;
+    entries.forEach(function (e) {
+      if (!e.id) return;
+      var n = { e: e, kids: [] };
+      if (e.level <= 1) { n.parent = root; sec = n; sub = null; }
+      else if (e.level === 2) { n.parent = sec || root; sub = n; }
+      else if (e.level === 3) { n.parent = sub || sec || root; }
+      else { n.parent = sub || sec || root; }
+      n.parent.kids.push(n);
+      flat.push(n);
+    });
+    tree.replaceChildren(render(root.kids, 1));
+  }
+  function render(nodes, depth) {
+    var ul = document.createElement('ul');
+    ul.className = 'toc-depth-' + depth;
+    nodes.forEach(function (n) {
+      var li = document.createElement('li'), a = document.createElement('a');
+      if (n.e.kind === 'theorem') li.className = 'toc-theorem';
+      a.href = '#' + n.e.id;
+      a.textContent = label(n.e);
+      a.addEventListener('click', function (ev) {
+        var t = document.getElementById(n.e.id);
+        if (!t) return;
+        ev.preventDefault();
+        t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        history.replaceState(null, '', '#' + n.e.id);
+      });
+      li.appendChild(a);
+      n.li = li; n.a = a;
+      if (n.kids.length) li.appendChild(render(n.kids, depth + 1));
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+  // Level with the block's top; sticky from there on (CSS).
+  function place() {
+    if (!block) return;
+    var off = block.getBoundingClientRect().top - aside.getBoundingClientRect().top;
+    nav.style.marginTop = Math.max(0, off) + 'px';
+  }
+  // The entry being read: the last one whose anchor has passed a line a
+  // quarter of the way down the window.
+  function spy() {
+    scheduled = false;
+    var line = window.innerHeight * 0.25, current = null;
+    for (var i = 0; i < flat.length; i++) {
+      var t = document.getElementById(flat[i].e.id);
+      if (t && t.getBoundingClientRect().top <= line) current = flat[i]; else if (t) break;
+    }
+    flat.forEach(function (n) { n.li.classList.remove('open'); n.a.classList.remove('current'); });
+    if (!current) return;
+    current.a.classList.add('current');
+    for (var n = current; n && n.li; n = n.parent) n.li.classList.add('open');
+    var ar = current.a.getBoundingClientRect(), nr = nav.getBoundingClientRect();
+    if (ar.top < nr.top + 40 || ar.bottom > nr.bottom - 20) nav.scrollTop += ar.top - nr.top - nr.height / 3;
+  }
+  function schedule() { if (!scheduled) { scheduled = true; requestAnimationFrame(spy); } }
+
+  document.addEventListener('reflowtex:outline', function (ev) {
+    if (ev.detail.entries.length <= size) return;           // keep the largest outline
+    block = ev.detail.block; size = ev.detail.entries.length;
+    build(ev.detail.entries);
+    place(); spy();
+    if (wired) return;
+    wired = true;
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', function () { place(); schedule(); });
+    new ResizeObserver(function () { place(); schedule(); }).observe(document.getElementById('lt-content'));
+  });
+})();
+</script>
