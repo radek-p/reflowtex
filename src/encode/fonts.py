@@ -90,9 +90,14 @@ class Fonts:
         that half-written file, decide provisioning is done, and hand it
         straight to fontTools, which chokes ("not enough data"). Writing to a
         temp name first and renaming into place means dst only ever appears
-        once it's complete, so that race window doesn't exist."""
+        once it's complete, so that race window doesn't exist.
+
+        mkstemp creates the file owner-only (0600), and the rename keeps that;
+        a served font must be readable by others — the Pages upload, run as a
+        different user than the container that built the site, is one."""
         fd, tmp = tempfile.mkstemp(dir=dst.parent, prefix=f'.{dst.name}.')
         try:
+            os.fchmod(fd, 0o644)
             with os.fdopen(fd, 'wb') as f:
                 shutil.copyfileobj(open(src, 'rb'), f)
             os.replace(tmp, dst)
