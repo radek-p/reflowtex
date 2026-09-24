@@ -181,6 +181,13 @@ vendored `protobuf.min.js`.
 `make check` verifies all of the above. The [container](#try-it-in-one-command)
 described above has all of this baked in, if you'd rather not install it.
 
+## Contributing
+
+Contributions are welcome – see [CONTRIBUTING.md](CONTRIBUTING.md). Each one
+needs a signed [Contributor License Agreement](CLA.md), which gives the
+maintainer the rights needed to keep the project's direction and licensing
+under one control during its initial phase.
+
 ## License
 
 Reflow TeX is licensed under the **GNU Affero General Public License v3.0 or
