@@ -15,9 +15,9 @@ text, and the paragraph re-breaks around it.
 
 <div class="live-demo">
 <div class="live-stepper" role="group" aria-label="Apples in the basket">
-  <button type="button" data-step="-1" aria-label="One apple fewer">−</button>
+  <button type="button" data-step="-1" aria-label="One apple fewer"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8"/></svg></button>
   <input type="number" min="0" max="999" value="0" inputmode="numeric" aria-label="Number of apples">
-  <button type="button" data-step="1" aria-label="One apple more">+</button>
+  <button type="button" data-step="1" aria-label="One apple more"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8M6 2v8"/></svg></button>
   <span class="live-stepper-label">apples</span>
 </div>
 <svg class="live-arrow" aria-hidden="true"><path class="live-arrow-line" d=""/><path class="live-arrow-head" d=""/></svg>
@@ -51,7 +51,12 @@ field.addEventListener('input', () => { n = Math.max(0, parseInt(field.value, 10
     background: var(--latex-page-bg); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
   .live-stepper button { width: 30px; height: 30px; border: 0; border-radius: 999px; cursor: pointer;
     font: 500 18px/1 ui-sans-serif, system-ui, sans-serif; color: var(--lt-primary);
-    background: color-mix(in srgb, var(--lt-primary) 9%, transparent); transition: background-color .15s ease; }
+    background: color-mix(in srgb, var(--lt-primary) 9%, transparent); transition: background-color .15s ease;
+    display: grid; place-items: center; padding: 0; }
+  /* The signs are drawn, not typed: a text "+" sits on the font's baseline,
+     which lands below the middle of the button in most system fonts. */
+  .live-stepper button svg { width: 12px; height: 12px; pointer-events: none;
+    stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; fill: none; }
   .live-stepper button:hover { background: color-mix(in srgb, var(--lt-primary) 18%, transparent); }
   .live-stepper button:active { background: color-mix(in srgb, var(--lt-primary) 28%, transparent); }
   .live-stepper button:disabled { opacity: .35; cursor: default; background: color-mix(in srgb, currentColor 6%, transparent); }
