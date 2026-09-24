@@ -88,52 +88,26 @@ A \texttt{tikz-cd} square, drawn as SVG with \TeX's own metrics.
 \begin{theorem}
 There are infinitely many primes.
 \end{theorem}
-\begin{accordion}
-\begin{collapsedpane}
-\noindent\textit{Idea:} multiply them all, add one. \expandlink[Proof]
-\end{collapsedpane}
-\begin{expandedpane}
-\begin{proof}\hfill\collapselink[Less]\par
+\begin{webaccordion}
+\begin{webpane}[collapsed]
+\noindent\textit{Idea:} multiply them all, add one. \webnextpane[Proof]
+\end{webpane}
+\begin{webpane}[expanded]
+\begin{proof}\hfill\webprevpane[Less]\par
 If $p_1, \dots, p_k$ were all of them, $p_1 \cdots p_k + 1$ would have a
 prime factor that is none of them.
 \end{proof}
-\end{expandedpane}
-\end{accordion}
+\end{webpane}
+\end{webaccordion}
 {{< /latex >}}
 
-</div>
-
-<div class="card span-6 card-widths">
-
-{{< latex preamble="home" >}}
-\cardtitle{One source, two widths}
-{{< /latex >}}
-
-<div class="widths">
-
-{{< latex preamble="home" >}}
-Knuth and Plass looked at a whole paragraph at once, weighing every
-possible break against every other, to find the lines whose spacing is most
-even. Here one paragraph is broken twice, for two widths, and each time the
-result is the best the algorithm can find: no ragged right, no rivers, no
-word stretched thin.
-{{< /latex >}}
-
-{{< latex preamble="home" >}}
-Knuth and Plass looked at a whole paragraph at once, weighing every
-possible break against every other, to find the lines whose spacing is most
-even. Here one paragraph is broken twice, for two widths, and each time the
-result is the best the algorithm can find: no ragged right, no rivers, no
-word stretched thin.
-{{< /latex >}}
-
-</div>
 </div>
 
 <div class="card span-3">
 
 {{< latex preamble="home" >}}
 \cardtitle{Footnotes and links}
+\vspace{-\baselineskip}
 \begin{equation}\label{eq:home-euler}
   e^{i\pi} + 1 = 0
 \end{equation}

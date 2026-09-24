@@ -40,7 +40,7 @@ examples/symbol/                       --demos-dir: where file="…" is found
 ```
 
 {{< tabs >}}
-{{< tab "SegmentSymbol.otf" >}}{{< glyph-outline "glyphs/segment-symbol.svg" >}}{{< /tab >}}
+{{< tab "SegmentSymbol.otf" >}}{{< glyph-outline "glyphs/segment-symbol.html" >}}{{< /tab >}}
 {{< tab "preamble.tex" >}}{{< source file="../examples/symbol/preamble.tex" >}}{{< /tab >}}
 {{< tab "segment.tex" >}}{{< source file="segment.tex" >}}{{< /tab >}}
 {{% tab "custom-symbols.md" %}}

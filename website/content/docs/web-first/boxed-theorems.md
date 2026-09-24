@@ -7,32 +7,16 @@ latexTitle: true
 {{< latex preamble="webfirst" >}}
 \pagetitle[Web-first \LaTeX]{Boxed theorems}
 \bigskip
-The command \cs{makeboxed} draws an environment as a box with a coloured left border.
-The source of the environment's uses does not change. A box inside a box --
-a claim inside a proof -- is a little narrower per level; the space
-\LaTeX{} puts around the environment stays outside the box, and a proof's QED
-box stays inside. In print \cs{makeboxed} changes nothing.
-\section*{Three ways to use it}
+The declaration \cs{DeclareWebBox} makes an environment a box on the web,
+with a coloured left border; the source of the environment's uses does not
+change, and in print \cs{DeclareWebBox} changes nothing. This example's preamble boxes
+every theorem and proof, and makes one boxed copy of \texttt{theorem} with a
+colour of its own:
 {{< /latex >}}
 
 ```latex
-\makeboxed{theorem}                  % every theorem in the document
-\makeboxed[keytheorem]{theorem}      % a boxed copy; theorem itself stays plain
-\makeboxed{lemma}[accent=#3b8a55]    % with options
-```
-
-{{< latex preamble="webfirst" >}}
-Without the optional first argument the environment itself is boxed,
-everywhere. With it, \cs{makeboxed} defines a new environment, a copy that
-shares the original's counter and heading, and boxes only the copy -- for the
-few theorems that deserve to stand out. The package option
-\texttt{boxedtheorems} boxes every environment made with \cs{newtheorem} and
-every \texttt{proof}; this page uses it, and also defines a copy:
-{{< /latex >}}
-
-```latex
-\usepackage[boxedtheorems]{reflowtex}
-\makeboxed[keytheorem]{theorem}[accent=#c2410c, class=key]
+\usepackage[boxed]{reflowtex}
+\DeclareWebBox[keytheorem]{theorem}[accent=#c2410c, class=key]
 ```
 
 {{< latex preamble="webfirst" show-source="true" >}}
@@ -53,6 +37,28 @@ So some $x$ has $ax = 1$, and $a$ is invertible.
 \begin{keytheorem}[Wedderburn]
 Every finite division ring is a field.
 \end{keytheorem}
+{{< /latex >}}
+
+{{< latex preamble="webfirst" >}}
+A box inside a box -- the claim inside the proof -- is a little narrower per
+level; the space \LaTeX{} puts around an environment stays outside its box,
+and a proof's QED box stays inside.
+\section*{Three ways to use it}
+{{< /latex >}}
+
+```latex
+\DeclareWebBox{theorem}                  % every theorem in the document
+\DeclareWebBox[keytheorem]{theorem}      % a boxed copy; theorem itself stays plain
+\DeclareWebBox{lemma}[accent=#3b8a55]    % with options
+```
+
+{{< latex preamble="webfirst" >}}
+Without the optional first argument the environment itself is boxed,
+everywhere. With it, \cs{DeclareWebBox} defines a new environment, a copy that
+shares the original's counter and heading, and boxes only the copy -- for the
+few theorems that deserve to stand out, like Wedderburn's above. The package
+option \texttt{boxed} boxes every environment made with
+\cs{newtheorem} and every \texttt{proof}.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" >}}

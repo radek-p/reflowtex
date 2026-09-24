@@ -401,7 +401,57 @@
   .glyph-outline .go-handle { fill: none; stroke: var(--go-accent); stroke-opacity: .55; stroke-width: 1; }
   .glyph-outline .go-control { fill: var(--latex-page-bg, #fafaf9); stroke: var(--go-accent); stroke-width: 1.25; }
   .glyph-outline .go-anchor { fill: var(--go-accent); stroke: var(--latex-page-bg, #fafaf9); stroke-width: 1; }
+  /* The font view above it: every glyph slot of the font, the one drawn
+     large outlined in the accent colour. */
+  /* Side by side: the font view a narrow column on the left, its cells
+     stacked, the glyph drawn large beside them. */
+  .glyph-outline-frame:has(> .font-view) { display: flex; align-items: flex-start; gap: 2.5rem; justify-content: center; }
+  .glyph-outline-frame:has(> .font-view) .glyph-outline { flex: 0 1 26rem; margin: 0; min-width: 0; }
+  .font-view { flex: 0 0 8.5rem; margin: 0; font: 13px/1.35 ui-sans-serif, system-ui, sans-serif; }
+  .font-view .fv-head { margin: 0 0 .7rem; opacity: .7; }
+  .font-view .fv-head span { font-weight: 650; opacity: 1; }
+  .font-view .fv-cells { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .font-view .fv-cell { position: relative; width: 100%; box-sizing: border-box; padding: .5rem .55rem .5rem;
+    border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px;
+    display: flex; flex-direction: column; gap: 1px; }
+  .font-view .fv-cell svg { display: block; width: 100%; height: 3.2rem; margin-bottom: .25rem; }
+  .font-view .fv-base { stroke: currentColor; stroke-opacity: .3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .font-view .fv-glyph { fill: currentColor; }
+  .font-view .fv-index { position: absolute; top: .35rem; left: .5rem; font-size: 11px; opacity: .5; }
+  .font-view .fv-name { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  .font-view .fv-code { font-size: 11.5px; opacity: .6; }
+  .font-view .fv-selected { border: 2px solid var(--lt-primary); padding: calc(.5rem - 1px) calc(.55rem - 1px); }
+  .font-view .fv-zoom { display: none; margin: 1.1rem 0 0; opacity: .7; }
+  .font-view .fv-zoom code { font-size: 12px; }
+  /* On a phone: the view above the drawing, its two cells side by side. */
+  @media (max-width: 40rem) {
+    .glyph-outline-frame { padding: .75rem 0; }
+    .glyph-outline-frame:has(> .font-view) { display: block; }
+    .font-view { margin: 0 0 1rem; }
+    .font-view .fv-cells { flex-direction: row; }
+    .font-view .fv-cell { width: calc(50% - 4px); }
+    .font-view .fv-zoom { display: block; }
+  }
   .glyph-outline .go-label { fill: currentColor; fill-opacity: .55; font: 500 22px ui-sans-serif, system-ui, sans-serif; }
+
+  /* ── A colour map as a table (shortcode color-map) ─────────────────────
+     Each cell is a small page of its theme: the theme's background, a sample
+     in the colour it uses, the value under it. The table itself keeps the
+     page's own colours; only the cells show the themes. */
+  /* scrolls sideways on a narrow screen, never up and down */
+  .cmap-wrap { max-width: 46rem; overflow-x: auto; overflow-y: hidden; margin: 1.4rem 0; }
+  .cmap { border-collapse: separate; border-spacing: 6px; margin: 0; width: 100%;
+    font: 12px/1.3 ui-sans-serif, system-ui, sans-serif; }
+  .cmap thead th { text-align: left; font-weight: 600; font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; opacity: .6; padding: 0 2px 2px; white-space: nowrap; }
+  .cmap th[scope="row"], .cmap td { padding: 0; font-weight: 400; text-align: left; }
+  .cmap-cell { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px 8px; min-width: 6.5rem;
+    border-radius: 7px; border: 1px solid color-mix(in srgb, #808080 22%, transparent); box-sizing: border-box; }
+  .cmap-aa { font: 600 20px/1 "Latin Modern Roman", Georgia, serif; }
+  .cmap-hex { font: 11px/1.2 ui-monospace, "SF Mono", Menlo, monospace; opacity: .8; white-space: nowrap; }
+  .cmap-kept .cmap-hex { font-family: ui-sans-serif, system-ui, sans-serif; opacity: .5; }
+  .cmap-swatch { display: block; height: 20px; border-radius: 4px;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, #808080 18%, transparent); }
 
   /* ── Tabs (shortcodes tabs / tab) ──────────────────────────────────────── */
   #lt-content .tabs {
@@ -539,8 +589,6 @@
     opacity: 1; width: 3px; left: 5.5px; background: var(--lt-primary); }
   @media (hover: none) { .resizer-handle::after { opacity: .3; } }
   @media (prefers-reduced-motion: reduce) { .resizer-body { transition: none; } }
-  .card-widths .widths { display: grid; grid-template-columns: 1fr 1.7fr; gap: 3.5rem; align-items: start; margin-top: 1.25rem; }
-  #lt-content .card-widths .widths > .latex-block { margin: 0; }
   .step, .map-card { padding-top: 1rem; border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
   .map-card { display: block; text-decoration: none; color: inherit; padding-bottom: 1.4rem; transition: border-color .2s ease; }
   .map-card:hover { border-top-color: currentColor; }
@@ -556,7 +604,11 @@
   @media (max-width: 40rem) {
     #lt-content .bento, #lt-content .steps, #lt-content .map { grid-template-columns: 1fr; gap: 1.25rem; }
     .span-2, .span-3, .span-4, .span-6 { grid-column: auto; }
-    .card-widths .widths { grid-template-columns: 1fr; }
+    /* The two-column rule above still matches here and would keep the third
+       step spanning two tracks: in a one-column grid that opens a phantom
+       second column, and the second step lands in it, zero wide, over the
+       first. Every step takes one track. */
+    #lt-content .steps > :nth-child(3):last-child { grid-column: auto; }
     .card { padding: 1.25rem 1.1rem; }
   }
 

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Draw one glyph of a font (OpenType/CFF, or Type 1) as an SVG, zoomed in, with its vector
+"""Show a small font the way a font editor does: first the font view – every
+glyph slot, with its index, glyph name and code point, the chosen one
+highlighted – then that glyph as an SVG, zoomed in, with its vector
 controls: the outline, its on-curve anchors (squares) and the off-curve
 handles of each Bézier segment (circles on thin lines), over the glyph's
-advance box and baseline – the way a vector editor shows a selected path.
+advance box and baseline, as a vector editor shows a selected path.
+OpenType/CFF, or Type 1 (zoomed glyph only).
 
     python website/tools/glyph_outline.py website/latex-fonts/SegmentSymbol.otf \\
-        segmentSymbol > website/assets/glyphs/segment-symbol.svg
+        segmentSymbol > website/assets/glyphs/segment-symbol.html
 
 The SVG uses currentColor and --lt-outline-accent, so it follows the page's
 theme; the {{< glyph-outline >}} shortcode inlines it.
@@ -17,11 +20,13 @@ from fontTools.ttLib import TTFont
 from fontTools.pens.recordingPen import RecordingPen
 
 path, name = sys.argv[1], sys.argv[2]
+tt = None
 if path.endswith('.pfb'):
     font = t1Lib.T1Font(path); font.parse()
     glyphs = font.getGlyphSet()
 else:
-    glyphs = TTFont(path).getGlyphSet()
+    tt = TTFont(path)
+    glyphs = tt.getGlyphSet()
 glyph = glyphs[name]
 pen = RecordingPen(); glyph.draw(pen)
 adv = glyph.width
@@ -48,7 +53,43 @@ for op, pts in pen.value:
     elif op == 'closePath':
         d.append('Z')
 
-out = [f'<svg class="glyph-outline" xmlns="http://www.w3.org/2000/svg" viewBox="{x0} 0 {w} {h}" '
+out = []
+
+# The font view: one cell per glyph slot, each a small drawing of the glyph
+# on the same em box, so a one-glyph font reads as a font.
+if tt is not None:
+    order = tt.getGlyphOrder()
+    codes = {}
+    for cp, g in tt.getBestCmap().items():
+        codes.setdefault(g, cp)
+    upem = tt['head'].unitsPerEm
+    asc, desc = tt['hhea'].ascent, tt['hhea'].descent
+    top_em, bot_em = max(asc, upem * 0.8), min(desc, -upem * 0.2)
+    fname = path.rsplit('/', 1)[-1]
+    out.append('<div class="font-view">')
+    out.append(f'<p class="fv-head"><span>{fname}</span> {len(order)} glyph slot'
+               f'{"s" if len(order) != 1 else ""}, {upem} units per em</p>')
+    out.append('<ol class="fv-cells">')
+    for i, g in enumerate(order):
+        pen2 = RecordingPen(); glyphs[g].draw(pen2)
+        d2 = []
+        for op, pts in pen2.value:
+            c = {'moveTo': 'M', 'lineTo': 'L', 'curveTo': 'C', 'qCurveTo': 'Q', 'closePath': 'Z'}[op]
+            d2.append(c + ' '.join(f'{x} {top_em - y}' for x, y in pts))
+        w2 = max(glyphs[g].width, upem * 0.6)
+        x2 = (glyphs[g].width - w2) / 2
+        cp = codes.get(g)
+        label = f'U+{cp:04X}' if cp is not None else 'no code point'
+        sel = ' fv-selected' if g == name else ''
+        out.append(f'<li class="fv-cell{sel}"><svg viewBox="{x2} 0 {w2} {top_em - bot_em}" aria-hidden="true">'
+                   f'<path d="M{x2} {top_em}H{x2 + w2}" class="fv-base"/>'
+                   + (f'<path d="{" ".join(d2)}" class="fv-glyph"/>' if d2 else '') +
+                   f'</svg><span class="fv-index">{i}</span><span class="fv-name">{g}</span>'
+                   f'<span class="fv-code">{label}</span></li>')
+    out.append('</ol>')
+    out.append(f'<p class="fv-zoom">Slot {order.index(name)}, <code>{name}</code>, drawn large:</p></div>')
+
+out += [f'<svg class="glyph-outline" xmlns="http://www.w3.org/2000/svg" viewBox="{x0} 0 {w} {h}" '
        f'role="img" aria-label="The glyph {name}, zoomed in, with its anchor points and control handles">']
 grid = ' '.join(f'M{x} 0V{h}' for x in range((x0 // 100 + 1) * 100, x1, 100)) + ' ' + \
        ' '.join(f'M{x0} {Y(y)}H{x1}' for y in range((bottom // 100 + 1) * 100, top, 100))

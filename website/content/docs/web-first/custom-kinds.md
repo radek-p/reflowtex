@@ -10,7 +10,7 @@ latexTitle: true
 Everything in the package is built from two primitives, and so can your own
 environments be.
 \section*{Streams}
-\verb|\begin{reflowtexstream}[|\emph{key=value}\verb|]{|\emph{kind}\verb|}|
+\verb|\begin{webstream}[|\emph{key=value}\verb|]{|\emph{kind}\verb|}|
 makes what is typeset inside it a \emph{stream}: a separate run of paragraphs
 and displays with a name, its \emph{kind}, placed where the environment stood.
 Streams nest, and a footnote is a stream too. On its way to the reader a
@@ -40,8 +40,8 @@ preamble.
 
 ```latex
 \newenvironment{webwarning}
-  {\begin{reflowtexstream}{warning}}
-  {\end{reflowtexstream}}
+  {\begin{webstream}{warning}}
+  {\end{webstream}}
 ```
 
 {{< latex preamble="webfirst" >}}
@@ -92,14 +92,14 @@ its links are actions:
 {{< /latex >}}
 
 ```latex
-\NewDocumentEnvironment{accordion}{O{}}   % options: initial=…, print=…
-  {\begin{reflowtexstream}[#1]{accordion}}
-  {\end{reflowtexstream}}
-\NewDocumentEnvironment{pane}{O{}}
-  {\begin{reflowtexstream}[name=#1]{pane}}
-  {\end{reflowtexstream}}
-\NewDocumentCommand\panelink{m m}{\webaction{pane:#1}{#2}}
-\NewDocumentCommand\expandlink{O{See more}}{\panelink{next}{#1}}
+\NewDocumentEnvironment{webaccordion}{O{}}   % options: initial=…, print=…
+  {\begin{webstream}[#1]{accordion}}
+  {\end{webstream}}
+\NewDocumentEnvironment{webpane}{O{}}
+  {\begin{webstream}[name=#1]{pane}}
+  {\end{webstream}}
+\NewDocumentCommand\webpanelink{m m}{\webaction{pane:#1}{#2}}
+\NewDocumentCommand\webnextpane{O{See more}}{\webpanelink{next}{#1}}
 ```
 
 {{< latex preamble="webfirst" >}}

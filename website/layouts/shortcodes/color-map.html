@@ -1,0 +1,49 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  A colour map drawn as a table:
+    {{< color-map map="site" >}}                            every colour it names
+    {{< color-map map="site" colors="#0000ff,#ff0000" >}}   only these, and their tints
+  Rows: every colour TeX wrote that the map (latex-color-maps/<name>.json,
+  read from data/latex_color_maps.json) names, then its tints. Columns: the
+  colour as written, then each theme – a sample set in the colour that theme
+  uses, on that theme's own page background. A tint is the mapped colour
+  mixed with the theme's background, as the viewer mixes it.
+*/ -}}
+{{- $m := index (hugo.Data.latex_color_maps | default dict) (.Get "map") -}}
+{{- $only := slice -}}
+{{- with .Get "colors" }}{{ range split . "," }}{{ $only = $only | append (strings.TrimSpace . | lower) }}{{ end }}{{ end -}}
+{{- $themes := slice "light" "dark" "sepia" "contrast" -}}
+{{- $bg := dict "light" "#fafaf9" "dark" "#0c0a09" "sepia" "#f4ecd8" "contrast" "#ffffff" -}}
+{{- $label := dict "light" "Light" "dark" "Dark" "sepia" "Sepia" "contrast" "High contrast" -}}
+{{- $names := dict "#000000" "black" "#0000ff" "blue" "#ff0000" "red" "#4f4f54" "grey" "#fcc712" "yellow" "#808080" "grey" -}}
+{{- $srcs := slice -}}
+{{- range $t, $cm := $m.colors }}{{ range $k, $_ := $cm }}{{ if and (not (in $srcs $k)) (or (not $only) (in $only $k)) }}{{ $srcs = $srcs | append $k }}{{ end }}{{ end }}{{ end -}}
+{{- $srcs = sort $srcs -}}
+<div class="cmap-wrap">
+<table class="cmap">
+  <thead><tr><th>As TeX wrote it</th>{{ range $themes }}<th>{{ index $label . }}</th>{{ end }}</tr></thead>
+  <tbody>
+  {{- range $src := $srcs }}
+    <tr>
+      <th scope="row"><span class="cmap-cell" style="background:#ffffff;color:{{ $src | safeCSS }}"><span class="cmap-aa">Aa</span><span class="cmap-hex">{{ with index $names $src }}{{ . }} {{ end }}{{ $src }}</span></span></th>
+      {{- range $t := $themes }}
+      {{- $to := index (index $m.colors $t | default dict) $src -}}
+      <td><span class="cmap-cell{{ if not $to }} cmap-kept{{ end }}" style="background:{{ index $bg $t | safeCSS }};color:{{ $to | default $src | safeCSS }}"><span class="cmap-aa">Aa</span><span class="cmap-hex">{{ with $to }}{{ . }}{{ else }}kept{{ end }}</span></span></td>
+      {{- end }}
+    </tr>
+  {{- end }}
+  {{- range $tint, $spec := $m.tints }}
+    {{- $base := index $spec 0 }}{{ $pct := index $spec 1 }}
+    {{- if or (not $only) (in $only $base) }}
+    <tr class="cmap-tint">
+      <th scope="row"><span class="cmap-cell" style="background:#ffffff;color:#333333"><span class="cmap-swatch" style="background:{{ $tint | safeCSS }}"></span><span class="cmap-hex">{{ with index $names $base }}{{ . }}{{ else }}{{ $base }}{{ end }}!{{ $pct }} = {{ $tint }}</span></span></th>
+      {{- range $t := $themes }}
+      {{- $to := index (index $m.colors $t | default dict) $base | default $base -}}
+      <td><span class="cmap-cell" style="background:{{ index $bg $t | safeCSS }};color:{{ if eq $t "dark" }}#e7e5e4{{ else }}#333333{{ end }}"><span class="cmap-swatch" style="background:color-mix(in srgb, {{ $to | safeCSS }} {{ $pct }}%, {{ index $bg $t | safeCSS }})"></span><span class="cmap-hex">{{ $pct }}% {{ $to }}</span></span></td>
+      {{- end }}
+    </tr>
+    {{- end }}
+  {{- end }}
+  </tbody>
+</table>
+</div>

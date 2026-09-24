@@ -16,7 +16,7 @@ run, to its nearest print equivalent, so one source keeps producing a PDF.
 {{< /latex >}}
 
 ```latex
-\usepackage{reflowtex}                  % or [boxedtheorems]
+\usepackage{reflowtex}                  % or [boxed]
 ```
 
 {{< latex preamble="webfirst" >}}

@@ -6,7 +6,7 @@
 \newtheorem{theorem}{Theorem}
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem*{claim}{Claim}
-\usepackage[boxedtheorems]{reflowtex}
+\usepackage[boxed]{reflowtex}
 
 % Like a sectioning command, it leaves the paragraph after it unindented.
 \makeatletter
@@ -18,11 +18,11 @@
 
 % Tutorial: a kind of our own, with a look and no behaviour.
 \newenvironment{webwarning}
-  {\begin{reflowtexstream}{warning}}
-  {\end{reflowtexstream}}
+  {\begin{webstream}{warning}}
+  {\end{webstream}}
 
 % Boxed theorems, docs: a boxed copy with its own look.
-\makeboxed[keytheorem]{theorem}[accent=#c2410c, class=key]
+\DeclareWebBox[keytheorem]{theorem}[accent=#c2410c, class=key]
 % Section headings ragged right: at a narrow measure a heading breaks onto
 % several lines, and the standard classes would justify them. Only the
 % heading's style changes, not its spacing or font.
