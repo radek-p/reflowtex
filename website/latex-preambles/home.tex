@@ -4,9 +4,12 @@
 \newtheorem{theorem}{Theorem}
 \usepackage{tikz-cd}
 \usepackage[boxedtheorems]{reflowtex}
+% Like a sectioning command, it leaves the paragraph after it unindented.
+\makeatletter
 \NewDocumentCommand\pagetitle{o m}{%
   \noindent\IfValueT{#1}{{\small\scshape #1}\par\smallskip\noindent}%
-  {\LARGE\bfseries #2\par}}
+  {\LARGE\bfseries #2\par}\@afterindentfalse\@afterheading}
+\makeatother
 % A card's title: bold at the text size — the face the page's headings use,
 % so no new style — with a little space before the text.
 \newcommand\cardtitle[1]{\noindent{\bfseries #1}\par\medskip}

@@ -1,0 +1,10 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+The segment modality $\segment_X\, \varphi$ cuts a word at the positions in
+$X$ and asks $\varphi$ to hold on every piece. It nests like any
+quantifier, so
+\[
+  \exists p\; \exists X\; \segment_X\; \exists a\;
+  \bigl(p \not\sim a \land \forall p'\,(a \le p' \lor p' \sim p)\bigr)
+\]
+says that the word splits into pieces, each with a value $a$ that differs
+from the one at $p$ and comes first among the values of its piece.

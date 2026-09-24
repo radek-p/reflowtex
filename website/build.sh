@@ -18,6 +18,7 @@ HUGO_INT="$REPO/integrations/hugo"
 DEMOS="$REPO/examples/demo"                     # shared snippets for the docs pages
 TESTMATH="$REPO/examples/testmath"               # testmath.tex, rendered on the Showcase page
 BOOK="$REPO/examples/book"                       # the batch example (Books in parts)
+SYMBOL="$REPO/examples/symbol"                   # a symbol of one's own (Symbols of your own)
 
 # Python deps (protobuf, fonttools) live in the repo-root virtualenv, not the
 # system interpreter. `make venv` (in $REPO) creates it; build it here too so
@@ -51,7 +52,7 @@ cp "$HUGO_INT/layouts/partials/reflowtex-viewer.html" "$SITE/layouts/partials/re
 # 2. Compile all LaTeX blocks, embed the schema, provision + patch fonts.
 #    Set PREBUILD_ARGS to pass extra flags (e.g. --force, --prune, -j 8).
 # shellcheck disable=SC2086
-"$PYTHON" "$HUGO_INT/prebuild.py" "$SITE" --demos-dir "$DEMOS" --demos-dir "$TESTMATH" --demos-dir "$BOOK" ${PREBUILD_ARGS:-}
+"$PYTHON" "$HUGO_INT/prebuild.py" "$SITE" --demos-dir "$DEMOS" --demos-dir "$TESTMATH" --demos-dir "$BOOK" --demos-dir "$SYMBOL" ${PREBUILD_ARGS:-}
 
 # 3. Build (or serve) the static site.
 if [ "${1:-}" = "server" ]; then

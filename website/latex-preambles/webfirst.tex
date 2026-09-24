@@ -8,9 +8,12 @@
 \newtheorem*{claim}{Claim}
 \usepackage[boxedtheorems]{reflowtex}
 
+% Like a sectioning command, it leaves the paragraph after it unindented.
+\makeatletter
 \NewDocumentCommand\pagetitle{o m}{%
   \noindent\IfValueT{#1}{{\small\scshape #1}\par\smallskip\noindent}%
-  {\LARGE\bfseries #2\par}}
+  {\LARGE\bfseries #2\par}\@afterindentfalse\@afterheading}
+\makeatother
 \newcommand\cs[1]{\texttt{\textbackslash #1}}
 
 % Tutorial: a kind of our own, with a look and no behaviour.

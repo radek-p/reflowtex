@@ -1,0 +1,7 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  A glyph drawn zoomed in with its vector controls, inlined from assets/:
+    {{< glyph-outline "glyphs/segment-symbol.svg" >}}
+  The SVG is made by tools/glyph_outline.py from the font file itself.
+*/ -}}
+<div class="glyph-outline-frame">{{ (resources.Get (.Get 0)).Content | safeHTML }}</div>

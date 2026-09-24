@@ -1,0 +1,12 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% A symbol no font has: the segment modality, one glyph drawn in FontForge and
+% saved as an OpenType font, SegmentSymbol.otf, at U+01A7 ("Ƨ", the reversed S
+% it resembles, so that copying it gives a real character). The build puts the
+% font next to the document, so it is loaded by its file name; declared as a
+% symbol font, it takes the script sizes from the math machinery.
+\DeclareFontFamily{TU}{segmentsymbol}{}
+\DeclareFontShape{TU}{segmentsymbol}{m}{n}{<->"[SegmentSymbol.otf]"}{}
+\DeclareSymbolFont{segmentsymbols}{TU}{segmentsymbol}{m}{n}
+% An ordinary math symbol, like \exists: \segment_X takes its variable as
+% a subscript.
+\Umathchardef\segment="0 \symsegmentsymbols "01A7\relax

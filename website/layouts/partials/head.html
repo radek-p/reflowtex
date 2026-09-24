@@ -311,8 +311,8 @@
   .latex-example-themes button[aria-pressed="true"] {
     opacity: 1; background: color-mix(in srgb, currentColor 16%, transparent);
   }
-  #lt-content .latex-example-preview > .latex-block { margin: 0; }
-  .latex-example-source pre {
+  #lt-content .latex-example-stage > .latex-block { margin: 0; }
+  .latex-example-source pre, .latex-example-source .highlight pre.chroma {
     margin: 0; border: 0; border-radius: 0; background: transparent;
     padding: 1.5rem 1.75rem; font-size: 0.86rem;
     /* Source wraps rather than scrolls: it is read, not copied line by line,
@@ -327,19 +327,48 @@
     }
     .latex-example-source { background: color-mix(in srgb, currentColor 3%, transparent); }
   }
+  /* The same look when the reader has dragged the divider (the figure is
+     then narrower than the query above asks, but stays side by side). */
+  .latex-example-split .latex-example-tabs button[aria-selected] { opacity: 0.55; border-bottom-color: transparent; }
+  .latex-example-split .latex-example-tabs button + button,
+  .latex-example-split .latex-example-source {
+    border-left: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+  }
+  .latex-example-split .latex-example-source { background: color-mix(in srgb, currentColor 3%, transparent); }
   @media (max-width: 40rem) {
     .latex-example-preview { padding: 1.4rem 1.2rem; --lt-example-pad: 1.2rem; }
     .latex-example-source pre { padding: 1.2rem; }
   }
 
+  /* ── A glyph zoomed in (shortcode glyph-outline) ────────────────────────
+     The outline as a vector editor shows a selected path: anchors as
+     squares, handles as circles on thin lines, over the advance box and
+     baseline. Stroke widths stay constant however large the drawing is. */
+  .glyph-outline-frame { padding: 1.5rem 2rem; }
+  .glyph-outline { display: block; width: 100%; max-width: 26rem; height: auto; margin: 0 auto;
+    --go-accent: var(--lt-outline-accent, #2f6fb3); }
+  .glyph-outline * { vector-effect: non-scaling-stroke; }
+  .glyph-outline .go-grid { fill: none; stroke: currentColor; stroke-opacity: .07; stroke-width: 1; }
+  .glyph-outline .go-box { fill: none; stroke: currentColor; stroke-opacity: .3; stroke-width: 1; stroke-dasharray: 4 4; }
+  .glyph-outline .go-baseline { stroke: currentColor; stroke-opacity: .45; stroke-width: 1; }
+  .glyph-outline .go-fill { fill: currentColor; fill-opacity: .1; }
+  .glyph-outline .go-path { fill: none; stroke: var(--go-accent); stroke-width: 1.5; }
+  .glyph-outline .go-handle { fill: none; stroke: var(--go-accent); stroke-opacity: .55; stroke-width: 1; }
+  .glyph-outline .go-control { fill: var(--latex-page-bg, #fafaf9); stroke: var(--go-accent); stroke-width: 1.25; }
+  .glyph-outline .go-anchor { fill: var(--go-accent); stroke: var(--latex-page-bg, #fafaf9); stroke-width: 1; }
+  .glyph-outline .go-label { fill: currentColor; fill-opacity: .55; font: 500 22px ui-sans-serif, system-ui, sans-serif; }
+
   /* ── Tabs (shortcodes tabs / tab) ──────────────────────────────────────── */
   #lt-content .tabs {
     margin: 2.5rem 0; max-width: 46rem;
     border: 1px solid color-mix(in srgb, currentColor 13%, transparent); border-radius: 12px;
-    overflow: hidden;
+    overflow: clip;   /* to the rounded frame, without being a scroll box */
   }
   .tabs-bar {
-    display: flex; flex-wrap: wrap; overflow-x: auto;
+    /* Wraps rather than scrolls: an overflow-x other than visible would make
+       the bar a scroll box, and the tabs' -1px overlap onto its border (the
+       selected tab's underline) would let it scroll vertically by a pixel. */
+    display: flex; flex-wrap: wrap;
     border-bottom: 1px solid color-mix(in srgb, currentColor 11%, transparent);
     background: color-mix(in srgb, currentColor 3%, transparent);
   }
@@ -352,7 +381,7 @@
   .tabs-bar button[aria-selected="true"] { opacity: 1; border-bottom-color: currentColor; font-weight: 600; }
   .tabs-panel { padding: 1.75rem 2rem; }
   .tabs-panel:has(> .highlight:only-child), .tabs-panel:has(> pre) { padding: 0; }
-  .tabs-panel pre { margin: 0; border: 0; border-radius: 0; background: transparent; }
+  .tabs-panel pre, .tabs-panel .highlight pre.chroma { margin: 0; border: 0; border-radius: 0; background: transparent; }
   #lt-content .tabs-panel > .latex-block { margin: 0; }
 
   .showcase-list { padding-left: 1.2rem; line-height: 1.7; }
