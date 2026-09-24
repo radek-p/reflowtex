@@ -417,8 +417,11 @@
   show .store = \reflowtex@lp@show,
 }
 \def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{proof}
+% Declared outside \ifreflowtex: in a print run the branch below is skipped,
+% and a conditional it had yet to declare would not count as one while it is,
+% so its \fi would end \ifreflowtex early.
+\newif\ifreflowtex@inlt
 \ifreflowtex
-  \newif\ifreflowtex@inlt
   \NewDocumentEnvironment{leantheorem}{O{}}{%
     \def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{none}%
     \SetKeys[reflowtex/leanproof]{#1}%
