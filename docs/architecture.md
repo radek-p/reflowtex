@@ -52,7 +52,7 @@ each with a kind. A footnote's insertion becomes a `footnote` stream. Its
 in-text marker points at it, so the viewer can reflow the fully typeset
 footnote (mathematics and citations included) in an accessible hover/focus
 popover, rather than give it an artificial place in the pageless flow. The
-companion package's `\begin{reflowtexstream}{kind}` (src/latex/reflowtex.sty)
+companion package's `\begin{webstream}{kind}` (src/latex/reflowtex.sty)
 stamps everything typeset inside it with LuaTeX attribute 911. The walk sends
 those items to a stream of that kind and leaves a `stream` item in the parent
 flow where the block stood. Streams nest. The viewer mounts each one in its own

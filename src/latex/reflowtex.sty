@@ -11,22 +11,29 @@
 %
 %   \ifreflowtex … \else … \fi       the switch
 %   webonly / printonly              medium-specific content
-%   reflowtexstream[attrs]{kind}     primitive: everything inside is typeset as
+%   webstream[attrs]{kind}           primitive: everything inside is typeset as
 %                                    its own *stream*, of a kind the browser
 %                                    renders by, with key=value parameters
 %   \webaction{action}{text}         primitive: text the reader clicks to
 %                                    trigger an action in the page
-%                                    (also \reflowtexaction, its first name)
 %   \webtext{name}{default}          a placeholder in running text whose
 %                                    words a page may replace from JavaScript
-%   accordion / pane                 built from the two: a block showing one
-%                                    of several panes, switched by links in them
+%   \webwidget[default]{name}        a place in running text where a page
+%                                    draws HTML, breakable across lines
+%   webaccordion / webpane           built from the two: a block showing one
+%                                    of several panes, switched by links in
+%                                    them (\webpanelink, \webnextpane,
+%                                    \webprevpane)
 %   webnote, webhint                 a framed note; a hint blurred until clicked
 %   leanproof, leancode              a proof with its Lean formalisation beside
 %                                    it (and leanblueprint's macros)
-%   \makeboxed[new]{env}[options]    an environment drawn as a box on the web
-%                                    (package option boxedtheorems: all
-%                                    theorems and proofs)
+%   \DeclareWebBox[new]{env}[opts]   an environment drawn as a box on the web
+%                                    (package option boxed: all theorems and
+%                                    proofs)
+%
+% Naming: everything written in a document starts with `web` (webonly's
+% mirror is printonly); preamble declarations are \Declare…; \ifreflowtex
+% matches \ifpdf; the Lean family keeps leanblueprint's `lean`.
 %
 % The primitives are what other web-first environments are made of; accordion
 % is the worked example (website: docs/web-first).
@@ -34,12 +41,12 @@
 \ProvidesPackage{reflowtex}[2026/09/23 v0.1 Reflow TeX companion package]
 
 % ── Options ─────────────────────────────────────────────────────────────────
-% boxedtheorems: on the web, every theorem-like environment and every proof is
-% a box (see the end of this file). No effect in print.
+% boxed: on the web, every theorem-like environment and every proof is a box
+% (see \DeclareWebBox below). No effect in print.
 \newif\ifreflowtex@boxed
 \newif\ifreflowtex@leanprint \reflowtex@leanprinttrue
 \DeclareKeys[reflowtex]{
-  boxedtheorems .if = reflowtex@boxed,
+  boxed         .if = reflowtex@boxed,
   leanprint     .if = reflowtex@leanprint,
 }
 \ProcessKeyOptions[reflowtex]
@@ -67,7 +74,7 @@
 \fi
 
 % ── The primitive: a stream ─────────────────────────────────────────────────
-% \begin{reflowtexstream}[key=value, …]{kind} … \end{reflowtexstream}
+% \begin{webstream}[key=value, …]{kind} … \end{webstream}
 %
 % In the extraction run every node typeset inside carries LuaTeX attribute 911
 % set to this stream's number; the serializer collects those nodes' paragraphs
@@ -92,7 +99,7 @@
   \newcount\reflowtex@streams
 \fi
 \ifreflowtex
-  \NewDocumentEnvironment{reflowtexstream}{O{} m}{%
+  \NewDocumentEnvironment{webstream}{O{} m}{%
     \par
     \global\advance\reflowtex@streams by 1
     \protected@edef\reflowtex@attrs{#1}%
@@ -105,7 +112,7 @@
     \attribute911=\reflowtex@streams\relax}%
    {\par}
 \else
-  \NewDocumentEnvironment{reflowtexstream}{O{} m}{\par}{\par}
+  \NewDocumentEnvironment{webstream}{O{} m}{\par}{\par}
 \fi
 
 % ── A placeholder: \webtext ──────────────────────────────────────────────────
@@ -137,6 +144,33 @@
   \NewDocumentCommand\webtext{m m}{#2}
 \fi
 
+% ── A widget: \webwidget ─────────────────────────────────────────────────────
+% \webwidget[default]{name}
+%
+% On the web, a page draws HTML here – a status badge, a small control – with
+% a widget it registers: reflowtex.widgets['name'] (or a prefix, 'lean:*').
+% The widget tells the viewer its size and, optionally, where it may break,
+% as a word has hyphenation points; the line breaker weighs those breaks
+% against the rest of the paragraph, and the widget then draws the part on
+% each line the chosen layout puts it across.
+%
+% In print it is `default`, empty unless given – and an empty one also takes
+% the space after it, so "text \webwidget{x} text" prints as "text text".
+% On the web the spaces either side stay, around the widget. The place is
+% marked like \webtext (attribute 913): the default's glyphs, and a
+% zero-width marked space, so that an empty default still leaves one.
+\ifreflowtex
+  \NewDocumentCommand\webwidget{O{} m}{%
+    \leavevmode
+    \global\advance\reflowtexSlotCount by 1
+    \directlua{Serializer.note_slot(\the\reflowtexSlotCount,
+      "\luaescapestring{#2}", 0, 0, 0, "widget")}%
+    \begingroup\attribute913=\reflowtexSlotCount\relax #1\hskip\z@\endgroup}
+\else
+  \NewDocumentCommand\webwidget{O{} m}{\ifx\relax#1\relax\expandafter\ignorespaces\else#1\fi}
+\fi
+
+
 % ── The primitive: an action ────────────────────────────────────────────────
 % \webaction{action}{text}
 %
@@ -149,7 +183,6 @@
 % one control however the line breaks.
 %
 % In print a control has nothing to do, so neither argument is typeset.
-% \reflowtexaction is the same command under the name it first had.
 \ifreflowtex
   \NewDocumentCommand\webaction{m m}{%
     \leavevmode
@@ -160,25 +193,23 @@
 \else
   \NewDocumentCommand\webaction{m m}{\ignorespaces}
 \fi
-\NewCommandCopy\reflowtexaction\webaction
 
 % ── accordion: one of several panes ─────────────────────────────────────────
-% \begin{accordion}[initial=collapsed, print=expanded]
-%   \begin{collapsedpane} A one-line summary. \expandlink \end{collapsedpane}
-%   \begin{expandedpane}
-%     \begin{proof} \hfill\collapselink[See less]\par … \end{proof}
-%   \end{expandedpane}
-% \end{accordion}
+% \begin{webaccordion}[initial=collapsed, print=expanded]
+%   \begin{webpane}[collapsed] A one-line summary. \webnextpane \end{webpane}
+%   \begin{webpane}[expanded]
+%     \begin{proof} \hfill\webprevpane[See less]\par … \end{proof}
+%   \end{webpane}
+% \end{webaccordion}
 %
-% An accordion holds panes, \begin{pane}[name] … \end{pane}, and shows one at
-% a time. collapsedpane and expandedpane are the panes named collapsed
-% and expanded. The reader moves
-% between them with links placed in the panes themselves:
+% An accordion holds panes, \begin{webpane}[name] … \end{webpane}, and shows
+% one at a time. The reader moves between them with links placed in the
+% panes themselves:
 %
-%   \panelink{target}{text}   target: a pane's name, its number (from 1),
-%                             or next / prev / first / last
-%   \expandlink[text]         \panelink{next}{text},  default "See more"
-%   \collapselink[text]       \panelink{prev}{text},  default "See less"
+%   \webpanelink{target}{text}  target: a pane's name, its number (from 1),
+%                               or next / prev / first / last
+%   \webnextpane[text]          \webpanelink{next}{text},  default "See more"
+%   \webprevpane[text]          \webpanelink{prev}{text},  default "See less"
 %
 % Options: initial= the pane shown first (name or number, default 1);
 % print= the pane a PDF shows instead (name, number, first or last; default
@@ -188,19 +219,19 @@
   initial .store = \reflowtex@acc@initial,
   print   .store = \reflowtex@acc@print,
 }
-\NewDocumentCommand\panelink{m m}{\webaction{pane:#1}{#2}}
-\NewDocumentCommand\expandlink{O{See more}}{\panelink{next}{#1}}
-\NewDocumentCommand\collapselink{O{See less}}{\panelink{prev}{#1}}
+\NewDocumentCommand\webpanelink{m m}{\webaction{pane:#1}{#2}}
+\NewDocumentCommand\webnextpane{O{See more}}{\webpanelink{next}{#1}}
+\NewDocumentCommand\webprevpane{O{See less}}{\webpanelink{prev}{#1}}
 \ifreflowtex
-  \NewDocumentEnvironment{accordion}{O{}}{%
+  \NewDocumentEnvironment{webaccordion}{O{}}{%
     \def\reflowtex@acc@initial{1}\def\reflowtex@acc@print{last}%
     \SetKeys[reflowtex/accordion]{#1}%
-    \begin{reflowtexstream}%
+    \begin{webstream}%
       [initial=\reflowtex@acc@initial, print=\reflowtex@acc@print]{accordion}}%
-   {\end{reflowtexstream}}
-  \NewDocumentEnvironment{pane}{O{}}%
-   {\begin{reflowtexstream}[name=#1]{pane}}%
-   {\end{reflowtexstream}}
+   {\end{webstream}}
+  \NewDocumentEnvironment{webpane}{O{}}%
+   {\begin{webstream}[name=#1]{pane}}%
+   {\end{webstream}}
 \else
   % Print: each pane's body is stored, unread, and the accordion typesets the
   % chosen one where it ends. Stored globally under the accordion's own
@@ -243,26 +274,13 @@
       \tl_use:N \l__reflowtex_acc_body_tl
     }
   \ExplSyntaxOff
-  \NewDocumentEnvironment{accordion}{O{}}{%
+  \NewDocumentEnvironment{webaccordion}{O{}}{%
     \par
     \def\reflowtex@acc@initial{1}\def\reflowtex@acc@print{last}%
     \SetKeys[reflowtex/accordion]{#1}%
     \reflowtex@acc@begin}%
    {\reflowtex@acc@end\par}
-  \NewDocumentEnvironment{pane}{O{} +b}{\reflowtex@acc@pane{#1}{#2}}{}
-\fi
-% The two named panes, collapsedpane and expandedpane: panes named
-% "collapsed" and "expanded", which is what initial=, print= and \panelink
-% use. (Not simply collapsed/expanded: \begin{expanded} would run the
-% \expanded primitive, which the kernel relies on.) In print each grabs its
-% own body: a +b argument is read up to the matching \end{…} in the source,
-% so wrapping pane would scan for an \end{pane} that is never written.
-\ifreflowtex
-  \NewDocumentEnvironment{collapsedpane}{}{\begin{pane}[collapsed]}{\end{pane}}
-  \NewDocumentEnvironment{expandedpane}{}{\begin{pane}[expanded]}{\end{pane}}
-\else
-  \NewDocumentEnvironment{collapsedpane}{+b}{\reflowtex@acc@pane{collapsed}{#1}}{}
-  \NewDocumentEnvironment{expandedpane}{+b}{\reflowtex@acc@pane{expanded}{#1}}{}
+  \NewDocumentEnvironment{webpane}{O{} +b}{\reflowtex@acc@pane{#1}{#2}}{}
 \fi
 
 % ── webnote, webhint ────────────────────────────────────────────────────────
@@ -278,19 +296,19 @@
 % after a heading: it opens a box, not a run of text.
 \NewDocumentEnvironment{webnote}{}
   {\par\addvspace{\topsep}%
-   \begin{reflowtexstream}{note}\@afterindentfalse\@afterheading}
-  {\end{reflowtexstream}\addvspace{\topsep}}
+   \begin{webstream}{note}\@afterindentfalse\@afterheading}
+  {\end{webstream}\addvspace{\topsep}}
 \NewDocumentEnvironment{webhint}{}
   {\par\addvspace{\topsep}%
-   \begin{reflowtexstream}{hint}\@afterindentfalse\@afterheading}
-  {\end{reflowtexstream}\addvspace{\topsep}}
+   \begin{webstream}{hint}\@afterindentfalse\@afterheading}
+  {\end{webstream}\addvspace{\topsep}}
 
-% ── \makeboxed: theorems (and anything else) as boxes ──────────────────────
-% \makeboxed{theorem}                 box every theorem in the document
-% \makeboxed[btheorem]{theorem}       a boxed copy, btheorem, sharing
+% ── \DeclareWebBox: theorems (and anything else) as boxes ──────────────────────
+% \DeclareWebBox{theorem}                 box every theorem in the document
+% \DeclareWebBox[btheorem]{theorem}       a boxed copy, btheorem, sharing
 %                                     theorem's counter and heading; theorem
 %                                     itself stays unboxed
-% \makeboxed{proof}[kind=proof]       any environment, with options:
+% \DeclareWebBox{proof}[kind=proof]       any environment, with options:
 %
 %   kind=K         the look (the viewer's stream kind): theorem (default),
 %                  proof (default for an environment named proof), note, or a
@@ -305,15 +323,15 @@
 % in a proof) is a little narrower per level. The space LaTeX puts around the
 % environment stays outside the box (the serializer gives space between a box
 % and its neighbour to the enclosing flow), a proof's QED box stays inside,
-% and the box ends when the environment's group does. In print \makeboxed only
+% and the box ends when the environment's group does. In print \DeclareWebBox only
 % defines the copy, if one is asked for; nothing is boxed.
 %
 % Values are taken as written, and must not contain commas (hex colours
 % rather than rgb(…)).
 %
-% Package option boxedtheorems: every environment made with \newtheorem, and
+% Package option boxed: every environment made with \newtheorem, and
 % proof, boxed with the defaults.
-% One box per environment: \makeboxed's hook and the boxedtheorems option can
+% One box per environment: \DeclareWebBox's hook and the boxed option can
 % both ask for the same one. Remembered with the group level, so a nested
 % environment of the same name still gets its own.
 \let\reflowtex@box@done\relax
@@ -337,7 +355,7 @@
   background .store = \reflowtex@bx@background,
 }
 % #1 new name (or empty: patch #2 itself), #2 environment, #3 options.
-\NewDocumentCommand\makeboxed{o m O{}}{%
+\NewDocumentCommand\DeclareWebBox{o m O{}}{%
   \IfValueTF{#1}%
     {\NewEnvironmentCopy{#1}{#2}\def\reflowtex@bx@env{#1}}%
     {\def\reflowtex@bx@env{#2}}%
@@ -425,12 +443,12 @@
   \NewDocumentEnvironment{leantheorem}{O{}}{%
     \def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{none}%
     \SetKeys[reflowtex/leanproof]{#1}%
-    \begin{reflowtexstream}[show=\reflowtex@lp@show]{leantheorem}%
+    \begin{webstream}[show=\reflowtex@lp@show]{leantheorem}%
     \edef\reflowtex@lp@id{\the\attribute911}%
     % The statement is a part of its own, until the proof begins.
     \reflowtex@box@open@{leanstatement}{}%
     \reflowtex@inlttrue}%
-   {\end{reflowtexstream}}
+   {\end{webstream}}
   % At the leantheorem's own \begin{proof} (the hook runs before the proof's
   % group opens, at the leantheorem's level): the statement part ends and
   % the proof part begins, beside which the code will stand.
@@ -443,11 +461,11 @@
   \NewDocumentEnvironment{leanproof}{O{}}{%
     \def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{proof}%
     \SetKeys[reflowtex/leanproof]{#1}%
-    \begin{reflowtexstream}[show=\reflowtex@lp@show]{leanproof}%
+    \begin{webstream}[show=\reflowtex@lp@show]{leanproof}%
     \edef\reflowtex@lp@id{\the\attribute911}%
     % The TeX side is a stream of its own, so the two can stand side by side.
     \reflowtex@box@open@{leantex}{}}%
-   {\end{reflowtexstream}}
+   {\end{webstream}}
   % A newline of catcode 12, to join the lines read verbatim.
   {\catcode`\^^J=12 \gdef\reflowtex@nl{^^J}}
   % Read the body line by line, as the verbatim package does, keeping every

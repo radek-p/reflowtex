@@ -130,6 +130,9 @@ message Slot {
   optional int32  space   = 2;
   optional int32  stretch = 3;
   optional int32  shrink  = 4;
+  // "widget" for \webwidget: the page draws HTML there, which it measures
+  // and may break across lines (see the viewer's widgets). Absent: text.
+  optional string kind    = 5;
 }
 
 // What one link points at. Exactly one field is set: `label` for a cross
@@ -141,7 +144,7 @@ message Link {
   optional string url    = 2;
   // Not a destination but a control: the glyphs trigger this action in the
   // page (\webaction in reflowtex.sty – "pane:next" for an accordion's
-  // \expandlink). The viewer sends it as a bubbling `reflowtex:action` DOM
+  // \webnextpane). The viewer sends it as a bubbling `reflowtex:action` DOM
   // event from the glyph, and whichever enclosing stream kind understands it
   // handles it.
   optional string action = 3;
@@ -228,7 +231,7 @@ enum ItemKind {
   // case, since \label follows a sectioning command in vertical mode.
   anchorpoint = 3;
   // A separately typeset stream embedded at this point of the flow: what
-  // \begin{reflowtexstream}{kind} wraps. Its content is
+  // \begin{webstream}{kind} wraps. Its content is
   // Document.streams[ContentItem.stream - 1].
   stream = 4;
 }
@@ -296,7 +299,7 @@ message ContentItem {
 // vertical space, over the document's shared paragraph and font tables –
 // referenced from wherever it belongs: a glyph (Node.stream: a footnote
 // marker pointing at its body) or a content item (ContentItem.stream: a block
-// the author wrapped in \begin{reflowtexstream}{kind}). One mechanism serves
+// the author wrapped in \begin{webstream}{kind}). One mechanism serves
 // footnotes, collapsible sections, framed boxes, table cells and popovers:
 // the producer names the kind, the viewer decides how a kind is shown (see
 // src/viewer/README.md, "Streams"). Streams nest: a stream's content may
@@ -305,7 +308,7 @@ message Stream {
   optional string      kind    = 1;  // "footnote", or the kind the author gave
   repeated ContentItem content = 2;
   // Parameters the author gave the stream,
-  // \begin{reflowtexstream}[initial=collapsed]{accordion}. The viewer puts
+  // \begin{webstream}[initial=collapsed]{accordion}. The viewer puts
   // each on the stream's element as data-KEY and hands them to the kind.
   repeated StreamAttr  attrs   = 3;
   // Text the stream carries as text rather than typeset, for its kind to show

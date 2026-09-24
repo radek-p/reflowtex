@@ -26,7 +26,7 @@ from fonts import fonts_of
 
 def _all_content_items(data: dict):
     """Yield every content item: the main flow's, then each stream's (footnote
-    bodies, \\begin{reflowtexstream} blocks). Streams nest by reference – a
+    bodies, \\begin{webstream} blocks). Streams nest by reference – a
     stream item names another stream – so one flat pass over the streams table
     reaches every item exactly once."""
     yield from data.get('content', [])

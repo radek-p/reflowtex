@@ -198,7 +198,7 @@ local TIKZ_PIC_ATTR      = 908 -- placeholder hbox for an internally captured Ti
 local LINK_ATTR          = 909 -- glyphs of a \ref/\eqref/\autoref's printed text
 local ANCHOR_ATTR        = 910 -- the zero-size box \label leaves behind
 local DISPLAY_ATTR       = 912 -- a display's box: the number Serializer.note_display recorded it under
-local STREAM_ATTR        = 911 -- nodes typeset inside \begin{reflowtexstream} (reflowtex.sty): the stream id
+local STREAM_ATTR        = 911 -- nodes typeset inside \begin{webstream} (reflowtex.sty): the stream id
 -- A \webtext slot (reflowtex.sty): text a page may replace from JavaScript.
 -- Stamped on every glyph and glue of the default text, like a link, so the
 -- viewer can find the whole run wherever the line breaks fall.
@@ -244,8 +244,9 @@ end
 function Serializer.note_link_action(id, action)
     link_labels[id] = { action = tostring(action) }
 end
-function Serializer.note_slot(id, name, space, stretch, shrink)
-    slot_table[id] = { name = tostring(name), space = space, stretch = stretch, shrink = shrink }
+function Serializer.note_slot(id, name, space, stretch, shrink, kind)
+    slot_table[id] = { name = tostring(name), space = space, stretch = stretch, shrink = shrink,
+                       kind = kind and tostring(kind) or nil }
 end
 function Serializer.note_label(id, label)
     anchor_labels[id] = clean_label(label)
@@ -278,7 +279,7 @@ function Serializer.note_outline(anchor, kind, level, number, title)
                               title = title, anchor = anchor }
 end
 
--- A stream opened by \begin{reflowtexstream}{kind} (reflowtex.sty): `id` is
+-- A stream opened by \begin{webstream}{kind} (reflowtex.sty): `id` is
 -- its number, which is also the value of attribute 911 on every node typeset
 -- inside it, and `parent` the attribute's value when it opened – an unset
 -- LuaTeX attribute reads as a large negative number, so anything non-positive
@@ -977,7 +978,7 @@ local last_display = nil
 
 -- ── Streams ───────────────────────────────────────────────────────────────
 -- Every item lands in exactly one content list: the main flow, a footnote's
--- body, or the content of a \begin{reflowtexstream} block (reflowtex.sty). The
+-- body, or the content of a \begin{webstream} block (reflowtex.sty). The
 -- walk carries a context: `out`, the list it is filling, and `base`, the
 -- stream id whose nodes belong *directly* in that list – nil for the main
 -- flow. A footnote written inside a stream inherits the stream's attribute on
@@ -1018,7 +1019,7 @@ end
 -- So the \topsep an environment puts before its first line or after its last
 -- lands outside the environment's stream, even though TeX typeset that glue
 -- inside the environment's group, and a box can simply open at \begin and end
--- with the group (reflowtex.sty's \makeboxed). Between two panes of an
+-- with the group (reflowtex.sty's \DeclareWebBox). Between two panes of an
 -- accordion it is the accordion's, where the viewer, laying panes out as
 -- alternatives, ignores it.
 --

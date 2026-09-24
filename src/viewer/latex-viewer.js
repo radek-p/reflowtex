@@ -699,6 +699,8 @@ function nodeWidthSp(n) {
         case 'kern':                return n.kern;
         case 'glue':                return n.width;
         case 'disc':                return sumWidthSp(n.replace);
+        case 'wdisc':               return sumWidthSp(n.replace);   // a widget, unbroken
+        case 'widget':              return n.width;
         // A transform is drawing-only and has no metrics of its own; its
         // children advance the pen just as they did before being grouped.
         case 'transform':           return sumWidthSp(n.children);
@@ -828,8 +830,20 @@ function buildBreakCandidates(nodes, fontInfo) {
             const preW=sumWidthSp(n.pre),postW=sumWidthSp(n.post),replaceW=sumWidthSp(n.replace);
             const preGlyphW=sumExpandableSp(fontInfo,n.pre),postGlyphW=sumExpandableSp(fontInfo,n.post),replaceGlyphW=sumExpandableSp(fontInfo,n.replace);
             const preGs=n.pre.filter(x=>x.type==='glyph'), postGs=n.post.filter(x=>x.type==='glyph');
-            bcs.push({ kind:'disc', nodeIdx:i, penalty:50, preW,postW,replaceW, preGlyphW,postGlyphW,replaceGlyphW, spaceW:0,spaceS:0,spaceZ:0, cumW,cumS,cumZ,cumGlyphW,cumFill, rightProtrusion:rightProtrusionOf(preGs.length>0?preGs[preGs.length-1]:findLastGlyph(nodes,i)), leftProtrusion:leftProtrusionOf(postGs.length>0?postGs[0]:findFirstGlyph(nodes,i+1)) });
+            bcs.push({ kind:'disc', nodeIdx:i, penalty:n.penalty??50, preW,postW,replaceW, preGlyphW,postGlyphW,replaceGlyphW, spaceW:0,spaceS:0,spaceZ:0, cumW,cumS,cumZ,cumGlyphW,cumFill, rightProtrusion:rightProtrusionOf(preGs.length>0?preGs[preGs.length-1]:findLastGlyph(nodes,i)), leftProtrusion:leftProtrusionOf(postGs.length>0?postGs[0]:findFirstGlyph(nodes,i+1)) });
             cumW+=replaceW; cumGlyphW+=replaceGlyphW;
+        } else if (n.type==='wdisc') {
+            // A widget that may be split (see Widgets): one candidate per split,
+            // each carrying its own two parts – a discretionary with several
+            // pre/post pairs over the one unbroken replacement.
+            const replaceW=sumWidthSp(n.replace);
+            for (const o of n.options) {
+                bcs.push({ kind:'disc', nodeIdx:i, penalty:o.penalty, pre:o.pre, post:o.post,
+                           preW:sumWidthSp(o.pre), postW:sumWidthSp(o.post), replaceW,
+                           preGlyphW:0, postGlyphW:0, replaceGlyphW:0, spaceW:0, spaceS:0, spaceZ:0,
+                           cumW,cumS,cumZ,cumGlyphW,cumFill, rightProtrusion:0, leftProtrusion:0 });
+            }
+            cumW+=replaceW;
         } else if (n.type==='penalty' && n.penalty<10000) {
             let lgW=0,lgS=0,lgZ=0,firstAfterLG=i+1;
             for (let k=i+1;k<nodes.length;k++) {
@@ -906,6 +920,9 @@ function kpPass(bcs, lineWidthSp, threshold, allowDisc, p) {
         if (bcJ.penalty>=10000) continue;
         for (let i=0;i<j;i++) {
             if (i<lastForced[j]) continue;   // line would span a forced break
+            // Two candidates at one node (a widget's alternative splits) are
+            // one place: a line may not start and end there.
+            if (bcs[i].nodeIdx===bcJ.nodeIdx) continue;
             for (let fc_i=0;fc_i<4;fc_i++) {
                 const si=dp[i][fc_i]; if(!si) continue;
                 const {w,s,z}=lineMetrics(bcs[i],bcJ,p);
@@ -959,7 +976,7 @@ function kpPass(bcs, lineWidthSp, threshold, allowDisc, p) {
 function extractLineNodes(startBC, endBC, nodes) {
     const result=[]; let from;
     if(startBC.kind==='start'){from=0;}
-    else{if(startBC.kind==='disc') for(const pn of nodes[startBC.nodeIdx].post) result.push(pn); from=startBC.nodeIdx+1;}
+    else{if(startBC.kind==='disc') for(const pn of (startBC.post||nodes[startBC.nodeIdx].post)) result.push(pn); from=startBC.nodeIdx+1;}
     // Glue and kern are discarded at a line break, but only at a *break*: at
     // the very start of a paragraph they are real content. \subparagraph* and
     // friends make this visible – \@xsect drops the usual \parindent box and
@@ -969,7 +986,7 @@ function extractLineNodes(startBC, endBC, nodes) {
     if(startBC.kind!=='start'&&result.length===0){while(from<endBC.nodeIdx&&(nodes[from].type==='glue'||nodes[from].type==='kern'))from++;}
     const to=endBC.nodeIdx;
     for(let i=from;i<to;i++) if(nodes[i].type!=='local_par') result.push(nodes[i]);
-    if(endBC.kind==='disc') for(const pn of nodes[endBC.nodeIdx].pre) result.push(pn);
+    if(endBC.kind==='disc') for(const pn of (endBC.pre||nodes[endBC.nodeIdx].pre)) result.push(pn);
     return result;
 }
 
@@ -1014,9 +1031,9 @@ function lineProfile(fontInfo, nodes, xStart, ratio, expandRatio) {
                 }
                 case 'glue':{let w=n.width; if(r>0&&!(n.stretch_order||0)&&n.stretch)w+=r*n.stretch; else if(r<0&&!(n.shrink_order||0)&&n.shrink)w+=r*n.shrink; x+=w*SP_TO_PX; break;}
                 case 'kern': x+=n.kern*((n.subtype||0)===0?kernExpandScale(fontInfo,ns[i-1],ns[i+1],er):1)*SP_TO_PX; break;
-                case 'disc': x=walk(n.replace,x,0,er); break;
+                case 'disc': case 'wdisc': x=walk(n.replace,x,0,er); break;
                 case 'math': x+=n.surround*SP_TO_PX; break;
-                case 'picture':{
+                case 'widget': case 'picture':{
                     const w=(n.width??0)*SP_TO_PX;
                     items.push({x1:x,x2:x+w,h:(n.height??0)*SP_TO_PX,d:(n.depth??0)*SP_TO_PX});
                     x+=w; break;
@@ -1367,14 +1384,48 @@ function drawLinkUnderline(key, els) {
 // new elements without the state classes, and leaves the drawn underline where
 // the glyphs were.
 let hot = null, held = null, linkRestoreQueued = false;
+let hotWidget = null, heldWidget = null;
 function restoreLinkStates() {
-    if ((!hot && !held) || linkRestoreQueued) return;
+    if ((!hot && !held && !hotWidget && !heldWidget) || linkRestoreQueued) return;
     linkRestoreQueued = true;
     queueMicrotask(() => {
         linkRestoreQueued = false;
         setLinkState(held, 'latex-link-active', true);
         setLinkState(hot, 'latex-link-hover', true);
+        setWidgetState(heldWidget, 'latex-widget-active', true);
+        setWidgetState(hotWidget, 'latex-widget-hover', true);
     });
+}
+
+// A widget split across two lines is one widget: pointing at, or pressing,
+// either part marks every part of it (latex-widget-hover / -active on the
+// foreignObjects), so a widget's CSS styles them together – as a reference
+// broken across lines lights up whole.
+function setWidgetState(key, cls, on) {
+    if (!key) return;
+    for (const el of document.querySelectorAll(`foreignObject[data-widget="${CSS.escape(key)}"]`))
+        el.classList.toggle(cls, on);
+}
+function installWidgetStates() {
+    const keyAt = t => (t && t.closest) ? t.closest('foreignObject[data-widget]')?.dataset.widget || null : null;
+    document.addEventListener('pointerover', e => {
+        const key = keyAt(e.target);
+        if (key === hotWidget) return;
+        setWidgetState(hotWidget, 'latex-widget-hover', false);
+        hotWidget = key;
+        setWidgetState(hotWidget, 'latex-widget-hover', true);
+    }, { passive: true });
+    document.addEventListener('pointerout', e => {
+        if (keyAt(e.relatedTarget) === hotWidget) return;
+        setWidgetState(hotWidget, 'latex-widget-hover', false); hotWidget = null;
+    }, { passive: true });
+    document.addEventListener('pointerdown', e => {
+        heldWidget = keyAt(e.target);
+        setWidgetState(heldWidget, 'latex-widget-active', true);
+    }, { passive: true });
+    const release = () => { setWidgetState(heldWidget, 'latex-widget-active', false); heldWidget = null; };
+    document.addEventListener('pointerup', release, { passive: true });
+    document.addEventListener('pointercancel', release, { passive: true });
 }
 
 function installLinks() {
@@ -1518,6 +1569,174 @@ function slotNodes(fontInfo, slot, id, run, text) {
     return out;
 }
 
+// ── Widgets (\webwidget) ───────────────────────────────────────────────────
+// A page draws HTML at a \webwidget with a widget it registers:
+//
+//   reflowtex.widgets['name'] (or a prefix: 'lean:*') = {
+//     measure(ctx) → { width, height, depth,          // px, the whole widget
+//                      splits: [{ first: {width, height, depth, overhang?},
+//                                 second: {…}, penalty? }, …] },
+//     (overhang: how far a piece reaches past the margin, px)
+//     render(el, part, ctx),   // part: 'whole', or { split: i, piece: 'first' | 'second' }
+//   };
+//
+// Or, to break across any number of lines: measure returns { segments:
+// [{width, height, depth}], gaps: [{width, penalty}] between each two,
+// ends: { left: {cap, cut, overhang?}, right: {…} } } and render is given
+// { from, to, left: 'cap'|'cut', right: 'cap'|'cut' } (widgetSegmentNodes).
+// A split is one way to break the widget between two lines, as a hyphen
+// breaks a word: the first part ends a line, the second starts the next. The
+// line breaker weighs every split, with its penalty (default 100, twice a
+// hyphen's), against the rest of the paragraph, and the widget then draws
+// the part the chosen layout puts on each line. ctx carries the name, the
+// text's font size and colour, a per-name `state`, `measure(html)` – the
+// width, height and depth of some HTML at that size and baseline – and
+// `invalidate()`, which measures again and re-breaks the paragraph when the
+// widget's content changes. Registering after the viewer has run: call
+// reflowtex.refreshWidgets().
+api.widgets = api.widgets || {};
+const widgetVersion = new Map();       // name → bumped by ctx.invalidate()
+const widgetState   = new Map();       // name → the widget's own state object
+const widgetMeasure = new Map();       // `${name}|${fontPx}|${version}` → measurement
+function widgetFor(name) {
+    const w = api.widgets || {};
+    if (w[name]) return w[name];
+    let best = null;
+    for (const k of Object.keys(w))
+        if (k.endsWith('*') && name.startsWith(k.slice(0, -1)) && (!best || k.length > best.length)) best = k;
+    return best ? w[best] : null;
+}
+// Size some HTML the way it sits in a line: its box against the baseline.
+function measureHTML(html, fontPx) {
+    const probe = document.createElement('div');
+    probe.style.cssText = `position:absolute;left:-10000px;top:0;visibility:hidden;white-space:nowrap;font-size:${fontPx}px;line-height:normal`;
+    const mark = document.createElement('span');
+    mark.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+    const body = document.createElement('span');
+    body.style.cssText = 'display:inline-block;vertical-align:baseline';
+    if (typeof html === 'string') body.innerHTML = html; else body.appendChild(html);
+    probe.append(mark, body);
+    document.body.appendChild(probe);
+    // The widget's own boxes, not the wrapper's: the wrapper's line box is
+    // as tall as a line of text at this size, which would count space above
+    // the widget as its height and so draw it too high. (Text straight in
+    // the HTML, with no element around it, falls back to the wrapper.)
+    const base = mark.getBoundingClientRect().top;
+    const rs = [...body.children].map(c => c.getBoundingClientRect());
+    const r = rs.length ? { left: Math.min(...rs.map(x => x.left)), right: Math.max(...rs.map(x => x.right)),
+                            top: Math.min(...rs.map(x => x.top)), bottom: Math.max(...rs.map(x => x.bottom)) }
+                        : body.getBoundingClientRect();
+    probe.remove();
+    return { width: r.right - r.left, height: Math.max(0, base - r.top), depth: Math.max(0, r.bottom - base) };
+}
+api.refreshWidgets = () => scheduleSlots();
+
+function widgetNodes(fontInfo, slot, id, run, before, after) {
+    const widget = widgetFor(slot.name);
+    if (!widget || typeof widget.measure !== 'function') return null;
+    // The text's size and colour: the default's first glyph, else the nearest
+    // glyph of the paragraph around it.
+    const glyph = ns => { for (const n of ns) { if (n.type === 'glyph') return n; if (n.type === 'disc') { const g = glyph(n.replace || []); if (g) return g; } } return null; };
+    const t = glyph(run) || glyph([...before].reverse()) || glyph(after);
+    const fi = t && fontInfo[String(t.font)];
+    const fontPx = fi ? fi.size_px : 20;
+    const version = widgetVersion.get(slot.name) || 0;
+    if (!widgetState.has(slot.name)) widgetState.set(slot.name, {});
+    const ctx = {
+        name: slot.name, fontSize: fontPx, color: t && t.color ? colorFill(t.color) : null,
+        state: widgetState.get(slot.name),
+        measure: html => measureHTML(html, fontPx),
+        invalidate: () => { widgetVersion.set(slot.name, (widgetVersion.get(slot.name) || 0) + 1); scheduleSlots(); },
+    };
+    const key = `${slot.name}|${fontPx}|${version}`;
+    let m = widgetMeasure.get(key);
+    if (!m) {
+        try { m = widget.measure(ctx); } catch (e) { console.warn(`[latex-viewer] widget ${slot.name}:`, e); return null; }
+        if (!m) return null;
+        widgetMeasure.set(key, m);
+    }
+    const sp = v => Math.round((+v || 0) / SP_TO_PX);
+    const part = (dims, which) => ({ type: 'widget', slot: id, part: which, widget, ctx, fontPx,
+        color: t && t.color, width: sp(dims.width), height: sp(dims.height), depth: sp(dims.depth),
+        version });
+    if (m.segments && m.segments.length) return widgetSegmentNodes(m, slot, id, widget, ctx, fontPx, t, version, sp);
+    const whole = part(m, 'whole');
+    if (!m.splits || !m.splits.length) return [whole];
+    // A piece may reach past the margin by its `overhang` (px), as hanging
+    // punctuation does: a negative kern after the first piece, which ends a
+    // line, and before the second, which starts one, so the text is set to
+    // the margin and the piece extends beyond it (a cut-edge mark on it can
+    // then sit exactly on the margin).
+    const hang = o => o && +o.overhang ? [{ type: 'kern', subtype: 1, kern: -sp(o.overhang) }] : [];
+    return [{ type: 'wdisc', slot: id, replace: [whole],
+              options: m.splits.map((s, i) => ({
+                  penalty: s.penalty ?? 100,
+                  pre:  [part(s.first,  { split: i, piece: 'first'  }), ...hang(s.first)],
+                  post: [...hang(s.second), part(s.second, { split: i, piece: 'second' })] })) }];
+}
+
+// The segments form: the widget's content as a row of segments, a break
+// point between each two, and its ends measured closed ('cap') and cut
+// ('cut'). It becomes what a hyphenated word is to TeX – boxes with a
+// discretionary between each two, whose pre is the cut end of the line
+// before, post the cut end of the line after, and replace the gap shown when
+// unbroken – so it may break at any number of its points, one line after
+// another. Each line's run of pieces is then drawn as one part
+// (mergeWidgetRuns): { from, to, left: 'cap'|'cut', right: 'cap'|'cut' }.
+function widgetSegmentNodes(m, slot, id, widget, ctx, fontPx, t, version, sp) {
+    const segs = m.segments, gaps = m.gaps || [];
+    const H = Math.max(...segs.map(g => sp(g.height))), D = Math.max(...segs.map(g => sp(g.depth)));
+    const run = { slot: id, widget, ctx, fontPx, color: t && t.color, version, merged: new Map(), height: H, depth: D };
+    const piece = (role, w, seg) => ({ type: 'widget', run, role, seg, width: sp(w), height: H, depth: D });
+    const ends = m.ends || {};
+    const L = ends.left || {}, R = ends.right || {};
+    const hang = e => e && +e.overhang ? [{ type: 'kern', subtype: 1, kern: -sp(e.overhang) }] : [];
+    const out = [piece('capL', L.cap || 0, 0)];
+    segs.forEach((g, i) => {
+        out.push(piece('seg', g.width, i));
+        if (i < segs.length - 1) {
+            const gap = gaps[i] || {};
+            out.push({ type: 'disc', penalty: gap.penalty ?? 100, slot: id,
+                       replace: gap.width ? [piece('gap', gap.width, i)] : [],
+                       pre:  [piece('cutR', R.cut || 0, i), ...hang(R)],
+                       post: [...hang(L), piece('cutL', L.cut || 0, i + 1)] });
+        }
+    });
+    out.push(piece('capR', R.cap || 0, segs.length - 1));
+    return out;
+}
+// One line's consecutive pieces of a segments widget, as one part to draw.
+// Kept per run and shape, so an unchanged part keeps its element across
+// reflows.
+function mergeWidgetRuns(nodes) {
+    if (!nodes.some(n => (n.type === 'widget' && n.run) || (n.type === 'disc' && n.slot))) return nodes;
+    // A break point the line did not break at is its replacement (the gap):
+    // unfold it, so the pieces either side join into one part.
+    nodes = nodes.flatMap(n => n.type === 'disc' && n.slot ? n.replace : [n]);
+    const out = [];
+    for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (!(n.type === 'widget' && n.run)) { out.push(n); continue; }
+        let j = i, w = 0;
+        while (j < nodes.length && nodes[j].type === 'widget' && nodes[j].run === n.run) { w += nodes[j].width; j++; }
+        const run = nodes.slice(i, j), segs = run.filter(x => x.role === 'seg').map(x => x.seg);
+        const part = { from: segs.length ? Math.min(...segs) : run[0].seg, to: segs.length ? Math.max(...segs) : run[0].seg,
+                       left: run[0].role === 'cutL' ? 'cut' : 'cap',
+                       right: run[run.length - 1].role === 'cutR' ? 'cut' : 'cap' };
+        const key = `${part.from}|${part.to}|${part.left}|${part.right}|${w}`;
+        let merged = n.run.merged.get(key);
+        if (!merged) {
+            merged = { type: 'widget', slot: n.run.slot, part, widget: n.run.widget, ctx: n.run.ctx,
+                       fontPx: n.run.fontPx, color: n.run.color, version: n.run.version,
+                       width: w, height: n.run.height, depth: n.run.depth };
+            n.run.merged.set(key, merged);
+        }
+        out.push(merged);
+        i = j - 1;
+    }
+    return out;
+}
+
 // Rebuild the node list of every paragraph holding a slot from its original
 // list, substituting the runs whose name has a text. Returns the indices of
 // the paragraphs whose list changed.
@@ -1535,19 +1754,26 @@ function applySlots(fontInfo, doc) {
         const orig = sp.orig, out = [], made = [];
         for (let i = 0; i < orig.length; i++) {
             const id = orig[i].slot, slot = id && slots[id - 1];
-            const text = slot ? slotValues.get(slot.name) : undefined;
-            if (text === undefined) { out.push(orig[i]); continue; }
+            const isWidget = slot && slot.kind === 'widget';
+            const text = slot && !isWidget ? slotValues.get(slot.name) : undefined;
+            if (!slot || (!isWidget && text === undefined)) { out.push(orig[i]); continue; }
             // The run: from here to the last node of this slot (a disc or a
             // font kern between its glyphs carries no id of its own).
             let j = i;
             for (let k = i + 1; k < orig.length; k++) if (orig[k].slot === id) j = k;
-            const nodes = slotNodes(fontInfo, slot, id, orig.slice(i, j + 1), text);
+            const run = orig.slice(i, j + 1);
+            const nodes = isWidget ? widgetNodes(fontInfo, slot, id, run, orig.slice(0, i), orig.slice(j + 1))
+                                   : slotNodes(fontInfo, slot, id, run, text);
+            if (!nodes) { out.push(orig[i]); continue; }
             out.push(...nodes); made.push(...nodes);
             i = j;
         }
         // What was substituted, with its measured widths: a text measured
         // again once its font has loaded counts as a change.
-        const key = made.map(n => n.text !== undefined ? n.text + '\u0002' + n.width : ' ').join('\u0001');
+        const key = made.map(n => n.text !== undefined ? n.text + '\u0002' + n.width
+                                : n.type === 'wdisc' || n.type === 'widget' ? 'w' + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace[0].version, n.width ?? n.replace[0].width, n.options && n.options.map(o => [o.pre[0].width, o.post[0].width])])
+                                : n.type === 'disc' && n.slot ? 'd' + JSON.stringify([n.slot, n.penalty, n.pre.map(x => x.width), n.post.map(x => x.width), n.replace.map(x => x.width)])
+                                : ' ').join('\u0001');
         if (key === sp.key && sp.made.length === made.length) continue;
         sp.key = key;
         sp.stale = sp.made; sp.made = made;
@@ -1579,7 +1805,11 @@ function refreshSlots(el) {
     if (!data || !data.cache.dom) return;
     const changed = applySlots(data.fontInfo, data.doc);
     if (!changed.size) return;
-    const stale = data.doc.slotParas.flatMap(sp => sp.stale || []);
+    // (a widget's drawn parts sit inside its wdisc: the whole and each split's two)
+    const parts = n => n.type === 'wdisc'
+        ? [...n.replace, ...n.options.flatMap(o => [...o.pre, ...o.post])]
+        : n.run ? [...n.run.merged.values()] : [n];
+    const stale = data.doc.slotParas.flatMap(sp => (sp.stale || []).flatMap(parts));
     data.doc.slotParas.forEach(sp => { sp.stale = null; });
     invalidateParagraphs(data.cache, changed, stale);
     const params = { ...data.params, align: data.lastAlign };
@@ -1923,6 +2153,10 @@ function reconcileSink(byNode, used, stats, cache) {
                 if (n.citetarget) registerCiteTarget(el, n.citetarget);
                 if (n.stream)     registerStreamSource(el, n.stream, cache);
                 if (n.link)       registerLinkGlyph(el, n.link, cache);
+                // A \webtext's glyphs – TeX's default or a text the page gave
+                // – carry its name, so a page can find (and style) where it is.
+                if (n.slot && cache.slotNames && cache.slotNames[n.slot - 1] !== undefined)
+                    el.dataset.slot = cache.slotNames[n.slot - 1];
                 byNode.set(n, el); stats.created++;
             } else {
                 el.setAttribute('x', x); el.setAttribute('y', y); stats.repositioned++;
@@ -1991,6 +2225,38 @@ function reconcileSink(byNode, used, stats, cache) {
                 el.setAttribute('width', w); el.setAttribute('height', h);
                 stats.repositioned++;
             }
+            place(auxParent, lastRect, el, isNew);
+            used.add(el); lastRect = el;
+        },
+        // A widget part (see Widgets): HTML in a foreignObject over the part's
+        // box, so it moves with the text on every reflow. Drawn by the widget
+        // once, when the element is made: a new measurement makes new nodes.
+        widget(n, x, y) {
+            let el = byNode.get(n), isNew = !el;
+            const h = n.height * SP_TO_PX, d = n.depth * SP_TO_PX, w = n.width * SP_TO_PX;
+            if (isNew) {
+                el = svgEl('foreignObject', { width: w, height: h + d });
+                el.setAttribute('class', 'latex-widget');
+                // every part of one widget shares a key, for the shared hover
+                // and pressed states (installWidgetStates)
+                el.dataset.widget = `${cache.blockKey}:${n.slot}`;
+                el.style.overflow = 'visible';
+                el.style.pointerEvents = 'auto';
+                const box = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+                box.style.cssText = `width:${w}px;height:${h + d}px;font-size:${n.fontPx}px;` +
+                    `line-height:normal;color:${n.color ? colorFill(n.color) : 'currentColor'};` +
+                    // content aligned by baseline, as ctx.measure measured it: the
+                    // highest-reaching element's top at the widget's top, so the
+                    // shared baseline lands on the line's
+                    'display:flex;align-items:baseline;user-select:none;-webkit-user-select:none';
+                el.appendChild(box);
+                try { n.widget.render(box, n.part, n.ctx); }
+                catch (e) { console.warn(`[latex-viewer] widget ${n.ctx.name}:`, e); }
+                byNode.set(n, el); stats.created++;
+            } else {
+                stats.repositioned++;
+            }
+            el.setAttribute('x', x); el.setAttribute('y', y - h);
             place(auxParent, lastRect, el, isNew);
             used.add(el); lastRect = el;
         },
@@ -2186,6 +2452,10 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
                 break;
             }
             case 'disc':  x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,expandRatio,0,runH,runD); break;
+            case 'wdisc': x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,0,0,runH,runD); break;
+            case 'widget':
+                if(sink.widget) sink.widget(n, x, baselineY);
+                x+=n.width*SP_TO_PX; break;
             case 'math':{
                 const w=n.surround*SP_TO_PX;
                 if(sink.gap) sink.gap(n,'surround',x,w);
@@ -2314,7 +2584,7 @@ function segmentsOf(doc) {
         }
         if (item.kind === 'stream') {
             // A separately typeset stream embedded here (what the companion
-            // package's \begin{reflowtexstream} wraps). Its own segment: the
+            // package's \begin{webstream} wraps). Its own segment: the
             // content is laid out as a nested block inside the segment's box,
             // at whatever width the page gives that box (see
             // layoutStreamSegment). Like a display it never merges with the
@@ -2457,6 +2727,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
               })
             : null;
         for (const ln of (ext || kpBreak(bcs, para.nodes, availSp, justify ? p : { ...p, ragged: true }))) {
+            ln.nodes = mergeWidgetRuns(ln.nodes);
             // For non-justified modes: allow glue shrink (ratio<0) but never stretch.
             // When the line must shrink, rendering and positioning are identical to justify.
             // The alignment offset only applies to lines whose natural width fits the column.
@@ -2913,7 +3184,7 @@ function updateDisplayOverflowCue(wrap) {
 // ── Streams ───────────────────────────────────────────────────────────────────
 // A stream is a separately typeset run of content (Document.streams): a
 // footnote's body, or a block the author wrapped in the companion package's
-// \begin{reflowtexstream}{kind}. Its content is an ordinary content stream
+// \begin{webstream}{kind}. Its content is an ordinary content stream
 // over the block's shared paragraphs, so it is laid out by layoutDocument
 // itself, recursively, into the segment's box – with its own cache, its own
 // lazily painted segments, and streams of its own inside if it has them. The
@@ -3306,7 +3577,7 @@ function installStreamStyles() {
         --latex-cap-height: calc(6.83 * var(--latex-pt));
         padding: max(2px, calc(var(--latex-box-space) + var(--latex-cap-height) - var(--latex-first-ascent, 0px))) .7rem
                  max(2px, calc(var(--latex-box-space) - var(--latex-last-depth, 0px))) .85rem;
-        /* --latex-box-accent / --latex-box-background: set per box (\makeboxed
+        /* --latex-box-accent / --latex-box-background: set per box (\DeclareWebBox
            accent=, background=) or by a page; else the kind's defaults – a
            page may give theorems a background of their own
            (--latex-theorem-background), else a tint of their accent. */
@@ -3569,6 +3840,7 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // paintSegment is handed only the cache, so the reference tables and this
     // block's id prefix travel on it.
     cache.links   = doc.links   || [];
+    cache.slotNames = (doc.slots || []).map(x => x.name);   // Node.slot → its name, for data-slot
     cache.anchors = doc.anchors || [];
     cache.streams = doc.streams || [];
     // Per-stream state a kind's behaviour keeps (an accordion's pane), keyed
@@ -3667,11 +3939,11 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
             const box = document.createElement('div');
             box.className = 'latex-stream';
             box.dataset.kind = seg.stream.kind || '';
-            // The author's parameters (\begin{reflowtexstream}[key=value]),
+            // The author's parameters (\begin{webstream}[key=value]),
             // for CSS and the kind's behaviour alike.
             // Two keys are special: class adds CSS classes, and a key
             // starting with -- sets that CSS custom property on the box
-            // (reflowtex.sty's \makeboxed accent= and background=).
+            // (reflowtex.sty's \DeclareWebBox accent= and background=).
             for (const a of seg.stream.attrs || []) {
                 if (!a.key || !/^[a-z0-9-]+$/.test(a.key)) continue;
                 if (a.key === 'class') box.classList.add(...(a.value || '').split(/\s+/).filter(Boolean));
@@ -4082,6 +4354,7 @@ async function init() {
     installFootnotes();
     installStreamStyles();
     installLinks();
+    installWidgetStates();
     loadSchema();
     loadFontMap();
 

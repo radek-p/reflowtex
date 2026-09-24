@@ -225,7 +225,7 @@ A block's content can hold *streams*: separately typeset runs of paragraphs
 and displays, each with a `kind` (`Document.streams` in the schema). A
 footnote's body is one, pointed at by its marker glyph and shown in the
 footnote popover. The companion package's
-`\begin{reflowtexstream}{kind}` (see [src/latex/](../latex/)) makes one at the
+`\begin{webstream}{kind}` (see [src/latex/](../latex/)) makes one at the
 point where it stands in the flow, and the viewer mounts it as
 
 ```html
@@ -256,7 +256,7 @@ same name. A kind with no behaviour is still rendered, as a plain box.
 
 ### Stream parameters and actions
 
-`\begin{reflowtexstream}[key=value, …]{kind}` gives a stream parameters. Each
+`\begin{webstream}[key=value, …]{kind}` gives a stream parameters. Each
 one is set on the box as `data-KEY="value"` and passed to `mount` as
 `ctx.attrs`. For example, an accordion's box carries `data-initial` and
 `data-print`.
@@ -328,6 +328,11 @@ reflowtex.setText('clock', null);      // TeX's default again
 reflowtex.getText('clock');            // the text last given, or undefined
 ```
 
+Every glyph of a slot, TeX's default or a given text, is drawn with
+`data-slot="name"`, so a page can find where it stands
+(`document.querySelectorAll('[data-slot="clock"]')`) or style it
+(`[data-slot="clock"] { fill: … }`).
+
 A given text is set as a browser sets it: split at breakable white space
 (not at a no-break space), each word one node measured with the canvas in the
 default's font and colour, with no kerning, ligatures or font expansion across
@@ -337,6 +342,63 @@ Changes within one animation frame are applied together, and only the
 segments holding an affected paragraph are laid out and painted again. A text
 set before its block is initialised is applied when the block is. A slot
 inside a box (`\mbox`) is left as its default.
+
+## Widgets (optional)
+
+`\webwidget[default]{name}` marks a place in running text where the page
+draws HTML. The page registers a widget under the name, or under a prefix
+ending in `*`, before or after the viewer runs:
+
+```js
+reflowtex.widgets['lean:*'] = {
+  measure(ctx) {           // px, at the text's size and baseline
+    return { width, height, depth,
+             splits: [{ first: {width, height, depth, overhang}, second: {…}, penalty: 100 }] };
+  },
+  render(el, part, ctx) {  // part: 'whole' or { split: i, piece: 'first' | 'second' }
+    el.innerHTML = …;
+  },
+};
+reflowtex.refreshWidgets();  // only if registered after the viewer has run
+```
+
+For a widget that should break across any number of lines, `measure`
+describes it as segments instead, as a word with hyphenation points:
+
+```js
+measure(ctx) {
+  return {
+    segments: [{ width, height, depth }, …],          // the content, in order
+    gaps: [{ width, penalty }, …],                      // between each two: the space
+                                                        // shown when not broken there
+    ends: { left:  { cap, cut, overhang },              // a closed end and a cut one
+            right: { cap, cut, overhang } },
+  };
+},
+render(el, part, ctx) {  // part: { from, to, left: 'cap' | 'cut', right: 'cap' | 'cut' }
+  …
+},
+```
+
+Each break point becomes a discretionary: the line before it ends with the
+right cut end, the line after starts with the left one, and unbroken it shows
+the gap. Each line's run of segments is drawn as one part.
+
+A split is one way to break the widget between two lines, as a hyphen breaks
+a word (a piece's optional `overhang`, in px, lets it reach past the margin by
+that much, as hanging punctuation does): the line breaker weighs every split (penalty 100 unless given) against
+the rest of the paragraph, and `render` is then asked for the part on each
+line. `ctx` carries `name`, `fontSize` and `color` of the text around it, a
+per-name `state` object, `measure(html)` – the width, height and depth of
+some HTML set at that size against the baseline (its elements' boxes, not
+the text around them) – and `invalidate()`, which measures again and
+re-breaks the paragraph when the widget's content changes. Each part is drawn
+in a `foreignObject`, its elements aligned by baseline on the line's, so it
+moves with the text on every reflow. Pointing at or pressing any part of a
+widget marks every part of it – `latex-widget-hover` and `latex-widget-active`
+on each part's `foreignObject` – so a split widget can be styled as one
+(`.latex-widget-hover .my-badge { … }`). Keep menus and popovers out of it: open
+them in the page (a fixed panel), where nothing of the text can cover them.
 
 ## Theming (optional)
 

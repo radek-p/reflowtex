@@ -1,7 +1,7 @@
 % SPDX-License-Identifier: AGPL-3.0-or-later
 \section*{A collapsible proof}
 The companion package \texttt{reflowtex.sty} adds a few environments for
-documents written with the web in mind. \texttt{accordion} is one: a block
+documents written with the web in mind. \texttt{webaccordion} is one: a block
 that shows one of its panes at a time, switched by links inside them. Here a
 one-line idea stands in for the proof until the reader asks for more; a PDF
 of the same source prints the proof.
@@ -10,13 +10,13 @@ of the same source prints the proof.
 For every integer $n$, the square $n^2$ leaves remainder $0$ or $1$ on division
 by $4$.
 \end{theorem}
-\begin{accordion}
-\begin{collapsedpane}
+\begin{webaccordion}
+\begin{webpane}[collapsed]
 \noindent\textit{Proof idea.} Split into even and odd $n$.
-\expandlink[See the proof]
-\end{collapsedpane}
-\begin{expandedpane}
-\begin{proof}\hfill\collapselink\par
+\webnextpane[See the proof]
+\end{webpane}
+\begin{webpane}[expanded]
+\begin{proof}\hfill\webprevpane\par
 Every integer is even or odd, so $n = 2k$ or $n = 2k+1$ for some integer $k$,
 and
 \[
@@ -26,7 +26,7 @@ and
 \]
 The first leaves remainder $0$ and the second remainder $1$.
 \end{proof}
-\end{expandedpane}
-\end{accordion}
+\end{webpane}
+\end{webaccordion}
 Inside, both panes are typeset by \TeX{} like everything else, and re-break
 with the column.
