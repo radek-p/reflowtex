@@ -150,8 +150,12 @@ is laid out only if its geometry is not cached, otherwise its layout is
 therefore re-breaks the paragraphs on screen and little else; returning to a
 recent width re-breaks nothing. If a deferred segment's real height turns out
 to differ from the cached one, the content below it moves at that moment and
-the cache is corrected. The console line printed on each re-render reports
-how many segments were laid out, reused, or deferred.
+the cache is corrected. With debugging on, a console line on each re-render
+reports how many segments were laid out, reused, or deferred. The viewer's
+timing lines are off by default; turn them on with `window.reflowtex.debug =
+true` (from the console, at any time) or by adding `?reflowtex-debug` to the
+page URL. They are logged at the debug level, so the console's Verbose level
+must be on too.
 
 The browser's own scroll anchoring survives a reflow: on a window resize the
 content at the top of the viewport stays where it was, as on any ordinary
@@ -462,3 +466,31 @@ If a page includes `<script id="lr-citations" type="application/json">…</scrip
 mapping citation numbers to reference metadata, and the LaTeX marked citation
 digits (via an integration-specific macro), the viewer wires hover/click popovers
 to them. This is opt-in and unused by the core examples.
+
+## Inspection (for developer tools)
+
+`window.reflowtex.inspect` exposes each block's decoded document and layout, so
+a tool can show the boxes and glue behind what is on screen – which box a
+glyph sits in, what a glue was set to on this line – and outline them on the
+page:
+
+```js
+const { inspect } = window.reflowtex;
+const el = inspect.blocks()[0];              // an initialised block element
+const { doc, cache } = inspect.state(el);    // the renderer's own state
+inspect.replay(el, 0, {                      // segment 0, drawn again with no DOM
+  line(j, line, x0, baselineY) {},
+  node(n, x, baselineY, advance) {},         // every node on a line, nested ones too
+  vnode(n, x, top, advance) {},              // every item of a vertical list
+});
+```
+
+Coordinates are the segment's `<svg>` user units (`cache.dom.segs[i].svg`);
+`getScreenCTM()` maps them to the viewport. `inspect.paints` counts segment
+paints, so a tool can poll it to notice a reflow. The state objects are
+internal and may change between versions; `inspect.version` says which shape
+to expect. Nothing here changes what is drawn.
+
+[`src/inspector/`](../inspector/) is a floating panel built on this API: a tree
+of boxes and glue for every block on the page, with the page outlining whatever
+is hovered or selected.

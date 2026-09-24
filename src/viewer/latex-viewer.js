@@ -18,7 +18,8 @@
 const SCRIPT_URL = document.currentScript?.src;
 
 // Version marker for cache diagnosis: logs the ?v= content hash the page
-// requested, and stamps <html data-latex-viewer> once the viewer initialises.
+// requested (when debugging – see debugLog), and stamps <html
+// data-latex-viewer> once the viewer initialises.
 const BUILD = (SCRIPT_URL?.match(/v=([a-f0-9]+)/) || [])[1] || 'unversioned';
 
 // The page-facing surface. Today it holds one thing: the registry of stream
@@ -26,7 +27,12 @@ const BUILD = (SCRIPT_URL?.match(/v=([a-f0-9]+)/) || [])[1] || 'unversioned';
 // it in a script that runs either before or after this one.
 const api = window.reflowtex = window.reflowtex || {};
 api.streamKinds = api.streamKinds || {};
-console.log(`[latex-viewer] build ${BUILD}`);
+// Timing lines (load, every re-render) are opt-in: set window.reflowtex.debug
+// = true (read on each line, so it can be flipped in the console), or add
+// ?reflowtex-debug to the page URL.
+if (/[?&]reflowtex-debug\b/.test(location.search)) api.debug = true;
+const debugLog = (...a) => { if (api.debug) console.debug(...a); };
+debugLog(`[latex-viewer] build ${BUILD}`);
 
 // ── Fixed rendering constants ─────────────────────────────────────────────────
 
@@ -277,7 +283,7 @@ function reflowBlock(el) {
     const repainted = paintVisibleNow(data.fontInfo, data.cache);
     const st = data.cache.stats || {};
     const ls = data.cache.layoutStats || {};
-    console.log(`[latex-viewer] re-render at ${newWidth.toFixed(0)}pt: layout ${(tp - t0).toFixed(1)} ms, paint ${(performance.now() - tp).toFixed(1)} ms (${repainted} visible segment(s); ${st.repositioned||0} repositioned, ${st.created||0} created; segments: ${ls.computed||0} laid out, ${ls.reused||0} reused, ${ls.deferred||0} deferred to scroll)`);
+    debugLog(`[latex-viewer] re-render at ${newWidth.toFixed(0)}pt: layout ${(tp - t0).toFixed(1)} ms, paint ${(performance.now() - tp).toFixed(1)} ms (${repainted} visible segment(s); ${st.repositioned||0} repositioned, ${st.created||0} created; segments: ${ls.computed||0} laid out, ${ls.reused||0} reused, ${ls.deferred||0} deferred to scroll)`);
     return true;
 }
 
@@ -1836,6 +1842,56 @@ api.setText = function (name, text) {
 };
 api.getText = name => slotValues.get(String(name));
 
+// ── Inspection ───────────────────────────────────────────────────────────────
+// For developer tools – a browser extension that shows boxes and glue, a test
+// harness. Read-only by convention: the state objects are the renderer's own,
+// and their shapes are internal and may change between versions (hence the
+// version number).
+//
+//   blocks()                every initialised block element on the page
+//   state(el)               { doc, fontInfo, cache, lastWidth, params, … }
+//   spToPx                  scaled points → the svg user units below
+//   paints                  a counter, bumped by every segment paint: a tool
+//                           polls it to notice a reflow
+//   replay(el, i, sink[, cache])
+//                           re-runs the drawing of segment i of `cache` (the
+//                           block's own by default; a stream's nested one,
+//                           cache.dom.segs[k].sub, for its segments) through
+//                           `sink`, touching no DOM. sink.line(j, line, x0,
+//                           baselineY), sink.node(n, x, baselineY, advance) and
+//                           sink.vnode(n, x, top, advance) are all optional;
+//                           coordinates are the segment <svg>'s user units
+//                           (cache.dom.segs[i].svg). False when the segment has
+//                           no lines yet (a stream, or a layout deferred until
+//                           it scrolls near).
+const inspectable = new Set();
+let paintCount = 0;
+api.inspect = {
+    version: 1,
+    spToPx: SP_TO_PX,          // scaled points → svg user units
+    blocks: () => [...inspectable].filter(el => el.isConnected),
+    state: el => blockData.get(el),
+    get paints() { return paintCount; },
+    replay(el, i, sink, cache) {
+        const data = blockData.get(el);
+        cache = cache || (data && data.cache);
+        const L = cache && cache.layout && cache.layout.laid[i];
+        if (!L || L.deferred || !L.lines || !L.lrp) return false;
+        useGlyphMetrics(cache.metrics);
+        const noop = () => {};
+        const s = { glyph: noop, missing: noop, space: noop, rule: noop, picture: noop,
+                    beginTransform: noop, endTransform: noop,
+                    node: sink.node, vnode: sink.vnode };
+        for (let j = 0; j < L.lines.length; j++) {
+            const { ratio, er, x0, fillRatio, fillOrder } = L.lrp[j];
+            if (sink.line) sink.line(j, L.lines[j], x0, L.baselineYs[j]);
+            renderNodes(data.fontInfo, s, L.lines[j].nodes, x0, L.baselineYs[j],
+                        fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+        }
+        return true;
+    },
+};
+
 // ── Footnotes ────────────────────────────────────────────────────────────────
 // Footnote bodies are ordinary ContentItem streams stored outside the document's
 // main flow. Hover/focus previews them; click pins the popover for touch users and
@@ -2370,6 +2426,7 @@ function renderVlistBody(fontInfo, sink, n, vlistX, refY){
     const vlistW=n.width;
     let curY=refY-n.height*SP_TO_PX;
     for(const child of n.children){
+        const y0=curY;
         if(child.type==='kern'){curY+=child.kern*SP_TO_PX;}
         else if(child.type==='glue'){curY+=setGlue(child,vr,vfo)*SP_TO_PX;}
         else if(child.type==='rule'){
@@ -2388,6 +2445,8 @@ function renderVlistBody(fontInfo, sink, n, vlistX, refY){
             renderVlistBody(fontInfo,sink,child,vlistX+(child.shift??0)*SP_TO_PX,curY+child.height*SP_TO_PX);
             curY+=(child.height+child.depth)*SP_TO_PX;
         }
+        // Inspection: a vertical list item's top edge and advance.
+        if(sink.vnode) sink.vnode(child, vlistX, y0, curY-y0);
     }
 }
 
@@ -2398,7 +2457,7 @@ function renderVlistBody(fontInfo, sink, n, vlistX, refY){
 function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fillOrder, runH, runD) {
     ratio=ratio||0; expandRatio=expandRatio||0; fillOrder=fillOrder||0; runH=runH||0; runD=runD||0;
     for(let i=0;i<nodes.length;i++){
-        const n=nodes[i];
+        const n=nodes[i], x0=x;
         switch(n.type){
             case 'rule':{
                 // In an hlist a rule is a vrule: its width is set, its height/depth
@@ -2472,6 +2531,8 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
                 renderVlistBody(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX);
                 x+=n.width*SP_TO_PX; break;
         }
+        // Inspection (api.inspect.replay): every node's pen position and advance.
+        if(sink.node) sink.node(n, x0, baselineY, x-x0);
     }
     return x;
 }
@@ -4141,6 +4202,7 @@ function materializeSegment(cache, i) {
 // possible (see observeSegments / paintVisibleNow): a long document only pays the
 // DOM cost for the segments that have been on screen, not for all of them at once.
 function paintSegment(fontInfo, cache, i) {
+    paintCount++;
     restoreLinkStates();              // once this paint is done (a microtask)
     materializeSegment(cache, i);     // a deferred layout is only ever run here
     useGlyphMetrics(cache.metrics);   // a paint may run after another block laid out
@@ -4304,6 +4366,7 @@ async function initBlock(el) {
     const cache = { bcs: null, dom: null, layout: null, stats: null };  // bcs: Map(paraIdx → break candidates), built lazily
     const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false };
     blockData.set(el, data);
+    inspectable.add(el);
     if (doc.slots && doc.slots.length) {
         slotBlocks.add(el);
         applySlots(fontInfo, doc);
@@ -4364,14 +4427,14 @@ async function init() {
         try {
             const t = await initBlock(el);
             segPainted += t.segPainted; segTotal += t.segTotal;
-            console.log(`[latex-viewer] block ${++idx}/${blocks.length}: ${t.total.toFixed(1)} ms `
+            debugLog(`[latex-viewer] block ${++idx}/${blocks.length}: ${t.total.toFixed(1)} ms `
                 + `(decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) `
                 + `– ${t.segPainted}/${t.segTotal} segments painted`);
         }
         catch (e) { el.textContent = `Render error: ${e.message}`; console.error(e); }
     }
     const segDeferred = segTotal - segPainted;
-    console.log(`[latex-viewer] ${blocks.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms `
+    debugLog(`[latex-viewer] ${blocks.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms `
         + `· ${segPainted}/${segTotal} segments painted`
         + (segDeferred ? `, ${segDeferred} deferred (painted on scroll)` : ''));
 
