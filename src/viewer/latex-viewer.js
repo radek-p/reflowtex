@@ -2626,9 +2626,11 @@ function segmentsOf(doc) {
     const segs = [];
     const pendingAnchors = [];
     const own = (seg, ids) => { if (ids.length) (seg.anchors ||= []).push(...ids); };
-    let text = null, gap = 0;
+    // `vsp` is the vspace item behind `gap`, kept on what follows it for tools
+    // that show what the space is made of (api.inspect); layout reads only gap.
+    let text = null, gap = 0, vsp = null;
     for (const item of contentStream(doc)) {
-        if (item.kind === 'vspace') { gap = item.amount * SP_TO_PX; continue; }
+        if (item.kind === 'vspace') { gap = (item.amount || 0) * SP_TO_PX; vsp = item; continue; }
         if (item.kind === 'anchorpoint') {
             // A label that stood between two items – nearly always straight
             // after a sectioning command, which is why it is in vertical mode
@@ -2652,8 +2654,8 @@ function segmentsOf(doc) {
             // prose around it, and its anchors are the nested layout's concern.
             const stream = doc.streams && doc.streams[item.stream - 1];
             if (stream) {
-                segs.push({ kind: 'stream', stream, index: item.stream, gapBefore: gap });
-                text = null; gap = 0;
+                segs.push({ kind: 'stream', stream, index: item.stream, gapBefore: gap, vspace: vsp });
+                text = null; gap = 0; vsp = null;
             }
             continue;
         }
@@ -2666,12 +2668,12 @@ function segmentsOf(doc) {
             const isAlign = item.box.subtype === HL_ALIGNMENT;
             const last    = segs[segs.length - 1];
             if (isAlign && last && last.kind === 'display' && last.isAlign) {
-                last.rows.push({ item, gap });
+                last.rows.push({ item, gap, vspace: vsp });
             } else {
-                segs.push({ kind: 'display', isAlign, rows: [{ item, gap: 0 }], gapBefore: gap });
+                segs.push({ kind: 'display', isAlign, rows: [{ item, gap: 0 }], gapBefore: gap, vspace: vsp });
             }
             own(segs[segs.length - 1], anchorIdsOf(item.box, item.box.children));
-            text = null; gap = 0;
+            text = null; gap = 0; vsp = null;
             continue;
         }
         const para = doc.paragraphs[item.para - 1];
@@ -2682,10 +2684,10 @@ function segmentsOf(doc) {
             // scroll box, and a shared one would let an oversized figure drag
             // perfectly-fitting text out of view with it.
             const fig = { kind: 'text', isFigure: true,
-                          items: [{ index: item.para, para }], gapBefore: gap };
+                          items: [{ index: item.para, para }], gapBefore: gap, vspace: vsp };
             segs.push(fig);
             own(fig, anchorIdsOf(para, para.nodes));
-            text = null; gap = 0;
+            text = null; gap = 0; vsp = null;
             continue;
         }
         // Consecutive paragraphs normally merge into one text segment and stack
@@ -2693,10 +2695,10 @@ function segmentsOf(doc) {
         // \vspace, or a section heading's before/after skip) breaks that merge:
         // the paragraph starts a new segment whose gapBefore reproduces exactly
         // the space TeX asked for (segment boxes stack baseline-to-baseline).
-        if (!text || gap) { text = { kind: 'text', items: [], gapBefore: gap }; segs.push(text); }
-        text.items.push({ index: item.para, para });
+        if (!text || gap) { text = { kind: 'text', items: [], gapBefore: gap, vspace: vsp }; segs.push(text); vsp = null; }
+        text.items.push({ index: item.para, para, vspace: vsp });   // a gap of 0 within the run
         own(text, anchorIdsOf(para, para.nodes));
-        gap = 0;
+        gap = 0; vsp = null;
     }
     // A label before anything was typeset has nothing to trail, so it leads.
     if (pendingAnchors.length && segs.length) own(segs[0], pendingAnchors);
@@ -2714,6 +2716,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
     const widthSp  = Math.round(widthPt * 65536);
     const columnPx = widthPt * ZOOM;
     const lines = [], lrp = [], meta = [];
+    const itemStarts = [];            // the first line of each item (paragraph)
     // Right edge of the widest line's ink, tracked alongside the loop below.
     // columnPx-only would be wrong for a figure segment (see isFigureParagraph):
     // its one line is an unbreakable, unshrinkable box that is exactly as wide
@@ -2723,6 +2726,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
     let maxRightPx = columnPx;
 
     for (const { index, para } of seg.items) {
+        itemStarts.push(lines.length);
         let bcs = cache.bcs.get(index);
         if (!bcs) { bcs = buildBreakCandidates(para.nodes, fontInfo); cache.bcs.set(index, bcs); }
 
@@ -2838,7 +2842,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
             meta.push(lineMeta);
         }
     }
-    return { lines, lrp, meta, W: Math.ceil(maxRightPx),
+    return { lines, lrp, meta, itemStarts, W: Math.ceil(maxRightPx),
              preDisplaySizeSp: preDisplaySizeSp(fontInfo, lines, lrp) };
 }
 

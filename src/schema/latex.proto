@@ -241,6 +241,11 @@ message ContentItem {
   optional uint32   para   = 2;  // paragraph: 1-based index into Document.paragraphs
   optional Node     box    = 3;  // display: the finished hlist, glue already set
   optional int32    amount = 4;  // vspace: vertical gap in sp
+  // vspace: the vertical glue and kerns the gap is made of, as TeX left them
+  // (subtype: 0 an author's or a heading's skip, 3 \parskip, 4-7 the display
+  // skips, 1-2 interline glue). Their widths add up to `amount`. For tools
+  // that show them; the layout reads only `amount`.
+  repeated Node     glue   = 29;
 
   // display: the band [display_indent, display_indent+display_width] the display
   // occupied, and where TeX shifted the box within it.

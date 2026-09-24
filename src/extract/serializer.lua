@@ -1010,7 +1010,24 @@ local function stream_out(ctx, sid)
 end
 
 local function reset_pending(pending)
-    pending.sp = 0; pending.explicit = 0
+    pending.sp = 0; pending.explicit = 0; pending.parts = nil
+end
+
+-- The vertical glue and kerns between two items, as TeX left them, for a
+-- vspace item to carry (its `glue`): what the gap is made of – the author's
+-- \vspace, a heading's skip, \parskip, a display's skip – for tools that
+-- show it (the inspector). The widths of the parts kept add up to `amount`.
+local function note_part(pending, n, t)
+    local parts = pending.parts or {}
+    pending.parts = parts
+    if t == "glue" then
+        local g = { type = "glue", subtype = n.subtype, width = n.width }
+        if (n.stretch or 0) ~= 0 then g.stretch = n.stretch; g.stretch_order = n.stretch_order end
+        if (n.shrink or 0) ~= 0 then g.shrink = n.shrink; g.shrink_order = n.shrink_order end
+        parts[#parts + 1] = g
+    else
+        parts[#parts + 1] = { type = "kern", kern = n.kern, subtype = n.subtype }
+    end
 end
 
 -- Where vertical space goes. A gap sits between two items, and belongs to the
@@ -1056,8 +1073,11 @@ local function only_anchors(list)
 end
 -- `sp` is the full glue, `explicit` only the author's own; after a display the
 -- full glue counts (it carries the display's below-skip). As everywhere, a gap
--- before anything at all is dropped.
-local function place_gap(ctx, next_sid, sp, explicit)
+-- before anything at all is dropped. `parts` (note_part) are kept with it:
+-- the explicit glue, or after a display all of it. A gap whose explicit glue
+-- is all zero – article's \parskip, 0pt plus 1pt – is still an item, of
+-- amount 0, so its glue is not lost to a tool that shows it.
+local function place_gap(ctx, next_sid, sp, explicit, parts)
     local list = stream_out(ctx, common_stream(ctx, ctx.last_sid, next_sid))
     local pos = #list
     while pos > 0 do
@@ -1070,9 +1090,17 @@ local function place_gap(ctx, next_sid, sp, explicit)
             break
         end
     end
-    local amount = (ctx.last_kind == "display") and sp or explicit
-    if amount and amount ~= 0 and pos > 0 then
-        table.insert(list, pos + 1, { kind = "vspace", amount = amount })
+    local after_display = ctx.last_kind == "display"
+    local amount = after_display and sp or explicit
+    local glue = {}
+    for _, g in ipairs(parts or {}) do
+        if after_display or (g.type == "glue" and (g.subtype == GLUE_USERSKIP or g.subtype == GLUE_PARSKIP)) then
+            glue[#glue + 1] = g
+        end
+    end
+    if pos > 0 and ((amount and amount ~= 0) or #glue > 0) then
+        table.insert(list, pos + 1, { kind = "vspace", amount = amount or 0,
+                                      glue = (#glue > 0) and glue or nil })
     end
 end
 
@@ -1116,7 +1144,7 @@ local function walk_flow(head, pending, ctx)
                 -- carries the display's spacing. Between text paragraphs keep only
                 -- explicit vspace: baselineskip leading is re-derived per line, but
                 -- a \vspace or a section's before/after skip must survive.
-                place_gap(ctx, stream_attr(n), pending.sp, pending.explicit)
+                place_gap(ctx, stream_attr(n), pending.sp, pending.explicit, pending.parts)
                 local out = stream_out(ctx, stream_attr(n))
                 out[#out + 1] = { kind = "paragraph", para = p }
                 ctx.last_sid, ctx.last_kind = stream_attr(n), "paragraph"
@@ -1124,7 +1152,7 @@ local function walk_flow(head, pending, ctx)
             reset_pending(pending)
         elseif t == "hlist" and (n.subtype == HL_EQUATION or n.subtype == HL_ALIGNMENT) then
             local gap = (pending.sp or 0) + ((last_box == "blank" and pending.blank_sp) or 0)
-            place_gap(ctx, stream_attr(n), gap, gap)
+            place_gap(ctx, stream_attr(n), gap, gap, pending.parts)
             reset_pending(pending)
             pending.blank_sp = nil
             local out = stream_out(ctx, stream_attr(n))
@@ -1193,6 +1221,7 @@ local function walk_flow(head, pending, ctx)
             streams[#streams + 1] = { kind = "footnote", content = fn_content }
             if id and id > 0 then footnote_index[id] = #streams end
         elseif t == "glue" then
+            note_part(pending, n, t)
             pending.sp = (pending.sp or 0) + (n.width or 0)
             if n.subtype == GLUE_ABOVEDISPLAY or n.subtype == GLUE_ABOVEDISPLAYSHORT then
                 pending.above_skip = n.width or 0
@@ -1210,6 +1239,7 @@ local function walk_flow(head, pending, ctx)
                 pending.explicit = (pending.explicit or 0) + (n.width or 0)
             end
         elseif t == "kern" then
+            note_part(pending, n, t)
             pending.sp = (pending.sp or 0) + (n.kern or 0)
         end
     end
