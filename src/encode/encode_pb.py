@@ -124,7 +124,10 @@ def _font_entry(fid: str, f: dict) -> dict:
 def build_document(data: dict) -> L.Document:
     doc = {
         # fonts is a map keyed by id in output.json; the wire form is a list.
-        'fonts': [_font_entry(k, f) for k, f in data['fonts'].items()],
+        # (Lua writes an empty table as [] – a block with no text, a lone
+        # picture, has no fonts)
+        'fonts': [_font_entry(k, f) for k, f in (data.get('fonts') or {}).items()]
+                 if isinstance(data.get('fonts'), dict) else [],
         'paragraphs': data.get('paragraphs', []),
         'content': data.get('content', []),
         'pictures': data.get('pictures', []),

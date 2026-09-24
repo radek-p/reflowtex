@@ -158,7 +158,7 @@
 \newif\ifreflowtex
 \reflowtextrue
 
-% Streams (\begin{reflowtexstream} in reflowtex.sty, and batch parts below)
+% Streams (\begin{webstream} in reflowtex.sty, and batch parts below)
 % are numbered by this one counter, which the package uses when it finds it.
 \newcount\reflowtexStreamCount
 
@@ -260,6 +260,12 @@
     \directlua{Serializer.note_captured_picture(
       \reflowtexThisPic, status.total_pages)}%
   \endgroup
+  % PGF places a finished picture with \leavevmode (\pgfsys@typesetpicturebox),
+  % so a picture that opens a paragraph – alone, or in a center – starts the
+  % paragraph. Here that \leavevmode ran inside the capture box above, so the
+  % placeholder has to do it itself, or it would join the vertical list
+  % outside any paragraph and never reach the page.
+  \leavevmode
   \begingroup
     \attribute908=\reflowtexThisPic\relax
     \setbox\reflowtexTikzBox=\hbox to \reflowtexTikzWidth{\hss}%
