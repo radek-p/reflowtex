@@ -10,3 +10,10 @@
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\abs}[1]{\left\lvert #1 \right\rvert}
 \newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+
+% The companion package (src/latex/reflowtex.sty): web-first environments such
+% as the collapsible proof in 07-collapsible-proof.tex. Every one of them falls
+% back to its print form in an ordinary LaTeX run.
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\usepackage{reflowtex}

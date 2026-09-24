@@ -70,6 +70,34 @@ and the Knuth–Plass knobs:
 {{</* latex width="360" align="left" */>}} … {{</* /latex */>}}
 ```
 
+`show-source="true"` presents a block as an example: the rendered result beside
+its LaTeX, highlighted, or behind Result / LaTeX tabs when the space is narrow.
+It works for both forms; a file ref's text comes from `data/latex_sources.json`,
+which `prebuild.py` writes. The partial carries the behaviour; style
+`figure.latex-example` to taste (this project's website is an example).
+
+A block that uses `\ref`, `\eqref` or a similar reference command is compiled twice, so the
+numbers resolve.
+
+### Books in parts: `batch` and `weight`
+
+Blocks with the same `batch="name"` are compiled together as one LaTeX
+document, in ascending `weight` order (ties by page, then position), and each
+then shows only its own part. A book's chapters can sit on separate pages or
+in tabs and keep the book's numbering, the macros earlier chapters defined,
+and cross-references between chapters (resolved to the right page through
+the link map):
+
+```markdown
+{{</* latex batch="mybook" weight="1" file="chapter1.tex" preamble="book" */>}}
+{{</* latex batch="mybook" weight="2" file="chapter2.tex" preamble="book" */>}}
+```
+
+All blocks of a batch share one `preamble`, which may start with its own
+`\documentclass` (e.g. `book`). Changing, adding or reordering any part
+recompiles the whole batch. The vanilla build does the same for a directory
+with `--batch`.
+
 Named preambles let blocks share macros/packages. Put them in
 `latex-preambles/<name>.tex` and reference one with `preamble="<name>"`; editing
 a preamble recompiles the blocks that use it.
@@ -83,9 +111,20 @@ with `color-map="<name>"`:
 {{</* latex file="intro.tex" preamble="book" color-map="my-book-colors" */>}}
 ```
 
-Unlike a preamble, a colour map is not part of what gets compiled — it's read
-by the browser at render time — so it must be repeated on every shortcode call
-that wants it, even multiple calls referencing the same `file="…"`.
+Unlike a preamble, a colour map is not part of what gets compiled; the browser
+reads it at render time. Either name it on every shortcode call that wants it
+(even several calls referencing the same `file="…"`), or make one the site's
+default in your config, which every block without its own `color-map` then uses:
+
+```toml
+[params]
+  latexColorMap = "site"     # latex-color-maps/site.json
+```
+
+`prebuild.py` embeds every map in `latex-color-maps/`, so a default needs no
+other registration. This project's own website uses `site.json`, which maps
+TeX's black, red and blue (and tints of them) for the dark, sepia and contrast
+themes. It is a reasonable starting point to copy.
 
 An inline block can register itself as a named lookup the same way a
 `file="…"` ref does, via `as="<name>"`, for a snippet with no natural `.tex`

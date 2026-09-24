@@ -105,6 +105,13 @@
   html.dark     { background: #0c0a09; color: #e7e5e4; }
   html.sepia    { background: #f4ecd8; color: #453a26; }
   html.contrast { background: #ffffff; color: #000000; }
+  /* The page's colour, for the viewer: the footnote popover is filled with
+     it and tints are mixed against it. Without it the viewer falls back to
+     Canvas, which follows the system's light/dark, not this page's theme. */
+  html          { --latex-page-bg: #fafaf9; }
+  html.dark     { --latex-page-bg: #0c0a09; }
+  html.sepia    { --latex-page-bg: #f4ecd8; }
+  html.contrast { --latex-page-bg: #ffffff; }
   body {
     margin: 0; min-height: 100vh;
     font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -254,7 +261,8 @@
   }
   .latex-block svg .latex-link.latex-link-hover {
     fill: var(--latex-link-hover, #1a4d85) !important;
-    text-decoration: underline;
+    /* The underline is drawn by the viewer, one line under the whole
+       reference (per line when it breaks), not per glyph as CSS would. */
   }
   .latex-block svg .latex-link.latex-link-active {
     fill: var(--latex-link-active, #c2410c) !important;

@@ -23,6 +23,7 @@ to latex-viewer.js's own URL, wherever that ends up.
 import argparse
 import base64
 import html
+import re
 import os
 import shutil
 import sys
@@ -61,6 +62,10 @@ def main() -> None:
                          'own URL, which works unmodified from a subpath, a '
                          "different domain, or straight off disk over file://; "
                          'pass an absolute URL (e.g. a CDN) to override that')
+    ap.add_argument('--batch', action='store_true',
+                    help='compile all snippets as ONE document (a book\'s chapters, in '
+                         'filename order), so numbering, macros and cross-references '
+                         'carry across them; each is still its own block')
     ap.add_argument('-j', '--jobs', type=int, default=1,
                     help='snippets to compile in parallel (default: 1)')
     ap.add_argument('--local-fonts', type=Path, default=None,
@@ -93,15 +98,23 @@ def main() -> None:
     print(f'reflowtex: compiling {len(snippets)} snippet(s) from {src_dir}')
     # Each snippet owns its heading (a \section, if any), so no HTML heading is
     # added here — the block is one self-contained rendering.
+    # A snippet that refers to its own labels needs the .aux round trip, or
+    # every \\ref prints "??": give it a second pass.
+    ref_re = re.compile(r'\\(?:eq|auto|c|C|name|page)?ref\*?\{')
     jobs = [(content_key(p.read_text(encoding='utf-8'), preamble),
-             p.read_text(encoding='utf-8'), preamble, p.name)
+             p.read_text(encoding='utf-8'), preamble, p.name,
+             2 if ref_re.search(p.read_text(encoding='utf-8')) else 1)
             for p in snippets]
     # Compile (optionally in parallel), then assemble blocks in filename order.
-    blobs = pipe.compile_many(jobs, jobs=args.jobs)
+    if args.batch:
+        blobs = pipe.compile_batch([(k, c, n) for k, c, _p, n, _passes in jobs], preamble,
+                                   passes=max(j[4] for j in jobs), name=f'batch {src_dir.name}')
+    else:
+        blobs = pipe.compile_many(jobs, jobs=args.jobs)
     pipe.patch_fonts()
 
     blocks_html = []
-    for key, _content, _pre, _name in jobs:
+    for key, *_ in jobs:
         b64 = base64.b64encode(blobs[key]).decode()
         blocks_html.append(f'<div class="latex-block" data-nodelist-b64="{b64}"></div>')
 

@@ -25,10 +25,13 @@ from fonts import fonts_of
 
 
 def _all_content_items(data: dict):
-    """Yield main-flow and separately stored footnote items."""
+    """Yield every content item: the main flow's, then each stream's (footnote
+    bodies, \\begin{reflowtexstream} blocks). Streams nest by reference — a
+    stream item names another stream — so one flat pass over the streams table
+    reaches every item exactly once."""
     yield from data.get('content', [])
-    for footnote in data.get('footnotes', []):
-        yield from footnote.get('content', [])
+    for stream in data.get('streams', []):
+        yield from stream.get('content', [])
 
 
 def _remap_font_codes(data: dict, remap: dict) -> None:
@@ -429,3 +432,121 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
             walk(item['box'].get('children', []))
     pdf_tmp.cleanup()
     return converted
+
+
+# ── Batch parts ──────────────────────────────────────────────────────────────
+# A batch (Pipeline.compile_batch) is one document whose top-level flow is a
+# run of "batch-part" streams, one per part. Each part becomes a document of
+# its own: the part's content as the main flow, over copies of the shared
+# tables pruned to what that part uses — streams (footnotes, boxes, panes)
+# reachable from it, paragraphs, pictures, and anchors. Pruning the anchors
+# matters beyond size: a page registers every anchor of its blocks as a label
+# found on that page, so a part must not claim labels another part defines.
+
+
+def _walk_nodes(nodes, fn):
+    for n in nodes or []:
+        if not isinstance(n, dict):
+            continue
+        fn(n)
+        for k in ('children', 'pre', 'post', 'replace'):
+            _walk_nodes(n.get(k), fn)
+        if n.get('leader'):
+            _walk_nodes([n['leader']], fn)
+
+
+def _part_document(data: dict, content: list) -> dict:
+    import copy
+    d = copy.deepcopy({k: v for k, v in data.items() if k != 'content'})
+    d['content'] = copy.deepcopy(content)
+    streams, paragraphs = d.get('streams', []), d.get('paragraphs', [])
+
+    def item_nodes(it):
+        if it.get('kind') == 'paragraph' and 1 <= it.get('para', 0) <= len(paragraphs):
+            return paragraphs[it['para'] - 1].get('nodes', [])
+        if it.get('box'):
+            return [it['box']]
+        return []
+
+    # Streams reachable from the part: items of kind stream, and glyphs that
+    # point at one (a footnote marker), transitively.
+    keep, todo = set(), [d['content']]
+    while todo:
+        for it in todo.pop():
+            refs = [it['stream']] if it.get('kind') == 'stream' else []
+            _walk_nodes(item_nodes(it), lambda n: n.get('stream') and refs.append(n['stream']))
+            for sid in refs:
+                if sid not in keep and 1 <= sid <= len(streams):
+                    keep.add(sid)
+                    todo.append(streams[sid - 1].get('content', []))
+    order = sorted(keep)
+    remap = {old: new for new, old in enumerate(order, start=1)}
+    lists = [d['content']] + [streams[i - 1].get('content', []) for i in order]
+    touched = set()
+
+    def fix_node(n):
+        if n.get('stream') in remap and id(n) not in touched:
+            n['stream'] = remap[n['stream']]; touched.add(id(n))
+    for items in lists:
+        for it in items:
+            if it.get('kind') == 'stream' and it.get('stream') in remap:
+                it['stream'] = remap[it['stream']]
+            _walk_nodes(item_nodes(it), fix_node)
+    d['streams'] = [streams[i - 1] for i in order]
+
+    drop_unreferenced_paragraphs(d)
+
+    # Pictures and anchors the part uses, renumbered.
+    used_pics, used_anchors = set(), set()
+    all_items = list(_all_content_items(d))
+    for it in all_items:
+        if it.get('kind') == 'anchorpoint' and it.get('anchor'):
+            used_anchors.add(it['anchor'])
+        _walk_nodes(item_nodes_of(d, it), lambda n: (
+            n.get('picture') and n.get('type') == 'picture' and used_pics.add(n['picture']),
+            n.get('anchor') and used_anchors.add(n['anchor'])))
+    pmap = {old: new for new, old in enumerate(sorted(used_pics), start=1)}
+    amap = {old: new for new, old in enumerate(sorted(used_anchors), start=1)}
+    seen = set()
+
+    def fix_refs(n):
+        if id(n) in seen:
+            return
+        seen.add(id(n))
+        if n.get('type') == 'picture' and n.get('picture') in pmap:
+            n['picture'] = pmap[n['picture']]
+        if n.get('anchor') in amap:
+            n['anchor'] = amap[n['anchor']]
+    for it in all_items:
+        if it.get('kind') == 'anchorpoint' and it.get('anchor') in amap:
+            it['anchor'] = amap[it['anchor']]
+        _walk_nodes(item_nodes_of(d, it), fix_refs)
+    if d.get('pictures'):
+        d['pictures'] = [d['pictures'][i - 1] for i in sorted(used_pics)]
+    anchors = d.get('anchors') or []
+    d['anchors'] = [anchors[i - 1] for i in sorted(used_anchors) if 1 <= i <= len(anchors)]
+    d['outline'] = [dict(e, anchor=amap[e['anchor']]) for e in d.get('outline', [])
+                    if e.get('anchor') in amap]
+    return d
+
+
+def item_nodes_of(d: dict, it: dict) -> list:
+    paragraphs = d.get('paragraphs', [])
+    if it.get('kind') == 'paragraph' and 1 <= it.get('para', 0) <= len(paragraphs):
+        return paragraphs[it['para'] - 1].get('nodes', [])
+    if it.get('box'):
+        return [it['box']]
+    return []
+
+
+def batch_parts(data: dict) -> list[dict]:
+    """The documents of a batch's parts, in part order (see above)."""
+    streams = data.get('streams', [])
+    parts = []
+    for it in data.get('content', []):
+        if it.get('kind') == 'stream' and 1 <= it.get('stream', 0) <= len(streams):
+            s = streams[it['stream'] - 1]
+            if s.get('kind') == 'batch-part':
+                n = next((int(a['value']) for a in s.get('attrs', []) if a.get('key') == 'part'), 0)
+                parts.append((n, s.get('content', [])))
+    return [_part_document(data, content) for _, content in sorted(parts, key=lambda p: p[0])]

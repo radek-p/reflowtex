@@ -30,8 +30,8 @@ GAP_FIELD_BY_TYPE = {'glue': 'width', 'kern': 'kern', 'math': 'surround'}
 def _display_items(data: dict) -> list[dict]:
     items = [item for item in data.get('content', [])
              if item.get('kind') == 'display']
-    for footnote in data.get('footnotes', []):
-        items.extend(item for item in footnote.get('content', [])
+    for stream in data.get('streams', []):
+        items.extend(item for item in stream.get('content', [])
                      if item.get('kind') == 'display')
     return items
 

@@ -1,0 +1,456 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% reflowtex.sty — the Reflow TeX companion package.
+%
+% Load it from a document that is written for the web but must still compile
+% to a PDF: \usepackage{reflowtex}. Everything here has two definitions, one
+% for the extraction run (the pipeline compiles the snippet with \ifreflowtex
+% true — see src/extract/template.tex) and one for an ordinary LaTeX run,
+% where the same constructs fall back to their nearest print analogue.
+%
+% Layers, from primitive to convenience:
+%
+%   \ifreflowtex … \else … \fi       the switch
+%   webonly / printonly              medium-specific content
+%   reflowtexstream[attrs]{kind}     primitive: everything inside is typeset as
+%                                    its own *stream*, of a kind the browser
+%                                    renders by, with key=value parameters
+%   \reflowtexaction{action}{text}   primitive: text the reader clicks to
+%                                    trigger an action in the page
+%   accordion / pane                 built from the two: a block showing one
+%                                    of several panes, switched by links in them
+%   webnote, webhint                 a framed note; a hint blurred until clicked
+%   leanproof, leancode              a proof with its Lean formalisation beside
+%                                    it (and leanblueprint's macros)
+%   \makeboxed[new]{env}[options]    an environment drawn as a box on the web
+%                                    (package option boxedtheorems: all
+%                                    theorems and proofs)
+%
+% The primitives are what other web-first environments are made of; accordion
+% is the worked example (website: docs/web-first).
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{reflowtex}[2026/09/23 v0.1 Reflow TeX companion package]
+
+% ── Options ─────────────────────────────────────────────────────────────────
+% boxedtheorems: on the web, every theorem-like environment and every proof is
+% a box (see the end of this file). No effect in print.
+\newif\ifreflowtex@boxed
+\newif\ifreflowtex@leanprint \reflowtex@leanprinttrue
+\DeclareKeys[reflowtex]{
+  boxedtheorems .if = reflowtex@boxed,
+  leanprint     .if = reflowtex@leanprint,
+}
+\ProcessKeyOptions[reflowtex]
+
+% ── The switch ──────────────────────────────────────────────────────────────
+% The pipeline's template defines \ifreflowtex (true) before the preamble is
+% read. In any other run it is undefined here, so define it false. Tested by
+% name: a bare `\ifdefined\ifreflowtex` would leave the \iftrue that
+% \ifreflowtex *is* dangling inside a skipped branch.
+\ifcsname ifreflowtex\endcsname\else
+  \expandafter\newif\csname ifreflowtex\endcsname
+\fi
+
+% ── Medium-specific content ─────────────────────────────────────────────────
+% \begin{webonly}…\end{webonly} is typeset only in the extraction run,
+% \begin{printonly}…\end{printonly} only in an ordinary run. The skipped body
+% is taken as a `+b` argument (the whole body, paragraphs included) and
+% dropped unread, so it may hold anything balanced except verbatim.
+\ifreflowtex
+  \NewDocumentEnvironment{webonly}{}{}{}
+  \NewDocumentEnvironment{printonly}{+b}{}{}
+\else
+  \NewDocumentEnvironment{webonly}{+b}{}{}
+  \NewDocumentEnvironment{printonly}{}{}{}
+\fi
+
+% ── The primitive: a stream ─────────────────────────────────────────────────
+% \begin{reflowtexstream}[key=value, …]{kind} … \end{reflowtexstream}
+%
+% In the extraction run every node typeset inside carries LuaTeX attribute 911
+% set to this stream's number; the serializer collects those nodes' paragraphs
+% and displays into a separate content stream of the given kind, placed in the
+% flow where the block stood (nested blocks nest). The browser mounts each
+% stream in its own <div class="latex-stream" data-kind="kind">, with every
+% key=value parameter as data-key="value", lays its paragraphs out at that
+% element's width, and hands the element to whatever behaviour is registered
+% for the kind — CSS for how it looks, a few lines of JavaScript for what it
+% does. Nothing here changes what TeX typesets: the attribute is invisible to
+% line breaking and to every package.
+%
+% Parameter values are expanded when the stream opens, so they may be macros.
+% Keys are letters, digits and "-".
+%
+% In print the environment is transparent (a paragraph boundary on each side,
+% which the web build has too).
+% The pipeline's template numbers batch parts with the same counter.
+\ifdefined\reflowtexStreamCount
+  \let\reflowtex@streams\reflowtexStreamCount
+\else
+  \newcount\reflowtex@streams
+\fi
+\ifreflowtex
+  \NewDocumentEnvironment{reflowtexstream}{O{} m}{%
+    \par
+    \global\advance\reflowtex@streams by 1
+    \protected@edef\reflowtex@attrs{#1}%
+    % The attribute's current value is the enclosing stream, if any (an unset
+    % LuaTeX attribute reads as a large negative number; the serializer
+    % treats anything non-positive as "none").
+    \directlua{Serializer.note_stream(\the\reflowtex@streams,
+      "\luaescapestring{#2}", \the\attribute911,
+      "\luaescapestring{\reflowtex@attrs}")}%
+    \attribute911=\reflowtex@streams\relax}%
+   {\par}
+\else
+  \NewDocumentEnvironment{reflowtexstream}{O{} m}{\par}{\par}
+\fi
+
+% ── The primitive: an action ────────────────────────────────────────────────
+% \reflowtexaction{action}{text}
+%
+% On the web, `text` is a control: it is coloured and focusable like a link,
+% and clicking it (or Enter/Space on it) sends `action` to the page as a
+% bubbling `reflowtex:action` DOM event from where the text sits. The nearest
+% enclosing stream whose kind understands the action handles it — an
+% accordion understands "pane:…" (below). It is a link underneath: every glyph
+% of `text` carries the same link id (template.tex, attribute 909), so it stays
+% one control however the line breaks.
+%
+% In print a control has nothing to do, so neither argument is typeset.
+\ifreflowtex
+  \NewDocumentCommand\reflowtexaction{m m}{%
+    \leavevmode
+    \global\advance\reflowtexLinkCount by 1
+    \directlua{Serializer.note_link_action(\the\reflowtexLinkCount,
+      "\luaescapestring{#1}")}%
+    \begingroup\attribute909=\reflowtexLinkCount\relax #2\endgroup}
+\else
+  \NewDocumentCommand\reflowtexaction{m m}{\ignorespaces}
+\fi
+
+% ── accordion: one of several panes ─────────────────────────────────────────
+% \begin{accordion}[initial=collapsed, print=expanded]
+%   \begin{collapsedpane} A one-line summary. \expandlink \end{collapsedpane}
+%   \begin{expandedpane}
+%     \begin{proof} \hfill\collapselink[See less]\par … \end{proof}
+%   \end{expandedpane}
+% \end{accordion}
+%
+% An accordion holds panes, \begin{pane}[name] … \end{pane}, and shows one at
+% a time. collapsedpane and expandedpane are the panes named collapsed
+% and expanded. The reader moves
+% between them with links placed in the panes themselves:
+%
+%   \panelink{target}{text}   target: a pane's name, its number (from 1),
+%                             or next / prev / first / last
+%   \expandlink[text]         \panelink{next}{text},  default "See more"
+%   \collapselink[text]       \panelink{prev}{text},  default "See less"
+%
+% Options: initial= the pane shown first (name or number, default 1);
+% print= the pane a PDF shows instead (name, number, first or last; default
+% last, the fullest). On the web, printing the page also shows that pane.
+% Any content fits in a pane — a proof, displays, lists, another accordion.
+\DeclareKeys[reflowtex/accordion]{
+  initial .store = \reflowtex@acc@initial,
+  print   .store = \reflowtex@acc@print,
+}
+\NewDocumentCommand\panelink{m m}{\reflowtexaction{pane:#1}{#2}}
+\NewDocumentCommand\expandlink{O{See more}}{\panelink{next}{#1}}
+\NewDocumentCommand\collapselink{O{See less}}{\panelink{prev}{#1}}
+\ifreflowtex
+  \NewDocumentEnvironment{accordion}{O{}}{%
+    \def\reflowtex@acc@initial{1}\def\reflowtex@acc@print{last}%
+    \SetKeys[reflowtex/accordion]{#1}%
+    \begin{reflowtexstream}%
+      [initial=\reflowtex@acc@initial, print=\reflowtex@acc@print]{accordion}}%
+   {\end{reflowtexstream}}
+  \NewDocumentEnvironment{pane}{O{}}%
+   {\begin{reflowtexstream}[name=#1]{pane}}%
+   {\end{reflowtexstream}}
+\else
+  % Print: each pane's body is stored, unread, and the accordion typesets the
+  % chosen one where it ends. Stored globally under the accordion's own
+  % number, so panes can be environments (groups) and accordions can nest.
+  \ExplSyntaxOn
+  \int_new:N \g__reflowtex_acc_int
+  \tl_new:N \l__reflowtex_acc_tl
+  \tl_new:N \l__reflowtex_acc_pick_tl
+  \tl_new:N \l__reflowtex_acc_body_tl
+  \cs_new:Npn \__reflowtex_acc:n #1 { g__reflowtex_acc_ \l__reflowtex_acc_tl _ #1 }
+  \cs_new_protected:Npn \reflowtex@acc@begin
+    {
+      \int_gincr:N \g__reflowtex_acc_int
+      \tl_set:Ne \l__reflowtex_acc_tl { \int_use:N \g__reflowtex_acc_int }
+      \seq_gclear_new:c  { \__reflowtex_acc:n { seq } }
+      \prop_gclear_new:c { \__reflowtex_acc:n { prop } }
+    }
+  \cs_new_protected:Npn \reflowtex@acc@pane #1 #2
+    {
+      \seq_gput_right:cn { \__reflowtex_acc:n { seq } } {#2}
+      \tl_if_blank:nF {#1}
+        { \prop_gput:cne { \__reflowtex_acc:n { prop } } {#1}
+            { \seq_count:c { \__reflowtex_acc:n { seq } } } }
+    }
+  \cs_new_protected:Npn \reflowtex@acc@end
+    {
+      \tl_set:Ne \l__reflowtex_acc_pick_tl { \reflowtex@acc@print }
+      \str_case_e:nnF { \l__reflowtex_acc_pick_tl }
+        {
+          { last }  { \tl_set:Ne \l__reflowtex_acc_pick_tl
+                        { \seq_count:c { \__reflowtex_acc:n { seq } } } }
+          { first } { \tl_set:Nn \l__reflowtex_acc_pick_tl { 1 } }
+        }
+        {
+          \prop_get:cVNT { \__reflowtex_acc:n { prop } }
+            \l__reflowtex_acc_pick_tl \l__reflowtex_acc_pick_tl { }
+        }
+      \tl_set:Ne \l__reflowtex_acc_body_tl
+        { \seq_item:cn { \__reflowtex_acc:n { seq } } { \l__reflowtex_acc_pick_tl } }
+      \tl_use:N \l__reflowtex_acc_body_tl
+    }
+  \ExplSyntaxOff
+  \NewDocumentEnvironment{accordion}{O{}}{%
+    \par
+    \def\reflowtex@acc@initial{1}\def\reflowtex@acc@print{last}%
+    \SetKeys[reflowtex/accordion]{#1}%
+    \reflowtex@acc@begin}%
+   {\reflowtex@acc@end\par}
+  \NewDocumentEnvironment{pane}{O{} +b}{\reflowtex@acc@pane{#1}{#2}}{}
+\fi
+% The two named panes, collapsedpane and expandedpane: panes named
+% "collapsed" and "expanded", which is what initial=, print= and \panelink
+% use. (Not simply collapsed/expanded: \begin{expanded} would run the
+% \expanded primitive, which the kernel relies on.) In print each grabs its
+% own body: a +b argument is read up to the matching \end{…} in the source,
+% so wrapping pane would scan for an \end{pane} that is never written.
+\ifreflowtex
+  \NewDocumentEnvironment{collapsedpane}{}{\begin{pane}[collapsed]}{\end{pane}}
+  \NewDocumentEnvironment{expandedpane}{}{\begin{pane}[expanded]}{\end{pane}}
+\else
+  \NewDocumentEnvironment{collapsedpane}{+b}{\reflowtex@acc@pane{collapsed}{#1}}{}
+  \NewDocumentEnvironment{expandedpane}{+b}{\reflowtex@acc@pane{expanded}{#1}}{}
+\fi
+
+% ── webnote, webhint ────────────────────────────────────────────────────────
+% \begin{webnote} … \end{webnote}   a note set off from the text: on the web
+%                                   a box with a coloured left border
+% \begin{webhint} … \end{webhint}   a hint: on the web blurred until the
+%                                   reader clicks it (or presses Enter)
+% Both are one-line uses of the stream primitive; the viewer supplies the
+% look and, for the hint, the behaviour (kinds "note" and "hint"). In print
+% both are ordinary paragraphs.
+% Set off by \topsep above and below, as a theorem or a list is (merged with
+% a neighbour's by \addvspace); the first paragraph inside starts flush, as
+% after a heading: it opens a box, not a run of text.
+\NewDocumentEnvironment{webnote}{}
+  {\par\addvspace{\topsep}%
+   \begin{reflowtexstream}{note}\@afterindentfalse\@afterheading}
+  {\end{reflowtexstream}\addvspace{\topsep}}
+\NewDocumentEnvironment{webhint}{}
+  {\par\addvspace{\topsep}%
+   \begin{reflowtexstream}{hint}\@afterindentfalse\@afterheading}
+  {\end{reflowtexstream}\addvspace{\topsep}}
+
+% ── \makeboxed: theorems (and anything else) as boxes ──────────────────────
+% \makeboxed{theorem}                 box every theorem in the document
+% \makeboxed[btheorem]{theorem}       a boxed copy, btheorem, sharing
+%                                     theorem's counter and heading; theorem
+%                                     itself stays unboxed
+% \makeboxed{proof}[kind=proof]       any environment, with options:
+%
+%   kind=K         the look (the viewer's stream kind): theorem (default),
+%                  proof (default for an environment named proof), note, or a
+%                  kind of the page's own
+%   class=C D      CSS classes for the box
+%   accent=#hex    the border colour (--latex-box-accent)
+%   background=#hex  the fill (--latex-box-background)
+%
+% On the web the environment's content becomes a stream of that kind, with
+% env=<environment name> as a parameter (data-env on the box). The viewer draws
+% theorem and proof as boxes with a left border; one inside another (a claim
+% in a proof) is a little narrower per level. The space LaTeX puts around the
+% environment stays outside the box (the serializer gives space between a box
+% and its neighbour to the enclosing flow), a proof's QED box stays inside,
+% and the box ends when the environment's group does. In print \makeboxed only
+% defines the copy, if one is asked for; nothing is boxed.
+%
+% Values are taken as written, and must not contain commas (hex colours
+% rather than rgb(…)).
+%
+% Package option boxedtheorems: every environment made with \newtheorem, and
+% proof, boxed with the defaults.
+% One box per environment: \makeboxed's hook and the boxedtheorems option can
+% both ask for the same one. Remembered with the group level, so a nested
+% environment of the same name still gets its own.
+\let\reflowtex@box@done\relax
+\def\reflowtex@box@open#1#2{%
+  \edef\reflowtex@box@here{\@currenvir:\the\currentgrouplevel}%
+  \ifx\reflowtex@box@here\reflowtex@box@done\else
+    \let\reflowtex@box@done\reflowtex@box@here
+    \reflowtex@box@open@{#1}{#2}%
+  \fi}
+\def\reflowtex@box@open@#1#2{%
+  \par
+  \global\advance\reflowtex@streams by 1
+  \protected@edef\reflowtex@attrs{env=\@currenvir#2}%
+  \directlua{Serializer.note_stream(\the\reflowtex@streams, "\luaescapestring{#1}",
+    \the\attribute911, "\luaescapestring{\reflowtex@attrs}")}%
+  \attribute911=\reflowtex@streams\relax}
+\DeclareKeys[reflowtex/box]{
+  kind       .store = \reflowtex@bx@kind,
+  class      .store = \reflowtex@bx@class,
+  accent     .store = \reflowtex@bx@accent,
+  background .store = \reflowtex@bx@background,
+}
+% #1 new name (or empty: patch #2 itself), #2 environment, #3 options.
+\NewDocumentCommand\makeboxed{o m O{}}{%
+  \IfValueTF{#1}%
+    {\NewEnvironmentCopy{#1}{#2}\def\reflowtex@bx@env{#1}}%
+    {\def\reflowtex@bx@env{#2}}%
+  \ifreflowtex
+    \begingroup
+      \def\reflowtex@bx@kind{theorem}%
+      \def\reflowtex@bx@name{#2}\def\reflowtex@bx@proof{proof}%
+      \ifx\reflowtex@bx@name\reflowtex@bx@proof \def\reflowtex@bx@kind{proof}\fi
+      \let\reflowtex@bx@class\@empty
+      \let\reflowtex@bx@accent\@empty
+      \let\reflowtex@bx@background\@empty
+      \SetKeys[reflowtex/box]{#3}%
+      % Values are taken as written (detokenized): a colour is #hex, and #
+      % is TeX's parameter character.
+      \def\reflowtex@bx@val##1{\detokenize\expandafter{##1}}%
+      \edef\reflowtex@bx@attrs{%
+        \ifx\reflowtex@bx@class\@empty\else,class=\reflowtex@bx@val\reflowtex@bx@class\fi
+        \ifx\reflowtex@bx@accent\@empty\else,--latex-box-accent=\reflowtex@bx@val\reflowtex@bx@accent\fi
+        \ifx\reflowtex@bx@background\@empty\else,--latex-box-background=\reflowtex@bx@val\reflowtex@bx@background\fi}%
+      \edef\reflowtex@bx@hook{%
+        \noexpand\AddToHook{env/\reflowtex@bx@env/begin}%
+          {\noexpand\reflowtex@box@open{\reflowtex@bx@kind}{\reflowtex@bx@attrs}}}%
+    \expandafter\endgroup\reflowtex@bx@hook
+  \fi}
+% The package option: every theorem-like environment (they all begin through
+% \@begintheorem, amsthm's or the kernel's) and proof.
+\ifreflowtex@boxed\ifreflowtex
+  \AddToHook{cmd/@begintheorem/before}{\reflowtex@box@open{theorem}{}}
+  \AddToHook{env/proof/begin}{\reflowtex@box@open{proof}{}}
+\fi\fi
+
+% ── Lean beside a proof ─────────────────────────────────────────────────────
+% \begin{leanproof}[decl=Nat.sum_odd, url=https://…, show=proof]
+%   \begin{proof} … \end{proof}
+%   \begin{leancode}
+%   theorem sum_odd (n : ℕ) : … := by
+%     …
+%   \end{leancode}
+% \end{leanproof}
+%
+% On the web the proof (in its usual box) and its Lean code (in a frame like
+% a proof's, in the Lean colour) have two switches above them, Proof and
+% Lean, pressed independently: neither, either one, or both — side by side,
+% or stacked on a narrow column. show= (proof, lean, both or none; default
+% proof) is how it starts.
+% The code is read verbatim — never typeset — and shown as text: highlighted,
+% selectable, copyable. decl= names the declaration in the code's header,
+% url= links it (to doc-gen4 documentation, say). In print the code follows
+% the proof as a verbatim listing (package option leanprint=false leaves it
+% out). The code starts on the line after \begin{leancode}.
+%
+% \begin{leantheorem}[decl=…, url=…, show=none]
+%   \begin{theorem} … \end{theorem}
+%   \begin{proof} … \end{proof}
+%   \begin{leancode} … \end{leancode}
+% \end{leantheorem}
+% The same for a theorem with its proof: the Proof and Lean switches hang
+% under the theorem's frame, and the proof and the code open beneath them. By
+% default neither is shown (show=none), so only the theorem is. Everything
+% before \begin{proof} is the statement.
+%
+% leanblueprint's macros — \lean{…}, \leanok, \uses{…}, \proves{…},
+% \notready, \mathlibok, \discussion{…} — are defined as markers with no
+% output when the document has not defined them, so a blueprint's sources
+% compile.
+\providecommand\lean[1]{}
+\providecommand\leanok{}
+\providecommand\uses[1]{}
+\providecommand\proves[1]{}
+\providecommand\notready{}
+\providecommand\mathlibok{}
+\providecommand\discussion[1]{}
+\RequirePackage{verbatim}
+\DeclareKeys[reflowtex/leanproof]{
+  decl .store = \reflowtex@lp@decl,
+  url  .store = \reflowtex@lp@url,
+  show .store = \reflowtex@lp@show,
+}
+\def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{proof}
+\ifreflowtex
+  \newif\ifreflowtex@inlt
+  \NewDocumentEnvironment{leantheorem}{O{}}{%
+    \def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{none}%
+    \SetKeys[reflowtex/leanproof]{#1}%
+    \begin{reflowtexstream}[show=\reflowtex@lp@show]{leantheorem}%
+    \edef\reflowtex@lp@id{\the\attribute911}%
+    % The statement is a part of its own, until the proof begins.
+    \reflowtex@box@open@{leanstatement}{}%
+    \reflowtex@inlttrue}%
+   {\end{reflowtexstream}}
+  % At the leantheorem's own \begin{proof} (the hook runs before the proof's
+  % group opens, at the leantheorem's level): the statement part ends and
+  % the proof part begins, beside which the code will stand.
+  \AddToHook{env/proof/before}{%
+    \ifreflowtex@inlt
+      \reflowtex@inltfalse
+      \attribute911=\reflowtex@lp@id\relax
+      \reflowtex@box@open@{leantex}{}%
+    \fi}
+  \NewDocumentEnvironment{leanproof}{O{}}{%
+    \def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{proof}%
+    \SetKeys[reflowtex/leanproof]{#1}%
+    \begin{reflowtexstream}[show=\reflowtex@lp@show]{leanproof}%
+    \edef\reflowtex@lp@id{\the\attribute911}%
+    % The TeX side is a stream of its own, so the two can stand side by side.
+    \reflowtex@box@open@{leantex}{}}%
+   {\end{reflowtexstream}}
+  % A newline of catcode 12, to join the lines read verbatim.
+  {\catcode`\^^J=12 \gdef\reflowtex@nl{^^J}}
+  % Read the body line by line, as the verbatim package does, keeping every
+  % space and tab (Lean is indentation-sensitive), and collect it instead of
+  % typesetting it.
+  \def\reflowtex@lc@collect{%
+    \let\do\@makeother\dospecials \catcode`\ =12 \catcode`\^^I=12
+    \catcode`\^^M\active
+    \def\verbatim@processline{%
+      \edef\reflowtex@lc@acc{\reflowtex@lc@acc\the\verbatim@line\reflowtex@nl}}%
+    \let\verbatim@finish\relax
+    \verbatim@}
+  \newenvironment{leancode}{%
+    \par
+    % Inside leanproof the code is the pair's second part, beside the TeX one.
+    \ifdefined\reflowtex@lp@id \attribute911=\reflowtex@lp@id\relax \fi
+    \global\advance\reflowtex@streams by 1
+    \edef\reflowtex@lc@id{\the\reflowtex@streams}%
+    \edef\reflowtex@attrs{decl=\detokenize\expandafter{\reflowtex@lp@decl},%
+      url=\detokenize\expandafter{\reflowtex@lp@url}}%
+    \directlua{Serializer.note_stream(\reflowtex@lc@id, "leancode", \the\attribute911,
+      "\luaescapestring{\reflowtex@attrs}")}%
+    \attribute911=\reflowtex@lc@id\relax
+    % An anchor gives the otherwise empty stream its place in the flow.
+    \global\advance\reflowtexAnchorCount by 1
+    \directlua{Serializer.note_label(\the\reflowtexAnchorCount, "reflowtex-lean-\reflowtex@lc@id")}%
+    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
+    \def\reflowtex@lc@acc{}%
+    \reflowtex@lc@collect}%
+   {\directlua{Serializer.note_stream_text(\reflowtex@lc@id,
+      "\luaescapestring{\reflowtex@lc@acc}")}%
+    \par}
+\else
+  \NewDocumentEnvironment{leanproof}{O{}}{\par}{\par}
+  \NewDocumentEnvironment{leantheorem}{O{}}{\par}{\par}
+  \ifreflowtex@leanprint
+    \newenvironment{leancode}{\par\small\verbatim}{\endverbatim}
+  \else
+    \newenvironment{leancode}{\comment}{\endcomment}
+  \fi
+\fi
+
+\endinput

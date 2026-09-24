@@ -20,6 +20,12 @@ const SCRIPT_URL = document.currentScript?.src;
 // Version marker for cache diagnosis: logs the ?v= content hash the page
 // requested, and stamps <html data-latex-viewer> once the viewer initialises.
 const BUILD = (SCRIPT_URL?.match(/v=([a-f0-9]+)/) || [])[1] || 'unversioned';
+
+// The page-facing surface. Today it holds one thing: the registry of stream
+// kinds a page may extend (see STREAM_KINDS). Created here so a page can fill
+// it in a script that runs either before or after this one.
+const api = window.reflowtex = window.reflowtex || {};
+api.streamKinds = api.streamKinds || {};
 console.log(`[latex-viewer] build ${BUILD}`);
 
 // ── Fixed rendering constants ─────────────────────────────────────────────────
@@ -134,6 +140,25 @@ function installColorMaps() {
             const scoped = theme === 'light' ? sel : `:root.${theme} ${sel}`;
             css += scoped + ' {\n' + decls.join('\n') + '\n}\n';
         }
+        // A theme scoped to part of the page: data-latex-theme="T" on any
+        // ancestor gives the blocks inside theme T's colours whatever the
+        // page's own theme is (a theme preview beside an example, say). Every
+        // colour any theme of this map remaps is declared, so a scoped theme
+        // also undoes the page theme's substitutions: a colour T leaves alone
+        // goes back to itself, and default text back to currentColor. The
+        // :root prefix outranks the page-theme rules above; being later wins
+        // the tie with a page-theme rule of the same specificity.
+        const allSrc = new Set();
+        for (const entries of Object.values(map.colors ?? {})) for (const src of Object.keys(entries)) allSrc.add(src);
+        if (allSrc.size) {
+            const themes = new Set(['light', ...Object.keys(map.colors ?? {})]);
+            for (const theme of themes) {
+                const entries = (map.colors ?? {})[theme] ?? {};
+                const decls = [...allSrc].map(src => `  --latex-color-${src.slice(1)}: `
+                    + (entries[src] ?? (src === '#000000' ? 'currentColor' : src)) + ';');
+                css += `:root [data-latex-theme=${JSON.stringify(theme)}] ${sel} {\n` + decls.join('\n') + '\n}\n';
+            }
+        }
         const tintDecls = Object.entries(map.tints ?? {}).map(([hex, [base, pct]]) =>
             `  --latex-color-${hex.slice(1)}: color-mix(in srgb, `
           + `var(--latex-color-${base.slice(1)}, ${base}) ${pct}%, `
@@ -241,12 +266,13 @@ function reflowBlock(el) {
     // DOM-heavy part, is then gated to the visible segments.
     const root = layoutDocument(data.fontInfo, data.doc, newWidth, params, data.cache);
     if (root !== el.firstElementChild) el.replaceChildren(root);
+    remeasureStreams(data.fontInfo, data.doc, newWidth, params, data.cache);
     // Re-layout moved every line: painted segments now hold ink at stale positions.
     // Mark them dirty so they get re-drawn in place — the on-screen ones now (below),
     // each off-screen one when it next scrolls into view (segIO). They are never
     // hidden in the meantime: their <svg> keeps its new reserved size, only its
     // glyphs are stale until repainted.
-    for (const s of data.cache.dom.segs) if (s.painted) s.dirty = true;
+    markDirty(data.cache);
     const tp = performance.now();
     const repainted = paintVisibleNow(data.fontInfo, data.cache);
     const st = data.cache.stats || {};
@@ -268,12 +294,39 @@ function rerenderBlock(el) {
     if (!data) return;
     // Rebuilding makes fresh <svg>s, so stop observing the old ones (segIO would
     // otherwise hold detached elements). layoutDocument observes the new ones.
-    if (data.cache.dom) for (const s of data.cache.dom.segs) segIO.unobserve(s.svg);
+    unobserveAll(data.cache);
     data.cache.dom = null;
     data.cache.layout = null;
     const params = { ...data.params, align: data.lastAlign };
     el.replaceChildren(layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache));
+    remeasureStreams(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
     paintVisibleNow(data.fontInfo, data.cache);
+}
+
+// Stream segments (see layoutStreamSegment) nest a whole layout, with its own
+// cache, inside the segment's box. These walk a block's cache tree.
+function markDirty(cache) {
+    if (!cache.dom) return;
+    for (const s of cache.dom.segs) {
+        if (s.painted) s.dirty = true;
+        if (s.sub) markDirty(s.sub);
+    }
+}
+function unobserveAll(cache) {
+    if (!cache.dom) return;
+    for (const s of cache.dom.segs) {
+        if (s.svg) segIO.unobserve(s.svg);
+        if (s.sub) unobserveAll(s.sub);
+    }
+}
+// A stream segment laid out while its box was not yet in the document could
+// not measure the box's inner width and used the column's. Once the block is
+// mounted, one more layout pass reads the real width; everything but the
+// stream segments comes straight from the cache, so it is cheap.
+function remeasureStreams(fontInfo, doc, widthPt, params, cache) {
+    if (!cache.streamsUnmeasured) return;
+    cache.streamsUnmeasured = false;
+    layoutDocument(fontInfo, doc, widthPt, params, cache);
 }
 
 // Repaint every block after a wave of webfonts finishes loading. On a cold cache
@@ -355,7 +408,7 @@ function observeSegments(cache) {
     const segs = cache.dom.segs;
     for (let i = 0; i < segs.length; i++) {
         const s = segs[i];
-        if (s.observed) continue;
+        if (s.observed || !s.svg) continue;   // a stream segment has no <svg> of its own
         segRef.set(s.svg, { cache, i });
         segIO.observe(s.svg);
         s.observed = true;
@@ -374,15 +427,24 @@ function paintVisibleNow(fontInfo, cache) {
     cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 };
     const segs = cache.dom.segs;
     const vh = window.innerHeight || 800, M = vh;
-    const todo = [];
+    const todo = [], nested = [];
     for (let i = 0; i < segs.length; i++) {
         const s = segs[i];
+        // A stream segment paints through its nested cache — after this pass,
+        // so the measurements below are not interleaved with DOM writes.
+        if (!s.svg) { if (s.sub) nested.push(s.sub); continue; }
         if (s.painted && !s.dirty) continue;
+        // Not rendered at all (inside a collapsed stream, say): its rect is all
+        // zeros, which would pass the test below. The IntersectionObserver
+        // paints it once it is shown.
+        if (!s.svg.getClientRects().length) continue;
         const r = s.svg.getBoundingClientRect();
         if (r.bottom > -M && r.top < vh + M) todo.push(i);
     }
     for (const i of todo) paintSegment(fontInfo, cache, i);
-    return todo.length;
+    let n = todo.length;
+    for (const c of nested) n += paintVisibleNow(fontInfo, c);
+    return n;
 }
 
 let vpScheduled = false;
@@ -546,6 +608,24 @@ function kernExpandScale(fontInfo, l, r, er) {
     const efOf = (fi, n) => { const c = fi && fi.codes && fi.codes.get(n.char); return c && c.ef !== undefined ? c.ef : 1000; };
     return 1 + er * ((efOf(fl, l) + efOf(fr, r)) / 2 / 1000) * ((ml + mr) / 2);
 }
+// How much of node i of `ns` a line's expansion factor er widens, as the
+// two functions above apply it when the line is drawn: a glyph's width times
+// its \efcode share, a font kern's by the mean of its neighbours', and zero
+// for anything of a font without expansion. The breaker must stretch a line
+// by exactly this much per unit of er, or a justified line is drawn short or
+// long by the difference (a document without microtype expands nothing).
+function expandableSp(fontInfo, ns, i) {
+    const n = ns[i];
+    if (n.type === 'glyph') return gW(n) * (glyphExpandScale(fontInfo, n, 1) - 1);
+    if (n.type === 'kern' && (n.subtype || 0) === 0)
+        return n.kern * (kernExpandScale(fontInfo, ns[i - 1], ns[i + 1], 1) - 1);
+    return 0;
+}
+function sumExpandableSp(fontInfo, ns) {
+    let w = 0;
+    for (let i = 0; i < (ns || []).length; i++) w += expandableSp(fontInfo, ns, i);
+    return w;
+}
 const gH = n => n.height !== undefined ? n.height : glyphMetrics[n.metrics - 1].height;
 const gD = n => n.depth  !== undefined ? n.depth  : glyphMetrics[n.metrics - 1].depth;
 
@@ -583,7 +663,6 @@ function fillInfo(nodes) {
     }
     return { order, stretch };
 }
-function sumRigidWidth(nodes) { return nodes.reduce((a, n) => n.type==='glyph' ? a+gW(n) : n.type==='kern' ? a+n.kern : a, 0); }
 
 // The set size of one glue node under a box's packing ratio.
 function setGlue(g, ratio, fillOrder) {
@@ -646,7 +725,9 @@ function leftProtrusionOf(g)  { return g ? (LEFT_PROTRUSION [g.char]||0)*gW(g) :
 
 // ── Knuth-Plass: break candidates ────────────────────────────────────────────
 
-function buildBreakCandidates(nodes) {
+// cumGlyphW and the disc *GlyphW fields hold *expandable* width
+// (expandableSp), which lineMetrics turns into the line's expansion stretch.
+function buildBreakCandidates(nodes, fontInfo) {
     const bcs = [{
         kind:'start', nodeIdx:-1, penalty:0,
         preW:0, postW:0, replaceW:0, preGlyphW:0, postGlyphW:0, replaceGlyphW:0,
@@ -684,7 +765,7 @@ function buildBreakCandidates(nodes) {
             cumW+=n.width; cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0;
         } else if (n.type==='disc') {
             const preW=sumWidthSp(n.pre),postW=sumWidthSp(n.post),replaceW=sumWidthSp(n.replace);
-            const preGlyphW=sumRigidWidth(n.pre),postGlyphW=sumRigidWidth(n.post),replaceGlyphW=sumRigidWidth(n.replace);
+            const preGlyphW=sumExpandableSp(fontInfo,n.pre),postGlyphW=sumExpandableSp(fontInfo,n.post),replaceGlyphW=sumExpandableSp(fontInfo,n.replace);
             const preGs=n.pre.filter(x=>x.type==='glyph'), postGs=n.post.filter(x=>x.type==='glyph');
             bcs.push({ kind:'disc', nodeIdx:i, penalty:50, preW,postW,replaceW, preGlyphW,postGlyphW,replaceGlyphW, spaceW:0,spaceS:0,spaceZ:0, cumW,cumS,cumZ,cumGlyphW,cumFill, rightProtrusion:rightProtrusionOf(preGs.length>0?preGs[preGs.length-1]:findLastGlyph(nodes,i)), leftProtrusion:leftProtrusionOf(postGs.length>0?postGs[0]:findFirstGlyph(nodes,i+1)) });
             cumW+=replaceW; cumGlyphW+=replaceGlyphW;
@@ -699,8 +780,7 @@ function buildBreakCandidates(nodes) {
             bcs.push({ kind:'penalty', nodeIdx:i, penalty:n.penalty, preW:0,postW:0,replaceW:0, preGlyphW:0,postGlyphW:0,replaceGlyphW:0, spaceW:0,spaceS:0,spaceZ:0, cumW,cumS,cumZ,cumGlyphW,cumFill, leadingGlueW:lgW,leadingGlueS:lgS,leadingGlueZ:lgZ, rightProtrusion:rightProtrusionOf(findLastGlyph(nodes,i)), leftProtrusion:leftProtrusionOf(findFirstGlyph(nodes,firstAfterLG)) });
         } else {
             cumW+=nodeWidthSp(n);
-            if (n.type==='glyph') cumGlyphW+=gW(n);
-            else if (n.type==='kern') cumGlyphW+=n.kern;
+            cumGlyphW+=expandableSp(fontInfo,nodes,i);
             if (n.type==='glue') { cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0; }
         }
     }
@@ -724,6 +804,20 @@ function lineMetrics(bcA, bcB, p) {
         return { w, s: s0+gW*p.maxExpand, z: z0+gW*p.maxShrink };
     }
     return { w, s:s0, z:z0 };
+}
+
+// The emergency pass (threshold 10000) admits every line, and badness is
+// capped at 10000, so every line past the cap would cost the same flat 1e8
+// demerits: the breaker could then put the one unavoidable bad line anywhere —
+// and does put it first, as a single-word line, since that lets every later
+// line be perfect. In that pass lines are therefore weighed by their real,
+// uncapped looseness, so a slightly loose line always beats a nearly empty one.
+// (TeX avoids the same flatness in practice with \emergencystretch.)
+function rawBadness(shortage, total) {
+    if (shortage === 0) return 0;
+    if (total <= 0) return 1e7;
+    const r = shortage / total;
+    return Math.min(1e7, 100 * r * r * r);
 }
 
 function badness(shortage, total) {
@@ -777,7 +871,8 @@ function kpPass(bcs, lineWidthSp, threshold, allowDisc, p) {
                     if(b>threshold) { if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b; continue; }
                 }
                 const fc_j=slack>=0?(b>99?0:b>12?1:2):(b>12?3:2);
-                const lp=p.linePenalty+b; let d=Math.abs(lp)>=10000?100000000:lp*lp;
+                const bd=threshold>=10000&&!(hasFill&&slack>=0) ? rawBadness(Math.abs(slack),slack>=0?s:z) : b;
+                const lp=p.linePenalty+bd; let d=threshold>=10000 ? lp*lp : (Math.abs(lp)>=10000?100000000:lp*lp);
                 if(bcJ.penalty>0) d+=bcJ.penalty*bcJ.penalty;
                 else if(bcJ.penalty>-10000) d-=bcJ.penalty*bcJ.penalty;
                 if(Math.abs(fc_j-fc_i)>1) d+=p.adjDemerits;
@@ -1158,8 +1253,47 @@ function linkHref(link) {
 // number stay independent and one that spans a line break still lights up whole.
 function setLinkState(key, cls, on) {
     if (!key) return;
-    for (const el of document.querySelectorAll(`[data-link="${CSS.escape(key)}"]`))
-        el.classList.toggle(cls, on);
+    const els = document.querySelectorAll(`[data-link="${CSS.escape(key)}"]`);
+    for (const el of els) el.classList.toggle(cls, on);
+    drawLinkUnderline(key, els);
+}
+
+// The underline of a hovered reference. CSS text-decoration would underline
+// each glyph on its own — every glyph is a separately placed tspan, and the
+// spaces between words are not glyphs at all — so the viewer draws it: one
+// line per text line, from the reference's first glyph to its last. Glyphs
+// are grouped by their SVG and baseline, so a reference broken across lines
+// gets one underline per piece. In the glyphs' current colour, so hover and
+// press colours carry over.
+function drawLinkUnderline(key, els) {
+    for (const old of document.querySelectorAll('.latex-link-underline')) old.remove();
+    const hover = [...els].filter(el => el.classList.contains('latex-link-hover'));
+    if (!hover.length) return;
+    const lines = [];   // { svg, base, left, right, em, colour }
+    for (const el of hover) {
+        const svg = el.ownerSVGElement, ctm = el.getScreenCTM(), sctm = svg?.getScreenCTM();
+        if (!svg || !ctm || !sctm) continue;
+        const r = el.getBoundingClientRect();
+        if (!r.width) continue;
+        const inv = sctm.inverse();
+        const at = (x, y) => new DOMPoint(x, y).matrixTransform(inv);
+        // Baseline from the tspan's own position; extent from its ink box.
+        const q = new DOMPoint(+el.getAttribute('x'), +el.getAttribute('y')).matrixTransform(ctm);
+        const base = at(q.x, q.y).y;
+        const left = at(r.left, r.top).x, right = at(r.right, r.top).x;
+        const em = (+el.getAttribute('font-size') || 12) * Math.hypot(ctm.a, ctm.b) / Math.hypot(sctm.a, sctm.b);
+        let line = lines.find(l => l.svg === svg && Math.abs(l.base - base) < .6 * Math.max(l.em, em));
+        if (!line) lines.push(line = { svg, base, left, right, em, colour: getComputedStyle(el).fill });
+        line.base = Math.max(line.base, base); line.em = Math.max(line.em, em);
+        line.left = Math.min(line.left, left); line.right = Math.max(line.right, right);
+    }
+    for (const l of lines) {
+        const y = l.base + .13 * l.em;
+        const u = svgEl('line', { x1: l.left, x2: l.right, y1: y, y2: y, 'stroke-width': Math.max(.065 * l.em, 1) });
+        u.setAttribute('class', 'latex-link-underline');
+        u.style.cssText = `stroke:${l.colour};pointer-events:none`;
+        l.svg.appendChild(u);
+    }
 }
 
 function installLinks() {
@@ -1192,6 +1326,15 @@ function installLinks() {
 
     document.addEventListener('click', e => {
         const el = linkAt(e.target);
+        if (el && el.dataset.linkAction) {
+            // Handed to the page as an event from the glyph, so it bubbles
+            // through the stream boxes around it and the innermost kind that
+            // understands it handles it (and stops it).
+            e.preventDefault();
+            el.dispatchEvent(new CustomEvent('reflowtex:action', {
+                bubbles: true, detail: { action: el.dataset.linkAction, source: el } }));
+            return;
+        }
         const href = el && el.dataset.linkHref;
         if (!href) return;
         e.preventDefault();
@@ -1222,16 +1365,20 @@ function installLinks() {
 // Attached once, at element creation, so the reconciler's reuse keeps it.
 function registerLinkGlyph(el, id, cache) {
     const link = cache.links?.[id - 1];
-    const href = linkHref(link);
-    if (!href) return;
+    // An action (\reflowtexaction) is a control rather than a destination: it
+    // has no href, is always live, and is announced as a button.
+    const action = link && link.action;
+    const href = action ? null : linkHref(link);
+    if (!href && !action) return;
     el.classList.add('latex-link');
     el.dataset.link = `${cache.blockKey}:${id}`;
-    el.dataset.linkHref = href;
+    if (action) { el.classList.add('latex-action'); el.dataset.linkAction = action; }
+    else el.dataset.linkHref = href;
     if (link.label) el.dataset.linkLabel = link.label;
     // One glyph of the reference carries the accessible name and the tab stop;
     // the rest are decoration, so a screen reader reads "Section 2", not "2 2 2".
     if (!document.querySelector(`[data-link="${CSS.escape(el.dataset.link)}"]`)) {
-        el.setAttribute('role', 'link');
+        el.setAttribute('role', action ? 'button' : 'link');
         el.setAttribute('tabindex', '0');
     }
 }
@@ -1361,8 +1508,8 @@ function footnoteGroupRect(el) {
 function renderFootnote(block, id) {
     const data = blockData.get(block);
     if (!data) return false;
-    const note = (data.doc.footnotes || []).find(f => String(f.id) === String(id));
-    if (!note) return false;
+    const note = (data.doc.streams || [])[Number(id) - 1];
+    if (!note || note.kind !== 'footnote') return false;
     data.footnoteCaches = data.footnoteCaches || new Map();
     let fc = data.footnoteCaches.get(String(id));
     if (!fc) {
@@ -1370,17 +1517,11 @@ function renderFootnote(block, id) {
         data.footnoteCaches.set(String(id), fc);
     }
     const widthPx = Math.min(420, Math.max(220, document.documentElement.clientWidth - 32));
-    const noteDoc = {
-        paragraphs: data.doc.paragraphs,
-        content: note.content,
-        pictures: data.doc.pictures,
-        glyph_metrics: data.doc.glyph_metrics,
-        // A footnote's displays are modelled by the pipeline exactly as the
-        // body's are, and their derivatives are per scaled point *of the measure
-        // they were compiled at* — so the popover has to carry that measure
-        // across or it would evaluate them against a width of zero.
-        source_width: data.doc.source_width,
-    };
+    // The body is the stream's own content over the block's shared tables
+    // (paragraphs, fonts, pictures, streams — and source_width: a footnote's
+    // displays are modelled per scaled point of the measure they were compiled
+    // at, so the popover must carry that measure across too).
+    const noteDoc = { ...data.doc, content: note.content };
     footnoteBody.style.width = widthPx + 'px';
     footnoteBody.replaceChildren(layoutDocument(
         data.fontInfo, noteDoc, widthPx / ZOOM, data.params, fc));
@@ -1428,6 +1569,17 @@ function registerFootnoteSource(el, id) {
     el.setAttribute('role', 'button');
     el.setAttribute('tabindex', '0');
     el.setAttribute('aria-describedby', 'latex-footnote-pop');
+}
+
+// A glyph that refers to a stream (Node.stream, a 1-based index into
+// Document.streams). What that means depends on the stream's kind: a footnote
+// marker opens its body in the popover above. Other kinds referenced from a
+// glyph are reserved for later (a term's definition on hover, say) and get no
+// behaviour yet — the glyph renders as plain text.
+function registerStreamSource(el, idx, cache) {
+    const stream = (cache.streams || [])[idx - 1];
+    if (!stream) return;
+    if (stream.kind === 'footnote') registerFootnoteSource(el, idx);
 }
 
 // ── SVG renderer ──────────────────────────────────────────────────────────────
@@ -1545,7 +1697,7 @@ function reconcileSink(byNode, used, stats, cache) {
                 // at creation, so reflow (which reuses the element) keeps them.
                 if (n.cite)       registerCiteSource(el, n.cite);
                 if (n.citetarget) registerCiteTarget(el, n.citetarget);
-                if (n.footnote)   registerFootnoteSource(el, n.footnote);
+                if (n.stream)     registerStreamSource(el, n.stream, cache);
                 if (n.link)       registerLinkGlyph(el, n.link, cache);
                 byNode.set(n, el); stats.created++;
             } else {
@@ -1936,6 +2088,20 @@ function segmentsOf(doc) {
             else pendingAnchors.push(item.anchor);
             continue;
         }
+        if (item.kind === 'stream') {
+            // A separately typeset stream embedded here (what the companion
+            // package's \begin{reflowtexstream} wraps). Its own segment: the
+            // content is laid out as a nested block inside the segment's box,
+            // at whatever width the page gives that box (see
+            // layoutStreamSegment). Like a display it never merges with the
+            // prose around it, and its anchors are the nested layout's concern.
+            const stream = doc.streams && doc.streams[item.stream - 1];
+            if (stream) {
+                segs.push({ kind: 'stream', stream, index: item.stream, gapBefore: gap });
+                text = null; gap = 0;
+            }
+            continue;
+        }
         if (item.kind === 'display') {
             // Consecutive alignment rows are the rows of one align/gather, and
             // must be laid out together: they share a single offset so their
@@ -1979,6 +2145,11 @@ function segmentsOf(doc) {
     }
     // A label before anything was typeset has nothing to trail, so it leads.
     if (pendingAnchors.length && segs.length) own(segs[0], pendingAnchors);
+    // Space after the last item. The main flow has none worth keeping, but a
+    // stream can end with its environment's closing skip (a proof's \topsep
+    // inside an accordion pane), which must still separate it from what
+    // follows the stream — so layoutDocument ends with a spacer this high.
+    segs.trailingGap = gap;
     return segs;
 }
 
@@ -1998,7 +2169,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
 
     for (const { index, para } of seg.items) {
         let bcs = cache.bcs.get(index);
-        if (!bcs) { bcs = buildBreakCandidates(para.nodes); cache.bcs.set(index, bcs); }
+        if (!bcs) { bcs = buildBreakCandidates(para.nodes, fontInfo); cache.bcs.set(index, bcs); }
 
         // Alignment is per paragraph: TeX's \centering/\raggedright/\raggedleft
         // set the paragraph's \leftskip/\rightskip, which the serializer reads and
@@ -2511,9 +2682,545 @@ function updateDisplayOverflowCue(wrap) {
 // which depends on the previous segment's last depth. Returns what to mount.
 // Shared by layoutDocument and materializeSegment; L may be a deferred layout
 // (geometry from the height cache, no lines yet).
+// ── Streams ───────────────────────────────────────────────────────────────────
+// A stream is a separately typeset run of content (Document.streams): a
+// footnote's body, or a block the author wrapped in the companion package's
+// \begin{reflowtexstream}{kind}. Its content is an ordinary content stream
+// over the block's shared paragraphs, so it is laid out by layoutDocument
+// itself, recursively, into the segment's box — with its own cache, its own
+// lazily painted segments, and streams of its own inside if it has them. The
+// box is `<div class="latex-stream" data-kind="…">`; the kind decides how the
+// page styles it and which behaviour, if any, it gets (STREAM_KINDS).
+//
+// Never cached at this level (the nested layout has its own cache) and never
+// deferred: the box must exist and hold its content's height at once, and a
+// hidden part (a collapsed body) is laid out but never painted, which is
+// cheap. The width is the box's own inner width — so CSS padding on a kind
+// narrows its measure — measured when the box is in the document; on the
+// first, detached layout it falls back to the column and asks for one more
+// pass (remeasureStreams).
+function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
+    if (!s.sub) {
+        s.sub = { bcs: cache.bcs, dom: null, layout: null, stats: null,
+                  streamState: cache.streamState };
+    }
+    // clientWidth includes the padding a kind's CSS may add; the measure is
+    // what is left inside it.
+    let innerPx = 0, frameTop = false, frameBottom = false;
+    if (s.box.isConnected) {
+        const cs = getComputedStyle(s.box);
+        innerPx = s.box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        // A box whose CSS gives it padding or a border on a side is a frame
+        // there (a boxed theorem, a note): TeX's interline glue does not
+        // reach across a frame edge — the padding is the space there. A
+        // bare stream (an accordion, a pane) stays part of the text.
+        frameTop    = parseFloat(cs.paddingTop)    + parseFloat(cs.borderTopWidth)    > 0;
+        frameBottom = parseFloat(cs.paddingBottom) + parseFloat(cs.borderBottomWidth) > 0;
+    }
+    let w = widthPt;
+    if (innerPx > 0) w = innerPx / ZOOM;
+    else cache.streamsUnmeasured = true;
+    // A kind whose child streams are *alternatives* (an accordion's panes:
+    // one shows at a time) has them laid out as if each alone stood here —
+    // no spacing between them, since none ever follows another on screen.
+    const hooks0 = api.streamKinds[seg.stream.kind] || STREAM_KINDS[seg.stream.kind];
+    s.sub.alternatives = !!(hooks0 && hooks0.alternatives);
+    const root = layoutDocument(fontInfo, { ...doc, content: seg.stream.content }, w, p, s.sub);
+    if (root.parentNode !== s.box) s.box.replaceChildren(root);
+    if (!s.mounted) {
+        // The kind's behaviour gets the box once, after its first nested
+        // layout, so whatever it looks for inside (its panes) exists.
+        s.mounted = true;
+        const kind = seg.stream.kind;
+        const hooks = api.streamKinds[kind] || STREAM_KINDS[kind];
+        if (hooks && hooks.mount) {
+            let state = cache.streamState.get(seg.index);
+            if (!state) { state = {}; cache.streamState.set(seg.index, state); }
+            const attrs = Object.fromEntries((seg.stream.attrs || []).map(a => [a.key, a.value || '']));
+            // paint(): after a behaviour reveals hidden content, draw it now
+            // rather than on the IntersectionObserver's next report — so the
+            // behaviour can, say, move focus into what it just showed.
+            const sub = s.sub;
+            const paint = () => paintVisibleNow(fontInfo, sub);
+            // relayout(): lay the whole block out again at its current width,
+            // for a behaviour that changed the width of its streams (putting
+            // two side by side, say) without the block's own width changing.
+            const relayout = () => {
+                const el = s.box.closest('[data-nodelist-b64]');
+                const d = el && blockData.get(el);
+                if (!d) return;
+                d.lastWidth = -1;
+                reflowBlock(el);
+            };
+            try { hooks.mount(s.box, { kind, index: seg.index, stream: seg.stream, attrs, state, paint, relayout }); }
+            catch (e) { console.error(`[latex-viewer] stream kind "${kind}" mount failed:`, e); }
+        }
+    }
+    // What the neighbours need: the nested first line's ascent and leading
+    // (for the interline glue above) and the last line's depth (for below).
+    const laid = s.sub.layout.laid;
+    const first = laid[0];
+    let last = laid[laid.length - 1], alts = null;
+    // The content's own edges, for CSS that sizes a frame around the ink
+    // (the boxed-theorem padding: one x-height above the capitals of the
+    // first line and below the last baseline). Written only on change.
+    // A box that starts or ends with a display (or a box of its own) is
+    // measured from that one's ink, not from a baseline: a fraction reaches far
+    // below its baseline, and a rule meant for a line of text would pull the
+    // frame onto it. Then the space is a plain x-height above or below.
+    const textAt = L => L && L.seg && L.seg.kind === 'text';
+    const fa = textAt(first) ? `${first.firstAscent}px` : 'var(--latex-cap-height, 0px)';
+    const ld = textAt(last) ? `${last.lastDepth}px` : '0px';
+    if (s.box.style.getPropertyValue('--latex-first-ascent') !== fa) s.box.style.setProperty('--latex-first-ascent', fa);
+    if (s.box.style.getPropertyValue('--latex-last-depth') !== ld) s.box.style.setProperty('--latex-last-depth', ld);
+    if (s.sub.alternatives) {
+        // Each alternative's edges, so sizeSegment can give every one the
+        // interline glue TeX would give it in this place. The first stands
+        // for the group in the spacing computed at this level; the others
+        // are offset from it (applyAlternativeOffsets).
+        alts = laid.map((Lj, j) => ({ L: Lj, box: s.sub.dom.segs[j].box }))
+                   .filter(a => a.L.seg.kind === 'stream');
+        last = first;
+    }
+    return { seg, lines: [], H: root.offsetHeight, W: widthPt * ZOOM,
+             firstAscent: first ? first.firstAscent : 0,
+             lastDepth:   last  ? last.lastDepth    : 0,
+             firstMeta:   first ? first.firstMeta   : null,
+             alts, frameTop, frameBottom,
+             gapBefore: seg.gapBefore || 0 };
+}
+
+// Built-in stream kinds. What a kind *looks* like is CSS on its selector; what
+// it *does* is `mount(box, ctx)`, called once per box after its first nested
+// layout. `ctx.state` is an object that outlives the box (a font re-render
+// rebuilds the DOM), so a kind keeps anything it must remember there and
+// restores it in mount. A page adds or overrides kinds before or after this
+// script loads:
+//
+//     window.reflowtex = { streamKinds: { callout: { mount(box, ctx) { … } } } };
+//
+// A kind with no entry here is still rendered — as a plain box the page can
+// style — it just has no behaviour.
+// A small Lean 4 highlighter: comments, strings, numbers and keywords, as
+// spans the page colours (--code-* custom properties if it has them).
+const LEAN_KEYWORDS = new Set(('theorem lemma def example instance structure class inductive where by fun '
+    + 'have show from at with match calc exact exacts intro intros induction cases rcases obtain simp simp_all '
+    + 'rw rwa rfl apply refine use constructor omega norm_num linarith nlinarith ring ring_nf field_simp decide '
+    + 'aesop sorry let in if then else do return namespace open section end variable noncomputable private '
+    + 'protected theorem abbrev deriving universe mutual termination_by decreasing_by nat_cases positivity gcongr '
+    + 'unfold subst specialize contradiction exfalso trivial assumption tauto push_neg by_contra by_cases').split(' '));
+function highlightLean(code) {
+    const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const re = /(\/-[\s\S]*?-\/)|(--[^\n]*)|("(?:[^"\\]|\\.)*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_'.!?]*)/g;
+    let out = '', last = 0, m;
+    while ((m = re.exec(code))) {
+        out += esc(code.slice(last, m.index));
+        const [t] = m;
+        if (m[1] || m[2]) out += `<span class="lean-com">${esc(t)}</span>`;
+        else if (m[3]) out += `<span class="lean-str">${esc(t)}</span>`;
+        else if (m[4]) out += `<span class="lean-num">${esc(t)}</span>`;
+        else if (LEAN_KEYWORDS.has(t)) out += `<span class="lean-kw">${esc(t)}</span>`;
+        else out += esc(t);
+        last = re.lastIndex;
+    }
+    return out + esc(code.slice(last));
+}
+
+// The Proof and Lean switches of leanproof and leantheorem: independent, so
+// either part, both (side by side from 44rem, else stacked) or neither shows.
+// `box` carries the state classes, `host` gets the switch row (appended: see
+// leanproof). Every change lays the block out again: the TeX part's width
+// changes.
+function leanSwitches(box, ctx, host, fallback) {
+    if (!ctx.state.show) {
+        const init = (ctx.attrs.show || fallback).toLowerCase();
+        ctx.state.show = { proof: init === 'proof' || init === 'both', lean: init === 'lean' || init === 'both' };
+    }
+    const row = document.createElement('div');
+    row.className = 'latex-lean-switches';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'Show the proof, its Lean code, or both');
+    const buttons = {};
+    const apply = () => {
+        for (const k of ['proof', 'lean']) {
+            box.classList.toggle('latex-show-' + k, ctx.state.show[k]);
+            buttons[k].setAttribute('aria-pressed', String(ctx.state.show[k]));
+        }
+    };
+    // The space TeX put after the widget is the space after the *proof* (with
+    // a display's below-skip, if the proof ends in one). While the proof is
+    // hidden the widget should be followed by the space that followed the
+    // statement (leantheorem) or preceded the widget (leanproof), so its
+    // bottom margin takes back the difference. The spacers are the layout's
+    // own elements, read after each layout.
+    const heightOf = el => (el && parseFloat(el.style.height)) || 0;
+    const adjust = () => {
+        box.style.marginBottom = '';
+        if (ctx.state.show.proof) return;
+        let after = box.nextElementSibling;
+        while (after && after.classList.contains('latex-anchor')) after = after.nextElementSibling;
+        const stmt = box.firstElementChild && box.firstElementChild.querySelector(':scope > .latex-stream[data-kind="leanstatement"]');
+        const want = heightOf(stmt ? stmt.nextElementSibling : box.previousElementSibling);
+        const d = want - heightOf(after);
+        if (d < 0) box.style.marginBottom = `${d}px`;
+    };
+    for (const [k, label] of [['proof', 'Proof'], ['lean', 'Lean']]) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.addEventListener('click', () => {
+            ctx.state.show[k] = !ctx.state.show[k];
+            apply(); ctx.relayout(); ctx.paint(); adjust();
+        });
+        buttons[k] = b;
+        row.appendChild(b);
+    }
+    host.appendChild(row);
+    apply();
+    requestAnimationFrame(adjust);                 // once the parent has placed its spacers
+    window.addEventListener('resize', () => requestAnimationFrame(adjust), { passive: true });
+}
+
+const STREAM_KINDS = {
+    // reflowtex.sty's leancode: Lean source carried as text (Stream.text),
+    // shown as highlighted, selectable code under a small header naming the
+    // declaration (linked when the author gave url=).
+    leancode: {
+        mount(box, ctx) {
+            if (ctx.attrs.decl) {
+                const head = document.createElement('div');
+                head.className = 'latex-lean-head';
+                const d = document.createElement(ctx.attrs.url ? 'a' : 'span');
+                d.textContent = ctx.attrs.decl;
+                if (ctx.attrs.url) { d.href = ctx.attrs.url; d.target = '_blank'; d.rel = 'noopener'; }
+                head.appendChild(d);
+                box.appendChild(head);
+            }
+            const pre = document.createElement('pre');
+            const code = document.createElement('code');
+            code.innerHTML = highlightLean(ctx.stream.text || '');
+            pre.appendChild(code);
+            box.appendChild(pre);
+        },
+    },
+    // reflowtex.sty's leanproof: one frame (the proof's look) holding a TeX
+    // part (leantex) and its Lean code (leancode), with Proof and Lean
+    // switches on top (placed first by CSS order: the layout code takes a
+    // stream box's first child for its content).
+    leanproof: {
+        mount(box, ctx) { leanSwitches(box, ctx, box, 'proof'); },
+    },
+    // reflowtex.sty's leantheorem: the statement (leanstatement), its proof
+    // (leantex) and the code (leancode). The switches hang under the
+    // theorem's frame, from its left edge, like tabs (under the statement
+    // when theorems are not boxed); the proof and code open beneath them,
+    // initially neither.
+    leantheorem: {
+        mount(box, ctx) {
+            const root = box.firstElementChild;
+            const stmt = root && root.querySelector(':scope > .latex-stream[data-kind="leanstatement"]');
+            const thm = stmt && stmt.querySelector('.latex-stream[data-kind="theorem"]');
+            leanSwitches(box, ctx, stmt || box, 'none');
+            if (thm) {
+                // In the theorem box's own colours, so a box with accent= or
+                // background= of its own is matched too (the variables are
+                // reset per stream, hence copied rather than inherited).
+                const row = (stmt || box).lastElementChild;
+                row.classList.add('latex-lean-hang');
+                for (const v of ['--latex-box-accent', '--latex-box-background']) {
+                    const val = thm.style.getPropertyValue(v);
+                    if (val) row.style.setProperty(v, val);
+                }
+            }
+        },
+    },
+    // reflowtex.sty's webhint: blurred (CSS) until the reader clicks it or
+    // presses Enter/Space on it, and blurred again by the next click. Clicks
+    // on a link inside, or that end a text selection, leave it as it is. The
+    // state survives re-renders.
+    hint: {
+        mount(box, ctx) {
+            const show = on => {
+                ctx.state.revealed = on;
+                box.classList.toggle('latex-revealed', on);
+                box.setAttribute('aria-pressed', String(on));
+                box.setAttribute('aria-label', on ? 'Hint, shown: press to hide' : 'Hint, hidden: press to reveal');
+            };
+            box.setAttribute('role', 'button');
+            box.setAttribute('tabindex', '0');
+            show(!!ctx.state.revealed);
+            box.addEventListener('click', e => {
+                if (e.target.closest && e.target.closest('[data-link]')) return;
+                if (ctx.state.revealed && String(getSelection()).trim()) return;
+                show(!ctx.state.revealed);
+            });
+            box.addEventListener('keydown', e => {
+                if (e.target !== box || (e.key !== 'Enter' && e.key !== ' ')) return;
+                e.preventDefault(); show(!ctx.state.revealed);
+            });
+        },
+    },
+    // One of several panes (reflowtex.sty's accordion): the child streams of
+    // kind "pane", of which exactly one shows. The reader switches with
+    // action links inside the panes — "pane:next", "pane:prev", "pane:first",
+    // "pane:last", "pane:NAME" or "pane:NUMBER" (from 1). The hiding itself
+    // is CSS (installStreamStyles); this keeps the current pane on the box as
+    // data-pane and the pane's class latex-pane-active.
+    accordion: {
+        alternatives: true,          // panes replace one another (see layoutStreamSegment)
+        mount(box, ctx) {
+            const root = box.firstElementChild;
+            const panes = root ? [...root.children].filter(e => e.matches('.latex-stream[data-kind="pane"]')) : [];
+            if (!panes.length) return;
+            const find = t => {
+                if (t === 'first') return 0;
+                if (t === 'last')  return panes.length - 1;
+                if (t === 'next')  return Math.min(ctx.state.pane + 1, panes.length - 1);
+                if (t === 'prev')  return Math.max(ctx.state.pane - 1, 0);
+                const byName = panes.findIndex(p => p.dataset.name && p.dataset.name === t);
+                if (byName >= 0) return byName;
+                const n = parseInt(t, 10);
+                return n >= 1 && n <= panes.length ? n - 1 : -1;
+            };
+            const show = i => {
+                ctx.state.pane = i;
+                panes.forEach((p, k) => p.classList.toggle('latex-pane-active', k === i));
+                box.dataset.pane = panes[i].dataset.name || String(i + 1);
+            };
+            // What printing the page shows: the pane a PDF would (print=).
+            const printAt = find(ctx.attrs.print || 'last');
+            panes.forEach((p, k) => p.classList.toggle('latex-pane-print', k === printAt));
+            if (ctx.state.pane === undefined) {
+                const first = find(ctx.attrs.initial || '1');
+                ctx.state.pane = first >= 0 ? first : 0;
+            }
+            show(ctx.state.pane);
+            box.addEventListener('reflowtex:action', e => {
+                const m = /^pane:(.+)$/.exec(e.detail.action);
+                if (!m) return;                       // not ours: let it bubble on
+                const i = find(m[1]);
+                if (i < 0) return;
+                e.stopPropagation();                  // an outer accordion must not act too
+                // The tab stop is one glyph of the control's group, not
+                // necessarily the one that sent the event: compare groups.
+                const active = document.activeElement;
+                // Only for keyboard focus: a mouse click focuses the glyph
+                // too, and moving that would draw a focus ring nobody asked for.
+                const hadFocus = !!(active && active.dataset && e.detail.source
+                                    && active.dataset.link === e.detail.source.dataset.link
+                                    && active.matches(':focus-visible'));
+                show(i);
+                ctx.paint();
+                // Collapsing a long pane from its end would leave the reader
+                // below the accordion; bring its top back into view.
+                if (box.getBoundingClientRect().top < 0) box.scrollIntoView({ block: 'start' });
+                // Keyboard: the control just pressed is now hidden, so move
+                // focus to the first control of the pane now showing.
+                if (hadFocus) {
+                    const next = panes[i].querySelector('.latex-action[tabindex]');
+                    if (next) next.focus({ preventScroll: true });
+                }
+            });
+        },
+    },
+};
+
+// The structural CSS the built-in kinds need (hidden or shown, a pointer, a
+// disclosure marker). Appearance beyond that is the page's, on the same
+// selectors; the marker glyphs are overridable through custom properties.
+function installStreamStyles() {
+    const st = document.createElement('style');
+    // Built-in looks for reflowtex.sty's note, hint and boxed theorems. Each
+    // colour is a custom property a page (or a theme class) can set; the
+    // tints are mixed with transparent, so they sit on any page background.
+    // Boxes keep their padding small: a nested box (a claim in a proof) is
+    // narrower by exactly that much per level.
+    st.textContent = `
+      /* Frames (note, hint, theorem, proof) grow outward: a top-level one
+         reaches into the margin by its padding and border
+         (--latex-outset-l/-r), so its text keeps the column's full measure
+         and lines up with the text around it. Inside another frame a box
+         stays within it, a little narrower per level. The outsets do not
+         inherit, so a stream inside a frame (a pane, say) has none.
+         A page's own framed kind can set the same two variables. */
+      :where(.latex-stream) { --latex-outset-l: initial; --latex-outset-r: initial; }
+      .latex-stream {
+        margin-left: calc(-1 * var(--latex-outset-l, 0px));
+        margin-right: calc(-1 * var(--latex-outset-r, 0px)); }
+      :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
+          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"],
+          .latex-stream[data-kind="leancode"]) .latex-stream {
+        margin-left: 0; margin-right: 0; }
+      .latex-stream[data-kind="note"] {
+        --latex-outset-l: calc(1rem + 3px); --latex-outset-r: 1rem;
+        padding: .6rem 1rem;
+        border-left: 3px solid var(--latex-note-accent, #2f6fb3);
+        background: color-mix(in srgb, var(--latex-note-accent, #2f6fb3) 8%, transparent); }
+      .latex-stream[data-kind="hint"] {
+        --latex-outset-l: 1rem; --latex-outset-r: 1rem;
+        padding: .6rem 1rem; cursor: pointer;
+        background: color-mix(in srgb, currentColor 5%, transparent);
+        filter: blur(5px); transition: filter .2s; }
+      .latex-stream[data-kind="hint"].latex-revealed { filter: none; }
+      .latex-stream[data-kind="hint"]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+      /* Vertical padding from the content's own edges: --latex-box-space
+         (default one x-height of 10pt Latin Modern, 4.31pt) between the box
+         and the top of a capital on the first line (cap height 6.83pt), and
+         the same between the last baseline and the box. The viewer sets
+         --latex-first-ascent / --latex-last-depth on every stream box. */
+      :root { --latex-pt: ${ZOOM}px; }
+      /* A box's colours are its own: do not inherit an enclosing box's
+         (zero specificity, so a page's rule or the box's own inline value wins). */
+      :where(.latex-stream) { --latex-box-accent: initial; --latex-box-background: initial; }
+      .latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"] {
+        --latex-outset-l: calc(.85rem + 3px); --latex-outset-r: .7rem;
+        --latex-box-space: calc(4.31 * var(--latex-pt));
+        --latex-cap-height: calc(6.83 * var(--latex-pt));
+        padding: max(2px, calc(var(--latex-box-space) + var(--latex-cap-height) - var(--latex-first-ascent, 0px))) .7rem
+                 max(2px, calc(var(--latex-box-space) - var(--latex-last-depth, 0px))) .85rem;
+        /* --latex-box-accent / --latex-box-background: set per box (\makeboxed
+           accent=, background=) or by a page; else the kind's defaults. */
+        border-left: 3px solid var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
+        background: var(--latex-box-background,
+          color-mix(in srgb, var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3)) 7%, transparent)); }
+      .latex-stream[data-kind="proof"] {
+        border-left-color: var(--latex-box-accent, var(--latex-proof-accent, #8a8f98));
+        background: var(--latex-box-background,
+          color-mix(in srgb, var(--latex-box-accent, var(--latex-proof-accent, #8a8f98)) 6%, transparent)); }
+      @media print {
+        .latex-stream[data-kind="hint"] { filter: none; }
+      }
+      .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"]:not(.latex-pane-active) {
+        display: none; }
+      /* Lean beside a proof. leanproof: one frame (the proof's look), its
+         switches on top, the proof box inside giving up its own frame.
+         leantheorem: the switches in the theorem's frame, the proof (in its
+         usual box) and the code beneath. The code has no background: just
+         space from the proof. */
+      .latex-stream[data-kind="leanproof"] { display: flex; flex-direction: column; container-type: inline-size; }
+      .latex-stream[data-kind="leanproof"] > .latex-lean-switches { order: -1; margin-bottom: .6rem; }
+      .latex-stream[data-kind="leanproof"]:not(.latex-show-proof):not(.latex-show-lean) > .latex-lean-switches { margin-bottom: 0; }
+      .latex-stream[data-kind="leantheorem"] { container-type: inline-size; }
+      .latex-stream[data-kind="leantheorem"] .latex-lean-switches { justify-content: flex-start; margin-top: .4rem; }
+      /* Hanging from a boxed theorem: flush with the frame's bottom, starting
+         where its text ("Theorem") starts, in the box's own colours (set by
+         the script from the box). Only the label is dimmed, never the fill. */
+      .latex-stream[data-kind="leantheorem"] .latex-lean-switches.latex-lean-hang {
+        margin: 0; gap: 2px;
+        --lt-accent: var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
+        --lt-bg: var(--latex-box-background, color-mix(in srgb, var(--lt-accent) 7%, transparent)); }
+      /* Borderless in every state, so nothing but colour changes on hover. */
+      .latex-lean-switches.latex-lean-hang button,
+      .latex-lean-switches.latex-lean-hang button:hover {
+        border: 0; opacity: 1; color: color-mix(in srgb, currentColor 72%, transparent);
+        background: linear-gradient(color-mix(in srgb, var(--lt-accent) 7%, transparent) 0 0), var(--lt-bg); }
+      .latex-lean-switches.latex-lean-hang button:hover { color: inherit; }
+      .latex-lean-switches.latex-lean-hang button[aria-pressed="true"] {
+        color: inherit; background: linear-gradient(color-mix(in srgb, var(--lt-accent) 20%, transparent) 0 0), var(--lt-bg); }
+      .latex-lean-switches { display: flex; gap: .3rem; }
+      .latex-lean-switches button {
+        font: 500 .72rem/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .02em; color: inherit;
+        padding: .34rem .7rem; border-radius: 0; cursor: pointer; opacity: .75;
+        background: none; border: 1px solid color-mix(in srgb, currentColor 24%, transparent); }
+      .latex-lean-switches button:hover { opacity: 1; }
+      .latex-lean-switches button[aria-pressed="true"] {
+        opacity: 1; border-color: transparent; background: color-mix(in srgb, currentColor 13%, transparent); }
+      .latex-lean-switches button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+      :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]) > div:first-child {
+        display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem 2rem; align-items: start; }
+      :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]) > div:first-child > :not(.latex-stream) { display: none; }
+      .latex-stream[data-kind="leantheorem"] > div:first-child > .latex-stream[data-kind="leanstatement"] { grid-column: 1 / -1; }
+      :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]):not(.latex-show-proof) > div:first-child > .latex-stream[data-kind="leantex"],
+      :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]):not(.latex-show-lean) > div:first-child > .latex-stream[data-kind="leancode"] { display: none; }
+      @container (min-width: 44rem) {
+        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]).latex-show-proof.latex-show-lean > div:first-child {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 3.2rem; } }
+      /* The code's frame: the proof's, in the Lean colour (--latex-lean-accent). */
+      .latex-stream[data-kind="leancode"] {
+        --latex-outset-l: calc(.85rem + 3px); --latex-outset-r: .7rem;
+        padding: .6rem .7rem .7rem .85rem;
+        border-left: 3px solid var(--latex-lean-accent, #2e8b7a);
+        background: color-mix(in srgb, var(--latex-lean-accent, #2e8b7a) 7%, transparent); }
+      .latex-lean-head { padding: 0 0 .35rem; opacity: .65; font: .72rem ui-monospace, "SF Mono", Menlo, monospace; }
+      .latex-lean-head a { color: inherit; }
+      .latex-stream[data-kind="leancode"] pre {
+        margin: 0; padding: 0; border: 0; border-radius: 0; background: none; overflow-x: auto;
+        font: .8rem/1.55 ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace; white-space: pre; }
+      .latex-stream[data-kind="leancode"] pre code { font: inherit; }
+      .lean-kw  { color: var(--code-kw, #1f5fa8); }
+      .lean-com { color: var(--code-com, #7b7f86); font-style: italic; }
+      .lean-str { color: var(--code-str, #2a7a3b); }
+      .lean-num { color: var(--code-num, #a0522d); }
+      @media print {
+        .latex-lean-switches { display: none; }
+        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]) > div:first-child > .latex-stream { display: block !important; }
+      }
+      @media print {
+        .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"] { display: none; }
+        .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"].latex-pane-print {
+          display: block; }
+        /* Controls do nothing on paper. More specific than the page's
+           .latex-block svg .latex-link colour rule, which is also !important. */
+        .latex-block svg .latex-link.latex-action { fill: transparent !important; }
+      }
+    `;
+    document.head.appendChild(st);
+}
+
+// Text and stream segments join with TeX's interline glue (a stream's outer
+// edges are its first and last lines); a display keeps its captured spacing.
+const isTextLike = kind => kind === 'text' || kind === 'stream';
+
 const onLayoutGrid = px => Math.round(px * 64) / 64;
 
+// A group of alternatives (L.alts, see layoutStreamSegment) is spaced at this
+// level by its first member. Each other member, when it is the one showing,
+// must sit where TeX would have put *it*: its first line's interline glue
+// from the line above the group, its last line's to the line below. Applied
+// as margins on the member's own box, relative to the first member's glue.
+function applyAlternativeOffsets(prev, L) {
+    if (L.alts) {                                        // above the group
+        const ref = L.alts[0].L;
+        for (const a of L.alts) {
+            let d = 0;
+            if (prev && isTextLike(prev.seg.kind) && a.L.firstMeta && ref.firstMeta) {
+                d = texInterlineGlue(prev.lastDepth, a.L.firstAscent, a.L.firstMeta)
+                  - texInterlineGlue(prev.lastDepth, ref.firstAscent, ref.firstMeta);
+            }
+            setStyle(a.box, 'marginTop', d ? `${d}px` : '');
+        }
+    }
+    if (prev && prev.alts) {                             // below the group
+        const ref = prev.alts[0].L;
+        for (const a of prev.alts) {
+            let d = 0;
+            if (isTextLike(L.seg.kind) && L.firstMeta) {
+                d = texInterlineGlue(a.L.lastDepth, L.firstAscent, L.firstMeta)
+                  - texInterlineGlue(ref.lastDepth, L.firstAscent, L.firstMeta);
+            }
+            setStyle(a.box, 'marginBottom', d ? `${d}px` : '');
+        }
+    }
+}
+
 function sizeSegment(s, L, prev, columnPx, p) {
+    applyAlternativeOffsets(prev, L);
+    if (L.seg.kind === 'stream') {
+        // The box already holds the nested layout, which sized itself. Only
+        // the spacer above is this level's: the explicit gap plus, after
+        // text, the interline glue the first nested line would have had.
+        let margin = L.gapBefore || 0;
+        // Across a frame edge the author's explicit space replaces TeX's
+        // interline glue; where there is none, the glue stays, so a frame
+        // never touches its neighbour.
+        const framed = L.frameTop || prev?.frameBottom;
+        if (prev && isTextLike(prev.seg.kind) && L.firstMeta && !(framed && L.gapBefore)) {
+            margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
+        }
+        margin += displaySkipAdjust(L, prev);
+        setStyle(s.gap, 'height', `${onLayoutGrid(margin)}px`);
+        return { mount: s.box.firstElementChild, overflows: false };
+    }
     // Do not create a scrollbar for scaled-point rounding or a tiny italic
     // overhang. A bare SVG uses the column as its viewport and overflow:
     // visible lets that ink bleed naturally without scaling the display.
@@ -2569,7 +3276,8 @@ function sizeSegment(s, L, prev, columnPx, p) {
     // body — and independently of the heading's descender depth, since the
     // glue absorbs that. Displays keep their own captured spacing.
     let margin = L.gapBefore || 0;
-    if (prev && L.seg.kind === 'text' && prev.seg.kind === 'text' && L.firstMeta) {
+    if (prev && L.seg.kind === 'text' && isTextLike(prev.seg.kind) && L.firstMeta
+        && !(prev.frameBottom && L.gapBefore)) {           // see the stream branch above
         margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
     }
     // The space above the segment lives in its spacer, not in a margin on the
@@ -2625,6 +3333,11 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // block's id prefix travel on it.
     cache.links   = doc.links   || [];
     cache.anchors = doc.anchors || [];
+    cache.streams = doc.streams || [];
+    // Per-stream state a kind's behaviour keeps (an accordion's pane), keyed
+    // by stream index. Lives on the top-level cache and is shared down into
+    // the nested ones, so it survives a rebuild of the DOM (rerenderBlock).
+    cache.streamState = cache.streamState || new Map();
     cache.blockKey = cache.blockKey || `b${++blockSeq}`;
     const minGapPx = p.minGapPt * ZOOM;
     const padPx    = p.padPt    * ZOOM;
@@ -2708,6 +3421,31 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // a wrong render. Segments near the viewport are always laid out for real.
     // The per-segment elements persist across renders; only contents reconcile.
     while (dom.segs.length < segs.length) {
+        const seg = segs[dom.segs.length];
+        if (seg.kind === 'stream') {
+            // The box is what the page styles and scripts by kind, and holds
+            // the nested layout (layoutStreamSegment) rather than an <svg>.
+            // Class and kind are set once, here: the box's style must never
+            // change afterwards (scroll anchoring, below).
+            const box = document.createElement('div');
+            box.className = 'latex-stream';
+            box.dataset.kind = seg.stream.kind || '';
+            // The author's parameters (\begin{reflowtexstream}[key=value]),
+            // for CSS and the kind's behaviour alike.
+            // Two keys are special: class adds CSS classes, and a key
+            // starting with -- sets that CSS custom property on the box
+            // (reflowtex.sty's \makeboxed accent= and background=).
+            for (const a of seg.stream.attrs || []) {
+                if (!a.key || !/^[a-z0-9-]+$/.test(a.key)) continue;
+                if (a.key === 'class') box.classList.add(...(a.value || '').split(/\s+/).filter(Boolean));
+                else if (a.key.startsWith('--')) box.style.setProperty(a.key, a.value || '');
+                else box.setAttribute('data-' + a.key, a.value || '');
+            }
+            const gap = document.createElement('div');
+            gap.style.cssText = 'height:0px;overflow-anchor:none';
+            dom.segs.push({ svg: null, box, gap, wrap: null, pairs: [], sub: null });
+            continue;
+        }
         // xmlns:xlink is declared so a picture's `<use xlink:href=…>` (dvisvgm
         // emits the xlink form) resolves once its markup is injected via innerHTML.
         const svg = svgEl('svg', { xmlns:'http://www.w3.org/2000/svg', 'xmlns:xlink':'http://www.w3.org/1999/xlink' });
@@ -2729,6 +3467,10 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     const stats = cache.layoutStats = { computed: 0, reused: 0, deferred: 0, materialized: 0 };
     const laid = segs.map((seg, i) => {
         const s = dom.segs[i];
+        if (seg.kind === 'stream') {
+            stats.computed++;
+            return layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache);
+        }
         const hc = segLayoutCache(s, paramsKey);
         const exact = hc.exact.get(widthPt);
         if (exact) { stats.reused++; return { ...exact, seg }; }
@@ -2766,7 +3508,8 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     const want = [];
     laid.forEach((L, i) => {
         const s = dom.segs[i];
-        const { mount, overflows } = sizeSegment(s, L, laid[i-1], columnPx, p);
+        const { mount, overflows } = sizeSegment(s, L, cache.alternatives ? null : laid[i-1], columnPx, p);
+        if (cache.alternatives) setStyle(s.gap, 'height', '0px');
         s.mount = mount;
         for (const id of L.seg.anchors || []) {
             const label = cache.anchors[id - 1];
@@ -2790,6 +3533,14 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         }
     });
 
+    if (segs.trailingGap) {
+        if (!dom.trail) {
+            dom.trail = document.createElement('div');
+            dom.trail.style.cssText = 'overflow-anchor:none';
+        }
+        setStyle(dom.trail, 'height', `${segs.trailingGap}px`);
+        want.push(dom.trail);
+    }
     syncChildren(dom.root, want);
     cache.layout = { laid };
     observeSegments(cache);
@@ -2943,7 +3694,11 @@ function paintSegment(fontInfo, cache, i) {
 function paintDocument(fontInfo, cache) {
     if (!cache.layout) return;
     cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 };
-    for (let i = 0; i < cache.layout.laid.length; i++) paintSegment(fontInfo, cache, i);
+    for (let i = 0; i < cache.layout.laid.length; i++) {
+        const s = cache.dom.segs[i];
+        if (!s.svg) { if (s.sub) paintDocument(fontInfo, s.sub); continue; }
+        paintSegment(fontInfo, cache, i);
+    }
 }
 
 // ── Initialisation ────────────────────────────────────────────────────────────
@@ -2963,8 +3718,8 @@ function resolvePictures(doc) {
     };
     for (const p of doc.paragraphs) walk(p.nodes);
     for (const it of doc.content || []) if (it.box) walk(it.box.children || []);
-    for (const f of doc.footnotes || []) {
-        for (const it of f.content || []) if (it.box) walk(it.box.children || []);
+    for (const st of doc.streams || []) {
+        for (const it of st.content || []) if (it.box) walk(it.box.children || []);
     }
 }
 
@@ -3044,6 +3799,20 @@ async function initBlock(el) {
     // are initialised top to bottom, so earlier blocks already have their
     // final heights when later ones measure their distance to the viewport.
     el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
+    remeasureStreams(fontInfo, doc, widthPt, params, cache);
+    // The document's outline (sections, subsections, theorems), for a page to
+    // build a table of contents from. Each entry's `id` is the id of its
+    // anchor element, which exists once the block is laid out — now. Also
+    // kept on the element for a script that attaches later.
+    if (doc.outline && doc.outline.length) {
+        const entries = doc.outline.map(e => ({
+            kind: e.kind || '', env: e.env || '', level: e.level || 0,
+            number: e.number || '', title: e.title || '',
+            id: (doc.anchors || [])[(e.anchor || 0) - 1] || null,
+        }));
+        el.reflowtexOutline = entries;
+        el.dispatchEvent(new CustomEvent('reflowtex:outline', { bubbles: true, detail: { block: el, entries } }));
+    }
     const t3 = performance.now();
     // Paint the segments near the viewport now; layoutDocument has already set the
     // IntersectionObserver watching the rest, which paint (once, for good) as they
@@ -3069,6 +3838,7 @@ async function init() {
     installColorMaps();
     installCitations();
     installFootnotes();
+    installStreamStyles();
     installLinks();
     loadSchema();
     loadFontMap();

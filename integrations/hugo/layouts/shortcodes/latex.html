@@ -20,10 +20,30 @@
                        hugo.Data.latex_files, as if it were a file="name" ref
     color-map="name"   use latex-color-maps/name.json (see prebuild.py); does
                        not affect compilation, so file refs need it repeated
-                       per shortcode call the same as any other data-* option
+                       per shortcode call the same as any other data-* option.
+                       Default: the site's params.latexColorMap, if set
     width="N"          layout width in pt (default: the block's own pixel width)
     align="justify"    justify | left | right | center
     class="…"          extra CSS classes on the wrapper
+    show-source="true" show the block beside its LaTeX, highlighted, as an
+                       example: <figure class="latex-example"> with a tab
+                       header (Result / LaTeX) over a .latex-example-preview
+                       and a .latex-example-source. Side by side when the
+                       figure is wide, tabs when narrow (the behaviour is in
+                       the viewer partial). A file ref's text comes from
+                       data/latex_sources.json (prebuild.py); a leading SPDX
+                       comment line is left out
+    batch="name"       compile this block together with every other block of
+                       the same batch, as ONE LaTeX document (a book's
+                       chapters on separate pages or tabs): numbering,
+                       macros and cross-references carry across. All blocks
+                       of a batch share one preamble
+    weight="N"         a batch block's place in that document (ascending;
+                       ties go by page, then position on the page)
+    themes="light,dark"  with show-source: a theme switcher at the top of the
+                       Result panel, previewing the block in each named
+                       theme without changing the page's (data-latex-theme
+                       on the panel; see the viewer's Theming docs)
     plus the Knuth–Plass knobs: line-penalty, adj-demerits,
     double-hyphen-demerits, pretolerance, tolerance, tolerance2,
     emergency-tolerance, last-line-min, last-line-penalty, max-expand,
@@ -31,26 +51,51 @@
 
   Run prebuild.py before `hugo` to populate the data. */ -}}
 {{- $file := .Get "file" -}}
+{{- $batch := .Get "batch" -}}
 {{- $key := "" -}}
 {{- if $file -}}
-  {{- $key = index hugo.Data.latex_files $file -}}
+  {{- /* prebuild registers a file in a batch as "batch/name" */ -}}
+  {{- $key = index hugo.Data.latex_files (cond (ne $batch "") (printf "%s/%s" $batch $file) $file) -}}
 {{- else -}}
   {{- $inner := .Inner | strings.TrimSpace -}}
+  {{- $pre := "" -}}
+  {{- with .Get "preamble" -}}{{- $pre = os.ReadFile (printf "latex-preambles/%s.tex" .) -}}{{- end -}}
+  {{- /* Boundaries must match pipeline.content_key and prebuild.batch_key. */ -}}
   {{- $hashInput := $inner -}}
-  {{- with .Get "preamble" -}}
-    {{- $pre := os.ReadFile (printf "latex-preambles/%s.tex" .) -}}
-    {{- /* Boundary must match pipeline.content_key in reflowtex/src/encode. */ -}}
+  {{- if $batch -}}
+    {{- $hashInput = printf "%s\n===REFLOWTEX-BATCH===\n%s\n===REFLOWTEX-PREAMBLE-BOUNDARY===\n%s" $pre $batch $inner -}}
+  {{- else if $pre -}}
     {{- $hashInput = printf "%s\n===REFLOWTEX-PREAMBLE-BOUNDARY===\n%s" $pre $inner -}}
   {{- end -}}
   {{- $key = printf "%.16s" ($hashInput | sha256) -}}
 {{- end -}}
 {{- $data := and $key (index hugo.Data.latex_blocks $key) -}}
+{{- $showSource := .Get "show-source" -}}
+{{- $source := "" -}}
+{{- if $showSource -}}
+  {{- if $file -}}{{- $source = index (hugo.Data.latex_sources | default dict) $file | default "" -}}
+  {{- else -}}{{- $source = .Inner -}}{{- end -}}
+  {{- $source = replaceRE `^%\s*SPDX-License-Identifier[^\n]*\n` "" $source | strings.TrimSpace -}}
+{{- end -}}
 {{ if $data -}}
+{{- if $showSource }}<figure class="latex-example">
+<div class="latex-example-tabs" role="tablist" aria-label="Example">
+  <button type="button" role="tab" aria-selected="true" data-tab="preview">Result</button>
+  <button type="button" role="tab" aria-selected="false" data-tab="source">LaTeX</button>
+</div>
+<div class="latex-example-body"><div class="latex-example-preview">
+{{- with .Get "themes" }}
+<div class="latex-example-themes" role="group" aria-label="Preview theme">
+  {{- range split . "," }}{{ $t := strings.TrimSpace . }}
+  <button type="button" data-latex-theme-choice="{{ $t }}" aria-pressed="false">{{ $t | humanize }}</button>
+  {{- end }}
+</div>
+{{- end }}{{ end }}
 <div class="latex-block{{ with .Get "class" }} {{ . }}{{ end }}"
      data-nodelist-b64="{{ $data.nodelist_b64 }}"
      {{- with .Get "width" }}                  data-latex-width="{{ . }}"{{ end }}
      {{- with .Get "align" }}                  data-align="{{ . }}"{{ end }}
-     {{- with .Get "color-map" }}              data-color-map="{{ . }}"{{ end }}
+     {{- with .Get "color-map" | default site.Params.latexColorMap }} data-color-map="{{ . }}"{{ end }}
      {{- with .Get "line-penalty" }}           data-line-penalty="{{ . }}"{{ end }}
      {{- with .Get "adj-demerits" }}           data-adj-demerits="{{ . }}"{{ end }}
      {{- with .Get "double-hyphen-demerits" }} data-double-hyphen-demerits="{{ . }}"{{ end }}
@@ -66,6 +111,10 @@
      {{- with .Get "pad" }}                    data-pad="{{ . }}"{{ end }}
      {{- with .Get "protrusion" }}             data-protrusion="{{ . }}"{{ end }}
      {{- with .Get "expansion" }}              data-expansion="{{ . }}"{{ end }}></div>
+{{- if $showSource }}</div>
+<div class="latex-example-source">{{ transform.Highlight $source "latex" }}</div>
+</div></figure>
+{{- end }}
 {{- else }}
 <div class="latex-block latex-block--missing">
   LaTeX block not compiled — run <code>python prebuild.py</code>.

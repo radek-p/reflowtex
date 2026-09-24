@@ -149,6 +149,32 @@
   \endgroup}
 
 % ── User preamble ────────────────────────────────────────────────────────────
+% ── Companion package switch ─────────────────────────────────────────────────
+% \ifreflowtex is true only inside this extraction run. reflowtex.sty, which a
+% snippet may load, defines the same switch as *false* when it finds it
+% undefined, so one source compiles to a PDF unchanged and to a web build with
+% the web-only constructs live. Defined before the preamble so the package,
+% loaded from the preamble, sees it.
+\newif\ifreflowtex
+\reflowtextrue
+
+% Streams (\begin{reflowtexstream} in reflowtex.sty, and batch parts below)
+% are numbered by this one counter, which the package uses when it finds it.
+\newcount\reflowtexStreamCount
+
+% ── Batch parts ──────────────────────────────────────────────────────────────
+% Pipeline.compile_batch compiles several snippets (a book's chapters) as one
+% document, joined by \reflowtexbatchpart{N}. Everything typeset after it
+% belongs to stream "batch-part" N, by a *global* attribute assignment rather
+% than an environment, so no group is opened: a \newcommand in one part is
+% still defined in the next, as in the book. The pipeline cuts the finished
+% document at these streams, one bundle per part.
+\def\reflowtexbatchpart#1{%
+  \par
+  \global\advance\reflowtexStreamCount by 1
+  \directlua{Serializer.note_stream(\the\reflowtexStreamCount, "batch-part", -1, "part=#1")}%
+  \global\attribute911=\reflowtexStreamCount\relax}
+
 %%PREAMBLE%%
 
 % The build pipeline compiles display-bearing snippets at several increasingly
@@ -353,6 +379,113 @@
   \@ifundefined{ltx@label}{}{\let\ltx@label\reflowtex@newlabel@}}
 \makeatother
 \reflowtexRestoreQuote
+
+% ── Outline capture ──────────────────────────────────────────────────────────
+% The document's outline — its sections and subsections, and its theorems,
+% lemmas and the like — for a page to show as a table of contents. Each entry
+% is recorded (Serializer.note_outline) with an anchor at its place in the
+% flow, labelled reflowtex-outline-N, which becomes an element the page can
+% scroll to. Nothing here changes what is typeset.
+%
+% Sections: whatever goes into the table of contents, caught at
+% \addcontentsline{toc}, whose text already carries the number
+% (\numberline{3.1}Title). Its anchor goes into the vertical list after the
+% heading, with no interline glue and \prevdepth restored, so the spacing to
+% the next line is untouched.
+%
+% Unnumbered sections (\section*, and so the bibliography's References):
+% they never reach the table of contents, so they are caught at \@ssect,
+% with the level remembered from \@startsection. Their anchor goes in at the
+% start of the heading's own paragraph (a one-shot para/begin hook). A
+% starred section a document also adds to the contents by hand is listed
+% once (the serializer drops the repeat).
+%
+% Theorem-like environments: caught at \@begintheorem (amsthm's, or the
+% kernel's pair), after the heading is set up. The anchor goes in at the
+% start of the theorem's first paragraph (a one-shot para/begin hook), so a
+% jump lands on the theorem itself — without starting that paragraph any
+% earlier than LaTeX would: a \label right after \begin{thm} stays in
+% vertical mode, and the line end after it stays a non-space.
+\newcount\reflowtexOutlineCount
+\makeatletter
+% #1 kind, #2 level, #3 number, #4 title (macros holding the text). Records
+% the entry; its anchor is \reflowtexAnchorCount afterwards.
+\def\reflowtex@outline@note#1#2#3#4{%
+  \global\advance\reflowtexAnchorCount by 1
+  \global\advance\reflowtexOutlineCount by 1
+  \directlua{Serializer.note_label(\the\reflowtexAnchorCount,
+      "reflowtex-outline-\the\reflowtexOutlineCount")
+    Serializer.note_outline(\the\reflowtexAnchorCount,
+      "\luaescapestring{\detokenize\expandafter{#1}}", #2,
+      "\luaescapestring{\detokenize\expandafter{#3}}",
+      "\luaescapestring{\detokenize\expandafter{#4}}")}}
+% Records the entry and places its anchor here.
+\def\reflowtex@outline@mark#1#2#3#4{%
+  \reflowtex@outline@note{#1}{#2}{#3}{#4}%
+  \ifvmode
+    \dimen@=\prevdepth \nointerlineskip
+    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
+    \prevdepth=\dimen@
+  \else
+    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
+  \fi}
+\def\reflowtex@outline@acl#1#2#3{%
+  \def\reflowtex@ol@file{#1}\def\reflowtex@ol@toc{toc}%
+  \ifx\reflowtex@ol@file\reflowtex@ol@toc
+    \begingroup
+      \protected@edef\reflowtex@ol@kind{#2}%
+      \protected@edef\reflowtex@ol@text{#3}%
+      \let\reflowtex@ol@none\@empty
+      \reflowtex@outline@mark\reflowtex@ol@kind{0}\reflowtex@ol@none\reflowtex@ol@text
+    \endgroup
+  \fi
+  \reflowtex@acl{#1}{#2}{#3}}
+% #1 heading name (Theorem), #2 number, #3 note (may be empty).
+\def\reflowtex@outline@thm#1#2#3{%
+  \begingroup
+    \protected@edef\reflowtex@ol@name{#1}%
+    \protected@edef\reflowtex@ol@num{#2}%
+    \protected@edef\reflowtex@ol@note{#3}%
+    \protected@edef\reflowtex@ol@title{\reflowtex@ol@name
+      \ifx\reflowtex@ol@note\@empty\else\space(\reflowtex@ol@note)\fi}%
+    \protected@edef\reflowtex@ol@kind{\@currenvir}%
+    \reflowtex@outline@note\reflowtex@ol@kind{9}\reflowtex@ol@num\reflowtex@ol@title
+    \edef\reflowtex@ol@hook{\noexpand\AddToHookNext{para/begin}{%
+      \begingroup\attribute910=\the\reflowtexAnchorCount\relax
+      \noexpand\reflowtex@anchorbox\endgroup}}%
+  \expandafter\endgroup\reflowtex@ol@hook}
+% #1 the heading's text (unnumbered section).
+\def\reflowtex@outline@starred#1{%
+  \begingroup
+    \protected@edef\reflowtex@ol@title{#1}%
+    \let\reflowtex@ol@none\@empty
+    \reflowtex@outline@note\reflowtex@ol@secname{0}\reflowtex@ol@none\reflowtex@ol@title
+    \edef\reflowtex@ol@hook{\noexpand\AddToHookNext{para/begin}{%
+      \begingroup\attribute910=\the\reflowtexAnchorCount\relax
+      \noexpand\reflowtex@anchorbox\endgroup}}%
+  \expandafter\endgroup\reflowtex@ol@hook}
+\let\reflowtex@ol@secname\@empty
+% The wrappers are defined here and only swapped in at \begin{document} (a
+% hook's code cannot hold parameter tokens; see the cross-reference section).
+\def\reflowtex@ol@startsection#1#2#3#4#5#6{%
+  \def\reflowtex@ol@secname{#1}\reflowtex@ss{#1}{#2}{#3}{#4}{#5}{#6}}
+\def\reflowtex@ol@ssect#1#2#3#4#5{%
+  \reflowtex@outline@starred{#5}\reflowtex@sss{#1}{#2}{#3}{#4}{#5}}
+\def\reflowtex@ams@bt#1#2[#3]{\reflowtex@bt{#1}{#2}[#3]\reflowtex@outline@thm{#1}{#2}{#3}}
+\def\reflowtex@k@bt#1#2{\reflowtex@bt{#1}{#2}\reflowtex@outline@thm{#1}{#2}{}}
+\def\reflowtex@k@obt#1#2#3{\reflowtex@obt{#1}{#2}{#3}\reflowtex@outline@thm{#1}{#2}{#3}}
+\AtBeginDocument{%
+  \let\reflowtex@acl\addcontentsline
+  \let\addcontentsline\reflowtex@outline@acl
+  \let\reflowtex@ss\@startsection  \let\@startsection\reflowtex@ol@startsection
+  \let\reflowtex@sss\@ssect        \let\@ssect\reflowtex@ol@ssect
+  \let\reflowtex@bt\@begintheorem
+  \@ifpackageloaded{amsthm}%
+    {\let\@begintheorem\reflowtex@ams@bt}%
+    {\let\@begintheorem\reflowtex@k@bt
+     \let\reflowtex@obt\@opargbegintheorem
+     \let\@opargbegintheorem\reflowtex@k@obt}}
+\makeatother
 
 % ── Footnote capture ─────────────────────────────────────────────────────────
 % Install this after the user preamble: packages such as hyperref legitimately

@@ -89,16 +89,16 @@ testmath-demo: venv
 website:
 	cd website && ./build.sh
 
-# Forces every block (including the slow, multi-pass testmath.tex) to
+# Forces every block (including testmath.tex on the Showcase page) to
 # recompile from scratch — needed after touching src/extract/template.tex,
 # font handling, or anything else that isn't reflected in a block's own
 # content hash. Slower; use `website` for routine content edits.
 website-clean:
 	cd website && rm -rf public resources .reflowtex-build .hugo_build.lock \
 	       data/latex_blocks data/latex_schema.json data/latex_files.json data/latex_font_map.json \
-	       static/fonts static/latex-viewer.js static/protobuf.min.js static/testmath \
+	       data/latex_sources.json static/fonts static/latex-viewer.js static/protobuf.min.js static/testmath \
 	       layouts/shortcodes/latex.html layouts/partials/reflowtex-viewer.html
-	cd website && FORCE_TESTMATH=1 PREBUILD_ARGS="--force --prune" ./build.sh
+	cd website && PREBUILD_ARGS="--force --prune" ./build.sh
 
 # Maintainer-only: refresh the vendored browser runtime from npm at the pinned
 # version. Needs npm on PATH; users building sites do not — the file is committed

@@ -155,6 +155,26 @@ anchors on the wrapper, whose style never changes. Pages that style
 `.latex-block svg` should keep `position`, `transform`, margins and padding
 off it and off the wrapper's ancestors, or anchoring is suppressed again.
 
+## Outline (optional)
+
+A block whose document has sections or theorem-like environments carries an
+*outline*. It is captured at compile time from what enters the table of
+contents, and from every theorem, lemma and so on. Once the block is laid out,
+the viewer fires a bubbling event on the block element, and leaves the same
+list on the element as `el.reflowtexOutline`:
+
+```js
+document.addEventListener('reflowtex:outline', e => {
+  for (const { kind, env, level, number, title, id } of e.detail.entries) …
+});
+```
+
+`level` is 1–3 for sections, subsections and subsubsections, and 9 for a
+theorem-like environment (`env` names it: `thm`, `lem`, …). `title` is plain
+text, and `id` is the id of an anchor element at the entry's place in the
+flow, to scroll to or observe. The website's Showcase page builds its sticky
+table of contents from this.
+
 ## Plugging in another paragraph breaker
 
 The viewer breaks paragraphs with its own Knuth–Plass implementation. A page
@@ -192,6 +212,102 @@ margin by that much; a negative kern at the line's end does the same on the
 right. Dispatch a `resize` event once an asynchronously loaded breaker
 becomes ready, so already-painted blocks re-lay out with it.
 
+## Streams
+
+A block's content can hold *streams*: separately typeset runs of paragraphs
+and displays, each with a `kind` (`Document.streams` in the schema). A
+footnote's body is one, pointed at by its marker glyph and shown in the
+footnote popover. The companion package's
+`\begin{reflowtexstream}{kind}` (see [src/latex/](../latex/)) makes one at the
+point where it stands in the flow, and the viewer mounts it as
+
+```html
+<div class="latex-stream" data-kind="KIND">
+  <div>…the stream's own segments, laid out like a block…</div>
+</div>
+```
+
+The stream is laid out at the box's inner width (its width minus its CSS
+padding) and re-broken whenever the block reflows. Streams nest. Segments a
+kind hides (`display: none`) are laid out but painted only once they are shown.
+
+What a kind looks like is CSS on `.latex-stream[data-kind=…]`. What it does is
+a behaviour a page registers, in a script that runs before or after the viewer:
+
+```js
+window.reflowtex ??= { streamKinds: {} };
+reflowtex.streamKinds.hint = {
+  mount(box, ctx) { … },   // once per box, after its first layout
+};
+```
+
+`ctx` carries `kind`, `index` (1-based, into `Document.streams`), `stream` and
+`state`. `state` is an object kept per stream for the life of the page. Boxes are
+rebuilt when web fonts arrive, so a behaviour stores what it must remember
+there and restores it in `mount`. A page's entry replaces a built-in one of the
+same name. A kind with no behaviour is still rendered, as a plain box.
+
+### Stream parameters and actions
+
+`\begin{reflowtexstream}[key=value, …]{kind}` gives a stream parameters. Each
+one is set on the box as `data-KEY="value"` and passed to `mount` as
+`ctx.attrs`. For example, an accordion's box carries `data-initial` and
+`data-print`.
+
+`\reflowtexaction{action}{text}` makes text inside a paragraph a *control*. Its
+glyphs are grouped like a `\ref` and coloured with the same `.latex-link`
+rules, plus `.latex-action`. They take `role="button"` and one tab stop. A
+click, Enter or Space sends a bubbling DOM event from the glyph:
+
+```js
+new CustomEvent('reflowtex:action', { bubbles: true, detail: { action, source } })
+```
+
+A kind listens for it on its box. It handles the actions it understands and
+calls `stopPropagation()`, so that an enclosing stream of another (or the
+same) kind does not act as well. Actions nobody handles do nothing.
+
+A kind may also declare `alternatives: true` next to `mount`. Its child
+streams then replace one another rather than follow each other, as an
+accordion's panes do. The viewer lays them out with no space between them.
+Each one gets the spacing TeX would give it if it alone stood there: the
+interline glue from the line above to its own first line, and from its own
+last line to the line below. So switching panes never moves the first
+baseline.
+
+`ctx.paint()` paints the stream's visible segments at once. Call it after
+revealing hidden content, instead of waiting for the IntersectionObserver.
+
+Built in:
+
+- **`accordion`**: shows one of its child streams of kind `pane` at a time.
+  It understands the actions `pane:next`, `pane:prev`, `pane:first`,
+  `pane:last`, `pane:NAME` (a pane's `data-name`) and `pane:N` (from 1).
+  - The current pane gets `latex-pane-active`, and the box gets
+    `data-pane` (its name or number).
+  - `data-initial` picks the first pane shown.
+  - In print only the `data-print` pane shows (default: the last), and
+    action text is transparent.
+  - When the reader switches with the keyboard, focus moves to the first
+    control of the new pane.
+  - If a switch leaves the box's top above the viewport, it is scrolled back
+    into view.
+- **`leantheorem`** / **`leanproof`**, with parts **`leanstatement`**,
+  **`leantex`** and **`leancode`**: reflowtex.sty's theorem or proof with its
+  Lean code. `leancode` carries the code as `Stream.text` and draws it as
+  highlighted, selectable text, under the declaration's name (`data-decl`,
+  linked by `data-url`). Both widgets have two switches, Proof and Lean
+  (initially `data-show`: proof, lean, both or none), toggling their parts
+  independently; both parts stand side by side from 44rem, stacked below it.
+  `leantheorem` hangs the switches under the theorem's frame, from its left edge; `leanproof` puts
+  them on a row above its parts. The code has a frame like a proof's, in
+  `--latex-lean-accent` (a muted teal by default). While the proof is hidden, the
+  widget's bottom margin takes back the space TeX left after the proof.
+  Every change lays the block out again through `ctx.relayout()`, which
+  re-lays out the whole block at its current width, for any behaviour that
+  changes a stream's width.
+- **`footnote`**: shown in the popover from its marker, never in the flow.
+
 ## Theming (optional)
 
 reflowtex ships no colour palette of its own — a block with no `data-color-map`
@@ -224,6 +340,13 @@ different ones — e.g. two documents sharing a page, each with its own palette.
   was built). Re-derived at runtime as `baked-hex: [base-hex, percent]`, so
   the tint follows the *current* background rather than staying stuck to
   whatever page colour was live when TeX compiled it.
+
+A theme can also be scoped to part of a page: `data-latex-theme="dark"` on any
+element gives the blocks inside it that theme's colours, whatever the page's
+theme is. That is how an example can preview each theme in place. Every colour
+the map remaps is declared in the scoped rules, so a scoped `light` also undoes
+the page's dark substitutions. Set `--latex-page-bg` on that element too, so
+tints mix with its background.
 
 A theme is matched by a class name on `<html>` (`dark`, `sepia`, `contrast`;
 unclassed is the implicit `light`) — switching the class restyles

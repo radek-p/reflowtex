@@ -198,6 +198,7 @@ local TIKZ_PIC_ATTR      = 908 -- placeholder hbox for an internally captured Ti
 local LINK_ATTR          = 909 -- glyphs of a \ref/\eqref/\autoref's printed text
 local ANCHOR_ATTR        = 910 -- the zero-size box \label leaves behind
 local DISPLAY_ATTR       = 912 -- a display's box: the number Serializer.note_display recorded it under
+local STREAM_ATTR        = 911 -- nodes typeset inside \begin{reflowtexstream} (reflowtex.sty): the stream id
 local RULE_IMAGE  = 2
 local picture_files = {}
 local source_width = 0
@@ -230,8 +231,83 @@ end
 function Serializer.note_link_url(id, url)
     link_labels[id] = { url = tostring(url) }
 end
+-- Not a destination but a control (\reflowtexaction in reflowtex.sty): the
+-- glyphs trigger `action` in the page instead of navigating.
+function Serializer.note_link_action(id, action)
+    link_labels[id] = { action = tostring(action) }
+end
 function Serializer.note_label(id, label)
     anchor_labels[id] = clean_label(label)
+end
+
+-- The document's outline (template.tex, "Outline capture"): sections from
+-- \addcontentsline{toc} (level 0 from TeX: the kind names it) and
+-- theorem-like environments (level 9). `anchor` is the anchor the entry's
+-- position is marked with. Titles stay TeX source here; the encoder turns
+-- them into plain text.
+local outline = {}
+local OUTLINE_LEVELS = { part = 0, chapter = 0, section = 1, subsection = 2, subsubsection = 3 }
+function Serializer.note_outline(anchor, kind, level, number, title)
+    kind, number, title = tostring(kind), tostring(number or ""), tostring(title or "")
+    if tonumber(level) == 9 then
+        outline[#outline + 1] = { kind = "theorem", env = kind, level = 9,
+                                  number = number, title = title, anchor = anchor }
+        return
+    end
+    local lv = OUTLINE_LEVELS[kind]
+    if not lv then return end                   -- \paragraph and deeper: not listed
+    -- "\numberline {3.1}Title" (the number's braces may hold spaces)
+    local num, rest = title:match("\\numberline%s*(%b{})%s*(.*)$")
+    if num then number, title = num:sub(2, -2), rest end
+    title = title:gsub("^\\protect%s*", "")
+    -- \section*{X} followed by \addcontentsline{toc}{section}{X}: once.
+    local last = outline[#outline]
+    if last and last.kind == kind and last.number == "" and last.title == title then return end
+    outline[#outline + 1] = { kind = kind, level = lv, number = number,
+                              title = title, anchor = anchor }
+end
+
+-- A stream opened by \begin{reflowtexstream}{kind} (reflowtex.sty): `id` is
+-- its number, which is also the value of attribute 911 on every node typeset
+-- inside it, and `parent` the attribute's value when it opened — an unset
+-- LuaTeX attribute reads as a large negative number, so anything non-positive
+-- means the main flow. Footnotes join the same table when the flow walk meets
+-- their insertions; the walk fills `content` (see walk_flow).
+local streams = {}
+local footnote_index = {}   -- template footnote id → stream index
+--
+-- `attrs` is the optional argument's key=value list, as written: split on
+-- commas, each item on its first "=", both sides trimmed. A key without a
+-- value is kept with an empty one. Keys are letters, digits and "-" (they
+-- become data-KEY in the page); anything else is dropped.
+local function parse_stream_attrs(text)
+    local out = {}
+    for item in tostring(text or ""):gmatch("[^,]+") do
+        local k, v = item:match("^%s*([^=]-)%s*=%s*(.-)%s*$")
+        if not k then k, v = item:match("^%s*(.-)%s*$"), "" end
+        if k ~= "" and k:match("^[%w%-]+$") then
+            -- A literal # reaches us doubled: \detokenize (how reflowtex.sty
+            -- passes a colour like #c2410c) doubles parameter characters.
+            out[#out + 1] = { key = k:lower(), value = (v:gsub("##", "#")) }
+        end
+    end
+    return out
+end
+-- Text a stream carries untypeset (reflowtex.sty's lean environment reads
+-- its body verbatim and hands it over here).
+function Serializer.note_stream_text(id, text)
+    id = tonumber(id)
+    -- Without the blank lines at either end (the rest of the \\begin line,
+    -- the line break before \\end).
+    if streams[id] then
+        streams[id].text = (tostring(text or ""):gsub("^%s*\n", ""):gsub("%s+$", ""))
+    end
+end
+function Serializer.note_stream(id, kind, parent, attrs)
+    id = tonumber(id); parent = tonumber(parent)
+    streams[id] = { kind = tostring(kind), content = {},
+                    attrs = parse_stream_attrs(attrs),
+                    parent = (parent and parent > 0) and parent or nil }
 end
 
 -- What TeX had in hand when it opened a display (\everydisplay, template.tex):
@@ -863,7 +939,6 @@ local GLUE_ABOVEDISPLAYSHORT, GLUE_BELOWDISPLAYSHORT = 6, 7
 -- than observing it.
 
 local content   = {}
-local footnotes = {}
 local seen_para = {}
 
 -- amsmath leaves an empty paragraph behind after an alignment (a zero-content
@@ -879,12 +954,6 @@ local function has_visible_nodes(nodes)
     return false
 end
 
-local function emit_vspace(out, sp)
-    if sp and sp ~= 0 and #out > 0 then
-        out[#out + 1] = { kind = "vspace", amount = sp }
-    end
-end
-
 -- The band of the most recent paragraph; displays inherit it.
 local cur_band = { indent = 0, width = 0 }
 -- What the flow last stacked — "line", "blank" (a line with no ink: the
@@ -893,8 +962,108 @@ local cur_band = { indent = 0, width = 0 }
 local last_box = nil
 local last_display = nil
 
-local function walk_flow(head, pending, out)
-    out = out or content
+-- ── Streams ───────────────────────────────────────────────────────────────
+-- Every item lands in exactly one content list: the main flow, a footnote's
+-- body, or the content of a \begin{reflowtexstream} block (reflowtex.sty). The
+-- walk carries a context: `out`, the list it is filling, and `base`, the
+-- stream id whose nodes belong *directly* in that list — nil for the main
+-- flow. A footnote written inside a stream inherits the stream's attribute on
+-- all its nodes, so its own walk takes that id as home rather than as a block
+-- nested in the footnote.
+--
+-- A node stamped with any other stream id belongs to that stream, which is
+-- opened on first contact: a {kind="stream"} item goes into its parent's list
+-- (recursively, so a stream whose parent has not been met yet opens the
+-- parent first) at the position of the stream's first item, and the item
+-- itself goes into the stream's own content. Document order is preserved on
+-- every list, and each stream item appears exactly once.
+local function stream_attr(n)
+    local v = node.get_attribute(n, STREAM_ATTR)
+    if v and v > 0 then return v end
+    return nil
+end
+
+local function stream_out(ctx, sid)
+    if sid == nil or sid == ctx.base then return ctx.out end
+    local s = streams[sid]
+    if not s then return ctx.out end        -- never noted: treat as unstamped
+    if not s.opened then
+        s.opened = true
+        local parent_out = stream_out(ctx, s.parent)
+        parent_out[#parent_out + 1] = { kind = "stream", stream = sid }
+    end
+    return s.content
+end
+
+local function reset_pending(pending)
+    pending.sp = 0; pending.explicit = 0
+end
+
+-- Where vertical space goes. A gap sits between two items, and belongs to the
+-- innermost stream holding *both* of them: space between two paragraphs of a
+-- box is the box's, space between a box and the text after it is the text's.
+-- So the \topsep an environment puts before its first line or after its last
+-- lands outside the environment's stream, even though TeX typeset that glue
+-- inside the environment's group, and a box can simply open at \begin and end
+-- with the group (reflowtex.sty's \makeboxed). Between two panes of an
+-- accordion it is the accordion's, where the viewer, laying panes out as
+-- alternatives, ignores it.
+--
+-- ctx.last_sid is the stream of the last paragraph or display emitted (nil:
+-- the list the walk is filling). Label anchors do not count as neighbours: a
+-- \label at the top of a theorem opens its box ahead of the space before it,
+-- and the space still goes before the box.
+local function norm_sid(ctx, sid)
+    if sid == nil or sid == ctx.base or not streams[sid] then return nil end
+    return sid
+end
+local function stream_chain(ctx, sid)
+    local c, seen = {}, {}
+    sid = norm_sid(ctx, sid)
+    while sid and not seen[sid] do
+        c[#c + 1] = sid; seen[sid] = true
+        sid = norm_sid(ctx, streams[sid].parent)
+    end
+    return c
+end
+local function common_stream(ctx, a, b)
+    local in_a = {}
+    for _, s in ipairs(stream_chain(ctx, a)) do in_a[s] = true end
+    for _, s in ipairs(stream_chain(ctx, b)) do
+        if in_a[s] then return s end
+    end
+    return nil
+end
+local function only_anchors(list)
+    for _, it in ipairs(list) do
+        if it.kind ~= "anchorpoint" then return false end
+    end
+    return true
+end
+-- `sp` is the full glue, `explicit` only the author's own; after a display the
+-- full glue counts (it carries the display's below-skip). As everywhere, a gap
+-- before anything at all is dropped.
+local function place_gap(ctx, next_sid, sp, explicit)
+    local list = stream_out(ctx, common_stream(ctx, ctx.last_sid, next_sid))
+    local pos = #list
+    while pos > 0 do
+        local it = list[pos]
+        if it.kind == "anchorpoint"
+                or (it.kind == "stream" and streams[it.stream]
+                    and only_anchors(streams[it.stream].content)) then
+            pos = pos - 1
+        else
+            break
+        end
+    end
+    local amount = (ctx.last_kind == "display") and sp or explicit
+    if amount and amount ~= 0 and pos > 0 then
+        table.insert(list, pos + 1, { kind = "vspace", amount = amount })
+    end
+end
+
+local function walk_flow(head, pending, ctx)
+    ctx = ctx or { out = content, base = nil }
     for n in node.traverse(head) do
         local t = node.type(n.id)
         if (t == "hlist" or t == "vlist") and node.get_attribute(n, ANCHOR_ATTR) then
@@ -904,6 +1073,7 @@ local function walk_flow(head, pending, out)
             -- Emit it into the content stream, where it lands between the two
             -- items it was written between — which is exactly the position a
             -- section label is meant to name.
+            local out = stream_out(ctx, stream_attr(n))
             out[#out + 1] = { kind = "anchorpoint",
                               anchor = node.get_attribute(n, ANCHOR_ATTR) }
         elseif t == "hlist" and n.subtype == HL_LINE then
@@ -916,24 +1086,21 @@ local function walk_flow(head, pending, out)
             end
             if p and not seen_para[p] and has_visible_nodes(all_paragraphs[p].nodes) then
                 seen_para[p] = true
-                if out[#out] and out[#out].kind == "display" then
-                    -- Abutting a display, keep TeX's full glue: above/belowdisplayskip
-                    -- carries the display's spacing.
-                    emit_vspace(out, pending.sp)
-                else
-                    -- Between text paragraphs keep only explicit vspace: baselineskip
-                    -- leading is re-derived per line, but a \vspace or a section's
-                    -- before/after skip must survive.
-                    emit_vspace(out, pending.explicit)
-                end
+                -- Abutting a display, keep TeX's full glue: above/belowdisplayskip
+                -- carries the display's spacing. Between text paragraphs keep only
+                -- explicit vspace: baselineskip leading is re-derived per line, but
+                -- a \vspace or a section's before/after skip must survive.
+                place_gap(ctx, stream_attr(n), pending.sp, pending.explicit)
+                local out = stream_out(ctx, stream_attr(n))
                 out[#out + 1] = { kind = "paragraph", para = p }
+                ctx.last_sid, ctx.last_kind = stream_attr(n), "paragraph"
             end
-            pending.sp = 0
-            pending.explicit = 0
+            reset_pending(pending)
         elseif t == "hlist" and (n.subtype == HL_EQUATION or n.subtype == HL_ALIGNMENT) then
-            emit_vspace(out, pending.sp)
-            pending.sp = 0
-            pending.explicit = 0
+            place_gap(ctx, stream_attr(n), pending.sp, pending.sp)
+            reset_pending(pending)
+            local out = stream_out(ctx, stream_attr(n))
+            ctx.last_sid, ctx.last_kind = stream_attr(n), "display"
             local note = display_notes[node.get_attribute(n, DISPLAY_ATTR) or -1]
             out[#out + 1] = {
                 kind = "display",
@@ -979,22 +1146,24 @@ local function walk_flow(head, pending, out)
             }
             last_display = out[#out]; last_box = "display"; pending.above_skip = nil; pending.interline = nil
         elseif t == "vlist" then
-            walk_flow(n.head, pending, out)
+            walk_flow(n.head, pending, ctx)
         elseif t == "ins" then
             -- A footnote is not part of the pageless main stream. Retain its
-            -- fully typeset paragraphs/displays in a separate stream and link
-            -- it to the superscript marker stamped by template.tex. Keeping
-            -- ContentItems (rather than flattening text) preserves inline math,
-            -- colours, citations, and the ordinary browser reflow machinery.
+            -- fully typeset paragraphs/displays as a stream of kind "footnote"
+            -- and link it to the superscript marker stamped by template.tex
+            -- (see remap_footnote_refs). Keeping ContentItems (rather than
+            -- flattening text) preserves inline math, colours, citations, and
+            -- the ordinary browser reflow machinery.
             local id = node.get_attribute(n, FOOTNOTE_INS_ATTR)
-            if not id or id == 0 then id = #footnotes + 1 end
             local fn_content = {}
             local saved_band = { indent = cur_band.indent, width = cur_band.width }
             local saved_last = last_box
-            walk_flow(n.head, { sp = 0, explicit = 0 }, fn_content)
+            walk_flow(n.head, { sp = 0, explicit = 0 },
+                      { out = fn_content, base = stream_attr(n) })
             cur_band = saved_band
             last_box = saved_last
-            footnotes[#footnotes + 1] = { id = id, content = fn_content }
+            streams[#streams + 1] = { kind = "footnote", content = fn_content }
+            if id and id > 0 then footnote_index[id] = #streams end
         elseif t == "glue" then
             pending.sp = (pending.sp or 0) + (n.width or 0)
             if n.subtype == GLUE_ABOVEDISPLAY or n.subtype == GLUE_ABOVEDISPLAYSHORT then
@@ -1018,6 +1187,23 @@ local function walk_flow(head, pending, out)
     end
 end
 
+-- The footnote marker's glyphs were serialized with the template's footnote id
+-- (attribute 906); the wire format points them at the footnote's *stream*
+-- instead, the same reference a glyph would carry for any other stream kind.
+-- Walked after the flow, when every footnote has its stream index.
+local function remap_footnote_refs(nodes)
+    for _, n in ipairs(nodes or {}) do
+        if n.footnote then
+            local idx = footnote_index[n.footnote]
+            n.footnote = nil
+            if idx then n.stream = idx end
+        end
+        remap_footnote_refs(n.children)
+        remap_footnote_refs(n.pre); remap_footnote_refs(n.post); remap_footnote_refs(n.replace)
+        if n.leader then remap_footnote_refs({ n.leader }) end
+    end
+end
+
 Serializer = Serializer or {}   -- note_picture already added a table above; do not clobber it
 
 -- The pageless main vertical list itself: every top-level node TeX
@@ -1031,6 +1217,21 @@ end
 
 local function write_output()
     walk_flow(flow_head, { sp = 0, explicit = 0 })
+    for _, p in ipairs(all_paragraphs) do remap_footnote_refs(p.nodes) end
+    -- Streams are written in index order (the ids reflowtex.sty assigned, then
+    -- the footnotes in the order their insertions were met); a stream that
+    -- ended up empty keeps its slot so the indices stay valid.
+    local stream_list = {}
+    for i = 1, #streams do
+        local s = streams[i]
+        for _, it in ipairs(s.content) do
+            if it.box then remap_footnote_refs(it.box.children) end
+        end
+        stream_list[i] = { kind = s.kind, content = s.content, attrs = s.attrs or {}, text = s.text }
+    end
+    for _, it in ipairs(content) do
+        if it.box then remap_footnote_refs(it.box.children) end
+    end
     annotate_fonts()
     local f = assert(io.open("output.json", "w"))
     f:write(json_encode({
@@ -1038,18 +1239,22 @@ local function write_output()
         fonts      = used_fonts,
         paragraphs = all_paragraphs,
         content    = content,
-        footnotes  = footnotes,
+        streams    = stream_list,
         links      = link_labels,
         anchors    = anchor_labels,
+        outline    = outline,
     }))
     f:close()
-    local n_disp = 0
+    local n_disp, n_fn = 0, 0
     for _, it in ipairs(content) do
         if it.kind == "display" then n_disp = n_disp + 1 end
     end
+    for _, s in ipairs(stream_list) do
+        if s.kind == "footnote" then n_fn = n_fn + 1 end
+    end
     texio.write_nl(string.format(
-        "serializer: wrote output.json (%d paragraph(s), %d item(s) in stream, %d display(s), %d footnote(s))",
-        #all_paragraphs, #content, n_disp, #footnotes))
+        "serializer: wrote output.json (%d paragraph(s), %d item(s) in stream, %d display(s), %d stream(s) of which %d footnote(s))",
+        #all_paragraphs, #content, n_disp, #stream_list, n_fn))
 end
 
 luatexbase.add_to_callback("pre_linebreak_filter",   capture_paragraph, "capture_paragraph")

@@ -31,6 +31,7 @@ and this writes:
     <site>/data/latex_blocks/<key>.json   {nodelist_b64, content_hash}
     <site>/data/latex_schema.json         {schema_b64}
     <site>/data/latex_color_maps.json     {name: <parsed color-map JSON>, …}
+    <site>/data/latex_sources.json        {"name.tex": source text} for show-source="true"
     <site>/static/fonts/*.otf             provisioned + cmap-patched fonts
     <site>/.reflowtex-build/<key>/          per-block build artefacts (git-ignore)
 
@@ -75,7 +76,20 @@ PREAMBLE_ATTR_RE = re.compile(r'preamble="([^"]+)"')
 COLOR_MAP_ATTR_RE = re.compile(r'color-map="([^"]+)"')
 AS_ATTR_RE = re.compile(r'as="([^"]+)"')
 FILE_ATTR_RE = re.compile(r'file="([^"]+)"')
+BATCH_ATTR_RE = re.compile(r'batch="([^"]+)"')
+WEIGHT_ATTR_RE = re.compile(r'weight="(-?[0-9]*\.?[0-9]+)"')
+
+
+def batch_key(content: str, preamble: str, batch: str) -> str:
+    """The key of a block that is part of batch `batch`. Must match the
+    shortcode, which hashes preamble, batch and content with these
+    boundaries. The batch is part of the key because the same text compiled
+    in another batch (or alone) is a different block."""
+    return content_key(content, preamble + '\n===REFLOWTEX-BATCH===\n' + batch)
 HASH_RE = re.compile(r'^[0-9a-f]{16}$')
+# \ref, \eqref, \autoref, \cref, \Cref, \nameref, \pageref: printing one
+# needs the label's number from the previous pass.
+REF_RE = re.compile(r'\\(?:eq|auto|c|C|name|page)?ref\*?\{')
 
 
 def _resolve_preamble(name: str, preamble_dir: Path) -> str:
@@ -99,7 +113,7 @@ def _block_name(page: str, line: int, inner: str, as_name: str | None) -> str:
     return f'{name} "{excerpt}"'
 
 
-def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
+def scan_content(content_dir: Path, preamble_dir: Path, demos_dirs: list[Path]):
     r"""Scan all markdown for latex blocks.
 
     Returns (blocks, files_map, block_pages, color_map_names):
@@ -119,11 +133,25 @@ def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
     files_map: dict[str, str] = {}
     block_pages: dict[str, str] = {}
     color_map_names: set[str] = set()
+    # batch="name" blocks: compiled together, not alone. Each part is
+    # (weight, (page, offset), key, content, preamble, name).
+    batches: dict[str, list] = {}
+    ref_files: set[str] = set()
 
-    # File refs share the demos dir's own preamble.tex (if present).
-    demos_preamble = ''
-    if demos_dir and (demos_dir / 'preamble.tex').exists():
-        demos_preamble = (demos_dir / 'preamble.tex').read_text(encoding='utf-8')
+    def add_part(attrs, page, pos, key, content, preamble, name):
+        bm = BATCH_ATTR_RE.search(attrs or '')
+        if not bm:
+            return False
+        wm = WEIGHT_ATTR_RE.search(attrs or '')
+        batches.setdefault(bm.group(1), []).append(
+            (float(wm.group(1)) if wm else 0.0, (page, pos), key, content, preamble, name))
+        return True
+
+    # A file ref resolves in the first demos dir that has it, and shares that
+    # dir's own preamble.tex (if present).
+    def demos_preamble(d: Path) -> str:
+        f = d / 'preamble.tex'
+        return f.read_text(encoding='utf-8') if f.exists() else ''
 
     for path in sorted(content_dir.rglob('*.md')):
         text = path.read_text(encoding='utf-8')
@@ -132,12 +160,15 @@ def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
             attrs, inner = m.group(1), m.group(2)
             pm = PREAMBLE_ATTR_RE.search(attrs or '')
             preamble = _resolve_preamble(pm.group(1), preamble_dir) if pm else ''
-            key = content_key(inner.strip(), preamble)
+            bm = BATCH_ATTR_RE.search(attrs or '')
+            key = (batch_key(inner.strip(), preamble, bm.group(1)) if bm
+                   else content_key(inner.strip(), preamble))
             page = path.relative_to(content_dir).as_posix()
             line = text.count('\n', 0, m.start()) + 1
             am = AS_ATTR_RE.search(attrs or '')
-            blocks.setdefault(key, (inner.strip(), preamble,
-                                    _block_name(page, line, inner, am.group(1) if am else None)))
+            bname = _block_name(page, line, inner, am.group(1) if am else None)
+            if not add_part(attrs, page, m.start(), key, inner.strip(), preamble, bname):
+                blocks.setdefault(key, (inner.strip(), preamble, bname))
             block_pages.setdefault(key, page)
             cm = COLOR_MAP_ATTR_RE.search(attrs or '')
             if cm:
@@ -151,23 +182,32 @@ def scan_content(content_dir: Path, preamble_dir: Path, demos_dir: Path | None):
             if not fm:
                 continue
             name = fm.group(1)
-            if demos_dir is None:
+            if not demos_dirs:
                 sys.exit(f'ERROR: {path.name} references file="{name}" but --demos-dir is not set')
-            src = demos_dir / name
-            if not src.exists():
-                sys.exit(f'ERROR: file="{name}" not found at {src}')
+            src = next((d / name for d in demos_dirs if (d / name).is_file()), None)
+            if src is None:
+                sys.exit(f'ERROR: file="{name}" not found in ' + ', '.join(map(str, demos_dirs)))
             content = src.read_text(encoding='utf-8')
             pm = PREAMBLE_ATTR_RE.search(attrs or '')
-            preamble = _resolve_preamble(pm.group(1), preamble_dir) if pm else demos_preamble
-            key = content_key(content.strip(), preamble)
-            blocks.setdefault(key, (content.strip(), preamble, name))
-            files_map[name] = key
-            block_pages.setdefault(key, path.relative_to(content_dir).as_posix())
+            preamble = _resolve_preamble(pm.group(1), preamble_dir) if pm else demos_preamble(src.parent)
+            ref_files.add(name)
+            page = path.relative_to(content_dir).as_posix()
+            bm = BATCH_ATTR_RE.search(attrs or '')
+            if bm:
+                # A file in a batch is looked up as "batch/name" (shortcode).
+                key = batch_key(content.strip(), preamble, bm.group(1))
+                add_part(attrs, page, m.start(), key, content.strip(), preamble, name)
+                files_map[f'{bm.group(1)}/{name}'] = key
+            else:
+                key = content_key(content.strip(), preamble)
+                blocks.setdefault(key, (content.strip(), preamble, name))
+                files_map[name] = key
+            block_pages.setdefault(key, page)
             cm = COLOR_MAP_ATTR_RE.search(attrs or '')
             if cm:
                 color_map_names.add(cm.group(1))
 
-    return blocks, files_map, block_pages, color_map_names
+    return blocks, files_map, block_pages, color_map_names, batches, ref_files
 
 
 def _resolve_color_maps(names: set[str], color_map_dir: Path) -> dict:
@@ -200,9 +240,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('site', nargs='?', type=Path, default=Path('.'), help='Hugo site root')
-    ap.add_argument('--demos-dir', type=Path, default=None,
-                    help='directory that file="…" references resolve against '
-                         '(default: <site>/latex-src if it exists)')
+    ap.add_argument('--demos-dir', type=Path, action='append', default=None,
+                    help='directory that file="…" references resolve against; '
+                         'repeatable, searched in order (default: <site>/latex-src '
+                         'if it exists). A referenced file may be a snippet or a '
+                         'complete document (\\documentclass … \\end{document})')
     ap.add_argument('--force', action='store_true', help='recompile all blocks')
     ap.add_argument('--prune', action='store_true', help='drop data/build entries no longer in content')
     ap.add_argument('-j', '--jobs', type=int, default=4, help='blocks to compile in parallel')
@@ -220,9 +262,9 @@ def main() -> None:
     local_fonts    = site / 'latex-fonts'
     build_root     = site / '.reflowtex-build'
 
-    demos_dir = args.demos_dir.resolve() if args.demos_dir else None
-    if demos_dir is None and (site / 'latex-src').is_dir():
-        demos_dir = site / 'latex-src'
+    demos_dirs = [d.resolve() for d in args.demos_dir or []]
+    if not demos_dirs and (site / 'latex-src').is_dir():
+        demos_dirs = [site / 'latex-src']
 
     if not content_dir.is_dir():
         sys.exit(f'error: {content_dir} not found — is {site} a Hugo site?')
@@ -243,17 +285,30 @@ def main() -> None:
     shutil.copy(viewer_script(), static / 'latex-viewer.js')
     shutil.copy(REFLOWTEX_ROOT / 'src' / 'viewer' / 'protobuf.min.js', static / 'protobuf.min.js')
 
-    blocks, files_map, block_pages, color_map_names = scan_content(
-        content_dir, preamble_dir, demos_dir)
+    blocks, files_map, block_pages, color_map_names, batches, ref_files = scan_content(
+        content_dir, preamble_dir, demos_dirs)
     # The path→key map lets the shortcode resolve file="…" without reading the
     # source itself. Always (re)write it, even if empty, so a removed ref clears.
     files_file.write_text(json.dumps(files_map, indent=2, sort_keys=True))
-    # Same idea for colour maps: only the ones actually referenced by a
-    # color-map="…" attribute are read from <site>/latex-color-maps/ and
-    # embedded, so an unused or removed map doesn't linger in the output.
+    # The source text of every file ref, for show-source="true" (the shortcode
+    # prints the LaTeX under the rendered block and cannot read --demos-dir).
+    sources = {}
+    for name in sorted(ref_files):
+        src = next((d / name for d in demos_dirs if (d / name).is_file()), None)
+        if src:
+            sources[name] = src.read_text(encoding='utf-8')
+    (site / 'data' / 'latex_sources.json').write_text(
+        json.dumps(sources, indent=2, sort_keys=True))
+    # Colour maps: every map in <site>/latex-color-maps/ is embedded, not only
+    # those a color-map="…" attribute names, because a site can make one the
+    # default for every block (params.latexColorMap, read by the shortcode —
+    # which prebuild cannot see). A referenced map that does not exist is
+    # still an error. Maps are small; an unused one costs a few hundred bytes.
+    if color_map_dir.is_dir():
+        color_map_names |= {f.stem for f in color_map_dir.glob('*.json')}
     color_maps_file.write_text(json.dumps(
         _resolve_color_maps(color_map_names, color_map_dir), indent=2, sort_keys=True))
-    if not blocks:
+    if not blocks and not batches:
         print('No {{< latex >}} blocks found.')
         return
 
@@ -263,7 +318,10 @@ def main() -> None:
         if not args.force and out.exists() and json.loads(out.read_text()).get('content_hash') == key:
             print(f'  {name} ({key}): up to date')
             continue
-        stale.append((key, content, preamble, name))
+        # A block that refers to its own labels needs the .aux round trip, or
+        # every \ref prints "??": one more pass (cheap, and only for these).
+        passes = 2 if REF_RE.search(content) else 1
+        stale.append((key, content, preamble, name, passes))
 
     if stale:
         print(f'reflowtex: compiling {len(stale)} block(s)…')
@@ -272,6 +330,39 @@ def main() -> None:
             (data_dir / f'{key}.json').write_text(json.dumps(
                 {'nodelist_b64': base64.b64encode(blob).decode(), 'content_hash': key}, indent=2))
             print(f'  {blocks[key][2]} ({key}): done ({len(blob)} bytes)')
+
+    # Batches: all blocks with the same batch="…", in weight order (then page
+    # and position), compiled as one document and cut back into one bundle
+    # per block (Pipeline.compile_batch). A part's data records the hash of
+    # the whole batch, so changing, adding or reordering any part recompiles
+    # the batch.
+    import hashlib
+    live_batches = set()
+    for bname, parts in sorted(batches.items()):
+        parts.sort(key=lambda p: (p[0], p[1]))
+        preambles = {p[4] for p in parts}
+        if len(preambles) > 1:
+            sys.exit(f'ERROR: the blocks of batch "{bname}" use different preambles; '
+                     f'give them all the same preamble="…"')
+        preamble = preambles.pop()
+        bhash = hashlib.sha256(json.dumps([bname, preamble, [(p[0], p[2]) for p in parts]])
+                               .encode()).hexdigest()[:16]
+        live_batches.add(bhash)
+        fresh = not args.force and all(
+            (data_dir / f'{p[2]}.json').exists()
+            and json.loads((data_dir / f'{p[2]}.json').read_text()).get('content_hash') == bhash
+            for p in parts)
+        if fresh:
+            print(f'  batch "{bname}" ({len(parts)} part(s)): up to date')
+            continue
+        passes = 2 if any(REF_RE.search(p[3]) for p in parts) else 1
+        print(f'reflowtex: compiling batch "{bname}" ({len(parts)} part(s), {passes} pass(es))…')
+        blobs = pipe.compile_batch([(p[2], p[3], p[5]) for p in parts], preamble,
+                                   key=bhash, passes=passes, name=f'batch "{bname}"')
+        for key, blob in blobs.items():
+            (data_dir / f'{key}.json').write_text(json.dumps(
+                {'nodelist_b64': base64.b64encode(blob).decode(), 'content_hash': bhash}, indent=2))
+        print(f'  batch "{bname}": done ({", ".join(f"{len(b)} bytes" for b in blobs.values())})')
 
     print('font-patch:')
     pipe.patch_fonts()
@@ -299,7 +390,8 @@ def main() -> None:
 
     if args.prune:
         print('prune:')
-        prune_stale(data_dir, build_root, set(blocks.keys()))
+        prune_stale(data_dir, build_root, set(blocks.keys())
+                    | {p[2] for parts in batches.values() for p in parts} | live_batches)
 
 
 if __name__ == '__main__':

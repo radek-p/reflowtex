@@ -25,6 +25,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
+import os
 import shutil
 import subprocess
 import sys
@@ -33,6 +35,7 @@ from pathlib import Path
 
 SRC_ROOT     = Path(__file__).resolve().parent.parent      # reflowtex/src
 EXTRACT_DIR  = SRC_ROOT / 'extract'
+LATEX_DIR    = SRC_ROOT / 'latex'       # the companion package, reflowtex.sty
 SCHEMA_DIR   = SRC_ROOT / 'schema'
 ENCODE_DIR   = SRC_ROOT / 'encode'
 
@@ -78,6 +81,26 @@ def viewer_script() -> Path:
         print('  viewer: latex-viewer.min.js is stale (source changed since it was '
               'generated) — shipping the unminified source; run `make minify-viewer`')
     return src
+
+
+_DOCCLASS_RE   = re.compile(r'^[ \t]*\\documentclass\b[^\n]*$', re.M)
+_BEGIN_DOC_RE  = re.compile(r'^[ \t]*\\begin\{document\}[^\n]*\n?', re.M)
+_END_DOC_RE    = re.compile(r'^[ \t]*\\end\{document\}', re.M)
+TEMPLATE_CLASS_RE = re.compile(r'^\\documentclass\b[^\n]*$', re.M)
+
+
+def split_document(tex: str):
+    """(class line, preamble, body) of a complete LaTeX document, or None for
+    a snippet. The class line may carry options ([draft]{article}); anything
+    before it (comments, \\RequirePackage) is dropped, and anything after
+    \\end{document} is ignored, as LaTeX ignores it."""
+    m_class = _DOCCLASS_RE.search(tex)
+    m_begin = _BEGIN_DOC_RE.search(tex)
+    m_end = _END_DOC_RE.search(tex)
+    if not (m_class and m_begin and m_end and m_class.start() < m_begin.start() < m_end.start()):
+        return None
+    return (m_class.group(0).strip(), tex[m_class.end():m_begin.start()],
+            tex[m_begin.end():m_end.start()])
 
 
 def content_key(content: str, preamble: str = '') -> str:
@@ -139,7 +162,55 @@ class Pipeline:
     # ── one snippet ─────────────────────────────────────────────────────────────
     def compile(self, content: str, preamble: str = '', key: str | None = None,
                 passes: int = 1, name: str | None = None) -> bytes:
-        """Compile one snippet → protobuf blob (bytes). Also writes build/<key>/
+        """Compile one snippet → protobuf blob (bytes); see _compile_data."""
+        import encode_pb
+        data, build_dir, _ = self._compile_data(content, preamble, key, passes, name)
+        blob = encode_pb.build_document(data).SerializeToString()
+        (build_dir / 'nodelist.pb').write_bytes(blob)
+        return blob
+
+    def compile_batch(self, parts: list[tuple], preamble: str = '', key: str | None = None,
+                      passes: int = 1, name: str | None = None) -> dict[str, bytes]:
+        """Compile several snippets as ONE document — the chapters of a book,
+        say, published on separate pages — and return one blob per part:
+        {part key: bytes}. `parts` is [(part key, content[, name]), …] in
+        document order. Because it is one LaTeX run, numbering, counters,
+        macros defined along the way and cross-references between the parts
+        all come out as in the whole document.
+
+        The parts are joined with a marker (\\reflowtexbatchpart, template.tex)
+        that makes everything typeset after it a stream of its own, without
+        opening a group, so a definition in one part is visible in the next.
+        The finished document is then cut into one document per part, each
+        keeping only the paragraphs, streams, pictures and anchors it uses
+        (transforms.batch_parts). Each part's data is also written to
+        build/<part key>/, like a block of its own."""
+        import encode_pb
+        import transforms
+        joined = '\n'.join(f'\\reflowtexbatchpart{{{i}}}\n{p[1]}' for i, p in enumerate(parts, 1))
+        for p in parts:
+            if split_document(p[1]):
+                sys.exit(f'ERROR: batch {name or key}: part {p[0]} is a complete document; '
+                         f'a batch is made of parts, and a named preamble holds the setup')
+        key = key or content_key(joined, preamble)
+        data, _, label = self._compile_data(joined, preamble, key, passes, name)
+        split = transforms.batch_parts(data)
+        if len(split) != len(parts):
+            sys.exit(f'ERROR: batch {label}: expected {len(parts)} part(s), found {len(split)}')
+        blobs = {}
+        for (pkey, *_), part in zip(parts, split):
+            pdir = self.build_root / pkey
+            pdir.mkdir(parents=True, exist_ok=True)
+            (pdir / 'output.json').write_text(json.dumps(part))
+            blob = encode_pb.build_document(part).SerializeToString()
+            (pdir / 'nodelist.pb').write_bytes(blob)
+            blobs[pkey] = blob
+        return blobs
+
+    def _compile_data(self, content: str, preamble: str = '', key: str | None = None,
+                      passes: int = 1, name: str | None = None):
+        """Compile one snippet → (the transformed data, its build dir, its
+        label). Also writes build/<key>/
         (input.tex, output.json, nodelist.pb) and provisions its fonts.
 
         `name` is how the caller knows the snippet — a filename, a page and line —
@@ -151,7 +222,6 @@ class Pipeline:
         trip resolves \\ref/\\pageref/\\cite (a self-contained snippet needs only
         one; a document with cross-references needs two or three)."""
         import transforms
-        import encode_pb
 
         key = key or content_key(content, preamble)
         label = f'{name} ({key})' if name else key
@@ -163,6 +233,27 @@ class Pipeline:
         (build_dir / 'pics').mkdir(exist_ok=True)
 
         template_text = self.template.read_text()
+        # A complete document (\documentclass … \end{document}) rather than
+        # a snippet: its class replaces the template's, its preamble becomes
+        # the preamble (a caller's preamble, if any, follows it), and its
+        # body the content. So a paper compiles as it is, with no splitting
+        # by hand.
+        doc = split_document(content)
+        if doc:
+            class_line, doc_preamble, content = doc
+            template_text, n = TEMPLATE_CLASS_RE.subn(lambda m: class_line, template_text, count=1)
+            if not n:
+                sys.exit(f'ERROR: template {self.template} has no \\documentclass line '
+                         f'for the complete document {label} to replace')
+            preamble = doc_preamble + ('\n' + preamble if preamble else '')
+        else:
+            # A preamble may bring its own class (\documentclass{book} for a
+            # book's chapters): it replaces the template's, as a complete
+            # document's does.
+            m = _DOCCLASS_RE.search(preamble)
+            if m:
+                template_text = TEMPLATE_CLASS_RE.sub(lambda _: m.group(0).strip(), template_text, count=1)
+                preamble = preamble[:m.start()] + preamble[m.end():]
 
         def write_input(width_extra_sp: int) -> None:
             tex = (template_text
@@ -251,22 +342,52 @@ class Pipeline:
             if n_pictures:  bits.append(f'converted {n_pictures} picture(s)')
             print(f'  {label}: ' + ', '.join(bits))
 
-        blob = encode_pb.build_document(data).SerializeToString()
-        (build_dir / 'nodelist.pb').write_bytes(blob)
-        return blob
+        return data, build_dir, label
 
     def _run_lualatex(self, build_dir: Path, label: str, passes: int = 1) -> None:
-        # TikZ capture itself no longer invokes a sub-run. Keep shell escape for
-        # compatibility with caller preambles that already relied on it. Repeated
-        # passes reuse the build dir's .aux, so references resolve; the last
-        # pass's output.json wins.
+        # Shell escape is off, deliberately. TikZ capture no longer invokes a
+        # sub-run, so nothing in the pipeline needs it — and what this compiles is
+        # LaTeX the caller did not necessarily write: a corpus of published
+        # papers, contributed Markdown a site generator walks, a CI job building
+        # submitted content. With shell escape on, a `\write18{...}` or a
+        # `\directlua{os.execute(...)}` anywhere in a snippet or its preamble runs
+        # arbitrary commands as the build user. That turns "render this author's
+        # maths" into remote code execution.
+        #
+        # `-no-shell-escape` is passed explicitly rather than left to TeX Live's
+        # default, because that default is `restricted`, not off: it still
+        # executes a whitelist of helper programs (`latexminted`, `texosquery`,
+        # `repstopdf`, ...) with arguments the document chooses.
+        #
+        # This does not make compiling untrusted LaTeX safe, only less unsafe.
+        # TeX Live ships `openin_any = a`, so a document can still read any file
+        # the build user can read and typeset it — and this pipeline's whole
+        # purpose is to serialize what was typeset into a blob that ships to a
+        # browser. Compile input you do not trust in a container without network
+        # access; see docs/security.md.
+        #
+        # A caller that really does need shell escape — a preamble built around
+        # minted or gnuplottex, over snippets it wrote itself — can set
+        # REFLOWTEX_SHELL_ESCAPE=1. Doing so asserts that every snippet compiled
+        # in that run is trusted.
+        #
+        # Repeated passes reuse the build dir's .aux, so references resolve; the
+        # last pass's output.json wins.
+        shell_escape = ('-shell-escape' if os.environ.get('REFLOWTEX_SHELL_ESCAPE') == '1'
+                        else '-no-shell-escape')
+        # The companion package (src/latex/reflowtex.sty) is reachable through
+        # TEXINPUTS, so a snippet can \usepackage{reflowtex} without the package
+        # being installed into a TeX tree. The trailing separator keeps the
+        # standard search path behind it; a TEXINPUTS the caller set is kept.
+        env = dict(os.environ)
+        env['TEXINPUTS'] = f"{LATEX_DIR}{os.pathsep}{env.get('TEXINPUTS', '')}"
         output_json = build_dir / 'output.json'
         output_json.unlink(missing_ok=True)
         result = None
         for _ in range(max(1, passes)):
             result = subprocess.run(
-                ['lualatex', '-shell-escape', '-interaction=nonstopmode', 'input.tex'],
-                cwd=build_dir, capture_output=True, text=True)
+                ['lualatex', shell_escape, '-interaction=nonstopmode', 'input.tex'],
+                cwd=build_dir, capture_output=True, text=True, env=env)
         log = build_dir / 'input.log'
         if not output_json.exists():
             detail = log.read_text() if log.exists() else result.stdout + result.stderr
@@ -287,9 +408,10 @@ class Pipeline:
 
     # ── batch helpers ───────────────────────────────────────────────────────────
     def compile_many(self, snippets: list[tuple], jobs: int = 1) -> dict[str, bytes]:
-        """Compile [(key, content, preamble[, name]), …] across a thread pool
-        (lualatex releases the GIL). Returns {key: blob}. Raises on the first
-        failure. `name` labels the snippet in output (see compile)."""
+        """Compile [(key, content, preamble[, name[, passes]]), …] across a
+        thread pool (lualatex releases the GIL). Returns {key: blob}. Raises on
+        the first failure. `name` labels the snippet in output and `passes` is
+        as for compile (default 1)."""
         if not snippets:
             return {}
         jobs = max(1, min(jobs, len(snippets)))
@@ -297,7 +419,9 @@ class Pipeline:
 
         def one(job):
             key, content, preamble, *rest = job
-            return key, self.compile(content, preamble, key=key, name=rest[0] if rest else None)
+            return key, self.compile(content, preamble, key=key,
+                                     name=rest[0] if rest else None,
+                                     passes=rest[1] if len(rest) > 1 else 1)
 
         if jobs > 1:
             # Warm the shared luaotfload font cache with one block before fanning

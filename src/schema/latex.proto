@@ -78,9 +78,11 @@ message Node {
   // and referenced here instead of stored inline. Only glyphs use this.
   optional uint32   metrics       = 32;
 
-  // glyph: unique footnote id. The matching body is stored separately in
-  // Document.footnotes and shown by the browser as a tooltip/popover.
-  optional uint32   footnote      = 33;
+  // glyph: 1-based index into Document.streams of a stream this glyph refers
+  // to. A footnote marker points at its body this way, and the browser shows
+  // it as a popover; the stream's `kind` says what it is. (See Stream below;
+  // field 33 was the footnote id before streams.) Declared at the end.
+  reserved 33;
 
   // Per-scaled-point derivatives recovered from several wide compilations.
   // Only fields which actually vary are present. The viewer evaluates them at
@@ -111,6 +113,7 @@ message Node {
   // hlist: an empty, zero-sized box marking where a \label stood — a 1-based
   // index into Document.anchors. The box is ordinary in every other respect.
   optional uint32 anchor = 51;
+  optional uint32 stream = 52;
 }
 
 // What one link points at. Exactly one field is set: `label` for a cross
@@ -118,8 +121,14 @@ message Node {
 // URL — see Document.links), `url` for a destination the author wrote out in
 // full, which needs no resolving.
 message Link {
-  optional string label = 1;
-  optional string url   = 2;
+  optional string label  = 1;
+  optional string url    = 2;
+  // Not a destination but a control: the glyphs trigger this action in the
+  // page (\reflowtexaction in reflowtex.sty — "pane:next" for an accordion's
+  // \expandlink). The viewer sends it as a bubbling `reflowtex:action` DOM
+  // event from the glyph, and whichever enclosing stream kind understands it
+  // handles it.
+  optional string action = 3;
 }
 
 // One distinct glyph box (width/height/depth in sp), referenced by Node.metrics.
@@ -202,6 +211,10 @@ enum ItemKind {
   // A \label that stood between two items rather than inside one — the usual
   // case, since \label follows a sectioning command in vertical mode.
   anchorpoint = 3;
+  // A separately typeset stream embedded at this point of the flow: what
+  // \begin{reflowtexstream}{kind} wraps. Its content is
+  // Document.streams[ContentItem.stream - 1].
+  stream = 4;
 }
 
 message ContentItem {
@@ -259,11 +272,35 @@ message ContentItem {
 
   // anchorpoint: 1-based index into Document.anchors.
   optional uint32 anchor = 12;
+  // stream: 1-based index into Document.streams.
+  optional uint32 stream = 13;
 }
 
-message Footnote {
-  optional uint32      id      = 1;
+// A separately typeset run of content — its own paragraphs, displays and
+// vertical space, over the document's shared paragraph and font tables —
+// referenced from wherever it belongs: a glyph (Node.stream: a footnote
+// marker pointing at its body) or a content item (ContentItem.stream: a block
+// the author wrapped in \begin{reflowtexstream}{kind}). One mechanism serves
+// footnotes, collapsible sections, framed boxes, table cells and popovers:
+// the producer names the kind, the viewer decides how a kind is shown (see
+// src/viewer/README.md, "Streams"). Streams nest: a stream's content may
+// itself hold stream items.
+message Stream {
+  optional string      kind    = 1;  // "footnote", or the kind the author gave
   repeated ContentItem content = 2;
+  // Parameters the author gave the stream,
+  // \begin{reflowtexstream}[initial=collapsed]{accordion}. The viewer puts
+  // each on the stream's element as data-KEY and hands them to the kind.
+  repeated StreamAttr  attrs   = 3;
+  // Text the stream carries as text rather than typeset, for its kind to show
+  // itself: the source of a \\begin{lean} block (reflowtex.sty), drawn by the
+  // viewer as highlighted code.
+  optional string      text    = 4;
+}
+
+message StreamAttr {
+  optional string key   = 1;
+  optional string value = 2;
 }
 
 message Document {
@@ -272,7 +309,7 @@ message Document {
   repeated ContentItem  content       = 3;
   repeated Picture      pictures      = 4;
   repeated GlyphMetrics glyph_metrics = 5;  // interned glyph boxes; see Node.metrics
-  repeated Footnote     footnotes      = 6;
+  reserved 6;                          // was: repeated Footnote footnotes
   // Width at which the stored display geometry was compiled. `display_model`
   // says that rate fields were verified against a stable three-sample window.
   optional int32        source_width   = 7;
@@ -285,4 +322,17 @@ message Document {
   reserved 9;                          // was: repeated string links
   repeated string       anchors        = 10;
   repeated Link         links          = 11;
+  repeated Stream       streams        = 12;
+  // The document's outline, in order: sections and subsections, and
+  // theorem-like environments, each with the anchor marking its place.
+  repeated OutlineEntry outline        = 13;
+}
+
+message OutlineEntry {
+  optional string kind   = 1;  // section, subsection, subsubsection, or theorem
+  optional string env    = 2;  // theorem: the environment's name (thm, lem, …)
+  optional uint32 level  = 3;  // 1 section, 2 subsection, 3 subsubsection, 9 theorem
+  optional string number = 4;  // as printed: "3.1"; may be empty
+  optional string title  = 5;  // plain text: "Enumeration of …", "Theorem (Main)"
+  optional uint32 anchor = 6;  // 1-based index into Document.anchors
 }

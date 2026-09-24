@@ -9,7 +9,7 @@ presence is preserved by only setting keys that exist in the source dict.
 
 Usage: python3 encode_pb.py <output.json> <nodelist.pb>
 """
-import json, sys
+import json, re, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import latex_pb2 as L
@@ -55,11 +55,34 @@ def intern_glyph_metrics(doc: dict) -> None:
     for it in doc.get('content', []):
         if it.get('box'):
             walk([it['box']])
-    for footnote in doc.get('footnotes', []):
-        for it in footnote.get('content', []):
+    for stream in doc.get('streams', []):
+        for it in stream.get('content', []):
             if it.get('box'):
                 walk([it['box']])
     doc['glyph_metrics'] = table
+
+
+# A handful of commands that stand for text, for outline titles.
+_TEXT_COMMANDS = {
+    'ldots': '…', 'dots': '…', 'TeX': 'TeX', 'LaTeX': 'LaTeX', 'AmS': 'AMS',
+    'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'delta': 'δ', 'epsilon': 'ε',
+    'lambda': 'λ', 'mu': 'μ', 'pi': 'π', 'sigma': 'σ', 'phi': 'φ', 'omega': 'ω',
+    'Gamma': 'Γ', 'Delta': 'Δ', 'Lambda': 'Λ', 'Sigma': 'Σ', 'Phi': 'Φ', 'Omega': 'Ω',
+    'infty': '∞', 'times': '×', 'le': '≤', 'ge': '≥', 'to': '→', 'S': '§',
+}
+
+
+def tex_to_text(s: str) -> str:
+    """Plain text from a title as TeX source (detokenized): known symbol
+    commands become their character, every other command is dropped (its
+    braced argument kept), and braces, $ and ties go. Good enough for a table
+    of contents; the typeset heading is what the reader sees in the text."""
+    s = s.replace('---', '—').replace('--', '–').replace('~', ' ')
+    s = s.replace('``', '“').replace("''", '”').replace('`', '‘').replace("'", '’')
+    s = re.sub(r'\\([A-Za-z]+)\s*', lambda m: _TEXT_COMMANDS.get(m.group(1), ''), s)
+    s = re.sub(r'\\(.)', r'\1', s)            # \{ \% \& …
+    s = s.replace('{', '').replace('}', '').replace('$', '')
+    return re.sub(r'\s+', ' ', s).strip()
 
 
 def fill(msg, d: dict) -> None:
@@ -105,7 +128,10 @@ def build_document(data: dict) -> L.Document:
         'paragraphs': data.get('paragraphs', []),
         'content': data.get('content', []),
         'pictures': data.get('pictures', []),
-        'footnotes': data.get('footnotes', []),
+        'streams': data.get('streams', []),
+        'outline': [dict(e, title=tex_to_text(e.get('title', '')),
+                         number=tex_to_text(e.get('number', '')))
+                    for e in data.get('outline', [])],
         'source_width': data.get('source_width'),
         'display_model': data.get('display_model'),
         # Lua writes an empty table as [], so these are always lists.

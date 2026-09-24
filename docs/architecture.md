@@ -46,10 +46,19 @@ ordinary content never reaches the page-height threshold, without inheriting
 TeX's finite dimension limit; explicit `\newpage` commands can still ship a
 page, but do not split the retained stream.
 
-Footnote insertions are collected into separate content streams. Their in-text
-markers carry matching ids, allowing the viewer to reflow the fully typeset
-footnote (including mathematics and citations) inside an accessible hover/focus
-popover instead of assigning it an artificial location in the pageless flow.
+Some content is typeset in the document but belongs somewhere other than the
+main flow, so it is collected into separate *streams* (`Document.streams`),
+each with a kind. A footnote's insertion becomes a `footnote` stream. Its
+in-text marker points at it, so the viewer can reflow the fully typeset
+footnote (mathematics and citations included) in an accessible hover/focus
+popover, rather than give it an artificial place in the pageless flow. The
+companion package's `\begin{reflowtexstream}{kind}` (src/latex/reflowtex.sty)
+stamps everything typeset inside it with LuaTeX attribute 911. The walk sends
+those items to a stream of that kind and leaves a `stream` item in the parent
+flow where the block stood. Streams nest. The viewer mounts each one in its own
+element, and page CSS and JavaScript decide per kind what it looks like and
+does: an accordion of panes, framed notes, and so on. `\reflowtexaction` adds in-text controls: link glyphs whose `Link.action` the viewer sends to the enclosing streams as a DOM event. See the Streams section of
+[src/viewer/README.md](../src/viewer/README.md).
 
 Display-bearing snippets are sampled at additive widths
 `W`, `W + 128pt`, `W + 256pt`, …. The pipeline matches the complete finished

@@ -123,12 +123,17 @@ directory is a thin shell that drives `src/` for a particular site generator.
 See [docs/architecture.md](docs/architecture.md) for the why, and
 [docs/binary-format.md](docs/binary-format.md) for the wire format.
 
+The build step compiles LaTeX, which is a programming language — if the
+snippets come from anywhere but you, read
+[docs/security.md](docs/security.md) first. Shell escape is off by default.
+
 ## Repository layout
 
 | Path | What it is |
 |---|---|
 | [`src/extract/`](src/extract/) | LuaTeX serializer + the wrapper template (LaTeX → `output.json`) |
 | [`src/schema/latex.proto`](src/schema/latex.proto) | the node-list schema — the single source of truth |
+| [`src/latex/`](src/latex/) | `reflowtex.sty`, the companion package for documents written for the web (accordions of collapsible panes, web-only text, streams) |
 | [`src/encode/`](src/encode/) | the build pipeline: transforms, protobuf encoder, font handling |
 | [`src/viewer/`](src/viewer/) | the browser renderer (`latex-viewer.js`) + vendored `protobuf.min.js` |
 | [`integrations/vanilla/`](integrations/vanilla/) | reference integration: `.tex` snippets → a static site |
@@ -138,7 +143,7 @@ See [docs/architecture.md](docs/architecture.md) for the why, and
 | [`examples/testmath/`](examples/testmath/) | AMS' `testmath.tex` rendered with classic CM fonts (`make testmath-demo`) |
 | [`tests/linebreak/`](tests/linebreak/) | paragraph-breaking fixtures: captures TeX's exact breaks for byte-for-byte comparison |
 | [`website/`](website/) | the project site; built in CI inside the container and deployed to GitHub Pages |
-| [`docs/`](docs/) | architecture and format notes |
+| [`docs/`](docs/) | architecture, wire format, and [security notes](docs/security.md) |
 
 ## Using it in a project
 

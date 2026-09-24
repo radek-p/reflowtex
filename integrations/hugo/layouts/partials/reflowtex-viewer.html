@@ -123,7 +123,8 @@
   }
   .latex-block svg .latex-link.latex-link-hover {
     fill: var(--latex-link-hover, #1a4d85) !important;
-    text-decoration: underline;
+    /* The underline is drawn by the viewer, one line under the whole
+       reference (per line when it breaks), not per glyph as CSS would. */
   }
   .latex-block svg .latex-link.latex-link-active {
     fill: var(--latex-link-active, #c2410c) !important;
@@ -132,6 +133,24 @@
   /* Scroll destination for a \label. Zero height so it takes part in nothing;
      give it scroll-margin-top if the page has a sticky header. */
   .latex-anchor { height: 0; overflow: hidden; }
+
+  /* ── Examples (show-source="true") ──────────────────────────────────────
+     The behaviour only; a site styles the frame. Side by side when the
+     figure is wide enough (a container query: the figure's width, not the
+     window's), otherwise one pane at a time behind the Result / LaTeX tabs.
+     A hidden preview is display:none, which the viewer handles: it keeps
+     its layout and re-lays out when shown. */
+  figure.latex-example { container-type: inline-size; margin-inline: 0; }
+  figure.latex-example:not([data-tab="source"]) .latex-example-source { display: none; }
+  figure.latex-example[data-tab="source"] .latex-example-preview { display: none; }
+  .latex-example-tabs { display: flex; }
+  @container (min-width: 52rem) {
+    .latex-example-body, .latex-example-tabs {
+      display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+    .latex-example-body > .latex-example-preview,
+    .latex-example-body > .latex-example-source { display: block !important; }
+    .latex-example-tabs [role="tab"] { pointer-events: none; }
+  }
 
   .latex-block--missing {
     border: 2px dashed #c00; padding: 0.75em 1em; color: #c00;
@@ -154,5 +173,37 @@
   <a href="{{ site.Params.reflowtexSource | default "https://github.com/radek-p/reflowtex" }}">Source code</a>.
 </footer>
 
+{{/* Example tabs and theme previews (show-source="true", themes="…"):
+     delegated listeners. A theme button scopes that theme to its example's
+     Result panel; until one is pressed, the button of the page's theme is
+     marked. */}}
+<script>
+  document.addEventListener('click', function (e) {
+    var choice = e.target.closest && e.target.closest('[data-latex-theme-choice]');
+    if (choice) {
+      var panel = choice.closest('.latex-example-preview');
+      panel.setAttribute('data-latex-theme', choice.getAttribute('data-latex-theme-choice'));
+      panel.querySelectorAll('[data-latex-theme-choice]').forEach(function (b) {
+        b.setAttribute('aria-pressed', b === choice ? 'true' : 'false');
+      });
+      return;
+    }
+    var tab = e.target.closest && e.target.closest('.latex-example-tabs [data-tab]');
+    if (!tab) return;
+    var fig = tab.closest('figure.latex-example');
+    fig.setAttribute('data-tab', tab.getAttribute('data-tab'));
+    fig.querySelectorAll('.latex-example-tabs [data-tab]').forEach(function (b) {
+      b.setAttribute('aria-selected', b === tab ? 'true' : 'false');
+    });
+  });
+  document.addEventListener('DOMContentLoaded', function () {
+    var cls = document.documentElement.classList;
+    var page = ['dark', 'sepia', 'contrast'].filter(function (t) { return cls.contains(t); })[0] || 'light';
+    document.querySelectorAll('.latex-example-themes').forEach(function (g) {
+      var b = g.querySelector('[data-latex-theme-choice="' + page + '"]');
+      if (b) b.setAttribute('aria-pressed', 'true');
+    });
+  });
+</script>
 <script src="{{ "protobuf.min.js" | relURL }}?v={{ substr (readFile "static/protobuf.min.js" | crypto.MD5) 0 8 }}"></script>
 <script src="{{ "latex-viewer.js" | relURL }}?v={{ substr (readFile "static/latex-viewer.js" | crypto.MD5) 0 8 }}"></script>
