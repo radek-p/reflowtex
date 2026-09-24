@@ -137,6 +137,7 @@ def build_document(data: dict) -> L.Document:
         # Lua writes an empty table as [], so these are always lists.
         'links': data.get('links', []),
         'anchors': data.get('anchors', []),
+        'slots': data.get('slots', []),
     }
     intern_glyph_metrics(doc)
     out = L.Document()

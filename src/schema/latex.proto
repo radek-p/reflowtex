@@ -114,6 +114,22 @@ message Node {
   // index into Document.anchors. The box is ordinary in every other respect.
   optional uint32 anchor = 51;
   optional uint32 stream = 52;
+  // glyph/glue: part of a \webtext slot's default text — a 1-based index into
+  // Document.slots. A page may replace the text from JavaScript (see Slot).
+  optional uint32 slot   = 53;
+}
+
+// A named placeholder in running text (\webtext{name}{default} in
+// reflowtex.sty). TeX typesets the default; a page may replace it with any
+// string, which the viewer then sets as the browser would — words measured in
+// the slot's font, no kerning or ligatures across them, and between words the
+// interword glue of that font, recorded here (\fontdimen2–4, sp), so the
+// paragraph re-breaks around the new text.
+message Slot {
+  optional string name    = 1;
+  optional int32  space   = 2;
+  optional int32  stretch = 3;
+  optional int32  shrink  = 4;
 }
 
 // What one link points at. Exactly one field is set: `label` for a cross
@@ -124,7 +140,7 @@ message Link {
   optional string label  = 1;
   optional string url    = 2;
   // Not a destination but a control: the glyphs trigger this action in the
-  // page (\reflowtexaction in reflowtex.sty — "pane:next" for an accordion's
+  // page (\webaction in reflowtex.sty — "pane:next" for an accordion's
   // \expandlink). The viewer sends it as a bubbling `reflowtex:action` DOM
   // event from the glyph, and whichever enclosing stream kind understands it
   // handles it.
@@ -326,6 +342,7 @@ message Document {
   // The document's outline, in order: sections and subsections, and
   // theorem-like environments, each with the anchor marking its place.
   repeated OutlineEntry outline        = 13;
+  repeated Slot         slots          = 14;
 }
 
 message OutlineEntry {

@@ -18,7 +18,8 @@ PDF.
 | `webonly` / `printonly` | body kept / dropped | dropped / kept |
 | `\begin{reflowtexstream}{kind}` | body becomes a stream of that kind | transparent |
 | `\begin{reflowtexstream}[key=value]{kind}` | parameters become `data-key` on the stream's element | ignored |
-| `\reflowtexaction{action}{text}` | `text` is a control sending `action` to the page | nothing typeset |
+| `\webaction{action}{text}` (or `\reflowtexaction`, its first name) | `text` is a control sending `action` to the page | nothing typeset |
+| `\webtext{name}{default}` | `default`, which a page may replace: `reflowtex.setText(name, text)` | `default` |
 | `accordion[initial=…, print=…]` with `pane[name]`, `collapsedpane`, `expandedpane` | one pane shown at a time | only the `print=` pane (default: the last) |
 | `\panelink{target}{text}`, `\expandlink[text]`, `\collapselink[text]` | switch the enclosing accordion (target: name, number, `next`, `prev`, `first`, `last`) | nothing typeset |
 | `webnote`, `webhint` | a framed note; a hint blurred until clicked | ordinary paragraphs |

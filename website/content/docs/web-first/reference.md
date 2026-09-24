@@ -14,8 +14,12 @@ latexTitle: true
   stream of that kind; parameters become \texttt{data-}\emph{key}, except
   \texttt{class} (CSS classes) and \texttt{--}\emph{name} (a CSS custom
   property); transparent in print.
-\item[\cs{reflowtexaction}\texttt{\{action\}\{text\}}] a control sending
+\item[\cs{webaction}\texttt{\{action\}\{text\}}] a control sending
   \emph{action} as a \texttt{reflowtex:action} event; nothing in print.
+  (\cs{reflowtexaction}, its first name, still works.)
+\item[\cs{webtext}\texttt{\{name\}\{default\}}] text a page may replace:
+  \texttt{reflowtex.setText(name, text)}, or \texttt{null} for the default
+  again; the default in print.
 \item[\texttt{accordion[initial=,print=]}] one \texttt{pane[name]} shown at a
   time; \texttt{collapsedpane} and \texttt{expandedpane} are the panes
   \texttt{collapsed} and \texttt{expanded}.

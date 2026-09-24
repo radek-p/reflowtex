@@ -254,7 +254,7 @@ one is set on the box as `data-KEY="value"` and passed to `mount` as
 `ctx.attrs`. For example, an accordion's box carries `data-initial` and
 `data-print`.
 
-`\reflowtexaction{action}{text}` makes text inside a paragraph a *control*. Its
+`\webaction{action}{text}` makes text inside a paragraph a *control*. Its
 glyphs are grouped like a `\ref` and coloured with the same `.latex-link`
 rules, plus `.latex-action`. They take `role="button"` and one tab stop. A
 click, Enter or Space sends a bubbling DOM event from the glyph:
@@ -307,6 +307,29 @@ Built in:
   re-lays out the whole block at its current width, for any behaviour that
   changes a stream's width.
 - **`footnote`**: shown in the popover from its marker, never in the flow.
+
+## Live text (optional)
+
+`\webtext{name}{default}` (the companion package, `src/latex/reflowtex.sty`)
+marks a run of running text a page may replace. Every glyph and space of the
+default carries the slot's index (`Node.slot` → `Document.slots`, which also
+records the name and the interword glue of the font the default was set in).
+
+```js
+reflowtex.setText('clock', '12:04');   // every \webtext{clock}, in every block
+reflowtex.setText('clock', null);      // TeX's default again
+reflowtex.getText('clock');            // the text last given, or undefined
+```
+
+A given text is set as a browser sets it: split at breakable white space
+(not at a no-break space), each word one node measured with the canvas in the
+default's font and colour, with no kerning, ligatures or font expansion across
+words; between words, the font's interword glue (`\fontdimen2–4`), so the
+line justifies with the rest. The words keep the default's height and depth.
+Changes within one animation frame are applied together, and only the
+segments holding an affected paragraph are laid out and painted again. A text
+set before its block is initialised is applied when the block is. A slot
+inside a box (`\mbox`) is left as its default.
 
 ## Theming (optional)
 

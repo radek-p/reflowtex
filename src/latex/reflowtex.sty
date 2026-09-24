@@ -14,8 +14,11 @@
 %   reflowtexstream[attrs]{kind}     primitive: everything inside is typeset as
 %                                    its own *stream*, of a kind the browser
 %                                    renders by, with key=value parameters
-%   \reflowtexaction{action}{text}   primitive: text the reader clicks to
+%   \webaction{action}{text}         primitive: text the reader clicks to
 %                                    trigger an action in the page
+%                                    (also \reflowtexaction, its first name)
+%   \webtext{name}{default}          a placeholder in running text whose
+%                                    words a page may replace from JavaScript
 %   accordion / pane                 built from the two: a block showing one
 %                                    of several panes, switched by links in them
 %   webnote, webhint                 a framed note; a hint blurred until clicked
@@ -105,8 +108,37 @@
   \NewDocumentEnvironment{reflowtexstream}{O{} m}{\par}{\par}
 \fi
 
+% ── A placeholder: \webtext ──────────────────────────────────────────────────
+% \webtext{name}{default}
+%
+% On the web, `default` is typeset as usual, and a page script may replace it
+% at any time: reflowtex.setText('name', '12:04'). The new text is set the way
+% a browser sets text — in the font the default was set in, word by word, with
+% no kerning or ligatures between words — and between its words stands that
+% font's interword glue, so the paragraph re-breaks around it. Every \webtext
+% of the same name shows the same text; setText('name', null) brings back the
+% default. For a counter, a clock, a value computed in the page.
+%
+% Every glyph and space of `default` carries the slot's id (attribute 913,
+% like a link's 909), so the viewer finds the whole run however the lines
+% break. It must sit in running text, not inside a box such as \mbox.
+%
+% In print `default` is simply typeset.
+\ifreflowtex
+  \ifdefined\reflowtexSlotCount\else\newcount\reflowtexSlotCount\fi
+  \NewDocumentCommand\webtext{m m}{%
+    \leavevmode
+    \global\advance\reflowtexSlotCount by 1
+    \directlua{Serializer.note_slot(\the\reflowtexSlotCount,
+      "\luaescapestring{#1}", \number\fontdimen2\font,
+      \number\fontdimen3\font, \number\fontdimen4\font)}%
+    \begingroup\attribute913=\reflowtexSlotCount\relax #2\endgroup}
+\else
+  \NewDocumentCommand\webtext{m m}{#2}
+\fi
+
 % ── The primitive: an action ────────────────────────────────────────────────
-% \reflowtexaction{action}{text}
+% \webaction{action}{text}
 %
 % On the web, `text` is a control: it is coloured and focusable like a link,
 % and clicking it (or Enter/Space on it) sends `action` to the page as a
@@ -117,16 +149,18 @@
 % one control however the line breaks.
 %
 % In print a control has nothing to do, so neither argument is typeset.
+% \reflowtexaction is the same command under the name it first had.
 \ifreflowtex
-  \NewDocumentCommand\reflowtexaction{m m}{%
+  \NewDocumentCommand\webaction{m m}{%
     \leavevmode
     \global\advance\reflowtexLinkCount by 1
     \directlua{Serializer.note_link_action(\the\reflowtexLinkCount,
       "\luaescapestring{#1}")}%
     \begingroup\attribute909=\reflowtexLinkCount\relax #2\endgroup}
 \else
-  \NewDocumentCommand\reflowtexaction{m m}{\ignorespaces}
+  \NewDocumentCommand\webaction{m m}{\ignorespaces}
 \fi
+\NewCommandCopy\reflowtexaction\webaction
 
 % ── accordion: one of several panes ─────────────────────────────────────────
 % \begin{accordion}[initial=collapsed, print=expanded]
@@ -154,7 +188,7 @@
   initial .store = \reflowtex@acc@initial,
   print   .store = \reflowtex@acc@print,
 }
-\NewDocumentCommand\panelink{m m}{\reflowtexaction{pane:#1}{#2}}
+\NewDocumentCommand\panelink{m m}{\webaction{pane:#1}{#2}}
 \NewDocumentCommand\expandlink{O{See more}}{\panelink{next}{#1}}
 \NewDocumentCommand\collapselink{O{See less}}{\panelink{prev}{#1}}
 \ifreflowtex

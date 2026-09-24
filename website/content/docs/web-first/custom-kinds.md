@@ -29,7 +29,7 @@ stream passes four stages:
   it does, with a few lines of JavaScript.
 \end{enumerate}
 \section*{Actions}
-\verb|\reflowtexaction{|\emph{action}\verb|}{|\emph{text}\verb|}| makes the
+\verb|\webaction{|\emph{action}\verb|}{|\emph{text}\verb|}| makes the
 text a control: clicking it sends \emph{action} to the page as a DOM event
 that bubbles out through the streams around it. The accordion's links are
 actions.
@@ -98,7 +98,7 @@ its links are actions:
 \NewDocumentEnvironment{pane}{O{}}
   {\begin{reflowtexstream}[name=#1]{pane}}
   {\end{reflowtexstream}}
-\NewDocumentCommand\panelink{m m}{\reflowtexaction{pane:#1}{#2}}
+\NewDocumentCommand\panelink{m m}{\webaction{pane:#1}{#2}}
 \NewDocumentCommand\expandlink{O{See more}}{\panelink{next}{#1}}
 ```
 

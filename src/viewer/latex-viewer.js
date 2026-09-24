@@ -593,7 +593,7 @@ const gW = n => n.width  !== undefined ? n.width  : glyphMetrics[n.metrics - 1].
 // codes (LuaTeX's kern_stretch/kern_shrink); one of the two fonts not
 // expanding halves it, as LuaTeX averages the two fonts' limits.
 function glyphExpandScale(fontInfo, n, er) {
-    if (!er) return 1;
+    if (!er || n.text !== undefined) return 1;
     const fi = fontInfo && fontInfo[String(n.font)];
     if (!fi || !fi.expand) return 1;
     const c = fi.codes.get(n.char);
@@ -1296,10 +1296,25 @@ function drawLinkUnderline(key, els) {
     }
 }
 
+// The reference under the pointer, and the one being pressed (data-link keys).
+// Module-level so a repaint can restore them: a reflow while the pointer rests
+// on a reference (a \webtext changing, say) moves its glyphs, may draw them as
+// new elements without the state classes, and leaves the drawn underline where
+// the glyphs were.
+let hot = null, held = null, linkRestoreQueued = false;
+function restoreLinkStates() {
+    if ((!hot && !held) || linkRestoreQueued) return;
+    linkRestoreQueued = true;
+    queueMicrotask(() => {
+        linkRestoreQueued = false;
+        setLinkState(held, 'latex-link-active', true);
+        setLinkState(hot, 'latex-link-hover', true);
+    });
+}
+
 function installLinks() {
     loadLinkMap();
     const linkAt = t => (t && t.closest) ? t.closest('[data-link]') : null;
-    let hot = null, held = null;
 
     document.addEventListener('pointerover', e => {
         const el = linkAt(e.target), key = el?.dataset.link || null;
@@ -1365,7 +1380,7 @@ function installLinks() {
 // Attached once, at element creation, so the reconciler's reuse keeps it.
 function registerLinkGlyph(el, id, cache) {
     const link = cache.links?.[id - 1];
-    // An action (\reflowtexaction) is a control rather than a destination: it
+    // An action (\webaction) is a control rather than a destination: it
     // has no href, is always live, and is announced as a button.
     const action = link && link.action;
     const href = action ? null : linkHref(link);
@@ -1382,6 +1397,149 @@ function registerLinkGlyph(el, id, cache) {
         el.setAttribute('tabindex', '0');
     }
 }
+
+// ── Slots (\webtext) ──────────────────────────────────────────────────────────
+// reflowtex.sty's \webtext{name}{default} leaves a run of glyphs and spaces in a
+// paragraph, each carrying the slot's id (Node.slot → Document.slots). Until a
+// page gives the name a text, TeX's typesetting of the default is shown as is.
+// Once it does — reflowtex.setText(name, text) — the run is replaced by the
+// text set the way a browser sets it: split at breakable white space, each
+// word one glyph-like node measured by the browser in the slot's font (no
+// kerning, ligatures or expansion between words, which the browser's own
+// shaping handles within them), and between words the interword glue of that
+// font as TeX recorded it. The paragraph then re-breaks around the new text,
+// and only the segments holding it are laid out and painted again.
+const slotValues = new Map();          // name → string (absent: the default)
+const slotBlocks = new Set();          // blocks whose document has slots
+let slotMeasure = null;                // a canvas context, made on first use
+let slotScheduled = false;
+
+// The width of `text` in font `fi`, in sp, as the browser draws it.
+function measureSlotText(fi, text) {
+    slotMeasure = slotMeasure || document.createElement('canvas').getContext('2d');
+    slotMeasure.font = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
+    return Math.round(slotMeasure.measureText(text).width / SP_TO_PX);
+}
+
+// The nodes a slot's text becomes. The font and colour are those of the
+// default's first glyph; height and depth the default's own, so replacing a
+// text never moves the line's baseline.
+function slotNodes(fontInfo, slot, id, run, text) {
+    const glyphs = [];
+    const walk = ns => { for (const n of ns) { if (n.type === 'glyph') glyphs.push(n); else if (n.type === 'disc') walk(n.replace || []); } };
+    walk(run);
+    const t = glyphs[0];
+    if (!t) return run;                // nothing to take the font from: keep the default
+    const fi = fontInfo[String(t.font)];
+    if (!fi || fi.unresolved) return run;
+    const height = Math.max(...glyphs.map(gH)), depth = Math.max(...glyphs.map(gD));
+    const spec = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
+    // Measured again once the face has loaded, if it had not yet.
+    if (document.fonts && !document.fonts.check(spec, text)) {
+        document.fonts.load(spec, text).then(() => scheduleSlots(), () => {});
+    }
+    const out = [];
+    // Breakable white space separates words; no-break spaces stay inside one.
+    for (const part of String(text).split(/([^\S\u00A0\u202F]+)/)) {
+        if (!part) continue;
+        if (/^[^\S\u00A0\u202F]+$/.test(part)) {
+            out.push({ type: 'glue', subtype: 13, width: slot.space || 0,
+                       stretch: slot.stretch || 0, shrink: slot.shrink || 0, slot: id });
+        } else {
+            out.push({ type: 'glyph', text: part, font: t.font, color: t.color, slot: id,
+                       width: measureSlotText(fi, part), height, depth });
+        }
+    }
+    return out;
+}
+
+// Rebuild the node list of every paragraph holding a slot from its original
+// list, substituting the runs whose name has a text. Returns the indices of
+// the paragraphs whose list changed.
+function applySlots(fontInfo, doc) {
+    const slots = doc.slots || [];
+    if (!doc.slotParas) {
+        doc.slotParas = [];
+        (doc.paragraphs || []).forEach((para, i) => {
+            if ((para.nodes || []).some(n => n.slot)) doc.slotParas.push({ index: i + 1, para, orig: para.nodes, made: [] });
+        });
+    }
+    useGlyphMetrics(doc.glyph_metrics);
+    const changed = new Set();
+    for (const sp of doc.slotParas) {
+        const orig = sp.orig, out = [], made = [];
+        for (let i = 0; i < orig.length; i++) {
+            const id = orig[i].slot, slot = id && slots[id - 1];
+            const text = slot ? slotValues.get(slot.name) : undefined;
+            if (text === undefined) { out.push(orig[i]); continue; }
+            // The run: from here to the last node of this slot (a disc or a
+            // font kern between its glyphs carries no id of its own).
+            let j = i;
+            for (let k = i + 1; k < orig.length; k++) if (orig[k].slot === id) j = k;
+            const nodes = slotNodes(fontInfo, slot, id, orig.slice(i, j + 1), text);
+            out.push(...nodes); made.push(...nodes);
+            i = j;
+        }
+        // What was substituted, with its measured widths: a text measured
+        // again once its font has loaded counts as a change.
+        const key = made.map(n => n.text !== undefined ? n.text + '\u0002' + n.width : ' ').join('\u0001');
+        if (key === sp.key && sp.made.length === made.length) continue;
+        sp.key = key;
+        sp.stale = sp.made; sp.made = made;
+        sp.para.nodes = made.length ? out : orig;
+        changed.add(sp.index);
+    }
+    return changed;
+}
+
+// Forget the layouts of the segments holding those paragraphs (in the nested
+// layouts of streams too), and the drawn elements of the words replaced.
+function invalidateParagraphs(cache, changed, stale) {
+    if (!cache || !cache.dom || !cache.layoutCtx) return;
+    for (const i of changed) cache.bcs && cache.bcs.delete(i);
+    for (const n of stale) cache.dom.byNode.delete(n);
+    cache.layoutCtx.segs.forEach((seg, i) => {
+        const s = cache.dom.segs[i];
+        if (!s) return;
+        if (s.sub) invalidateParagraphs(s.sub, changed, stale);
+        if (seg.items && seg.items.some(it => changed.has(it.index))) {
+            s.hc = null;
+            if (s.painted) s.dirty = true;
+        }
+    });
+}
+
+function refreshSlots(el) {
+    const data = blockData.get(el);
+    if (!data || !data.cache.dom) return;
+    const changed = applySlots(data.fontInfo, data.doc);
+    if (!changed.size) return;
+    const stale = data.doc.slotParas.flatMap(sp => sp.stale || []);
+    data.doc.slotParas.forEach(sp => { sp.stale = null; });
+    invalidateParagraphs(data.cache, changed, stale);
+    const params = { ...data.params, align: data.lastAlign };
+    layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
+    paintVisibleNow(data.fontInfo, data.cache);
+}
+
+function scheduleSlots() {
+    if (slotScheduled) return;
+    slotScheduled = true;
+    requestAnimationFrame(() => {
+        slotScheduled = false;
+        for (const el of slotBlocks) refreshSlots(el);
+    });
+}
+
+// The page's side: give a slot a text (any value; it is shown as a string),
+// or null/undefined to show the default again. Every \webtext of that name,
+// in every block, follows. Updates within one frame are applied together.
+api.setText = function (name, text) {
+    if (text === null || text === undefined) slotValues.delete(String(name));
+    else slotValues.set(String(name), String(text));
+    scheduleSlots();
+};
+api.getText = name => slotValues.get(String(name));
 
 // ── Footnotes ────────────────────────────────────────────────────────────────
 // Footnote bodies are ordinary ContentItem streams stored outside the document's
@@ -1686,7 +1844,8 @@ function reconcileSink(byNode, used, stats, cache) {
             let el = byNode.get(n), isNew = !el;
             if (isNew) {
                 el = svgEl('tspan', {x, y, 'font-family': fi?.family ?? 'serif', 'font-size': fi?.size_px ?? 12});
-                el.textContent = String.fromCodePoint(n.char);
+                // A \webtext slot's word (see Slots) is a whole word, as text.
+                el.textContent = n.text !== undefined ? n.text : String.fromCodePoint(n.char);
                 // Inline style so it wins over the page's `fill: currentColor`
                 // rule; uncoloured glyphs keep currentColor (dark-mode aware).
                 // Coloured ones go through the theme substitution maps.
@@ -3632,6 +3791,7 @@ function materializeSegment(cache, i) {
 // possible (see observeSegments / paintVisibleNow): a long document only pays the
 // DOM cost for the segments that have been on screen, not for all of them at once.
 function paintSegment(fontInfo, cache, i) {
+    restoreLinkStates();              // once this paint is done (a microtask)
     materializeSegment(cache, i);     // a deferred layout is only ever run here
     useGlyphMetrics(cache.metrics);   // a paint may run after another block laid out
     const dom = cache.dom;
@@ -3794,6 +3954,10 @@ async function initBlock(el) {
     const cache = { bcs: null, dom: null, layout: null, stats: null };  // bcs: Map(paraIdx → break candidates), built lazily
     const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false };
     blockData.set(el, data);
+    if (doc.slots && doc.slots.length) {
+        slotBlocks.add(el);
+        applySlots(fontInfo, doc);
+    }
     // Layout first (this sets the svg's final height), then decide from the
     // block's resulting position whether to paint now or on approach. Blocks
     // are initialised top to bottom, so earlier blocks already have their

@@ -199,6 +199,10 @@ local LINK_ATTR          = 909 -- glyphs of a \ref/\eqref/\autoref's printed tex
 local ANCHOR_ATTR        = 910 -- the zero-size box \label leaves behind
 local DISPLAY_ATTR       = 912 -- a display's box: the number Serializer.note_display recorded it under
 local STREAM_ATTR        = 911 -- nodes typeset inside \begin{reflowtexstream} (reflowtex.sty): the stream id
+-- A \webtext slot (reflowtex.sty): text a page may replace from JavaScript.
+-- Stamped on every glyph and glue of the default text, like a link, so the
+-- viewer can find the whole run wherever the line breaks fall.
+local SLOT_ATTR          = 913
 local RULE_IMAGE  = 2
 local picture_files = {}
 local source_width = 0
@@ -207,6 +211,10 @@ local source_width = 0
 -- this document is published, which is not us.
 local link_labels  = {}
 local anchor_labels = {}
+-- id → { name, space, stretch, shrink }: a \webtext slot's name, and the
+-- interword glue of the font it was set in (\fontdimen2–4, sp), which the
+-- viewer puts between the words of a replacement text.
+local slot_table = {}
 
 Serializer = Serializer or {}
 -- A reference's destination is recorded as the *label* the author wrote, not as
@@ -231,10 +239,13 @@ end
 function Serializer.note_link_url(id, url)
     link_labels[id] = { url = tostring(url) }
 end
--- Not a destination but a control (\reflowtexaction in reflowtex.sty): the
+-- Not a destination but a control (\webaction in reflowtex.sty): the
 -- glyphs trigger `action` in the page instead of navigating.
 function Serializer.note_link_action(id, action)
     link_labels[id] = { action = tostring(action) }
+end
+function Serializer.note_slot(id, name, space, stretch, shrink)
+    slot_table[id] = { name = tostring(name), space = space, stretch = stretch, shrink = shrink }
 end
 function Serializer.note_label(id, label)
     anchor_labels[id] = clean_label(label)
@@ -515,6 +526,7 @@ local function serialize_nodelist(head)
                 citetarget = node.get_attribute(n, CITETGT_ATTR),
                 footnote   = node.get_attribute(n, FOOTNOTE_MARK_ATTR),
                 link       = node.get_attribute(n, LINK_ATTR),
+                slot       = node.get_attribute(n, SLOT_ATTR),
             }
 
         elseif t == "glue" then
@@ -526,6 +538,7 @@ local function serialize_nodelist(head)
                 stretch_order = n.stretch_order,
                 shrink_order  = n.shrink_order,
                 subtype      = n.subtype,
+                slot         = node.get_attribute(n, SLOT_ATTR),
             }
             -- Leader glue (\leaders, \cleaders, \xleaders, \gleaders) carries a
             -- box that TeX tiles across the glue's *set* width instead of
@@ -1242,6 +1255,7 @@ local function write_output()
         streams    = stream_list,
         links      = link_labels,
         anchors    = anchor_labels,
+        slots      = slot_table,
         outline    = outline,
     }))
     f:close()

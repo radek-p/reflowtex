@@ -57,7 +57,7 @@ stamps everything typeset inside it with LuaTeX attribute 911. The walk sends
 those items to a stream of that kind and leaves a `stream` item in the parent
 flow where the block stood. Streams nest. The viewer mounts each one in its own
 element, and page CSS and JavaScript decide per kind what it looks like and
-does: an accordion of panes, framed notes, and so on. `\reflowtexaction` adds in-text controls: link glyphs whose `Link.action` the viewer sends to the enclosing streams as a DOM event. See the Streams section of
+does: an accordion of panes, framed notes, and so on. `\webaction` adds in-text controls: link glyphs whose `Link.action` the viewer sends to the enclosing streams as a DOM event. See the Streams section of
 [src/viewer/README.md](../src/viewer/README.md).
 
 Display-bearing snippets are sampled at additive widths
