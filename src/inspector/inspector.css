@@ -1,0 +1,99 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Reflow TeX inspector – the floating panel. Loaded into the panel's shadow
+   root, so the page's styles and these never meet. */
+:host { all: initial; }
+.rtx {
+  --bg: #fff; --fg: #1f1f1f; --muted: #6b6b6b; --line: #e3e3e3; --hover: #eef3fd;
+  --sel: #d5e3fb; --bar: #f5f5f7; --accent: #2f2ccd;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --box: #3f7fcc; --glue: #4f8f33; --kern: #8e44ad; --penalty: #c0392b; --math: #c7741f; --line-c: #a88614; --glyph: #1f1f1f;
+  position: fixed; z-index: 2147483647;
+  display: flex; flex-direction: column;
+  min-width: 280px; min-height: 180px;
+  max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
+  background: var(--bg); color: var(--fg);
+  font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08);
+  overflow: hidden; resize: both;
+  container-type: inline-size;
+}
+.rtx[hidden] { display: none; }
+/* Docked (reflowtex.inspector.dock): part of the page, filling its box. */
+.rtx.docked {
+  position: relative; left: auto; top: auto; width: 100%; height: 100%;
+  min-width: 0; max-width: none; max-height: none; resize: none;
+  border-radius: 12px; box-shadow: none;
+}
+.rtx.docked .bar { cursor: default; }
+.rtx.docked .close { display: none; }
+.rtx.dark {
+  --bg: #1f2023; --fg: #e3e3e3; --muted: #9aa0a6; --line: #3a3b3f; --hover: #2a313c;
+  --sel: #33476a; --bar: #26272b; --accent: #9d9bff;
+  --box: #7fb2ec; --glue: #8fcf6f; --kern: #c89ce8; --penalty: #ef7a7a; --math: #f0a860; --line-c: #e0c060; --glyph: #e3e3e3;
+  box-shadow: 0 12px 40px rgba(0,0,0,.5);
+}
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+
+.bar {
+  display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 10px;
+  background: var(--bar); border-bottom: 1px solid var(--line);
+  cursor: move; user-select: none; -webkit-user-select: none; touch-action: none;
+}
+.title { font-weight: 600; margin-right: 4px; white-space: nowrap; }
+.bar button {
+  display: inline-flex; gap: 4px; align-items: center; cursor: pointer;
+  background: transparent; border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px;
+}
+.bar button:hover { background: var(--hover); }
+.bar button.on { background: var(--sel); border-color: var(--accent); }
+.bar .close { border-color: transparent; padding: 2px 6px; font-size: 15px; line-height: 1; }
+.status { margin-left: auto; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+.main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tree { flex: 1 1 60%; min-height: 0; overflow: auto; padding: 4px 0; font-family: var(--mono); outline: none; }
+.details { flex: 0 1 40%; min-height: 0; overflow: auto; border-top: 1px solid var(--line); padding: 8px 10px; }
+@container (min-width: 640px) {
+  .main { flex-direction: row; }
+  .details { flex: 0 0 42%; border-top: 0; border-left: 1px solid var(--line); }
+}
+
+.row { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; padding: 1px 8px 1px 0; cursor: default; }
+.row:hover { background: var(--hover); }
+.row.sel { background: var(--sel); }
+.row.undrawn { opacity: .55; }
+/* A run of letters: one row, a chip per glyph. */
+.row.run:hover { background: transparent; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 1px; }
+.chip { min-width: 1.1em; text-align: center; padding: 0 2px; border-radius: 3px; cursor: default;
+  color: var(--glyph); box-shadow: inset 0 0 0 1px var(--line); }
+.chip:hover { background: var(--hover); }
+.chip.sel { background: var(--sel); box-shadow: inset 0 0 0 1px var(--accent); }
+.chip.undrawn { opacity: .55; }
+/* A hyphenation point among the letters: a hyphen like a letter's chip, but
+   greyed, so it does not read as a hyphen glyph. */
+.chip.disc { color: var(--muted); }
+.twisty { width: 12px; flex: none; text-align: center; color: var(--muted); cursor: pointer; user-select: none; }
+.label { font-weight: 600; }
+.note { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.t-hlist .label, .t-vlist .label, .t-block .label, .t-text .label, .t-display .label, .t-stream .label,
+.t-rule .label, .t-picture .label, .t-widget .label { color: var(--box); }
+.t-glue .label { color: var(--glue); }
+.t-kern .label { color: var(--kern); }
+.t-penalty .label { color: var(--penalty); }
+.t-math .label { color: var(--math); }
+.t-line .label { color: var(--line-c); }
+.t-glyph .label { color: var(--glyph); font-weight: 400; }
+
+.muted { color: var(--muted); }
+.details h2 { font-size: 12.5px; margin: 0 0 8px; font-family: var(--mono); font-weight: 600; }
+.details table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 11.5px; }
+.details td { padding: 2px 6px 2px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+.details td:first-child { color: var(--muted); white-space: nowrap; }
+.legend { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); }
+.legend .key { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.sw { width: 14px; height: 9px; border: 1px solid; opacity: .7; }
+.empty { padding: 14px; color: var(--muted); line-height: 1.6; }
+.empty code { font-family: var(--mono); }
+kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }

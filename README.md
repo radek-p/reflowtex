@@ -136,6 +136,7 @@ snippets come from anywhere but you, read
 | [`src/latex/`](src/latex/) | `reflowtex.sty`, the companion package for documents written for the web (accordions of collapsible panes, web-only text, streams) |
 | [`src/encode/`](src/encode/) | the build pipeline: transforms, protobuf encoder, font handling |
 | [`src/viewer/`](src/viewer/) | the browser renderer (`latex-viewer.js`) + vendored `protobuf.min.js` |
+| [`src/inspector/`](src/inspector/) | a floating panel showing the boxes and glue behind the blocks on a page (Alt+Shift+I on the website) |
 | [`integrations/vanilla/`](integrations/vanilla/) | reference integration: `.tex` snippets → a static site |
 | [`integrations/hugo/`](integrations/hugo/) | Hugo shortcode + prebuild (also a runnable example) |
 | [`integrations/jekyll/`](integrations/jekyll/) | Jekyll integration (planned – see its README) |
