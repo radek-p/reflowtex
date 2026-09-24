@@ -11,13 +11,13 @@ Reflow TeX splits the work differently:
 
 - **TeX does the typesetting.** LuaTeX lays out every glyph, kern, rule, fraction,
   accent and box exactly as it would for print, and we capture the finished node
-  list — positions and all.
+  list – positions and all.
 - **The browser does the line breaking.** The node list is shipped to the client,
   which runs Knuth–Plass over it to choose breakpoints for the *current* column
   width and paints the lines as inline SVG.
 
 So the intra-line microtypography is genuine TeX, while the one decision that
-depends on the viewport — where lines break — is deferred to the browser. That is
+depends on the viewport – where lines break – is deferred to the browser. That is
 what lets a paragraph reflow without giving up fidelity.
 
 ## Pipeline stages
@@ -70,7 +70,7 @@ simultaneously; the third verifies them (up to scaled-point rounding). This is
 generic across `equation`, `\[...\]`, `align`, `gather`, `multline`, nested
 alignment environments, and package-defined displays whose finished topology is
 stable. The accepted tree stores sparse derivatives only for fields that vary, and marks
-which of them are *gaps* — a glue's set width, a kern, a math node's surround —
+which of them are *gaps* – a glue's set width, a kern, a math node's surround –
 as opposed to box widths, which are whatever their contents came to.
 
 At runtime each gap that stayed nonnegative across the accepted samples is
@@ -78,7 +78,7 @@ classified by where the ink around it falls. A gap with ink on both sides is
 internal to the formula: it separates an align's columns, or an equation from its
 number, and closing it would run the two together, so it stops at
 `data-display-min-space` (10pt by default). A gap with ink on one side only is
-outer — centring glue, or the display's own `display_shift` in the column — and
+outer – centring glue, or the display's own `display_shift` in the column – and
 closes all the way to zero, so a display is never held wider than its own ink.
 The classification is geometric rather than environment-specific, and is computed
 once per display from the compiled tree.
@@ -95,11 +95,11 @@ After display-width modelling, three transforms run on `output.json` before it
 is encoded:
 
 - **strip** nodes the schema/renderer don't model (colour-stack whatsits, etc.);
-- **normalise glyph addressing** — some glyphs LuaTeX places (GSUB variants,
+- **normalise glyph addressing** – some glyphs LuaTeX places (GSUB variants,
   combining accents, unencoded variants) can't be addressed by their Unicode
   codepoint in the served font, so they are rewritten to private-use codepoints
   and the served font's cmap is patched to match;
-- **convert pictures** — each captured TikZ page or included PDF page becomes
+- **convert pictures** – each captured TikZ page or included PDF page becomes
   inline SVG (ids prefixed per picture, colours mapped to CSS custom properties
   for theming). Ghostscript first normalises ordinary included PDFs to DeviceRGB:
   Figma encodes all its fills with ICC `scn`, which current `dvisvgm` otherwise
@@ -117,7 +117,7 @@ OTF files the page will serve. `pipeline.py` ties these together into one
 
 `latex-viewer.js` finds each embedded block, decodes the protobuf against the
 embedded schema, runs Knuth–Plass line breaking at the block's measured width,
-and paints inline SVG — re-breaking on resize and repainting on theme change. See
+and paints inline SVG – re-breaking on resize and repainting on theme change. See
 [src/viewer/README.md](../src/viewer/README.md) for the DOM contract.
 
 ## Why a schema-bound binary format
@@ -136,5 +136,5 @@ Buffers gives that plus a compact wire form. See [binary-format.md](binary-forma
   (`input.tex`, the lualatex run, `output.json`, `nodelist.pb`) are kept so a
   rebuild can skip unchanged snippets and so failures are inspectable.
 - **Everything is reproducible from source**, so generated data (compiled blocks,
-  provisioned fonts) is safe to `.gitignore` — though committing it lets a site
+  provisioned fonts) is safe to `.gitignore` – though committing it lets a site
   build without a TeX installation on the deploy host.

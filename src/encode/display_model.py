@@ -122,7 +122,7 @@ def check_samples(a: dict, b: dict, c: dict) -> tuple[bool, str | None]:
 
 def _attach_node_rates(recv: dict, previous: dict, newest: dict, dx: int) -> None:
     """Measure each field's slope between the two wider samples, and write it
-    onto ``recv`` — the narrowest sample, which is the tree that is kept."""
+    onto ``recv`` – the narrowest sample, which is the tree that is kept."""
     for field in NODE_GEOMETRY:
         delta = newest.get(field, 0) - previous.get(field, 0)
         if delta:
@@ -140,8 +140,8 @@ def _mark_node_floors(oldest: dict, previous: dict, newest: dict, dx: int) -> No
     # Only a gap can be floored, and only these node types carry one: a glue's
     # set width, a kern, and the space a math node surrounds itself with are the
     # horizontal space *between* pieces of a display. A box's ``width`` also
-    # varies with the measure, but it is not space — it is however wide the
-    # box's contents came out — so flooring it would fence off a measure the
+    # varies with the measure, but it is not space – it is however wide the
+    # box's contents came out – so flooring it would fence off a measure the
     # contents never asked for. Other sampled fields (box height, vertical
     # shift, glue_set, transform coefficients) may legitimately cross zero and
     # define no horizontal validity boundary at all.
@@ -163,8 +163,8 @@ def attach_model(oldest: dict, previous: dict, newest: dict) -> dict:
     **narrowest** sample as the document of record.
 
     The wider samples exist only to measure slopes with. Everything else in a
-    compilation — paragraphs, colours, and any width a package baked into the
-    page rather than into a display — belongs to the measure the document was
+    compilation – paragraphs, colours, and any width a package baked into the
+    page rather than into a display – belongs to the measure the document was
     actually written for. Keeping a wider sample would silently publish those at
     that width: a listings background, drawn as a rule across ``\linewidth``,
     would stretch as far as the widest probe reached. Slopes are derivatives, so
@@ -202,12 +202,12 @@ def anchor_model(first: dict, previous: dict, newest: dict) -> tuple[dict, int]:
     samples is the width itself: a display skip that turns short, a kern that
     jumps, a box that shrinks only at the narrower measure. Anchoring the model
     at the first sample that happened to pass would publish the document as
-    compiled at that wider width — different display skips, different
-    breaks — and the page would not match the document at its own width, which
+    compiled at that wider width – different display skips, different
+    breaks – and the page would not match the document at its own width, which
     is the one width it is expected to match exactly. So the slopes measured
     between the two wider samples are attached to ``first`` instead, to every
     display whose tree has the same shape there as in ``previous``; a display
-    whose shape differs keeps its geometry fixed — it renders as TeX set it and
+    whose shape differs keeps its geometry fixed – it renders as TeX set it and
     does not reflow. Returns the document and the number of displays left fixed.
     """
     xp, xn = int(previous['source_width']), int(newest['source_width'])

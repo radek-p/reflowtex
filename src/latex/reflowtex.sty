@@ -1,10 +1,10 @@
 % SPDX-License-Identifier: AGPL-3.0-or-later
-% reflowtex.sty — the Reflow TeX companion package.
+% reflowtex.sty – the Reflow TeX companion package.
 %
 % Load it from a document that is written for the web but must still compile
 % to a PDF: \usepackage{reflowtex}. Everything here has two definitions, one
 % for the extraction run (the pipeline compiles the snippet with \ifreflowtex
-% true — see src/extract/template.tex) and one for an ordinary LaTeX run,
+% true – see src/extract/template.tex) and one for an ordinary LaTeX run,
 % where the same constructs fall back to their nearest print analogue.
 %
 % Layers, from primitive to convenience:
@@ -76,7 +76,7 @@
 % stream in its own <div class="latex-stream" data-kind="kind">, with every
 % key=value parameter as data-key="value", lays its paragraphs out at that
 % element's width, and hands the element to whatever behaviour is registered
-% for the kind — CSS for how it looks, a few lines of JavaScript for what it
+% for the kind – CSS for how it looks, a few lines of JavaScript for what it
 % does. Nothing here changes what TeX typesets: the attribute is invisible to
 % line breaking and to every package.
 %
@@ -113,8 +113,8 @@
 %
 % On the web, `default` is typeset as usual, and a page script may replace it
 % at any time: reflowtex.setText('name', '12:04'). The new text is set the way
-% a browser sets text — in the font the default was set in, word by word, with
-% no kerning or ligatures between words — and between its words stands that
+% a browser sets text – in the font the default was set in, word by word, with
+% no kerning or ligatures between words – and between its words stands that
 % font's interword glue, so the paragraph re-breaks around it. Every \webtext
 % of the same name shows the same text; setText('name', null) brings back the
 % default. For a counter, a clock, a value computed in the page.
@@ -143,7 +143,7 @@
 % On the web, `text` is a control: it is coloured and focusable like a link,
 % and clicking it (or Enter/Space on it) sends `action` to the page as a
 % bubbling `reflowtex:action` DOM event from where the text sits. The nearest
-% enclosing stream whose kind understands the action handles it — an
+% enclosing stream whose kind understands the action handles it – an
 % accordion understands "pane:…" (below). It is a link underneath: every glyph
 % of `text` carries the same link id (template.tex, attribute 909), so it stays
 % one control however the line breaks.
@@ -183,7 +183,7 @@
 % Options: initial= the pane shown first (name or number, default 1);
 % print= the pane a PDF shows instead (name, number, first or last; default
 % last, the fullest). On the web, printing the page also shows that pane.
-% Any content fits in a pane — a proof, displays, lists, another accordion.
+% Any content fits in a pane – a proof, displays, lists, another accordion.
 \DeclareKeys[reflowtex/accordion]{
   initial .store = \reflowtex@acc@initial,
   print   .store = \reflowtex@acc@print,
@@ -380,10 +380,10 @@
 %
 % On the web the proof (in its usual box) and its Lean code (in a frame like
 % a proof's, in the Lean colour) have two switches above them, Proof and
-% Lean, pressed independently: neither, either one, or both — side by side,
+% Lean, pressed independently: neither, either one, or both – side by side,
 % or stacked on a narrow column. show= (proof, lean, both or none; default
 % proof) is how it starts.
-% The code is read verbatim — never typeset — and shown as text: highlighted,
+% The code is read verbatim – never typeset – and shown as text: highlighted,
 % selectable, copyable. decl= names the declaration in the code's header,
 % url= links it (to doc-gen4 documentation, say). In print the code follows
 % the proof as a verbatim listing (package option leanprint=false leaves it
@@ -399,8 +399,8 @@
 % default neither is shown (show=none), so only the theorem is. Everything
 % before \begin{proof} is the statement.
 %
-% leanblueprint's macros — \lean{…}, \leanok, \uses{…}, \proves{…},
-% \notready, \mathlibok, \discussion{…} — are defined as markers with no
+% leanblueprint's macros – \lean{…}, \leanok, \uses{…}, \proves{…},
+% \notready, \mathlibok, \discussion{…} – are defined as markers with no
 % output when the document has not defined them, so a blueprint's sources
 % compile.
 \providecommand\lean[1]{}

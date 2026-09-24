@@ -33,7 +33,7 @@
 <!-- Content width: 'auto' is the fluid column (a max-width, shrinking below it);
      'narrow'/'normal'/'wide' pin it to a fixed measure that overflows into a
      horizontal scroll when the window is narrower. Set from the saved choice
-     before first paint — like the theme — so the blocks lay out at the chosen
+     before first paint – like the theme – so the blocks lay out at the chosen
      width immediately rather than reflowing once after load. The switcher (bottom-
      right) calls window.__setWidth, which resizes #lt-content; the viewer's
      ResizeObserver reflows each block to the new width. -->
@@ -57,7 +57,7 @@
      (no first-paint flash). window.__zoom(dir): dir<0 smaller, 0 reset, dir>0
      bigger; the reset button doubles as a live percentage readout. A synthetic
      resize event nudges the viewer to repaint the (now differently sized) viewport
-     — scaling does not fire its ResizeObserver, which keys off unzoomed widths. -->
+     – scaling does not fire its ResizeObserver, which keys off unzoomed widths. -->
 <script>
   (function () {
     var KEY = 'reflowtex-zoom', MIN = 0.5, MAX = 3, STEP = 1.1, z = 1;
@@ -86,7 +86,7 @@
 
 <!-- Font URL map: original filename → served filename (a modified font is served
      renamed + content-hashed). latex-viewer.js reads it to build @font-face.
-     data-fonts-base is the URL prefix for those files — the default 'fonts/'
+     data-fonts-base is the URL prefix for those files – the default 'fonts/'
      resolves against latex-viewer.js's own URL (see build.py --fonts-base),
      which works under a subpath, a different domain, or opened straight off
      disk over file://, with no reconfiguration. -->
@@ -97,7 +97,7 @@
   /* Page palette lives on <html> (not <body>) so it also fills the strip a
      fixed-width column reveals when it overflows into a horizontal scroll.
      Driven by html.dark etc. (set by the theme script), which the viewer keys
-     its colour maps off too — so text and background stay in step. */
+     its colour maps off too – so text and background stay in step. */
   html {
     background: #fafaf9; color: #333333;
     transition: background 150ms ease, color 150ms ease;
@@ -123,13 +123,13 @@
      Holds the title and every block, centred with a reading measure. The width
      switch retargets it and the zoom control scales it (see the head scripts);
      both act here rather than on <body> so the floating switches and the
-     citation popover — siblings in <body> — are neither resized nor scaled. */
+     citation popover – siblings in <body> – are neither resized nor scaled. */
   #lt-content {
     max-width: 46rem; margin: 3rem auto; padding: 0 1.25rem;
     zoom: var(--lt-zoom, 1);
   }
   /* Fixed widths carry no viewport cap: a column wider than the window overflows
-     into a horizontal scroll rather than shrinking. No width transition —
+     into a horizontal scroll rather than shrinking. No width transition –
      animating it would fire the viewer's ResizeObserver every frame and re-break
      every paragraph. */
   html[data-width="narrow"] #lt-content { max-width: none; width: 34rem; }
@@ -168,7 +168,7 @@
   #zoom-switch button[data-z="reset"] {
     min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums;
   }
-  /* Active state is background + full opacity only — deliberately NOT a weight
+  /* Active state is background + full opacity only – deliberately NOT a weight
      change, which would make the active button wider and reflow the row (and,
      since the switcher is anchored at its right edge, visibly shift it) on every
      switch. */
@@ -212,7 +212,7 @@
     margin-inline: calc(0px - var(--latex-display-peek));
     /* The trailing peek is a real box (the ::after below), not padding on this
        element. A scroll container's *end* padding is not part of the scrollable
-       overflow in every engine — WebKit drops it — and where it is dropped the
+       overflow in every engine – WebKit drops it – and where it is dropped the
        display can no longer be panned the whole distance it overflows the
        column, so its last glyphs can never be brought level with the text edge.
        A flex item's border box is counted everywhere. Start padding is counted
@@ -252,7 +252,7 @@
      A \ref is a *set* of glyphs sharing data-link, not one element, so the
      viewer toggles these classes across the whole set: hovering any part of a
      reference lights all of it, including when it broke across two lines.
-     Colour only — nothing here may change a glyph's size or position, or the
+     Colour only – nothing here may change a glyph's size or position, or the
      text would reflow under the pointer. Glyph fill is set inline when TeX
      coloured it, hence the !important. */
   .latex-block svg .latex-link {
@@ -315,7 +315,7 @@
 
 <!-- AGPL-3.0 §13 source offer for the software running in this page. -->
 <footer id="lt-agpl-notice">
-  Rendered with <a href="{{SOURCE_URL}}" rel="license">Reflow TeX</a> —
+  Rendered with <a href="{{SOURCE_URL}}" rel="license">Reflow TeX</a> –
   free software under <abbr title="GNU Affero General Public License v3.0 or later">AGPL-3.0-or-later</abbr>.
   <a href="{{SOURCE_URL}}">Source code</a>.
 </footer>

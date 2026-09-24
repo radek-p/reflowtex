@@ -1,10 +1,10 @@
-# Reflow TeX — Hugo integration
+# Reflow TeX – Hugo integration
 
 Render LaTeX in a [Hugo](https://gohugo.io) site with a `{{</* latex */>}}`
 shortcode. The snippet is compiled to a binary node list at build time and drawn
 in the browser by `latex-viewer.js`.
 
-This directory is also a **runnable example site** — try it first:
+This directory is also a **runnable example site** – try it first:
 
 ```sh
 cd integrations/hugo
@@ -20,7 +20,7 @@ hugo server                                            # open the printed URL
    - `layouts/shortcodes/latex.html`
    - `layouts/partials/reflowtex-viewer.html`
 
-2. **Include the viewer** once per page that can contain blocks — add this near
+2. **Include the viewer** once per page that can contain blocks – add this near
    the end of your `baseof.html`, before `</body>`:
 
    ```go-html-template
@@ -44,7 +44,7 @@ hugo server                                            # open the printed URL
 
    File references resolve against `prebuild.py --demos-dir` (default:
    `<site>/latex-src/`), share that directory's `preamble.tex`, and are looked up
-   through `data/latex_files.json` — the shortcode never reads across
+   through `data/latex_files.json` – the shortcode never reads across
    directories. The example site points `--demos-dir` at the shared
    `../../examples/demo` (see the Makefile's `hugo-demo` target), which is exactly
    the set the vanilla integration renders.
@@ -103,7 +103,7 @@ beside its chapters. Changing, adding or reordering any part
 recompiles the whole batch. The vanilla build does the same for a directory
 with `--batch`.
 
-A part may be shown in more than one place — the same `file=` (or the same
+A part may be shown in more than one place – the same `file=` (or the same
 text) twice in one batch. It is still one part of the book, compiled once, at
 the lowest `weight` given to it, and every place shows that result; its labels
 link to the page of that lowest-weight place. The same file in *different*
@@ -139,7 +139,7 @@ themes. It is a reasonable starting point to copy.
 
 An inline block can register itself as a named lookup the same way a
 `file="…"` ref does, via `as="<name>"`, for a snippet with no natural `.tex`
-file of its own that another template still wants to find by name later — a
+file of its own that another template still wants to find by name later – a
 page's own short title, or a handful of one-line labels a sidebar looks up
 from every page:
 

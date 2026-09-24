@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Reflow TeX — one-command demos.
+# Reflow TeX – one-command demos.
 #
 # Prerequisites on PATH: lualatex (TeX Live), gs (Ghostscript), dvisvgm, protoc, python3.
-# Python deps: managed automatically in a local .venv — see the `venv` target.
+# Python deps: managed automatically in a local .venv – see the `venv` target.
 
 PORT ?= 8000
 DEMO_OUT := build/demo-site
@@ -25,7 +25,7 @@ help:
 	@echo "  make serve            build the demo and serve it at http://localhost:$(PORT)"
 	@echo "  make hugo-demo        compile + serve the Hugo example (needs hugo)"
 	@echo "  make testmath-demo    render AMS' testmath.tex (classic CM fonts, legacy path)"
-	@echo "  make website          rebuild website/public (incremental — only changed blocks)"
+	@echo "  make website          rebuild website/public (incremental – only changed blocks)"
 	@echo "  make website-clean    force a full clean rebuild of website/public (incl. testmath.tex)"
 	@echo "  make clean            remove build artefacts"
 	@echo "  make vendor-protobuf  refresh src/viewer/protobuf.min.js from protobufjs@$(PROTOBUFJS_VERSION)"
@@ -33,8 +33,8 @@ help:
 
 # Python deps live in a project-local virtualenv, not the system interpreter.
 # Everything below depends on this and calls $(PYTHON), so `make demo` etc. set
-# it up on first use — no manual `pip install` needed. Needs Python 3.9+ (see
-# scripts/find_python.sh — macOS's bundled python3 qualifies); rebuilds the
+# it up on first use – no manual `pip install` needed. Needs Python 3.9+ (see
+# scripts/find_python.sh – macOS's bundled python3 qualifies); rebuilds the
 # venv if it's missing or was created with a too-old interpreter.
 venv:
 	@if [ -x $(VENV)/bin/python3 ] && $(VENV)/bin/python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then \
@@ -76,7 +76,7 @@ serve: demo
 hugo-demo: venv
 	cd integrations/hugo && $(PYTHON) prebuild.py . --demos-dir ../../examples/demo && hugo server --port $(PORT)
 
-# Renders AMS' testmath.tex (bundled verbatim, LPPL 1.3c — see
+# Renders AMS' testmath.tex (bundled verbatim, LPPL 1.3c – see
 # examples/testmath/NOTICE.md) with the classic Computer Modern fonts, exercising
 # the Type1→web-font conversion. Output is a self-contained site under build/.
 testmath-demo: venv
@@ -90,7 +90,7 @@ website:
 	cd website && ./build.sh
 
 # Forces every block (including testmath.tex on the Showcase page) to
-# recompile from scratch — needed after touching src/extract/template.tex,
+# recompile from scratch – needed after touching src/extract/template.tex,
 # font handling, or anything else that isn't reflected in a block's own
 # content hash. Slower; use `website` for routine content edits.
 website-clean:
@@ -101,7 +101,7 @@ website-clean:
 	cd website && PREBUILD_ARGS="--force --prune" ./build.sh
 
 # Maintainer-only: refresh the vendored browser runtime from npm at the pinned
-# version. Needs npm on PATH; users building sites do not — the file is committed
+# version. Needs npm on PATH; users building sites do not – the file is committed
 # so the browser side stays Node-free and offline.
 vendor-protobuf:
 	@tmp=$$(mktemp -d); \
@@ -114,7 +114,7 @@ vendor-protobuf:
 # Maintainer-only: regenerate the committed minified viewer after editing
 # latex-viewer.js. Integrations ship the minified copy under the name
 # latex-viewer.js when its header records the current source's SHA-256, and
-# fall back to the source (with a warning) when it is stale — so forgetting
+# fall back to the source (with a warning) when it is stale – so forgetting
 # this step costs bytes, never correctness. Needs npx (Node); site builders
 # do not. terser is pinned like protobufjs above.
 minify-viewer:

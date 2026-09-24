@@ -1,4 +1,4 @@
-# Extract — LaTeX → node list
+# Extract – LaTeX → node list
 
 This stage turns a LaTeX snippet into `output.json`, the finished node list.
 
@@ -14,7 +14,7 @@ This stage turns a LaTeX snippet into `output.json`, the finished node list.
 ## Placeholders
 
 The pipeline (`src/encode/pipeline.py`) does a plain text substitution of two
-markers in `template.tex` — each is the word `PREAMBLE` or `CONTENT` wrapped in
+markers in `template.tex` – each is the word `PREAMBLE` or `CONTENT` wrapped in
 double percent signs. Because the replacement is literal, those exact tokens must
 appear **only** at their two real sites; the template's own comments deliberately
 avoid spelling them out.
@@ -27,7 +27,7 @@ avoid spelling them out.
 | `\tikzpicture` / `\endtikzpicture` (wrapped) | captures the completed box to a private job-PDF page and leaves a metric-identical picture placeholder; low-level users such as `tikz-cd` work without source externalisation |
 | `buildpage_filter` → `capture_flow` | copies main-vertical-list contributions before pagination and presents zero-height originals to the page builder, preserving document order without page boundaries |
 
-If you replace the template, preserve the serializer and picture hooks — the
+If you replace the template, preserve the serializer and picture hooks – the
 encode stage relies on them (a missing picture hook, in particular, makes
 drawings vanish with no other symptom).
 
@@ -61,14 +61,14 @@ not appended to the pageless main stream.
 
 A section heading is just a paragraph (its own font and size), so it rides
 through as a `paragraph` item and renders like any other text. The vertical space
-a heading opens — and any `\vspace`/`\vskip` the author writes — is captured as
+a heading opens – and any `\vspace`/`\vskip` the author writes – is captured as
 `vspace` items.
 
 Ordinary interline leading (the per-line baselineskip glue) is *not* emitted as
 `vspace`, because it depends on where the browser re-breaks each line. Instead,
 each paragraph records TeX's `\baselineskip`, `\lineskip`, and `\lineskiplimit`,
 and the renderer applies TeX's baseline-to-baseline rule as it stacks the
-re-broken lines — so lines land at exactly the LaTeX distance, and a heading sits
+re-broken lines – so lines land at exactly the LaTeX distance, and a heading sits
 the LaTeX distance above its body regardless of its descender depth.
 
 Node types: `glyph`, `glue`, `kern`, `rule`, `hlist`, `vlist`, `disc`, `penalty`,

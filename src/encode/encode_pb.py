@@ -4,7 +4,7 @@
 
 Replaces encode-standalone.mjs (kiwi). Descriptor-driven: fields are set by
 walking the message descriptor, so the .proto is the single source of truth for
-which fields exist and their types — the encoder can't drift from it. proto2
+which fields exist and their types – the encoder can't drift from it. proto2
 presence is preserved by only setting keys that exist in the source dict.
 
 Usage: python3 encode_pb.py <output.json> <nodelist.pb>

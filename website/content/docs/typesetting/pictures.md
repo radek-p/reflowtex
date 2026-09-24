@@ -8,7 +8,7 @@ latexTitle: true
 \pagetitle[Typesetting]{Pictures}
 \bigskip
 
-A TikZ picture --- or a \texttt{tikz-cd} diagram, or an included PDF --- is
+A TikZ picture -- or a \texttt{tikz-cd} diagram, or an included PDF -- is
 captured as \TeX{} finished it and drawn as inline SVG with \TeX{}'s own
 metrics, so it sits anywhere a box can, even inside an alignment. Its colours
 follow the theme like the text's.

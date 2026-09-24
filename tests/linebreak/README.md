@@ -1,4 +1,4 @@
-# tests/linebreak — paragraph-breaking fixtures
+# tests/linebreak – paragraph-breaking fixtures
 
 Ground truth for test (a) of the test suite: does a paragraph breaker pick
 **exactly** the lines TeX picks?
@@ -14,7 +14,7 @@ fixture per paragraph the engine breaks:
 
 Both halves are written in one canonical text format, and a breaker under
 test must re-serialize its own result the same way so the comparison is a
-byte-for-byte file diff — no tolerance, no parsing. The format's source of
+byte-for-byte file diff – no tolerance, no parsing. The format's source of
 truth is `capture.lua` itself.
 
 ## Capturing

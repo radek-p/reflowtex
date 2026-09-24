@@ -2,8 +2,8 @@
 
 Reflow TeX's input is LaTeX, and LaTeX is a programming language with file I/O,
 not a markup format. Whenever the snippets being compiled come from somewhere
-other than the person running the build — contributed content a site generator
-walks, papers from a corpus, a CI job building a submission — the compile step is
+other than the person running the build – contributed content a site generator
+walks, papers from a corpus, a CI job building a submission – the compile step is
 executing someone else's program. This note says what the pipeline does about
 that, what it deliberately does not, and how to run it when the input is not
 trusted.
@@ -19,8 +19,8 @@ records finished boxes rather than shelling out to a sub-run.
 
 The flag is passed explicitly rather than left to the default, because TeX Live's
 default is **`restricted`, not off**. Restricted mode still executes a whitelist
-of helper programs — `latexminted` (Python), `texosquery-jre8` (Java),
-`repstopdf`, `makeindex` and others — with arguments the document chooses. It is
+of helper programs – `latexminted` (Python), `texosquery-jre8` (Java),
+`repstopdf`, `makeindex` and others – with arguments the document chooses. It is
 a speed bump, not a boundary.
 
 A caller whose own preamble genuinely needs shell escape (minted, gnuplottex)
@@ -32,7 +32,7 @@ elsewhere.
 
 **It does not stop a document reading your files.** TeX Live ships
 `openin_any = a`, so a `.tex` file can `\openin` any path the build user can
-read — `~/.ssh/id_rsa`, a `.env`, shell history — and typeset the contents.
+read – `~/.ssh/id_rsa`, a `.env`, shell history – and typeset the contents.
 LuaTeX's `io.open`, `lfs`, and `os.getenv` remain available with shell escape
 off, so environment variables are readable too. Verify your own settings with:
 
@@ -44,14 +44,14 @@ kpsewhich -var-value=openout_any    # p = writes confined
 
 **That read matters more here than in an ordinary LaTeX workflow.** This
 pipeline's entire job is to serialize what TeX typeset and embed it in a web
-page. A document that reads a secret and typesets it — in white, at 1pt, off the
-edge of the box — does not leave that secret in a local PDF you never open. It
+page. A document that reads a secret and typesets it – in white, at 1pt, off the
+edge of the box – does not leave that secret in a local PDF you never open. It
 gets encoded into `nodelist.pb` and published with the page.
 
 With shell escape off there is no network stack inside the TeX process: LuaTeX's
 `socket` module is unavailable and `io.popen` is inert, so a document cannot
 open a connection itself. Exfiltration therefore requires an artifact you go on
-to publish, share, or commit — which is exactly what a build pipeline produces.
+to publish, share, or commit – which is exactly what a build pipeline produces.
 
 **It does not bound resource use.** TeX macro loops do not terminate on their
 own. Run untrusted input under a timeout.

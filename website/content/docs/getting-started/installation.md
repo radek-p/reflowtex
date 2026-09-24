@@ -7,8 +7,8 @@ latexTitle: true
 {{< latex preamble="docs" >}}
 \pagetitle[Getting started]{Installation}
 \bigskip
-The build step drives a real \TeX{} toolchain --- Lua\TeX, \texttt{dvisvgm},
-Ghostscript, \texttt{protoc} --- plus Python for the encoder. The easiest way
+The build step drives a real \TeX{} toolchain -- Lua\TeX, \texttt{dvisvgm},
+Ghostscript, \texttt{protoc} -- plus Python for the encoder. The easiest way
 to get all of it is the project's container: nothing to install but a
 container runtime.
 \section*{In a container}

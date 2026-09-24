@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""reflowtex — Hugo integration prebuild.
+"""reflowtex – Hugo integration prebuild.
 
 A thin shell over reflowtex/src: it scans a Hugo site for {{< latex >}} shortcodes,
 compiles each with the reflowtex pipeline, and writes the results where Hugo can
@@ -17,12 +17,12 @@ Hugo site:
     <site>/latex-fonts/*.otf          optional repo-shipped fonts (not in TeX)
 
 An inline block can also carry as="name" to register itself in the same
-file→key lookup a file="name" ref would (data/latex_files.json) — for content
+file→key lookup a file="name" ref would (data/latex_files.json) – for content
 that has no natural .tex file of its own (a page's own short title, a handful
 of one-line labels some sidebar template looks up from every page, …) but
 that another template still wants to find later by name. A page of nothing
 but such blocks, marked `render = "never"` in its front matter, replaces what
-would otherwise need a whole --demos-dir of many tiny single-purpose files —
+would otherwise need a whole --demos-dir of many tiny single-purpose files –
 one .md file with N inline blocks instead of N .tex files plus N file refs to
 them.
 
@@ -62,9 +62,9 @@ from pipeline import Pipeline, content_key, viewer_script   # noqa: E402
 # shortcode can look it up without reading across directories itself.
 #
 # An inline block can also carry as="name" to register under that same
-# files_map, for content with nowhere more natural to live as its own file —
+# files_map, for content with nowhere more natural to live as its own file –
 # e.g. a page's own short title, or a handful of one-line labels a sidebar
-# needs to look up from every page — without needing a whole --demos-dir
+# needs to look up from every page – without needing a whole --demos-dir
 # entry (and a file="…" ref to it) per snippet. Purely a lookup-table
 # registration: as="…" plays no part in what gets compiled or how, so an
 # inline block with no other page rendering it directly (a dedicated
@@ -115,7 +115,7 @@ def _resolve_preamble(name: str, preamble_dir: Path) -> str:
 def _block_name(page: str, line: int, inner: str, as_name: str | None) -> str:
     """How an inline block is referred to in progress lines and errors: the page
     and line it starts on, its as="…" name if it has one, and the first words of
-    its text — a line number alone is a poor handle once the page has been
+    its text – a line number alone is a poor handle once the page has been
     edited, while a few words of the block are recognisable at a glance."""
     excerpt = ' '.join(inner.split())
     if len(excerpt) > 48:
@@ -130,15 +130,15 @@ def scan_content(content_dir: Path, preamble_dir: Path, demos_dirs: list[Path]):
     r"""Scan all markdown for latex blocks.
 
     Returns (blocks, files_map, block_pages, color_map_names):
-      blocks          {key: (content, preamble, name)} — everything to compile;
+      blocks          {key: (content, preamble, name)} – everything to compile;
                       name is where the block was authored (page:line, or the
                       referenced .tex file), for progress lines and errors
-      files_map       {"name.tex": key}            — for file-ref shortcode lookups,
+      files_map       {"name.tex": key}            – for file-ref shortcode lookups,
                       plus any inline block that registered itself via as="…"
-      block_pages     {key: "sub/page.md"}         — which page each block sits on,
+      block_pages     {key: "sub/page.md"}         – which page each block sits on,
                       content-dir-relative, so a ``\label`` compiled inside a block can
                       be turned into a URL by the only layer that knows about URLs
-      color_map_names {"name", …}                  — every color-map="…" referenced;
+      color_map_names {"name", …}                  – every color-map="…" referenced;
                       unlike preamble, a colour map never affects compilation (it's a
                       browser-rendering concern), so it plays no part in a block's key
     """
@@ -280,7 +280,7 @@ def main() -> None:
         demos_dirs = [site / 'latex-src']
 
     if not content_dir.is_dir():
-        sys.exit(f'error: {content_dir} not found — is {site} a Hugo site?')
+        sys.exit(f'error: {content_dir} not found – is {site} a Hugo site?')
     data_dir.mkdir(parents=True, exist_ok=True)
 
     pipe = Pipeline(build_root=build_root, fonts_dir=fonts_dir,
@@ -318,7 +318,7 @@ def main() -> None:
         json.dumps(sources, indent=2, sort_keys=True))
     # Colour maps: every map in <site>/latex-color-maps/ is embedded, not only
     # those a color-map="…" attribute names, because a site can make one the
-    # default for every block (params.latexColorMap, read by the shortcode —
+    # default for every block (params.latexColorMap, read by the shortcode –
     # which prebuild cannot see). A referenced map that does not exist is
     # still an error. Maps are small; an unused one costs a few hundred bytes.
     if color_map_dir.is_dir():

@@ -28,7 +28,7 @@ bit-for-bit identical to the source.
 
 Enum values in the `.proto` are lowercase (`glyph`, `display`, …) so that
 decoding with `enums: String` yields the exact strings the renderer already
-compares against (`n.type === 'glyph'`) — no mapping layer.
+compares against (`n.type === 'glyph'`) – no mapping layer.
 
 ### Interned glyph metrics
 
@@ -55,7 +55,7 @@ const doc = Document.toObject(Document.decode(bytes), {
 ```
 
 `keepCase: true` matters because the renderer reads `glyph_metrics`,
-`stretch_order`, `size_sp` — the schema's snake_case names — not protobuf.js's
+`stretch_order`, `size_sp` – the schema's snake_case names – not protobuf.js's
 default camelCase.
 
 ## Cost and a future optimisation
@@ -63,6 +63,6 @@ default camelCase.
 Parsing the `.proto` at runtime keeps the browser side simple and dependency-free
 beyond the vendored `protobuf.min.js`. The size/speed win available later is to
 precompile the schema to a descriptor with `pbjs` and ship the protobuf *minimal*
-runtime instead of the full bundle — decoding is unchanged, the parse step goes
+runtime instead of the full bundle – decoding is unchanged, the parse step goes
 away, and the payload shrinks. It's deliberately not done in the alpha to keep the
 build trivial.

@@ -1,7 +1,7 @@
-# Reflow TeX — landing site
+# Reflow TeX – landing site
 
 The project's public site (Hugo), built to be hosted on **GitHub Pages**. Most of
-its prose is set through the reflowtex pipeline itself — the page is its own demo.
+its prose is set through the reflowtex pipeline itself – the page is its own demo.
 
 ## Build
 
@@ -11,7 +11,7 @@ its prose is set through the reflowtex pipeline itself — the page is its own d
 ```
 
 `build.sh` vendors the shortcode and viewer partial from `../integrations/hugo`,
-runs `prebuild.py` (which needs the pipeline prerequisites — `lualatex`,
+runs `prebuild.py` (which needs the pipeline prerequisites – `lualatex`,
 `dvisvgm`, `protoc`, and the Python deps; see the repo `Makefile`'s `check`
 target), then runs Hugo. Everything it generates is git-ignored, `public/`
 included: the deployed site is built in CI, never committed.
@@ -38,16 +38,16 @@ that is fine, since `public/` is not tracked.
 | `layouts/` | base template, home, page layouts, and the hero/nav/switch partials |
 | `layouts/partials/hero.html` | the animated hero (ported from `experiments/26-reflow-tex-hero`) |
 
-The reader controls from the vanilla output — **width**, **colour theme**, and
-**text size** — are in the bottom-right corner and persist across pages.
+The reader controls from the vanilla output – **width**, **colour theme**, and
+**text size** – are in the bottom-right corner and persist across pages.
 
 ## Before you publish
 
 Set these to the real values (all currently placeholders):
 
-- `baseURL` in `hugo.toml` — your Pages URL, e.g. `https://<user>.github.io/reflowtex/`.
+- `baseURL` in `hugo.toml` – your Pages URL, e.g. `https://<user>.github.io/reflowtex/`.
   The viewer resolves font URLs against it, so a project subpath works.
-- `params.github` and `params.reflowtexSource` in `hugo.toml` — the repository URL
+- `params.github` and `params.reflowtexSource` in `hugo.toml` – the repository URL
   (used by the nav link and the AGPL-3.0 source-offer footer).
 
 ## Deploy

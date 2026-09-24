@@ -8,7 +8,7 @@ latexTitle: true
 \pagetitle[Typesetting]{Colours and themes}
 \bigskip
 Text \TeX{} left black takes the page's own text colour, so a dark theme
-works with no configuration. Colours the author chose are kept --- and can be
+works with no configuration. Colours the author chose are kept -- and can be
 remapped per theme by a \emph{colour map}, so that \verb|\textcolor{blue}|
 stays readable on a dark page. The switch above the example previews each
 theme on the example alone; the one in the corner switches the whole page.
@@ -24,8 +24,8 @@ colour inside mathematics:
 
 {{< latex preamble="docs" >}}
 A colour map is a small JSON file: for each theme, which colours to replace,
-and \emph{tints} --- colours \TeX{} mixed with the page, like
-\verb|blue!20!white| --- re-mixed with whatever the page's background is now.
+and \emph{tints} -- colours \TeX{} mixed with the page, like
+\verb|blue!20!white| -- re-mixed with whatever the page's background is now.
 This site's map, \texttt{latex-color-maps/site.json}, is the default for
 every block:
 {{< /latex >}}
@@ -42,8 +42,8 @@ every block:
 ```
 
 {{< latex preamble="docs" >}}
-A theme is a class on the page's \verb|<html>| element --- \texttt{dark},
-\texttt{sepia}, \texttt{contrast} --- so switching it restyles what is already
+A theme is a class on the page's \verb|<html>| element -- \texttt{dark},
+\texttt{sepia}, \texttt{contrast} -- so switching it restyles what is already
 drawn, with no re-render. The Theming section of \texttt{src/viewer/README.md}
 has the details.
 {{< /latex >}}

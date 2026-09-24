@@ -8,8 +8,8 @@ latexTitle: true
 \pagetitle[Web-first \LaTeX]{Boxed theorems}
 \bigskip
 The command \cs{makeboxed} draws an environment as a box with a coloured left border.
-The source of the environment's uses does not change. A box inside a box ---
-a claim inside a proof --- is a little narrower per level; the space
+The source of the environment's uses does not change. A box inside a box --
+a claim inside a proof -- is a little narrower per level; the space
 \LaTeX{} puts around the environment stays outside the box, and a proof's QED
 box stays inside. In print \cs{makeboxed} changes nothing.
 \section*{Three ways to use it}
@@ -24,7 +24,7 @@ box stays inside. In print \cs{makeboxed} changes nothing.
 {{< latex preamble="webfirst" >}}
 Without the optional first argument the environment itself is boxed,
 everywhere. With it, \cs{makeboxed} defines a new environment, a copy that
-shares the original's counter and heading, and boxes only the copy --- for the
+shares the original's counter and heading, and boxes only the copy -- for the
 few theorems that deserve to stand out. The package option
 \texttt{boxedtheorems} boxes every environment made with \cs{newtheorem} and
 every \texttt{proof}; this page uses it, and also defines a copy:

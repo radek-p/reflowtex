@@ -30,8 +30,8 @@ latexTitle: true
   Lean code: switches in the theorem's frame open either or both beneath it.
 \item[\texttt{leanproof[decl=,url=,show=]}, \texttt{leancode}] a proof and
   its Lean code in one frame, each shown or hidden by its own switch; option
-  \texttt{leanprint=false} leaves the code out of print. The macros of leanblueprint ---
-  \cs{lean}, \cs{leanok}, \cs{uses} and the rest --- compile as markers.
+  \texttt{leanprint=false} leaves the code out of print. The macros of leanblueprint --
+  \cs{lean}, \cs{leanok}, \cs{uses} and the rest -- compile as markers.
 \item[\cs{makeboxed}\texttt{[new]\{env\}[options]}] draw \emph{env} (or a
   copy of it named \emph{new}) as a box; options \texttt{kind},
   \texttt{accent}, \texttt{background}, \texttt{class}.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Protobuf schema for the LaTeX node list. Replaces schema.kiwi.
 //
-// proto2 (not proto3) on purpose: the renderer relies on field *presence* — a
+// proto2 (not proto3) on purpose: the renderer relies on field *presence* – a
 // glyph carries `metrics` but no width; a box carries `shift` only when shifted;
 // gW falls back on `width === undefined`. proto2 tracks presence explicitly, so
 // an unset field decodes as absent (undefined in JS via toObject{defaults:false},
@@ -61,7 +61,7 @@ message Node {
   optional Node     leader        = 25;  // glue: box tiled across the set width (\cleaders, arrows)
 
   // transform: the PDF matrix [a b c d] from \rotatebox/\reflectbox/\scalebox,
-  // applied about the current point. No metrics of its own — it only wraps its
+  // applied about the current point. No metrics of its own – it only wraps its
   // children (the enclosing box was already sized by TeX).
   optional double   m_a           = 26;
   optional double   m_b           = 27;
@@ -106,22 +106,22 @@ message Node {
   optional bool kern_floor     = 48;
   optional bool surround_floor = 49;
 
-  // glyph: the cross-reference this glyph is part of — a 1-based index into
+  // glyph: the cross-reference this glyph is part of – a 1-based index into
   // Document.links. Every glyph a \ref printed carries the same id, so a
   // reference stays one link however the browser re-breaks the line it sits on.
   optional uint32 link   = 50;
-  // hlist: an empty, zero-sized box marking where a \label stood — a 1-based
+  // hlist: an empty, zero-sized box marking where a \label stood – a 1-based
   // index into Document.anchors. The box is ordinary in every other respect.
   optional uint32 anchor = 51;
   optional uint32 stream = 52;
-  // glyph/glue: part of a \webtext slot's default text — a 1-based index into
+  // glyph/glue: part of a \webtext slot's default text – a 1-based index into
   // Document.slots. A page may replace the text from JavaScript (see Slot).
   optional uint32 slot   = 53;
 }
 
 // A named placeholder in running text (\webtext{name}{default} in
 // reflowtex.sty). TeX typesets the default; a page may replace it with any
-// string, which the viewer then sets as the browser would — words measured in
+// string, which the viewer then sets as the browser would – words measured in
 // the slot's font, no kerning or ligatures across them, and between words the
 // interword glue of that font, recorded here (\fontdimen2–4, sp), so the
 // paragraph re-breaks around the new text.
@@ -134,13 +134,13 @@ message Slot {
 
 // What one link points at. Exactly one field is set: `label` for a cross
 // reference inside this document (which only the publishing site can turn into a
-// URL — see Document.links), `url` for a destination the author wrote out in
+// URL – see Document.links), `url` for a destination the author wrote out in
 // full, which needs no resolving.
 message Link {
   optional string label  = 1;
   optional string url    = 2;
   // Not a destination but a control: the glyphs trigger this action in the
-  // page (\webaction in reflowtex.sty — "pane:next" for an accordion's
+  // page (\webaction in reflowtex.sty – "pane:next" for an accordion's
   // \expandlink). The viewer sends it as a bubbling `reflowtex:action` DOM
   // event from the glyph, and whichever enclosing stream kind understands it
   // handles it.
@@ -169,9 +169,9 @@ message FontInfo {
   optional uint32 size_sp  = 3;
   optional string filename = 4;
 
-  // Microtypography as TeX had it while typesetting — what microtype (or a
+  // Microtypography as TeX had it while typesetting – what microtype (or a
   // preamble using \lpcode, \rpcode and \expandglyphsinfont directly) set on
-  // this font — in TeX's own units, so a breaker running TeX's algorithm
+  // this font – in TeX's own units, so a breaker running TeX's algorithm
   // protrudes and expands exactly as TeX did. `quad` (sp) is what protrusion
   // codes are relative to. expand_* are \expandglyphsinfont's three
   // arguments (thousandths); all absent = the font does not expand. `codes`
@@ -224,7 +224,7 @@ enum ItemKind {
   paragraph = 0;
   display   = 1;
   vspace    = 2;
-  // A \label that stood between two items rather than inside one — the usual
+  // A \label that stood between two items rather than inside one – the usual
   // case, since \label follows a sectioning command in vertical mode.
   anchorpoint = 3;
   // A separately typeset stream embedded at this point of the flow: what
@@ -255,9 +255,9 @@ message ContentItem {
   // display began its paragraph), the short pair otherwise. The viewer
   // re-breaks that line, so it redoes the choice: display_pre_size is TeX's
   // value at source_width, display_above .. display_below_short the four
-  // skips in force, display_used_above/below the ones TeX used — they are
+  // skips in force, display_used_above/below the ones TeX used – they are
   // components of the vspace items before and after the display, which the
-  // viewer swaps for its own choice — and display_after_line says a set line
+  // viewer swaps for its own choice – and display_after_line says a set line
   // of a paragraph stood directly before the display (otherwise
   // display_pre_size stands as captured).
   optional int32 display_pre_size    = 14;
@@ -275,7 +275,7 @@ message ContentItem {
   optional int32 display_quad            = 22;
   optional int32 display_interline_above = 23;
   optional int32 display_interline_below = 24;
-  // the leading TeX appended the display with — \baselineskip, \lineskip
+  // the leading TeX appended the display with – \baselineskip, \lineskip
   // and \lineskiplimit as set inside the display (amsmath opens them up by
   // \jot in split and multline), which the interline glue above it follows
   optional int32 display_baselineskip  = 25;
@@ -292,8 +292,8 @@ message ContentItem {
   optional uint32 stream = 13;
 }
 
-// A separately typeset run of content — its own paragraphs, displays and
-// vertical space, over the document's shared paragraph and font tables —
+// A separately typeset run of content – its own paragraphs, displays and
+// vertical space, over the document's shared paragraph and font tables –
 // referenced from wherever it belongs: a glyph (Node.stream: a footnote
 // marker pointing at its body) or a content item (ContentItem.stream: a block
 // the author wrapped in \begin{reflowtexstream}{kind}). One mechanism serves

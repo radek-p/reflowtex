@@ -3,7 +3,7 @@
 """Draw one glyph of a font (OpenType/CFF, or Type 1) as an SVG, zoomed in, with its vector
 controls: the outline, its on-curve anchors (squares) and the off-curve
 handles of each Bézier segment (circles on thin lines), over the glyph's
-advance box and baseline — the way a vector editor shows a selected path.
+advance box and baseline – the way a vector editor shows a selected path.
 
     python website/tools/glyph_outline.py website/latex-fonts/SegmentSymbol.otf \\
         segmentSymbol > website/assets/glyphs/segment-symbol.svg

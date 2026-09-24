@@ -136,7 +136,7 @@ local function collect_chars(used, head)
 end
 
 -- Protrusion (\lpcode/\rpcode) and expansion (\efcode, \expandglyphsinfont)
--- are set on the engine's internal font after loading — by microtype, say —
+-- are set on the engine's internal font after loading – by microtype, say –
 -- and font.getfont's table, the one the font was defined from, never sees
 -- them; font.getcopy rebuilds a table from the internal structure. One copy
 -- per font is kept: the codes are in place before the first paragraph that

@@ -9,7 +9,7 @@ Reflow TeX compiles a LaTeX snippet with LuaTeX, captures the finished node list
 ships it to the browser as a compact binary. A small JavaScript viewer then runs
 the Knuth–Plass line-breaking algorithm *in the browser* and paints the result as
 inline SVG. Because line breaking happens client-side, a paragraph re-breaks to
-whatever width the page gives it — the math and microtypography stay exactly as
+whatever width the page gives it – the math and microtypography stay exactly as
 TeX set them.
 
 - **Faithful.** Glyphs, spacing, fractions, accents, and TikZ pictures come from
@@ -27,26 +27,26 @@ TeX set them.
 ## Try it in one command
 
 The build pipeline shells out to a real TeX toolchain (LuaTeX, dvisvgm,
-protoc, Hugo for the website) — enough moving parts that the default,
+protoc, Hugo for the website) – enough moving parts that the default,
 recommended way to run it is in the provided container rather than installing
 all of that on your machine. See [local install](#local-install) below if
 you'd rather not use a container.
 
 **1. Get a container runtime**, if you don't have one:
 
-- **macOS:** [OrbStack](https://orbstack.dev) — `brew install orbstack`, or
+- **macOS:** [OrbStack](https://orbstack.dev) – `brew install orbstack`, or
   the installer from its site. Docker Desktop or
   [Colima](https://github.com/abiosoft/colima) (`brew install colima docker`)
   work too.
-- **Linux:** Docker Engine — your distro's package (e.g. `apt install
+- **Linux:** Docker Engine – your distro's package (e.g. `apt install
   docker.io`) or the [official install script](https://docs.docker.com/engine/install/)
   (`curl -fsSL https://get.docker.com | sh`); add yourself to the `docker`
   group so it runs without `sudo`. [Podman](https://podman.io) works as a
   drop-in too.
-- *(Windows isn't covered here yet — the container should still work under
+- *(Windows isn't covered here yet – the container should still work under
   WSL2, just untested.)*
 
-**2. Run the pipeline** — no local TeX Live, Python venv, or Hugo install
+**2. Run the pipeline** – no local TeX Live, Python venv, or Hugo install
 needed, the container has all of it:
 
 ```sh
@@ -54,7 +54,7 @@ docker compose run --rm reflowtex make check
 docker compose run --rm --service-ports reflowtex make serve   # → http://localhost:8000
 ```
 
-Open the URL and resize the window — the text re-breaks live. `.venv` lives
+Open the URL and resize the window – the text re-breaks live. `.venv` lives
 in its own named Docker volume rather than the bind-mounted repo, so it can't
 collide with a `.venv` you might also build on the host outside the container.
 
@@ -68,12 +68,12 @@ ports 8000 and 1313 forward to your host automatically.
 A snippet's own preamble is free to `\usepackage` anything (see
 [docs/architecture.md](docs/architecture.md)); if that pulls in a LaTeX
 package the image doesn't already have, it's installed via `tlmgr` on the
-spot and the run retried (see `docker/lualatex-autoinstall.sh`) — needs
+spot and the run retried (see `docker/lualatex-autoinstall.sh`) – needs
 network the first time a given package is used.
 
 **Rebuilding the reflowtex.dev website from scratch:** the site's `baseURL`
 bakes in a `/reflowtex/` path prefix, so serving `website/public` with a
-plain static file server 404s on every asset — use Hugo's own dev server
+plain static file server 404s on every asset – use Hugo's own dev server
 instead, which rewrites the prefix to match:
 
 ```sh
@@ -86,7 +86,7 @@ docker compose run --rm --service-ports reflowtex bash -lc 'cd website && hugo s
 multi-pass `testmath.tex`; for routine content edits use `make website`
 instead (incremental), or `website/build.sh server --bind 0.0.0.0` to build
 and serve in one step (equivalent to the two commands above, minus the forced
-full rebuild — `--bind` is still needed so the dev server is reachable from
+full rebuild – `--bind` is still needed so the dev server is reachable from
 outside the container).
 
 ## Local install
@@ -99,7 +99,7 @@ make check     # confirm lualatex, dvisvgm, protoc, python deps are present
 make serve     # compile examples/demo and serve it at http://localhost:8000
 ```
 
-Open the URL and resize the window — the text re-breaks live.
+Open the URL and resize the window – the text re-breaks live.
 
 ## How it fits together
 
@@ -123,7 +123,7 @@ directory is a thin shell that drives `src/` for a particular site generator.
 See [docs/architecture.md](docs/architecture.md) for the why, and
 [docs/binary-format.md](docs/binary-format.md) for the wire format.
 
-The build step compiles LaTeX, which is a programming language — if the
+The build step compiles LaTeX, which is a programming language – if the
 snippets come from anywhere but you, read
 [docs/security.md](docs/security.md) first. Shell escape is off by default.
 
@@ -132,13 +132,13 @@ snippets come from anywhere but you, read
 | Path | What it is |
 |---|---|
 | [`src/extract/`](src/extract/) | LuaTeX serializer + the wrapper template (LaTeX → `output.json`) |
-| [`src/schema/latex.proto`](src/schema/latex.proto) | the node-list schema — the single source of truth |
+| [`src/schema/latex.proto`](src/schema/latex.proto) | the node-list schema – the single source of truth |
 | [`src/latex/`](src/latex/) | `reflowtex.sty`, the companion package for documents written for the web (accordions of collapsible panes, web-only text, streams) |
 | [`src/encode/`](src/encode/) | the build pipeline: transforms, protobuf encoder, font handling |
 | [`src/viewer/`](src/viewer/) | the browser renderer (`latex-viewer.js`) + vendored `protobuf.min.js` |
 | [`integrations/vanilla/`](integrations/vanilla/) | reference integration: `.tex` snippets → a static site |
 | [`integrations/hugo/`](integrations/hugo/) | Hugo shortcode + prebuild (also a runnable example) |
-| [`integrations/jekyll/`](integrations/jekyll/) | Jekyll integration (planned — see its README) |
+| [`integrations/jekyll/`](integrations/jekyll/) | Jekyll integration (planned – see its README) |
 | [`examples/demo/`](examples/demo/) | the snippets `make demo` renders |
 | [`examples/testmath/`](examples/testmath/) | AMS' `testmath.tex` rendered with classic CM fonts (`make testmath-demo`) |
 | [`tests/linebreak/`](tests/linebreak/) | paragraph-breaking fixtures: captures TeX's exact breaks for byte-for-byte comparison |
@@ -147,15 +147,15 @@ snippets come from anywhere but you, read
 
 ## Using it in a project
 
-The simplest path is the **vanilla** integration — a directory of `.tex` snippets
+The simplest path is the **vanilla** integration – a directory of `.tex` snippets
 becomes a self-contained static site:
 
 ```sh
 python integrations/vanilla/build.py my-snippets/ -o site/
-open site/index.html                 # self-contained — works straight off disk
+open site/index.html                 # self-contained – works straight off disk
 ```
 
-For a **Hugo** site, copy two layout files and run the prebuild before `hugo` —
+For a **Hugo** site, copy two layout files and run the prebuild before `hugo` –
 see [integrations/hugo/README.md](integrations/hugo/README.md). **Jekyll** is
 planned. To embed blocks in a hand-written page, follow the DOM contract in
 [src/viewer/README.md](src/viewer/README.md).
@@ -164,13 +164,13 @@ planned. To embed blocks in a hand-written page, follow the DOM contract in
 
 The build pipeline shells out to a real TeX toolchain:
 
-- **LuaTeX** (`lualatex`) — TeX Live 2023+
-- **Ghostscript** (`gs`) — normalises ICC-coloured included PDFs before SVG conversion
-- **dvisvgm** — converts captured TikZ pages and included PDFs to SVG
-- **protoc** — the Protocol Buffers compiler (`apt install protobuf-compiler`)
+- **LuaTeX** (`lualatex`) – TeX Live 2023+
+- **Ghostscript** (`gs`) – normalises ICC-coloured included PDFs before SVG conversion
+- **dvisvgm** – converts captured TikZ pages and included PDFs to SVG
+- **protoc** – the Protocol Buffers compiler (`apt install protobuf-compiler`)
 - **Python 3.9+** (macOS's bundled `python3` qualifies) with the packages in
   [`src/encode/requirements.txt`](src/encode/requirements.txt), installed into a
-  project-local virtualenv — `make venv` creates `.venv/` and installs them; every
+  project-local virtualenv – `make venv` creates `.venv/` and installs them; every
   other `make` target (and `website/build.sh`) depends on it, so this happens
   automatically. To do it by hand: `python3 -m venv .venv && .venv/bin/pip install
   -r src/encode/requirements.txt`

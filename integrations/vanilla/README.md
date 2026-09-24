@@ -1,7 +1,7 @@
-# Reflow TeX — vanilla integration
+# Reflow TeX – vanilla integration
 
-The reference integration. It depends only on [`../../src`](../../src) — no site
-generator — so it's the clearest example of how to drive the pipeline, and the
+The reference integration. It depends only on [`../../src`](../../src) – no site
+generator – so it's the clearest example of how to drive the pipeline, and the
 quickest way to get LaTeX onto a page.
 
 ## Use
@@ -11,7 +11,7 @@ python build.py <snippets-dir> -o site/
 python -m http.server -d site        # then open http://localhost:8000
 ```
 
-Serve the output directory from anywhere — a domain root, a subpath, or a
+Serve the output directory from anywhere – a domain root, a subpath, or a
 page opened straight from disk: fonts resolve relative to `latex-viewer.js`.
 
 ## Input
@@ -20,7 +20,7 @@ A directory of LaTeX snippets:
 
 - Each `*.tex` file becomes **one block** on the page, in filename order, headed
   by its filename stem.
-- A file named **`preamble.tex`** is not a block — its contents are prepended to
+- A file named **`preamble.tex`** is not a block – its contents are prepended to
   every snippet's preamble (shared macros, packages, TikZ libraries, fonts).
 - Repo-local OTF fonts (faces not installed into TeX) go in a **`fonts/`**
   subdirectory of the snippets dir, or pass `--local-fonts`.
@@ -51,13 +51,13 @@ site/
 scratch you can delete.
 
 Serve it compressed: GitHub Pages and most static hosts gzip or brotli
-transparently, and it matters here — the inline node lists and the viewer
+transparently, and it matters here – the inline node lists and the viewer
 shrink about three-fold in transit. No precompressed sidecar files are
 emitted, since such hosts ignore them and simple dev servers cannot serve them.
 
 ## Embedding blocks in your own HTML
 
-`page.template.html` shows the whole contract — the `#latex-schema` element, the
+`page.template.html` shows the whole contract – the `#latex-schema` element, the
 `.latex-block[data-nodelist-b64]` blocks, the two scripts, and the minimum CSS the
 rendered SVG needs. See [../../src/viewer/README.md](../../src/viewer/README.md)
 for the full DOM contract if you want to hand-author pages rather than generate

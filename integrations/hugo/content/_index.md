@@ -1,5 +1,5 @@
 ---
-title: Reflow TeX — Hugo example
+title: Reflow TeX – Hugo example
 ---
 
 Every block below is the **same `.tex` file** the vanilla demo renders, pulled in

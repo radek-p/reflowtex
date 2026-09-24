@@ -9,8 +9,8 @@ latexTitle: true
 \bigskip
 
 Displayed equations keep \TeX{}'s spacing, operator sizes and limits. A
-display does not re-break; instead its width model --- recovered from
-several real \TeX{} runs at different widths --- lets the space around and
+display does not re-break; instead its width model -- recovered from
+several real \TeX{} runs at different widths -- lets the space around and
 inside it shrink as the column narrows, and only a display genuinely wider
 than its ink scrolls.
 {{< /latex >}}

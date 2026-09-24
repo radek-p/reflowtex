@@ -15,7 +15,7 @@ for cand in python3 python3.13 python3.12 python3.11 python3.10 python3.9; do
   fi
 done
 
-echo "error: no Python 3.9+ interpreter found on PATH — install one, e.g.:" >&2
+echo "error: no Python 3.9+ interpreter found on PATH – install one, e.g.:" >&2
 echo "         brew install python@3.12" >&2
 echo "       (or, with MacPorts: sudo port install python312)" >&2
 exit 1

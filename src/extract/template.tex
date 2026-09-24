@@ -22,16 +22,16 @@
 
 % ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
 % luaotfload resolves a font *by name* against a database built from several
-% locations, searched in `location_precedence` order — whose default is
+% locations, searched in `location_precedence` order – whose default is
 % {"system", "texmf", "local"}. On macOS, "system" means ~/Library/Fonts and
-% /Library/Fonts — regular Font Book directories any app (or a user, installing
+% /Library/Fonts – regular Font Book directories any app (or a user, installing
 % a font by hand) can add to, independently of TeX Live. If a font of the same
 % name ends up there too, it can be a *different, non-identical* copy of what
 % TeX Live ships under texmf-dist (different glyph-index ordering internally,
 % despite matching filenames). Since reflowtex addresses glyphs by the index
 % LuaTeX assigns while compiling but *serves the browser the texmf-dist file*
 % (via kpsewhich, see fonts.py), a "system" font winning that lookup makes every
-% glyph index wrong — wrong enough that normalise_glyph_addressing
+% glyph index wrong – wrong enough that normalise_glyph_addressing
 % (transforms.py) treats it as a substituted glyph and PUA-rewrites it, and the
 % served font (lacking the PUA codepoints, since they were computed against a
 % different file) can't display it at all. Reordering precedence so texmf wins
@@ -74,8 +74,8 @@
 % The template deliberately chooses *no* fonts. A document's typefaces are the
 % author's, and imposing one here does more than override a preference: loading
 % fontspec switches the default encoding to TU, and every 8-bit family the
-% preamble then selects — Libertine, Inconsolata, and most of what a real book
-% loads — has no TU shape, so NFSS silently substitutes the template's own
+% preamble then selects – Libertine, Inconsolata, and most of what a real book
+% loads – has no TU shape, so NFSS silently substitutes the template's own
 % font for it. Code set in \ttfamily comes out in a proportional serif, and the
 % log says so only as a font-shape warning nobody reads.
 %
@@ -83,7 +83,7 @@
 % fontspec and picks its faces; one that stays with classic 8-bit families gets
 % them through reflowtex's Type1 conversion (fonts.py legacy_otf(),
 % t1_convert.py), which PUA-remaps every glyph into a cmap the served font
-% actually has — the path examples/testmath exercises. Math likewise keeps
+% actually has – the path examples/testmath exercises. Math likewise keeps
 % whatever the document set up, classic Computer Modern included.
 \usepackage{mathtools}
 \usepackage{amssymb}
@@ -198,7 +198,7 @@
 % and \belowdisplayshortskip when that line ends left of the formula. The
 % renderer re-breaks the line, so it has to make that choice itself. Every
 % display is numbered here, its box stamped with the number, and what TeX
-% decides with — \predisplaysize and the four skips — recorded under it
+% decides with – \predisplaysize and the four skips – recorded under it
 % (Serializer.note_display); the serializer puts them on the display item.
 \newcount\reflowtexDisplayCount
 \AtBeginDocument{\everydisplay\expandafter{\the\everydisplay
@@ -208,7 +208,7 @@
 % LaTeX's \addvspace (a theorem's, list's or heading's space above) makes the
 % space since the last box at least its argument, judged on \lastskip. After
 % a display that skip is the below-display glue, which the renderer swaps for
-% its own choice — so it must know the minimum too. Every \addvspace reports
+% its own choice – so it must know the minimum too. Every \addvspace reports
 % the \lastskip it found and what it asked for; the serializer attaches the
 % minimum to the display whose skip it was (Serializer.note_addvspace).
 \let\reflowtexAddvspace\addvspace
@@ -281,8 +281,8 @@
 % unchanged.
 %
 % `"` is forced back to an ordinary character while this is read. A preamble may
-% legitimately have made it active — the knowledge package's quotation syntax
-% does, so that "term" is a reference — and an active quote inside the Lua string
+% legitimately have made it active – the knowledge package's quotation syntax
+% does, so that "term" is a reference – and an active quote inside the Lua string
 % literals below is passed to Lua as a macro call rather than a delimiter, which
 % fails at run time with a bare `unexpected symbol near '\'`. Catcodes are fixed
 % when a definition is *read*, so the guard has to be here, not at the call.
@@ -306,7 +306,7 @@
   \box\reflowtexAnchorBox}
 % #1 is the saved original macro, #2 the label.
 %
-% One reference macro often prints through another — \eqref is (\ref{...}) — and
+% One reference macro often prints through another – \eqref is (\ref{...}) – and
 % the inner call would otherwise stamp the number with an id of its own, cutting
 % the parentheses off from the digits they belong to. The outermost reference is
 % the one the reader means, so an already-stamped group is left alone. An unset
@@ -342,7 +342,7 @@
     \endgroup
   \fi}
 % Record and place the marker *before* delegating: packages that layer on \label
-% — cleveref, knowledge — scan ahead from it for an optional argument, and
+% – cleveref, knowledge – scan ahead from it for an optional argument, and
 % anything left after the delegated call can be swallowed by that lookahead.
 \DeclareRobustCommand{\reflowtex@newlabel@}[1]{%
   \global\advance\reflowtexAnchorCount by 1
@@ -374,15 +374,15 @@
   \let\reflowtex@label\label \let\label\reflowtex@newlabel@
   % A \label inside a display never reaches \label: amsmath swaps in
   % \label@in@display, which only stores the name and replays it later through
-  % \ltx@label — a copy of \label taken when amsmath was loaded, long before
+  % \ltx@label – a copy of \label taken when amsmath was loaded, long before
   % this hook runs. Redirect that copy as well, or every equation label is lost.
   \@ifundefined{ltx@label}{}{\let\ltx@label\reflowtex@newlabel@}}
 \makeatother
 \reflowtexRestoreQuote
 
 % ── Outline capture ──────────────────────────────────────────────────────────
-% The document's outline — its sections and subsections, and its theorems,
-% lemmas and the like — for a page to show as a table of contents. Each entry
+% The document's outline – its sections and subsections, and its theorems,
+% lemmas and the like – for a page to show as a table of contents. Each entry
 % is recorded (Serializer.note_outline) with an anchor at its place in the
 % flow, labelled reflowtex-outline-N, which becomes an element the page can
 % scroll to. Nothing here changes what is typeset.
@@ -403,7 +403,7 @@
 % Theorem-like environments: caught at \@begintheorem (amsthm's, or the
 % kernel's pair), after the heading is set up. The anchor goes in at the
 % start of the theorem's first paragraph (a one-shot para/begin hook), so a
-% jump lands on the theorem itself — without starting that paragraph any
+% jump lands on the theorem itself – without starting that paragraph any
 % earlier than LaTeX would: a \label right after \begin{thm} stays in
 % vertical mode, and the line end after it stays a non-space.
 \newcount\reflowtexOutlineCount

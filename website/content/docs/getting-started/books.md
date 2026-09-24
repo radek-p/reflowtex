@@ -12,7 +12,7 @@ counts its theorems and equations from where chapter~2 stopped, and uses the
 macros the chapters before it defined. On the web the same book is several
 pages, or several tabs. A \emph{batch} gives it both: every block with the
 same \texttt{batch=} is compiled together, as one document, in the order
-their \texttt{weight=} gives --- and each block then shows only its own
+their \texttt{weight=} gives -- and each block then shows only its own
 part.
 {{< /latex >}}
 
@@ -92,8 +92,8 @@ chapter each.
 
 {{< latex preamble="docs" >}}
 \section*{How it works}
-\texttt{prebuild.py} collects every block of a batch --- across all pages
---- orders them by \texttt{weight} (ties go by page, then by position on the
+\texttt{prebuild.py} collects every block of a batch -- across all pages
+-- orders them by \texttt{weight} (ties go by page, then by position on the
 page), and compiles them as one document, exactly as if a \texttt{main.tex}
 had \verb|\include|d them in that order. Between the parts it places a
 marker that opens no group, so whatever one part defines is still defined in
@@ -101,7 +101,7 @@ the next. The finished document is then cut back into one block per part,
 each carrying only its own paragraphs, footnotes, pictures and labels.
 \begin{description}
 \item[One chapter, two places.] A block may repeat a chapter the batch
-  already has --- the same \texttt{file=} on another page, say. It stays one
+  already has -- the same \texttt{file=} on another page, say. It stays one
   chapter of the book, compiled once, at the lowest \texttt{weight=} it is
   given, and both places show it; its labels link to the page with that
   lowest weight. In a different batch the same file is compiled again, as

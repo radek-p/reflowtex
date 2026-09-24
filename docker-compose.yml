@@ -12,7 +12,7 @@ services:
       # .venv holds compiled extensions (protobuf, fonttools) built for the
       # container's Linux/glibc target. Bind-mounting it straight from the repo
       # would make it fight with a host-native .venv (macOS/Mach-O) every time
-      # you switch between running `make` in and out of the container — each
+      # you switch between running `make` in and out of the container – each
       # side sees the other's venv as broken and silently recreates it. A named
       # volume mounted on top of that one path keeps it container-only.
       - reflowtex-venv:/workspace/.venv

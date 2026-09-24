@@ -18,7 +18,7 @@ FROM texlive/texlive:latest-basic@sha256:d54587cc7093dee8cc41c3a6317a37eb33164ba
 
 # ── LaTeX packages ───────────────────────────────────────────────────────────
 # src/extract/template.tex always loads mathtools, amssymb and fontspec, and
-# (for TikZ picture capture) pgf — every snippet needs these regardless of its
+# (for TikZ picture capture) pgf – every snippet needs these regardless of its
 # own preamble. xcolor, unicode-math and lm-math cover what this repo's own
 # examples/integrations preambles add on top (examples/demo/preamble.tex,
 # the unicode-math path template.tex documents as an alternative to the
@@ -38,10 +38,10 @@ RUN tlmgr update --self && \
     tlmgr path add
 
 # ── protoc + Python + PDF tools ──────────────────────────────────────────────
-# python3-venv (not python3-pip) — its bundled ensurepip is enough for `make
+# python3-venv (not python3-pip) – its bundled ensurepip is enough for `make
 # venv`, without pulling in python3-pip's build-essential dependency chain.
 # mutool (mupdf-tools): dvisvgm's PDF backend needs Ghostscript < 10.01.0 or
-# mutool — the Debian testing Ghostscript this image's base pulls in (10.07.1)
+# mutool – the Debian testing Ghostscript this image's base pulls in (10.07.1)
 # is too new for dvisvgm to drive directly, so mutool is what dvisvgm shells
 # out to for reading the externalised TikZ picture PDFs it converts to SVG.
 # Ghostscript itself normalises ICC-coloured included PDFs to DeviceRGB before
@@ -57,7 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ── Hugo ─────────────────────────────────────────────────────────────────────
 # Needed for website/build.sh (the reflowtex.dev site) and `make hugo-demo`.
-# Pinned .deb from upstream, like the Makefile pins PROTOBUFJS_VERSION — no
+# Pinned .deb from upstream, like the Makefile pins PROTOBUFJS_VERSION – no
 # Hugo package in Debian's repos is both current and available for both
 # architectures. "extended" for its embedded LibSass, in case a future layout
 # adds an SCSS pipeline; nothing here uses it today.

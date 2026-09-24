@@ -10,19 +10,19 @@ outlines ship with every TeX install, though, so we convert each .pfb to a
 CFF/OTF in pure fontTools (no FontForge dependency) that the browser can load.
 
 The addressing is the crux. A classic font is 8-bit: each glyph lives in a
-numeric slot (0–255) whose meaning is font-specific — slot 0x22 of cmsy10 is
+numeric slot (0–255) whose meaning is font-specific – slot 0x22 of cmsy10 is
 'arrowup', not '"'. We give each slot a target codepoint (build the converted
 font's cmap accordingly, and let the caller rewrite each glyph node's `char` to
-match — transforms.normalise_legacy_font_addressing):
+match – transforms.normalise_legacy_font_addressing):
 
   * If the slot's glyph *name* resolves through the Adobe Glyph List to a single
     common, searchable character (an ASCII/Latin/Greek letter, a digit, ordinary
-    punctuation), the real Unicode codepoint is used — so the text is selectable
+    punctuation), the real Unicode codepoint is used – so the text is selectable
     and Ctrl-F finds it. Keying on the name, not the slot, sidesteps the classic
     TeX encodings' quirks (cmr's slot 0x3C is 'exclamdown', and gets U+00A1, not
     '<').
-  * Everything else — math symbols, ligatures, CM-specific glyphs with no standard
-    name — keeps a private-use code, PUA_BASE + slot: collision-free, but not
+  * Everything else – math symbols, ligatures, CM-specific glyphs with no standard
+    name – keeps a private-use code, PUA_BASE + slot: collision-free, but not
     searchable. This is the same idea the rest of the pipeline uses for awkward
     glyphs (see transforms.PUA_BASE).
 
@@ -34,7 +34,7 @@ move any ink.
 
 A BMP private-use base is used (U+E000, not the Plane-16 base the glyph-index
 normaliser uses) so a font's 256 slots fit in E000..E0FF and a plain format-4
-cmap suffices — the converted font is one we build from scratch, so there is no
+cmap suffices – the converted font is one we build from scratch, so there is no
 real glyph at those codepoints to collide with.
 
 fontTools is required (t1Lib for parsing, fontBuilder for emitting). Without it,
@@ -60,8 +60,8 @@ PUA_BASE = 0xE000
 
 # Codepoints common and unambiguous enough to be worth making searchable: a slot
 # whose AGL name lands here gets its real Unicode value, everything else stays in
-# the PUA. Ranges are deliberately conservative — letters, digits, ordinary
-# punctuation and Greek — and exclude combining marks, controls, and the private
+# the PUA. Ranges are deliberately conservative – letters, digits, ordinary
+# punctuation and Greek – and exclude combining marks, controls, and the private
 # use area itself, none of which behave well as standalone SVG text.
 _SEARCHABLE_RANGES = (
     (0x0020, 0x007E),   # ASCII: space, digits, letters, punctuation
@@ -97,7 +97,7 @@ def _addressing(slots: dict[int, str]) -> dict[int, int]:
     A slot whose glyph name resolves (via the Adobe Glyph List) to one common,
     searchable character maps to that real codepoint; everything else keeps
     PUA_BASE + slot. Real codepoints are claimed first-come (slots ascending), so
-    the cmap stays a function — a later slot that would want an already-taken
+    the cmap stays a function – a later slot that would want an already-taken
     codepoint falls back to the PUA. PUA codes (0xE000+) never overlap the real
     ranges (all < 0x2200), so the two schemes cannot collide.
     """
@@ -124,7 +124,7 @@ def convert(name: str, out_dir: Path) -> tuple[str, dict[int, int]] | None:
     """Convert <name>.pfb → a content-hashed OTF in out_dir.
 
     Returns (served_filename, {source slot -> target codepoint}) or None when the
-    font cannot be converted — it has no Type1 outline (a genuinely bitmap-only
+    font cannot be converted – it has no Type1 outline (a genuinely bitmap-only
     face) or fontTools' Type1 parser rejects it. Either way the caller keeps the
     metric-box fallback for that font, so one bad font never fails a build.
     """
@@ -136,7 +136,7 @@ def convert(name: str, out_dir: Path) -> tuple[str, dict[int, int]] | None:
     try:
         return _convert(pfb, name, Path(out_dir))
     except Exception as e:                                  # noqa: BLE001
-        print(f'  t1-convert: {name} skipped ({type(e).__name__}: {e}) — keeps metric boxes')
+        print(f'  t1-convert: {name} skipped ({type(e).__name__}: {e}) – keeps metric boxes')
         return None
 
 

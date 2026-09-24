@@ -1,10 +1,10 @@
-# Reflow TeX — project landing site.
+# Reflow TeX – project landing site.
 #
 # Build it with ./build.sh (runs the reflowtex prebuild, then hugo). See README.md.
 #
 # baseURL: for a GitHub Pages *project* site this is https://<user>.github.io/<repo>/.
 # The viewer resolves font URLs against it (data-fonts-base uses relURL), so a
-# subpath works — just set the real value here before deploying. For a custom
+# subpath works – just set the real value here before deploying. For a custom
 # domain or a user/org page served at the root, set it to that root instead.
 baseURL = "https://radek-p.github.io/reflowtex/"
 languageCode = "en-us"

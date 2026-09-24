@@ -8,8 +8,8 @@ latexTitle: true
 \pagetitle[Getting started]{Hugo}
 \bigskip
 In a Hugo site, \LaTeX{} lives in a shortcode. Copy two files from
-\texttt{integrations/hugo/layouts/} into your site --- the shortcode
-\texttt{latex.html} and the partial \texttt{reflowtex-viewer.html} --- and
+\texttt{integrations/hugo/layouts/} into your site -- the shortcode
+\texttt{latex.html} and the partial \texttt{reflowtex-viewer.html} -- and
 include the partial once, before \verb|</body>|. Then run
 \texttt{prebuild.py} before every \texttt{hugo} build: it compiles the blocks,
 embeds the schema and provisions the fonts. This site is built that way.

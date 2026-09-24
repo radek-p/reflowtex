@@ -1,4 +1,4 @@
-# reflowtex.sty — the companion package
+# reflowtex.sty – the companion package
 
 For documents written *for* the web, not only published on it. A snippet
 loads it like any package:

@@ -7,8 +7,8 @@ aliases: ["/docs/"]
 {{< latex preamble="home" >}}
 \pagetitle[Reflow\,\TeX]{Real \TeX{} on the web}
 \bigskip
-\noindent \LaTeX{}, published exactly as a genuine Lua\TeX{} run set it ---
-every glyph, kern and formula --- with the lines broken again by the browser,
+\noindent \LaTeX{}, published exactly as a genuine Lua\TeX{} run set it --
+every glyph, kern and formula -- with the lines broken again by the browser,
 for whatever screen it is read on.
 {{< /latex >}}
 
@@ -17,7 +17,7 @@ for whatever screen it is read on.
 {{< latex preamble="home" >}}
 \section*{It is all real \TeX}
 Every card below is a live block: set by \TeX, laid out by the browser. The
-layout around them is plain HTML and CSS --- which is the point.
+layout around them is plain HTML and CSS -- which is the point.
 {{< /latex >}}
 
 <div class="bento">
@@ -168,7 +168,7 @@ the document's own fonts, not a picture of text.
 \raggedright
 \cardtitle{\TeX{} sets it}
 \noindent A real Lua\TeX{} run typesets your
-source, and a Lua hook records the finished node list --- before any line
+source, and a Lua hook records the finished node list -- before any line
 is broken.
 {{< /latex >}}
 
@@ -232,7 +232,7 @@ result beside its source.
 \raggedright
 \cardtitle{Web-first \LaTeX}
 \noindent Accordions, notes, hints, boxed
-theorems --- and kinds of your own.
+theorems -- and kinds of your own.
 {{< /latex >}}
 
 </a>

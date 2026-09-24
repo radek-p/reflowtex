@@ -7,8 +7,8 @@ latexTitle: true
 {{< latex preamble="docs" >}}
 \pagetitle[Typesetting]{Links and footnotes}
 \bigskip
-Cross-references and hyperlinks --- \verb|\ref|, \verb|\eqref|,
-\verb|\autoref|, \verb|\cref| and \verb|\href| --- become links, lit as a whole on hover even when a line break splits them, and
+Cross-references and hyperlinks -- \verb|\ref|, \verb|\eqref|,
+\verb|\autoref|, \verb|\cref| and \verb|\href| -- become links, lit as a whole on hover even when a line break splits them, and
 each \verb|\label| becomes an anchor on the page. A footnote is typeset by
 \TeX{} in full and opens in a popover from its marker.
 {{< /latex >}}

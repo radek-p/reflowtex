@@ -5,16 +5,16 @@
 The browser is served the same OTF files LuaTeX typeset with, so two things have
 to happen for every font a compiled block references:
 
-  * provision — copy the file into the output fonts directory. It is found first
+  * provision – copy the file into the output fonts directory. It is found first
     in an optional repo-local fonts dir (for fonts not installed into TeX), then
     via kpsewhich in the TeX installation.
-  * patch — LuaTeX addresses some glyphs by codepoints the font's cmap does not
+  * patch – LuaTeX addresses some glyphs by codepoints the font's cmap does not
     map (GSUB variants, unencoded glyphs, and the Plane-16 rewrites the glyph
     normaliser adds; see transforms.normalise_glyph_addressing). A served font
     missing those entries would draw the wrong glyph or nothing, so the missing
     codepoint→glyph-index entries are added. A font that is actually modified is
     then served under a *renamed*, content-hashed filename (e.g.
-    `NewCMMath-Regular.reflowtex-1a2b3c4d.otf`) — so it never masquerades as the
+    `NewCMMath-Regular.reflowtex-1a2b3c4d.otf`) – so it never masquerades as the
     upstream original (which many font licences require of a modified version),
     and a changed patch busts the browser cache. Unmodified fonts are served
     verbatim under their original name. patch() records the original→served map in
@@ -58,8 +58,8 @@ import t1_convert as _t1_convert
 class Fonts:
     """Resolves, copies, and patches the font files a document needs.
 
-    output_dir     — where served fonts are written (and patched in place).
-    local_dir      — optional dir of repo-shipped fonts searched before kpsewhich
+    output_dir     – where served fonts are written (and patched in place).
+    local_dir      – optional dir of repo-shipped fonts searched before kpsewhich
                      (for faces deliberately not installed into the TeX tree).
     """
 
@@ -95,7 +95,7 @@ class Fonts:
         once it's complete, so that race window doesn't exist.
 
         mkstemp creates the file owner-only (0600), and the rename keeps that;
-        a served font must be readable by others — the Pages upload, run as a
+        a served font must be readable by others – the Pages upload, run as a
         different user than the container that built the site, is one."""
         fd, tmp = tempfile.mkstemp(dir=dst.parent, prefix=f'.{dst.name}.')
         try:
@@ -126,7 +126,7 @@ class Fonts:
             # up to date (restored from a cache, as in CI) still needs the file,
             # so convert it again: the conversion is byte-reproducible, so the
             # same TeX installation gives the same name. A different name means
-            # the installation changed under the cached blocks — fail loudly
+            # the installation changed under the cached blocks – fail loudly
             # rather than publish pages that reference a font nobody serves.
             m = re.match(rf'^(.+)\.{MODIFIED_TAG}-[0-9a-f]{{8}}\.otf$', fname)
             if m:
@@ -136,11 +136,11 @@ class Fonts:
                     continue
                 sys.exit(f'ERROR: font {fname} is referenced by compiled blocks, but converting '
                          f'{m.group(1)} now gives {got[0] if got else "nothing"}; the TeX '
-                         f'installation changed — rebuild with --force')
+                         f'installation changed – rebuild with --force')
             result = subprocess.run(['kpsewhich', fname], capture_output=True, text=True)
             src = result.stdout.strip()
             if result.returncode != 0 or not src:
-                print(f'  font-provision: WARNING — {fname} not found via kpsewhich; '
+                print(f'  font-provision: WARNING – {fname} not found via kpsewhich; '
                       f'the browser will fall back to a system font')
                 continue
             self._copy_atomic(src, dst)
@@ -152,7 +152,7 @@ class Fonts:
         OTF and return (served_filename, {slot → target codepoint}), or None if it
         has no convertible outline (the caller then keeps the metric-box fallback).
 
-        Cached per name — the same face recurs across sizes and blocks — and
+        Cached per name – the same face recurs across sizes and blocks – and
         locked, since blocks convert on the compile thread pool. The written file
         is protected from patch()'s stale sweep via self.converted."""
         with self._convert_lock:
@@ -193,7 +193,7 @@ class Fonts:
                     continue
                 if rec.nameID in (1, 4, 16):            # family, full, typographic family
                     rec.string = f'{s} (ReflowTeX patched)'
-                elif rec.nameID == 6:                   # PostScript name — no spaces
+                elif rec.nameID == 6:                   # PostScript name – no spaces
                     rec.string = f'{s}-ReflowTeXPatched'
         except Exception:                               # noqa: BLE001
             pass
@@ -216,7 +216,7 @@ class Fonts:
         # during the transform pass and never rebuilt by patch, so sweeping it
         # would leave a dangling reference. Such fonts are referenced by their
         # hashed name in `requirements` (the transform set it as the filename),
-        # while patched fonts are referenced by their original name — so requiring
+        # while patched fonts are referenced by their original name – so requiring
         # the tag in the requirement name selects exactly the converted ones.
         keep = {name for name in requirements if f'.{MODIFIED_TAG}-' in name}
         for stale in self.output_dir.glob(f'*.{MODIFIED_TAG}-*'):
@@ -224,7 +224,7 @@ class Fonts:
                 stale.unlink()
 
         if _TTFont is None:
-            print('  font-patch: skipped (fonttools not installed — pip install fonttools)')
+            print('  font-patch: skipped (fonttools not installed – pip install fonttools)')
             self.served = {f: f for f in requirements}      # best effort: serve as-is
             return
 
@@ -259,7 +259,7 @@ class Fonts:
             )
             if non_bmp_missing and fmt12 is None:
                 self.served[filename] = filename
-                print(f'  font-patch: {filename} has no format-12 cmap — '
+                print(f'  font-patch: {filename} has no format-12 cmap – '
                       f'cannot add {len(non_bmp_missing)} non-BMP entries, skipping')
                 continue
 
@@ -270,7 +270,7 @@ class Fonts:
                 if table is None:
                     continue
                 if gindex >= len(glyph_order):
-                    print(f'  font-patch: {filename} glyph index {gindex} out of range — '
+                    print(f'  font-patch: {filename} glyph index {gindex} out of range – '
                           f'skipping U+{cp:05X}')
                     continue
                 gname = glyph_order[gindex]
@@ -304,8 +304,8 @@ class Fonts:
         the font that will be served for it.
 
         Every codepoint in `requirements` must have a cmap entry in its served
-        font. A miss means the browser would render nothing for that glyph —
-        silently, since @font-face has no per-glyph fallback — which is exactly
+        font. A miss means the browser would render nothing for that glyph –
+        silently, since @font-face has no per-glyph fallback – which is exactly
         the failure that should never reach a deployed page. (It happens, for
         instance, when LuaTeX resolved a font to a different build of the same
         face than the one kpsewhich serves: the glyph indices disagree, every
@@ -333,7 +333,7 @@ class Fonts:
                                 f'referenced codepoint(s) missing from its cmap: {sample}{more}')
         if problems:
             raise SystemExit('ERROR: served fonts cannot draw every glyph the blocks '
-                             'reference — the page would render blanks:\n  '
+                             'reference – the page would render blanks:\n  '
                              + '\n  '.join(problems))
 
 

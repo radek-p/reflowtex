@@ -4,11 +4,11 @@
 
 Three passes, each returning a count of what it changed:
 
-  * drop_unreferenced_paragraphs — forget captured paragraphs no stream item uses.
-  * strip_unsupported_nodes   — drop nodes the schema/renderer do not model.
-  * normalise_glyph_addressing — rewrite glyphs the served font cannot address by
+  * drop_unreferenced_paragraphs – forget captured paragraphs no stream item uses.
+  * strip_unsupported_nodes   – drop nodes the schema/renderer do not model.
+  * normalise_glyph_addressing – rewrite glyphs the served font cannot address by
                                  their Unicode codepoint to a private-use code.
-  * convert_pictures          — turn TikZ and included PDF pictures into inline SVG.
+  * convert_pictures          – turn TikZ and included PDF pictures into inline SVG.
 
 None of these depend on any framework; they operate on the parsed dict and (for
 fonts) a Fonts instance from fonts.py.
@@ -26,8 +26,8 @@ from fonts import fonts_of
 
 def _all_content_items(data: dict):
     """Yield every content item: the main flow's, then each stream's (footnote
-    bodies, \\begin{reflowtexstream} blocks). Streams nest by reference — a
-    stream item names another stream — so one flat pass over the streams table
+    bodies, \\begin{reflowtexstream} blocks). Streams nest by reference – a
+    stream item names another stream – so one flat pass over the streams table
     reaches every item exactly once."""
     yield from data.get('content', [])
     for stream in data.get('streams', []):
@@ -134,11 +134,11 @@ def strip_unsupported_nodes(data: dict) -> int:
 # reproduce the glyph LuaTeX actually typeset:
 #
 #  * the glyph is a GSUB substitution result (e.g. ssty script-size variants in
-#    fractions/scripts, size variants of delimiters) — the served font's cmap
+#    fractions/scripts, size variants of delimiters) – the served font's cmap
 #    maps the codepoint to a *different* glyph, and relying on the browser to
 #    re-apply font features is exactly the cross-browser lottery this pipeline
 #    exists to avoid;
-#  * the codepoint is a combining mark (math accents like \hat, \vec) — Safari
+#  * the codepoint is a combining mark (math accents like \hat, \vec) – Safari
 #    refuses to let an isolated mark's ink hang left of the text-run origin,
 #    shifting it; PUA codepoints carry no combining semantics;
 #  * the codepoint has no cmap entry at all (LuaTeX assigns Plane-15 codes to
@@ -166,7 +166,7 @@ def normalise_glyph_addressing(data: dict, fonts) -> int:
             return False
         if cp < 0xF0000 and unicodedata.category(chr(cp)) in ('Mn', 'Mc', 'Me'):
             return True                           # combining mark
-        if lookup is None:                        # font unavailable — marks only
+        if lookup is None:                        # font unavailable – marks only
             return False
         return lookup.get(cp) != gi               # substituted or unencoded glyph
 
@@ -203,7 +203,7 @@ def normalise_glyph_addressing(data: dict, fonts) -> int:
 # OpenType form, so the serializer records filename 'unknown' and the viewer draws
 # each glyph's metric box. Their outlines ship with TeX, though, so we convert each
 # to a served OTF (see t1_convert) and rewrite its glyph nodes' 8-bit slot numbers
-# to the private-use codepoints the converted font's cmap maps — the same PUA trick
+# to the private-use codepoints the converted font's cmap maps – the same PUA trick
 # as normalise_glyph_addressing, keyed on the slot instead of a glyph index (these
 # fonts carry no gindex). A font with no convertible outline is left as-is: its
 # filename stays 'unknown' and the viewer keeps drawing metric boxes.
@@ -239,8 +239,8 @@ def normalise_legacy_font_addressing(data: dict, fonts) -> int:
                     ch = n.get('char')
                     # Rewrite only slots the OTF actually addresses (0..255); an
                     # unencoded one is left as-is (it renders as nothing rather than
-                    # a wrong glyph). The pass never runs twice on a font — once its
-                    # filename is set above it is skipped — so no anti-re-entry guard
+                    # a wrong glyph). The pass never runs twice on a font – once its
+                    # filename is set above it is skipped – so no anti-re-entry guard
                     # on the codepoint is needed, which is good because a slot can now
                     # map to a real codepoint below 256.
                     if ch is not None and ch in addressing:
@@ -268,10 +268,10 @@ def normalise_legacy_font_addressing(data: dict, fonts) -> int:
 # anywhere) and gains an SVG payload the browser can draw. Two rewrites make the
 # payload safe to inline:
 #
-#  * ids — dvisvgm names glyph paths "g1-4855" and refers to them with <use>.
+#  * ids – dvisvgm names glyph paths "g1-4855" and refers to them with <use>.
 #    Those names restart per file, so two pictures on one page would collide and
 #    silently draw each other's glyphs. Every id gets a per-picture prefix.
-#  * colours — rewritten to CSS custom properties so a theme can recolour
+#  * colours – rewritten to CSS custom properties so a theme can recolour
 #    drawings exactly as it recolours text. Black is special: it is the default
 #    text colour and dvisvgm often omits fill for it (SVG's initial fill is
 #    black), so the renderer sets the inherited fill on the wrapping <g> rather
@@ -371,7 +371,7 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
                 externalized = bool(n.pop('externalized', False))
                 generated = bool(n.pop('generated', False))
                 if not src:
-                    sys.exit(f'ERROR: picture node in {build_dir.name} has no source file — '
+                    sys.exit(f'ERROR: picture node in {build_dir.name} has no source file – '
                              f'the template image hook did not record it')
                 source_key = (src, page, externalized, generated)
                 if source_key not in by_source:
@@ -383,12 +383,12 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
                         out = build_dir / f'{src}.svg'
                     else:
                         # src is whatever kpse.find_file returned inside the
-                        # LuaTeX process (serializer.lua's note_graphic) — kpathsea
+                        # LuaTeX process (serializer.lua's note_graphic) – kpathsea
                         # doesn't necessarily absolutise its answer, so a relative
                         # TEXINPUTS entry comes back as a path relative to *that
                         # process's* cwd (build_dir, per _run_lualatex). This
                         # transform runs later, as plain Python, with no reason to
-                        # share that cwd — so a relative src must still be resolved
+                        # share that cwd – so a relative src must still be resolved
                         # against build_dir, not wherever this happens to run from.
                         pdf = Path(src) if Path(src).is_absolute() else build_dir / src
                         out = build_dir / f'included-{len(pictures) + 1}.svg'
@@ -403,7 +403,7 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
                     # temporary files are not namespaced per process, so concurrent
                     # conversions (blocks compile on a thread pool) collide and some
                     # silently emit an SVG with every glyph missing. It exits 0 and
-                    # writes valid SVG, so nothing downstream can tell — the picture
+                    # writes valid SVG, so nothing downstream can tell – the picture
                     # just loses all its labels. A private tmpdir avoids it.
                     with tempfile.TemporaryDirectory(prefix='dvisvgm-') as tmpdir:
                         r = subprocess.run(
@@ -438,7 +438,7 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
 # A batch (Pipeline.compile_batch) is one document whose top-level flow is a
 # run of "batch-part" streams, one per part. Each part becomes a document of
 # its own: the part's content as the main flow, over copies of the shared
-# tables pruned to what that part uses — streams (footnotes, boxes, panes)
+# tables pruned to what that part uses – streams (footnotes, boxes, panes)
 # reachable from it, paragraphs, pictures, and anchors. Pruning the anchors
 # matters beyond size: a page registers every anchor of its blocks as a label
 # found on that page, so a part must not claim labels another part defines.

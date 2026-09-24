@@ -69,8 +69,8 @@ ordinary paragraph.
 \textbf{Step 3: the behaviour}, when a kind needs one. Register it under the
 kind's name in a script on the page, before or after the viewer. The viewer
 calls \texttt{mount} once for every box of that kind, with the box and a
-\texttt{ctx}; \texttt{ctx.state} outlives the box --- the viewer rebuilds
-boxes when web fonts arrive --- so a kind keeps what it must remember there.
+\texttt{ctx}; \texttt{ctx.state} outlives the box -- the viewer rebuilds
+boxes when web fonts arrive -- so a kind keeps what it must remember there.
 The built-in hint is exactly this, less its keyboard handling:
 {{< /latex >}}
 

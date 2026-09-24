@@ -280,7 +280,7 @@ end
 
 -- A stream opened by \begin{reflowtexstream}{kind} (reflowtex.sty): `id` is
 -- its number, which is also the value of attribute 911 on every node typeset
--- inside it, and `parent` the attribute's value when it opened — an unset
+-- inside it, and `parent` the attribute's value when it opened – an unset
 -- LuaTeX attribute reads as a large negative number, so anything non-positive
 -- means the main flow. Footnotes join the same table when the flow walk meets
 -- their insertions; the walk fills `content` (see walk_flow).
@@ -322,8 +322,8 @@ function Serializer.note_stream(id, kind, parent, attrs)
 end
 
 -- What TeX had in hand when it opened a display (\everydisplay, template.tex):
--- \predisplaysize — where the line before the display ends, +2em, or
--- -\maxdimen when the display began its paragraph — and the four display
+-- \predisplaysize – where the line before the display ends, +2em, or
+-- -\maxdimen when the display began its paragraph – and the four display
 -- skips in force. TeX picks the full pair when the display's left edge is at
 -- or left of that end (TeX §1203), the short pair otherwise. The renderer
 -- re-breaks the line, so it must make that choice itself; see the viewer.
@@ -359,12 +359,12 @@ function Serializer.note_display(id)
 end
 -- The leading TeX appends the display box with. The box goes onto the
 -- vertical list before the math group closes, so \baselineskip as set
--- *inside* the display counts — amsmath's \openup\jot in split and
+-- *inside* the display counts – amsmath's \openup\jot in split and
 -- multline, for one. The conversion of the display's own math list runs
 -- at that point, in that group: read the parameters there. An alignment's
 -- outer list is empty and never converted, so its cells' conversions (text
 -- style, inside the same group, after amsmath opened the leading up) stand
--- in — the display's own conversion, when it comes, has the last word.
+-- in – the display's own conversion, when it comes, has the last word.
 local function note_display_leading(head, style, penalties)
     local rec = current_display and display_notes[current_display]
     if rec and (style == "display" or rec.bskip == nil) then
@@ -380,7 +380,7 @@ end
 -- The below skip TeX appended after the display: the first glue after the
 -- display's box on the vertical list, as it stands at the first \addvspace
 -- (\addpenalty may have put a copy of it after a penalty by then, and the
--- page builder may have moved the earlier part onto the page — the list is
+-- page builder may have moved the earlier part onto the page – the list is
 -- read back from its end, then the page from its end, to the last box).
 below_skip_of = function(id)
     local rec = display_notes[id]
@@ -429,8 +429,8 @@ end
 
 -- ── Transforms ────────────────────────────────────────────────────────────
 -- Rotation is not a node property: \rotatebox (and \reflectbox, \scalebox)
--- leave the box tree alone and emit three whatsits around the content —
--- pdf_save, pdf_setmatrix, pdf_restore — while adjusting the *enclosing* box
+-- leave the box tree alone and emit three whatsits around the content –
+-- pdf_save, pdf_setmatrix, pdf_restore – while adjusting the *enclosing* box
 -- to the transformed bounding box. So the metrics are already right without
 -- us; only the drawing needs the matrix. Dropping these whatsits is silent
 -- and looks like a layout bug: the content renders unrotated in a box sized
@@ -465,7 +465,7 @@ local function serialize_nodelist(head)
     -- `cur` is the list being appended to: a pdf_save opens a frame that
     -- collects nodes until its pdf_restore, at which point the frame becomes
     -- a transform node (if a matrix was set) or is spliced back in flat (if
-    -- not — plenty of saves carry no matrix at all).
+    -- not – plenty of saves carry no matrix at all).
     local cur = result
     local frames = {}
 
@@ -544,7 +544,7 @@ local function serialize_nodelist(head)
             -- box that TeX tiles across the glue's *set* width instead of
             -- leaving blank space. Extensible arrows are built this way:
             -- \xrightarrow is an arrow tail, a \cleaders run of en-dashes, and
-            -- an arrowhead — so dropping the leader silently deletes the middle
+            -- an arrowhead – so dropping the leader silently deletes the middle
             -- of every arrow and leaves the two ends floating apart.
             if n.leader then
                 g.leader = serialize_nodelist(n.leader)[1]
@@ -565,9 +565,9 @@ local function serialize_nodelist(head)
             }
 
         elseif t == "rule" and n.subtype == RULE_IMAGE then
-            -- An included or externally supplied picture. Keep TeX's metrics —
+            -- An included or externally supplied picture. Keep TeX's metrics –
             -- they are what lets the picture behave as an ordinary box
-            -- everywhere — and carry the source file into the encode stage.
+            -- everywhere – and carry the source file into the encode stage.
             local id = node.get_attribute(n, PIC_ATTR)
             local picture = id and picture_files[id] or nil
             cur[#cur + 1] = {
@@ -638,7 +638,7 @@ local function serialize_nodelist(head)
                 -- template.tex leaves an empty, zero-sized box where it stood;
                 -- that box flows with the text through line breaking, so where
                 -- it comes to rest is where the label belongs. No special node
-                -- kind is needed — it is an ordinary box that happens to be
+                -- kind is needed – it is an ordinary box that happens to be
                 -- empty, and it draws and advances nothing either way.
                 anchor     = node.get_attribute(n, ANCHOR_ATTR),
                 children   = n.head and serialize_nodelist(n.head) or {},
@@ -678,7 +678,7 @@ end
 --
 -- Each captured node is stamped with its paragraph index so the shipout walk
 -- can recognise the resulting lines. Displays never pass through this
--- callback, so they stay unstamped — that is exactly how the walk tells text
+-- callback, so they stay unstamped – that is exactly how the walk tells text
 -- apart from math.
 
 local all_paragraphs = {}
@@ -710,12 +710,12 @@ end
 
 -- List indentation never appears in the node list. LaTeX's list environments
 -- leave \leftskip at zero and indent via \parshape instead, whose first pair
--- is {indent, linewidth} — so an item at depth 1 reports {25pt, 320pt} of a
+-- is {indent, linewidth} – so an item at depth 1 reports {25pt, 320pt} of a
 -- 345pt \hsize. The indent must be recorded here, while the paragraph is
 -- being broken, and is an absolute typographic measure (\leftmargin), so the
 -- renderer keeps it fixed and narrows the text column rather than scaling it.
--- Without it, item text starts at x=0 and the label — which hangs a fixed
--- distance to the *left* of the text — lands at negative x and is clipped.
+-- Without it, item text starts at x=0 and the label – which hangs a fixed
+-- distance to the *left* of the text – lands at negative x and is clipped.
 -- The band this paragraph occupies: {indent, width}. Doubles as the band any
 -- display inside it inherits (see the \displaywidth note below).
 local function para_band()
@@ -833,12 +833,12 @@ local function capture_flow()
     -- The kernel's spacing macros read back the vertical list's tail:
     -- \addvspace/\addpenalty/\endtrivlist test \lastskip (and \unpenalty can
     -- pop a penalty to reach the glue behind it) to merge an environment's
-    -- \topsep with the one the previous environment already contributed —
+    -- \topsep with the one the previous environment already contributed –
     -- that is what keeps a lemma→proof boundary at one \topsep, not two.
     -- Zeroing that glue in place makes those reads see 0.0pt, the merge
     -- silently no-ops, and every \addvspace-mediated boundary records its
     -- skip twice. Only the trailing run of discardables (glue/kern/penalty
-    -- with no box after them) is reachable this way — \lastbox is illegal in
+    -- with no box after them) is reachable this way – \lastbox is illegal in
     -- outer vertical mode, so a box shields everything before it. Keep that
     -- run's dimensions real, and balance the page total with one negative
     -- kern inserted *before* the run: interior, hence unreachable, and
@@ -919,7 +919,7 @@ local HL_LINE, HL_ALIGNMENT, HL_EQUATION = 1, 4, 6
 -- and the before/after skips \@startsection puts around a section heading. That
 -- is *explicit* spacing the author asked for, and it is preserved. So is
 -- parskip (3): the glue TeX adds at every paragraph start is paragraph
--- spacing, not leading — zero in article's running text, but inside a list
+-- spacing, not leading – zero in article's running text, but inside a list
 -- it is \parsep, and dropping it pulled every item 4pt closer than TeX sets
 -- them. Only baselineskip (2) and lineskip (1) are interline leading the
 -- renderer re-derives per line, so those are dropped between text paragraphs.
@@ -940,7 +940,7 @@ local GLUE_ABOVEDISPLAYSHORT, GLUE_BELOWDISPLAYSHORT = 6, 7
 --
 -- \displaywidth itself is long gone by the vertical-list walk, but it does not
 -- need to be captured: TeX derives it from the enclosing paragraph's shape (TeX82 §1145
--- — with no \parshape and no \hangindent, \displaywidth = \hsize and
+-- – with no \parshape and no \hangindent, \displaywidth = \hsize and
 -- \displayindent = 0; otherwise both come from \parshape). Since every
 -- paragraph already records its \parshape band, a display simply inherits the
 -- band of the paragraph it interrupts.
@@ -948,7 +948,7 @@ local GLUE_ABOVEDISPLAYSHORT, GLUE_BELOWDISPLAYSHORT = 6, 7
 -- Reading the value from append_to_vlist_filter would be the obvious
 -- alternative and is a trap: returning a box from that callback makes the
 -- callback responsible for the interline glue, so hooking it silently drops
--- every baselineskip TeX would have inserted — it changes the document rather
+-- every baselineskip TeX would have inserted – it changes the document rather
 -- than observing it.
 
 local content   = {}
@@ -969,8 +969,8 @@ end
 
 -- The band of the most recent paragraph; displays inherit it.
 local cur_band = { indent = 0, width = 0 }
--- What the flow last stacked — "line", "blank" (a line with no ink: the
--- indent box of a paragraph that opens with a display) or "display" — and
+-- What the flow last stacked – "line", "blank" (a line with no ink: the
+-- indent box of a paragraph that opens with a display) or "display" – and
 -- the display item the next below-display glue belongs to.
 local last_box = nil
 local last_display = nil
@@ -979,7 +979,7 @@ local last_display = nil
 -- Every item lands in exactly one content list: the main flow, a footnote's
 -- body, or the content of a \begin{reflowtexstream} block (reflowtex.sty). The
 -- walk carries a context: `out`, the list it is filling, and `base`, the
--- stream id whose nodes belong *directly* in that list — nil for the main
+-- stream id whose nodes belong *directly* in that list – nil for the main
 -- flow. A footnote written inside a stream inherits the stream's attribute on
 -- all its nodes, so its own walk takes that id as home rather than as a block
 -- nested in the footnote.
@@ -1084,7 +1084,7 @@ local function walk_flow(head, pending, ctx)
             -- executed in vertical mode, so its marker box joins the vertical
             -- list instead of a paragraph and never reaches serialize_nodelist.
             -- Emit it into the content stream, where it lands between the two
-            -- items it was written between — which is exactly the position a
+            -- items it was written between – which is exactly the position a
             -- section label is meant to name.
             local out = stream_out(ctx, stream_attr(n))
             out[#out + 1] = { kind = "anchorpoint",
@@ -1094,8 +1094,8 @@ local function walk_flow(head, pending, ctx)
             last_box = (p and has_visible_nodes(all_paragraphs[p].nodes)) and "line" or "blank"
             -- A blank line (a paragraph with nothing visible) is not an item,
             -- but the space down to it and its own height are real space. If
-            -- a display follows — the display opened that empty paragraph, as
-            -- \begin{equation} straight after \par does — they belong to the
+            -- a display follows – the display opened that empty paragraph, as
+            -- \begin{equation} straight after \par does – they belong to the
             -- gap above the display (below). Before anything else the blank
             -- line's space is dropped with it, as ever.
             if last_box == "blank" then
@@ -1135,7 +1135,7 @@ local function walk_flow(head, pending, ctx)
                 -- inside it. display_shift is carried out here rather than on
                 -- the box because in a vertical list shift means a horizontal
                 -- displacement, whereas the renderer reaches the box through
-                -- its hlist path, where shift means a vertical offset —
+                -- its hlist path, where shift means a vertical offset –
                 -- passing it through would push displays down the page.
                 display_width  = cur_band.width > 0 and cur_band.width or n.width,
                 display_indent = cur_band.indent,
@@ -1157,7 +1157,7 @@ local function walk_flow(head, pending, ctx)
                 display_lineskiplimit = note and note.lskiplimit,
                 display_after_min   = addvspace_min[node.get_attribute(n, DISPLAY_ATTR) or -1],
                 -- (-\maxdimen: the display opened an empty paragraph, whatever
-                -- the flow holds before it — \noindent$$ after a paragraph)
+                -- the flow holds before it – \noindent$$ after a paragraph)
                 display_after_line  = last_box == "line" and (note == nil or note.pre_size > -1073741823),
                 box  = {
                     type       = "hlist",

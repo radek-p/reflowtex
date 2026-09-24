@@ -3,7 +3,7 @@
 # and layouts/partials/reflowtex-viewer.html (copy them into your layouts/), plus
 # prebuild.py run before every build.
 baseURL = "/"
-title = "Reflow TeX — Hugo example"
+title = "Reflow TeX – Hugo example"
 disableKinds = ["taxonomy", "term", "RSS", "sitemap", "404"]
 
 [params]

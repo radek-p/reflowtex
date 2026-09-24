@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""reflowtex — vanilla HTML+JS integration.
+"""reflowtex – vanilla HTML+JS integration.
 
 The reference integration: it depends only on reflowtex/src, nothing framework-
 specific. Point it at a directory of LaTeX snippets and it emits a self-contained
-static site — one HTML page, the viewer scripts, and the fonts — that renders the
+static site – one HTML page, the viewer scripts, and the fonts – that renders the
 snippets in any browser.
 
     python build.py <snippets-dir> -o site/
@@ -16,7 +16,7 @@ fonts). Repo-local OTF fonts (faces not installed into TeX) go in a `fonts/`
 subdirectory of the snippets dir, or pass --local-fonts.
 
 Self-contained: open site/index.html straight off disk, or serve it any way
-you like (python -m http.server -d site works too) — fonts resolve relative
+you like (python -m http.server -d site works too) – fonts resolve relative
 to latex-viewer.js's own URL, wherever that ends up.
 """
 
@@ -40,7 +40,7 @@ PAGE_TEMPLATE = HERE / 'page.template.html'
 
 # AGPL-3.0 §13: deployed pages must offer their users the Corresponding Source of
 # the software they interact with. This is the URL the footer's source link points
-# to — the reflowtex source. Overridable with --source-url or the
+# to – the reflowtex source. Overridable with --source-url or the
 # REFLOWTEX_SOURCE_URL environment variable.
 DEFAULT_SOURCE_URL = os.environ.get(
     'REFLOWTEX_SOURCE_URL', 'https://github.com/radek-p/reflowtex')
@@ -57,7 +57,7 @@ def main() -> None:
                     help='URL of the published source (AGPL-3.0 §13 source offer '
                          'shown in the page footer)')
     ap.add_argument('--fonts-base', default='fonts/',
-                    help="URL prefix @font-face fetches fonts from — relative "
+                    help="URL prefix @font-face fetches fonts from – relative "
                          "(default 'fonts/') resolves against latex-viewer.js's "
                          'own URL, which works unmodified from a subpath, a '
                          "different domain, or straight off disk over file://; "
@@ -97,7 +97,7 @@ def main() -> None:
 
     print(f'reflowtex: compiling {len(snippets)} snippet(s) from {src_dir}')
     # Each snippet owns its heading (a \section, if any), so no HTML heading is
-    # added here — the block is one self-contained rendering.
+    # added here – the block is one self-contained rendering.
     # A snippet that refers to its own labels needs the .aux round trip, or
     # every \\ref prints "??": give it a second pass.
     ref_re = re.compile(r'\\(?:eq|auto|c|C|name|page)?ref\*?\{')

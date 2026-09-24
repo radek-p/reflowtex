@@ -4,7 +4,7 @@
 // inline SVG using Knuth-Plass line breaking.
 //
 // Data is embedded in the HTML at Hugo build time (via prebuild.py).
-// No runtime fetching of binary files — works fully offline.
+// No runtime fetching of binary files – works fully offline.
 //
 // Depends on protobuf.min.js being loaded first (exposes global `protobuf`).
 
@@ -12,7 +12,7 @@
 'use strict';
 
 // document.currentScript is only valid during this script's own synchronous
-// top-level execution — it reads as null from inside any callback (DOMContent-
+// top-level execution – it reads as null from inside any callback (DOMContent-
 // Loaded handlers, event listeners, …), so anything that needs it later must
 // capture it now.
 const SCRIPT_URL = document.currentScript?.src;
@@ -61,7 +61,7 @@ const RIGHT_PROTRUSION = { 44:0.7,46:0.7,58:0.5,59:0.5,45:0.5,8208:0.5,8722:0.5,
 const LEFT_PROTRUSION  = { 40:0.3,8220:0.7,8216:0.7 };
 
 // ── Colour maps (optional, page-supplied) ────────────────────────────────────
-// reflowtex ships no palette of its own — colour substitution is entirely
+// reflowtex ships no palette of its own – colour substitution is entirely
 // optional and driven by data an integration embeds on the page, so this file
 // stays document-agnostic. A block opts in with [data-color-map="<name>"],
 // naming one entry of an optional page-supplied JSON island:
@@ -73,7 +73,7 @@ const LEFT_PROTRUSION  = { 40:0.3,8220:0.7,8216:0.7 };
 //     }, … }
 //   </script>
 //
-// colors — flat per-theme substitution, keyed by the hex TeX/tikz produced;
+// colors – flat per-theme substitution, keyed by the hex TeX/tikz produced;
 //   colours not listed render as-is. Each non-light theme is matched by a
 //   class name on <html> (see this file's README's Theming section); adding a
 //   theme to a map is just a new key here plus a class the page switcher sets.
@@ -87,22 +87,22 @@ const LEFT_PROTRUSION  = { 40:0.3,8220:0.7,8216:0.7 };
 //   working even for a block with no colour map at all. '#ffffff' is special
 //   too, but is not something a map needs to set: it always tracks
 //   --latex-page-bg (see below), because a flat white fill in a TikZ/PDF
-//   picture means "the paper", not a deliberate colour choice — true with or
+//   picture means "the paper", not a deliberate colour choice – true with or
 //   without a colour map, so it's a fixed default rather than map data.
 //
-// tints — colours TeX produced by mixing a base colour into the page, e.g.
+// tints – colours TeX produced by mixing a base colour into the page, e.g.
 //   `red!20!white` is red at 20% over the paper. TeX resolves that to flat
 //   RGB at compile time, so what arrives is a baked hex with no trace of how
-//   it was built — and a tint of a *white* page reads wrong on a dark one.
+//   it was built – and a tint of a *white* page reads wrong on a dark one.
 //   Re-deriving the mix at runtime, against whatever --latex-page-bg
 //   currently is, keeps the intent: a tint follows both its base colour and
 //   the current background. This is not the same as opacity, and must not be
-//   reimplemented with it — these fills are opaque on purpose, masking the
+//   reimplemented with it – these fills are opaque on purpose, masking the
 //   drawing underneath. Each entry is baked-hex: [base-hex, percent-of-base].
 //
 // --latex-page-bg is deliberately not part of this data: TeX has no notion of
 // the page's colour, so it is the *page's* responsibility (its own theme
-// CSS), not a colour map's — e.g. `:root.dark { --latex-page-bg: #0c0a09; }`
+// CSS), not a colour map's – e.g. `:root.dark { --latex-page-bg: #0c0a09; }`
 // alongside wherever else that theme sets its background. Unset, it falls
 // back to the CSS `Canvas` system colour, so tints and the viewer's own UI
 // chrome (the display scrollbox, citation popovers) still land somewhere
@@ -126,8 +126,8 @@ function installColorMaps() {
     // TeX has no notion of the page's colour, so a flat white fill in a
     // TikZ/PDF picture (the paper, not a deliberate colour choice) needs to
     // track whatever the page's background actually is. True for every
-    // picture regardless of colour map, so — unlike the rest of this
-    // function — this is not map data: it is a fixed, unconditional default,
+    // picture regardless of colour map, so – unlike the rest of this
+    // function – this is not map data: it is a fixed, unconditional default,
     // on :root so a map's own '#ffffff' entry (if any) still wins by
     // specificity.
     let css = ':root { --latex-color-ffffff: var(--latex-page-bg, Canvas); }\n';
@@ -166,7 +166,7 @@ function installColorMaps() {
         if (tintDecls.length) css += sel + ' {\n' + tintDecls.join('\n') + '\n}\n';
     }
     // Default-coloured glyphs carry no inline fill; route them through the
-    // '#000000' variable with currentColor as fallback — works with zero
+    // '#000000' variable with currentColor as fallback – works with zero
     // colour maps installed. The html prefix outranks the page's own
     // `.latex-block svg text` rule regardless of stylesheet order.
     //
@@ -219,7 +219,7 @@ function paramsFromEl(el) {
 
 // ── Per-page shared state ─────────────────────────────────────────────────────
 
-// fontInfo is intentionally NOT global — font IDs are per-compilation and collide
+// fontInfo is intentionally NOT global – font IDs are per-compilation and collide
 // across blocks (e.g. both block 1 and block 2 may use ID 54 for different files).
 // Each block gets its own map returned from registerFonts().
 const registeredFontFaces = new Set();
@@ -228,7 +228,7 @@ let   fontUrlMap          = {};     // original font filename → served filenam
 // Fonts are deployed beside this script. Resolving from the script URL keeps the
 // viewer portable across a domain root, arbitrary subpaths, and local previews
 // (including a page opened straight off disk over file://, where an absolute
-// '/fonts/'-style path can't resolve at all — see loadFontMap's handling of
+// '/fonts/'-style path can't resolve at all – see loadFontMap's handling of
 // data-fonts-base below, which must preserve this same resolution).
 let   fontBase            = SCRIPT_URL
     ? new URL('fonts/', SCRIPT_URL).href
@@ -247,7 +247,7 @@ function reflowBlock(el) {
     if (!data) return false;
     // A block inside a collapsed section is display:none and reports clientWidth
     // 0, which would fall through to DEFAULT_WIDTH_PT and re-lay-out the block at
-    // a width it is never shown at — leaving that stale layout to be printed.
+    // a width it is never shown at – leaving that stale layout to be printed.
     // Keep the last good layout; being shown again resizes the element, which
     // fires the observer once more.
     if (el.clientWidth === 0 && !el.dataset.latexWidth) return false;
@@ -262,13 +262,13 @@ function reflowBlock(el) {
     const params = { ...data.params, align: newAlign };
     const t0  = performance.now();
     // Layout always runs for the whole block so its height (and the page's scroll
-    // geometry) stays correct — it is pure computation and cheap. Painting, the
+    // geometry) stays correct – it is pure computation and cheap. Painting, the
     // DOM-heavy part, is then gated to the visible segments.
     const root = layoutDocument(data.fontInfo, data.doc, newWidth, params, data.cache);
     if (root !== el.firstElementChild) el.replaceChildren(root);
     remeasureStreams(data.fontInfo, data.doc, newWidth, params, data.cache);
     // Re-layout moved every line: painted segments now hold ink at stale positions.
-    // Mark them dirty so they get re-drawn in place — the on-screen ones now (below),
+    // Mark them dirty so they get re-drawn in place – the on-screen ones now (below),
     // each off-screen one when it next scrolls into view (segIO). They are never
     // hidden in the meantime: their <svg> keeps its new reserved size, only its
     // glyphs are stale until repainted.
@@ -330,8 +330,8 @@ function remeasureStreams(fontInfo, doc, widthPt, params, cache) {
 }
 
 // Repaint every block after a wave of webfonts finishes loading. On a cold cache
-// faces arrive in waves *after* content has painted — at init, and lazily on
-// scroll — and SVG <text> does not reliably re-rasterise when its face lands
+// faces arrive in waves *after* content has painted – at init, and lazily on
+// scroll – and SVG <text> does not reliably re-rasterise when its face lands
 // (Firefox especially). A one-shot repaint on document.fonts.ready is not enough:
 // a heading below the first screen is not painted until scrolled to, so if it is
 // reached while its (bold) face is still loading it paints in a fallback that the
@@ -356,7 +356,7 @@ function scheduleFontRepaint() {
 // Re-layout runs in a rAF, not synchronously in the observer callback. Doing the
 // work inline resizes the observed element (a new layout has a new height), which
 // the observer then reports as "ResizeObserver loop completed with undelivered
-// notifications" — harmless but noisy. Deferring to the next frame breaks that
+// notifications" – harmless but noisy. Deferring to the next frame breaks that
 // synchronous feedback loop and coalesces bursts of resizes into one pass.
 const roPending = new Set();
 let roScheduled = false;
@@ -374,21 +374,21 @@ const ro = new ResizeObserver(entries => {
 
 // ── Per-segment painting (grow-only) ──────────────────────────────────────────
 // Layout always covers the whole block (cheap pure computation, and it must, so
-// the block's height keeps scroll geometry exact). Painting — placing tens of
-// thousands of glyph elements — is the DOM-heavy part, so a segment is painted
+// the block's height keeps scroll geometry exact). Painting – placing tens of
+// thousands of glyph elements – is the DOM-heavy part, so a segment is painted
 // only once it comes within a viewport of the screen. Which segments those are is
 // tracked by an IntersectionObserver on each segment's own <svg>, i.e. from the
 // real element positions. It is deliberately NOT computed from a running height
 // model: a model would have to reproduce every margin and wrapper detail of the
 // real layout (a scrollable display's headroom padding and compensating margins,
-// say — see layoutDocument), so it drifts from it and, near the bottom of a long
+// say – see layoutDocument), so it drifts from it and, near the bottom of a long
 // page, mis-gates segments that are in fact on screen. Observing the elements has
 // no such drift and costs no per-frame measurement.
 //
 // Painting is grow-only: a segment, once painted, is never hidden. Scrolling can
 // only ever add ink, never remove it, so text never vanishes as the page moves. A
-// width change re-draws the painted segments in place (their glyphs move) — the
-// visible ones at once, the rest when scrolled to — but still never blanks them.
+// width change re-draws the painted segments in place (their glyphs move) – the
+// visible ones at once, the rest when scrolled to – but still never blanks them.
 const observedBlocks = new Set();       // blocks (for font-repaint + print)
 const segRef = new WeakMap();           // a segment's <svg> → { cache, i }
 const segIO = new IntersectionObserver(entries => {
@@ -403,7 +403,7 @@ const segIO = new IntersectionObserver(entries => {
 
 // Observe each not-yet-observed segment of a block. Idempotent: a segment's <svg>
 // is created once and reused across reflows, so its observation persists (only a
-// font rerender, which rebuilds the DOM, makes new ones — see rerenderBlock).
+// font rerender, which rebuilds the DOM, makes new ones – see rerenderBlock).
 function observeSegments(cache) {
     const segs = cache.dom.segs;
     for (let i = 0; i < segs.length; i++) {
@@ -419,7 +419,7 @@ function observeSegments(cache) {
 // a reflow) and is within a viewport of the screen. Reads each segment's real box,
 // so it shares the IntersectionObserver's immunity to height drift and is correct
 // under page zoom (getBoundingClientRect and innerHeight are the same space). Two
-// passes — measure all, then paint — because painting mutates the DOM and would
+// passes – measure all, then paint – because painting mutates the DOM and would
 // otherwise force a fresh layout between measurements. Used for the first paint and
 // after a reflow; the observer covers whatever scrolls into view later.
 function paintVisibleNow(fontInfo, cache) {
@@ -430,7 +430,7 @@ function paintVisibleNow(fontInfo, cache) {
     const todo = [], nested = [];
     for (let i = 0; i < segs.length; i++) {
         const s = segs[i];
-        // A stream segment paints through its nested cache — after this pass,
+        // A stream segment paints through its nested cache – after this pass,
         // so the measurements below are not interleaved with DOM writes.
         if (!s.svg) { if (s.sub) nested.push(s.sub); continue; }
         if (s.painted && !s.dirty) continue;
@@ -460,7 +460,7 @@ function scheduleViewportPaint() {
     });
 }
 // Scrolling is handled by the IntersectionObserver (no per-frame work). A viewport
-// resize — or the synthetic resize the zoom control fires — can change which
+// resize – or the synthetic resize the zoom control fires – can change which
 // segments are on screen without the observer necessarily re-firing, so re-check
 // the visible set then.
 window.addEventListener('resize', scheduleViewportPaint, { passive: true });
@@ -490,7 +490,7 @@ async function registerFonts(fontsData) {
         const file = f.filename;
         if (fileToFamily[file]) continue;
         // A font the serializer could not resolve to an OTF file (filename
-        // 'unknown' — e.g. a Type1 math font with no OpenType form) has nothing to
+        // 'unknown' – e.g. a Type1 math font with no OpenType form) has nothing to
         // fetch. Map it to a system serif so its glyphs fall back, rather than
         // emitting an @font-face that is guaranteed to 404.
         if (!file || file === 'unknown') { fileToFamily[file] = 'serif'; continue; }
@@ -542,7 +542,7 @@ async function registerFonts(fontsData) {
     const families = [...new Set(Object.values(fileToFamily))].filter(fam => fam !== 'serif');
 
     // A face that still has to be fetched (cold cache) can first paint as a
-    // fallback, and SVG <text> — notably in Firefox — does not always re-rasterise
+    // fallback, and SVG <text> – notably in Firefox – does not always re-rasterise
     // when the real face arrives. Note it so init() can force one repaint once the
     // faces have settled; a warm load (every face already cached, so the first
     // paint is already correct) leaves this false and pays for no second render.
@@ -550,7 +550,7 @@ async function registerFonts(fontsData) {
     if (document.fonts && families.some(fam => !check(fam))) fontsPending = true;
 
     // allSettled, not all: a font that fails to load (a missing file, a network
-    // blip) must not reject and blank the whole block — its glyphs fall back (or
+    // blip) must not reject and blank the whole block – its glyphs fall back (or
     // are drawn as metric boxes; see the sink). 'serif' is a system family and
     // needs no loading.
     await Promise.allSettled(families.map(fam => document.fonts.load(`12px '${fam}'`)));
@@ -560,7 +560,7 @@ async function registerFonts(fontsData) {
 // ── Glyph metrics ─────────────────────────────────────────────────────────────
 // A glyph's width/height/depth are interned once per distinct box in the
 // document's glyph_metrics table (the encoder replaces the inline dimensions with
-// a 1-based Node.metrics index — the same box repeats across thousands of glyphs,
+// a 1-based Node.metrics index – the same box repeats across thousands of glyphs,
 // so keeping one copy matters at 1000-page scale). They are NOT folded back onto
 // the node; instead layout/paint read them straight from the table by index,
 // which is a single array lookup and keeps the nodes lean. `glyphMetrics` is
@@ -580,14 +580,14 @@ function useGlyphMetrics(table) {
     }
 }
 // Read from the table by index; but if a glyph still carries inline dimensions
-// (an un-interned document — e.g. output.json fed straight to layout by a test
+// (an un-interned document – e.g. output.json fed straight to layout by a test
 // harness), honour those. The branch outcome is constant for a given document,
 // so it costs nothing measurable.
 const gW = n => n.width  !== undefined ? n.width  : glyphMetrics[n.metrics - 1].width;
 
 // Font expansion as TeX applies it: a line's factor `er` (a fraction) stretches
 // or shrinks a glyph only if its font was given expansion limits
-// (\expandglyphsinfont — microtype sets them on text fonts, never on math
+// (\expandglyphsinfont – microtype sets them on text fonts, never on math
 // fonts), and then scaled by the character's \efcode (‰; 1000 unless listed).
 // A font kern between two glyphs expands with them, by the mean of their
 // codes (LuaTeX's kern_stretch/kern_shrink); one of the two fonts not
@@ -675,7 +675,7 @@ function setGlue(g, ratio, fillOrder) {
     return w;
 }
 
-// A vlist's glue is *set* exactly as an hlist's is, just along y — so stacking
+// A vlist's glue is *set* exactly as an hlist's is, just along y – so stacking
 // its children by their natural widths is wrong wherever TeX packed the box to
 // a size. Extensible delimiters are the case that makes this visible: LuaTeX
 // assembles a tall \left( from GlyphAssembly pieces stacked with *negative,
@@ -698,7 +698,7 @@ function hlistGlueRatio(box) {
     if (box.glue_sign === 1 && box.glue_set > 0) return { ratio:  box.glue_set, fillOrder: box.glue_order || 0 };
     if (box.glue_sign === 2 && box.glue_set > 0) return { ratio: -box.glue_set, fillOrder: box.glue_order || 0 };
     // A box TeX packed carries glue_set, 0 when it was set at its natural
-    // size — and a natural box can still be wider than its contents: a
+    // size – and a natural box can still be wider than its contents: a
     // sub/superscript box gets \scriptspace added to its width with no node
     // for it. Measuring such a box would stretch its glue by that surplus;
     // only a box with no packing information at all is measured.
@@ -742,7 +742,7 @@ function buildBreakCandidates(nodes, fontInfo) {
 
         // \parfillskip (LuaTeX subtype 15) terminates the paragraph, whatever its
         // stretch. The usual value is "0pt plus 1fil" (a ragged last line), but
-        // \centering / \raggedleft set it rigid ("0pt") — and keying the end on
+        // \centering / \raggedleft set it rigid ("0pt") – and keying the end on
         // stretch>0, as before, gave a centred paragraph (a title, \begin{center})
         // no end candidate at all: kpPass then returned nothing and the greedy
         // fallback emitted no final line, so the whole paragraph vanished whenever
@@ -808,7 +808,7 @@ function lineMetrics(bcA, bcB, p) {
 
 // The emergency pass (threshold 10000) admits every line, and badness is
 // capped at 10000, so every line past the cap would cost the same flat 1e8
-// demerits: the breaker could then put the one unavoidable bad line anywhere —
+// demerits: the breaker could then put the one unavoidable bad line anywhere –
 // and does put it first, as a single-word line, since that lets every later
 // line be perfect. In that pass lines are therefore weighed by their real,
 // uncapped looseness, so a slightly loose line always beats a nearly empty one.
@@ -897,7 +897,7 @@ function extractLineNodes(startBC, endBC, nodes) {
     else{if(startBC.kind==='disc') for(const pn of nodes[startBC.nodeIdx].post) result.push(pn); from=startBC.nodeIdx+1;}
     // Glue and kern are discarded at a line break, but only at a *break*: at
     // the very start of a paragraph they are real content. \subparagraph* and
-    // friends make this visible — \@xsect drops the usual \parindent box and
+    // friends make this visible – \@xsect drops the usual \parindent box and
     // re-inserts the indent as \hskip\parindent glue, which stripping here
     // would delete from the render while the break candidates still counted
     // its width, leaving the first line short by exactly the indent.
@@ -994,11 +994,11 @@ function texInterlineGlue(prevDepth, thisAscent, m) {
 
 // ── Citations ──────────────────────────────────────────────────────────────────
 // A \lrcite number carries its reference number on each of its digit glyphs
-// (serializer `cite`). The renderer only *tags* those glyphs — class lr-cite and
+// (serializer `cite`). The renderer only *tags* those glyphs – class lr-cite and
 // data-cite="<n>"; all behaviour lives in one shared popover driven by delegated
 // document events. Delegation (rather than per-glyph listeners) means it does not
 // matter when a glyph is painted, that a number is several separate <tspan>s, or
-// whether SVG text elements reliably fire mouseenter — a single listener on the
+// whether SVG text elements reliably fire mouseenter – a single listener on the
 // document handles every citation.
 //
 //   hover a number → preview it (popover anchored under the number, arrow to it)
@@ -1088,7 +1088,7 @@ function fillCite(num) {
     if (ref.authors) add('lr-cite-authors', ref.authors);
     if (ref.rest)    add('lr-cite-rest', ref.rest);
     // The link is taken verbatim from the .bib's own url/doi field, so it is
-    // exact — never scraped back out of rendered text.
+    // exact – never scraped back out of rendered text.
     if (ref.link && ref.link.href) {
         const d = document.createElement('div'); d.className = 'lr-cite-link';
         const a = document.createElement('a');
@@ -1103,7 +1103,7 @@ function fillCite(num) {
 // nor getBBox() works: for an SVG <tspan> both return the box of the whole
 // enclosing <text> run, which would anchor every citation to the centre of its
 // line. But each glyph carries its own baseline position as x/y attributes, so
-// build the box from those (width ~half an em, height from the font size — rough
+// build the box from those (width ~half an em, height from the font size – rough
 // is fine, it only anchors a popover) and map it through getScreenCTM(), which
 // folds in every ancestor transform and the SVG's own screen position.
 function glyphScreenRect(el) {
@@ -1197,7 +1197,7 @@ function registerCiteTarget(el, num) { el.dataset.citeTarget = num; }
 // A \ref stamps every glyph of its printed text with the same document-local id
 // (see template.tex), so a reference is a *set* of glyphs, not one. That is what
 // makes it possible to light the whole reference up on hover even when the
-// browser has broken it across two lines — the pieces never had to stay
+// browser has broken it across two lines – the pieces never had to stay
 // adjacent, they only have to share an id.
 //
 // Where a label lives is not something this file can know: one LaTeX document
@@ -1259,8 +1259,8 @@ function setLinkState(key, cls, on) {
 }
 
 // The underline of a hovered reference. CSS text-decoration would underline
-// each glyph on its own — every glyph is a separately placed tspan, and the
-// spaces between words are not glyphs at all — so the viewer draws it: one
+// each glyph on its own – every glyph is a separately placed tspan, and the
+// spaces between words are not glyphs at all – so the viewer draws it: one
 // line per text line, from the reference's first glyph to its last. Glyphs
 // are grouped by their SVG and baseline, so a reference broken across lines
 // gets one underline per piece. In the glyphs' current colour, so hover and
@@ -1376,7 +1376,7 @@ function installLinks() {
 }
 
 // Tag one glyph of a reference. Only a reference we can actually resolve is
-// marked — an unresolvable one is left as plain text (see the note above).
+// marked – an unresolvable one is left as plain text (see the note above).
 // Attached once, at element creation, so the reconciler's reuse keeps it.
 function registerLinkGlyph(el, id, cache) {
     const link = cache.links?.[id - 1];
@@ -1402,7 +1402,7 @@ function registerLinkGlyph(el, id, cache) {
 // reflowtex.sty's \webtext{name}{default} leaves a run of glyphs and spaces in a
 // paragraph, each carrying the slot's id (Node.slot → Document.slots). Until a
 // page gives the name a text, TeX's typesetting of the default is shown as is.
-// Once it does — reflowtex.setText(name, text) — the run is replaced by the
+// Once it does – reflowtex.setText(name, text) – the run is replaced by the
 // text set the way a browser sets it: split at breakable white space, each
 // word one glyph-like node measured by the browser in the slot's font (no
 // kerning, ligatures or expansion between words, which the browser's own
@@ -1676,7 +1676,7 @@ function renderFootnote(block, id) {
     }
     const widthPx = Math.min(420, Math.max(220, document.documentElement.clientWidth - 32));
     // The body is the stream's own content over the block's shared tables
-    // (paragraphs, fonts, pictures, streams — and source_width: a footnote's
+    // (paragraphs, fonts, pictures, streams – and source_width: a footnote's
     // displays are modelled per scaled point of the measure they were compiled
     // at, so the popover must carry that measure across too).
     const noteDoc = { ...data.doc, content: note.content };
@@ -1733,7 +1733,7 @@ function registerFootnoteSource(el, id) {
 // Document.streams). What that means depends on the stream's kind: a footnote
 // marker opens its body in the popover above. Other kinds referenced from a
 // glyph are reserved for later (a term's definition on hover, say) and get no
-// behaviour yet — the glyph renders as plain text.
+// behaviour yet – the glyph renders as plain text.
 function registerStreamSource(el, idx, cache) {
     const stream = (cache.streams || [])[idx - 1];
     if (!stream) return;
@@ -1753,7 +1753,7 @@ function svgEl(tag, attrs) {
 // recreating them: every element is keyed by the identity of the node-list
 // object it renders (node objects are decoded once per block and never
 // change). Because lines are contiguous slices of one fixed node sequence,
-// the global emission order is break-invariant — a reflow can move elements
+// the global emission order is break-invariant – a reflow can move elements
 // between lines and toggle conditional ones (disc pre/post vs replace,
 // boundary spaces) on and off, but never reorder them. So reconciliation is
 // a single forward merge: reused elements in place cost two attribute writes,
@@ -1769,7 +1769,7 @@ function svgEl(tag, attrs) {
 //   * PDF's y axis points up, SVG's points down. The SVG matrix is the PDF one
 //     conjugated by the flip diag(1,-1), which negates the off-diagonal terms:
 //     [a b c d] becomes matrix(a, -b, -c, d). Skip this and rotations come out
-//     mirrored — 90° turns the wrong way.
+//     mirrored – 90° turns the wrong way.
 //   * The matrix acts about the reference point, not the origin, so it is
 //     wrapped in translate(±ref).
 function svgMatrixOf(n, x, y) {
@@ -1784,7 +1784,7 @@ function affineOf(t) {
             t.y - (t.b * t.x + t.d * t.y)];
 }
 
-// m1 ∘ m2 — apply m2, then m1.
+// m1 ∘ m2 – apply m2, then m1.
 function affineMul(m1, m2) {
     if (!m1) return m2;
     if (!m2) return m1;
@@ -1865,8 +1865,8 @@ function reconcileSink(byNode, used, stats, cache) {
             place(textParent, lastTspan, el, isNew);
             used.add(el); lastTspan = el;
         },
-        // A glyph whose font could not be loaded: draw its TeX metric boxes — the
-        // advance width by the height above the baseline, and by the depth below —
+        // A glyph whose font could not be loaded: draw its TeX metric boxes – the
+        // advance width by the height above the baseline, and by the depth below –
         // as two outlined rects, so the missing ink's place and size are visible.
         missing(n, x, y) {
             let el = byNode.get(n), isNew = !el;
@@ -1930,7 +1930,7 @@ function reconcileSink(byNode, used, stats, cache) {
             used.add(el); lastRect = el;
         },
         // A precompiled TikZ box or included PDF page. Its markup never changes,
-        // so reflowing is only a new transform — the drawing is built once.
+        // so reflowing is only a new transform – the drawing is built once.
         picture(n, x, y) {
             let el = byNode.get(n), isNew = !el;
             const pic = n.pic;
@@ -1967,9 +1967,9 @@ function reconcileSink(byNode, used, stats, cache) {
 // glue setting produced, so the copies are laid out here rather than baked in.
 //
 // Placement follows TeX82 §626-627: as many whole copies as fit, then
-//   \cleaders — the remainder is split evenly at the two ends (centred);
-//   \xleaders — the remainder is spread evenly into count+1 gaps;
-//   \leaders / \gleaders — copies align to a grid on the *enclosing* box rather
+//   \cleaders – the remainder is split evenly at the two ends (centred);
+//   \xleaders – the remainder is spread evenly into count+1 gaps;
+//   \leaders / \gleaders – copies align to a grid on the *enclosing* box rather
 //     than to this glue, which is not information the node carries, so they are
 //     packed from the left. Nothing in this pipeline uses them today.
 const GLUE_LEADERS = 100, GLUE_CLEADERS = 101, GLUE_XLEADERS = 102;
@@ -1978,7 +1978,7 @@ const GLUE_LEADERS = 100, GLUE_CLEADERS = 101, GLUE_XLEADERS = 102;
 // own node objects: drawing one leader box N times would look up the same
 // element N times, move it, and leave a single copy at the last position. The
 // clones are cached on the glue node and reused while the count holds, which
-// keeps the elements — and the reconciler's work — stable across reflows.
+// keeps the elements – and the reconciler's work – stable across reflows.
 function deepCloneNode(o){
     if(Array.isArray(o)) return o.map(deepCloneNode);
     if(o&&typeof o==='object'){
@@ -2020,7 +2020,7 @@ function renderLeaders(fontInfo, sink, n, x, baselineY, wSp){
     let start, step=Lw;
     if(n.subtype===GLUE_XLEADERS){ const gap=slack/(count+1); start=gap; step=Lw+gap; }
     else if(n.subtype===GLUE_CLEADERS){ start=slack/2; }
-    else { start=0; }                     // \leaders / \gleaders — see note above
+    else { start=0; }                     // \leaders / \gleaders – see note above
 
     const copies=leaderCopies(n,count);
     for(let i=0;i<count;i++){
@@ -2031,7 +2031,7 @@ function renderLeaders(fontInfo, sink, n, x, baselineY, wSp){
 // Stack a vlist's children top-to-bottom. refY is the vlist's reference baseline
 // and vlistX its left edge; both are supplied by the caller (already resolving any
 // shift for the context the vlist appears in). Split out of renderNodes so a vlist
-// nested inside another vlist can reuse it — without this, a vlist child was
+// nested inside another vlist can reuse it – without this, a vlist child was
 // dropped, which silently deleted the inner half of a stacked construction
 // (double math accents, \substack, nested roots, …), leaving one piece too high.
 function renderVlistBody(fontInfo, sink, n, vlistX, refY){
@@ -2061,7 +2061,7 @@ function renderVlistBody(fontInfo, sink, n, vlistX, refY){
 }
 
 // runH/runD (sp) are the enclosing box's height and depth. A rule with a running
-// dimension (the RUNNING_RULE sentinel) inherits it — that is how a \vrule stretches
+// dimension (the RUNNING_RULE sentinel) inherits it – that is how a \vrule stretches
 // to the exact height of the \hbox it sits in (e.g. the two side edges of the amsthm
 // QED box). Without this the rule is dropped and only the top/bottom edges show.
 function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fillOrder, runH, runD) {
@@ -2112,7 +2112,7 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
                 // rotated bbox, so the children still advance x exactly as
                 // they did before the serializer grouped them. (graphicx makes
                 // the content box zero-width, so in practice this is 0.) The
-                // ratio/fillOrder pass through for the same reason — these
+                // ratio/fillOrder pass through for the same reason – these
                 // were siblings in the parent list and their glue is set by
                 // the parent's packing.
                 sink.beginTransform(n, svgMatrixOf(n, x, baselineY));
@@ -2144,7 +2144,7 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
 // ── Document → SVG element ────────────────────────────────────────────────────
 // A block is an ordered stream of paragraphs and displays (see latex.proto).
 // The two are laid out very differently but stack identically, so both are
-// reduced to the same "line" shape — {nodes, ratio, er, x0} — and the existing
+// reduced to the same "line" shape – {nodes, ratio, er, x0} – and the existing
 // profiling, spacing, and reconciliation machinery then treats them alike:
 //
 //   paragraph → Knuth-Plass re-breaks it at the reader's width, many lines
@@ -2169,7 +2169,7 @@ function contentStream(doc) {
 
 // A block is split into segments rather than drawn as one SVG: runs of text
 // share an SVG, but every display gets its own. A display keeps its compiled
-// width, so it can be wider than the column — in one shared SVG that overflow
+// width, so it can be wider than the column – in one shared SVG that overflow
 // would scroll the whole block, dragging text that fits perfectly out of view.
 // Giving each display its own scroll container (as MathJax and KaTeX do) keeps
 // the text still and lets only the maths pan.
@@ -2179,7 +2179,7 @@ function contentStream(doc) {
 const HL_ALIGNMENT = 4;   // hlist subtype: one row of an alignment
 const HL_EQUATION  = 6;   // hlist subtype: a display that is not an alignment
 
-// Anchor markers that ended up *inside* what was typeset — a \label written
+// Anchor markers that ended up *inside* what was typeset – a \label written
 // mid-sentence, or one amsmath replayed into a display's own box. Their exact
 // pen position is known but not useful: an anchor is a scroll destination, and
 // the segment is the smallest thing worth scrolling to. Walked once per
@@ -2200,7 +2200,7 @@ function anchorIdsOf(key, roots) {
     return ids;
 }
 
-// A \begin{center}\includegraphics..\end{center}-style figure — a paragraph
+// A \begin{center}\includegraphics..\end{center}-style figure – a paragraph
 // whose only ink is one or more pictures, no running text. \mypic in the
 // transducers book is the motivating case, but the test is structural (picture
 // present, no glyph present) so it holds for any front end's plain centred
@@ -2234,7 +2234,7 @@ function segmentsOf(doc) {
     for (const item of contentStream(doc)) {
         if (item.kind === 'vspace') { gap = item.amount * SP_TO_PX; continue; }
         if (item.kind === 'anchorpoint') {
-            // A label that stood between two items — nearly always straight
+            // A label that stood between two items – nearly always straight
             // after a sectioning command, which is why it is in vertical mode
             // at all. Attach it to the item it *followed*, so jumping to it
             // lands on the heading rather than below it.
@@ -2307,7 +2307,7 @@ function segmentsOf(doc) {
     // Space after the last item. The main flow has none worth keeping, but a
     // stream can end with its environment's closing skip (a proof's \topsep
     // inside an accordion pane), which must still separate it from what
-    // follows the stream — so layoutDocument ends with a spacer this high.
+    // follows the stream – so layoutDocument ends with a spacer this high.
     segs.trailingGap = gap;
     return segs;
 }
@@ -2349,7 +2349,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
         // A list item's indent is a fixed measure (\leftmargin), so it stays
         // put and the text column narrows around it. The item's label hangs a
         // fixed distance to the left of this offset, which is precisely why
-        // the indent has to be applied — at x0=0 the label would sit at
+        // the indent has to be applied – at x0=0 the label would sit at
         // negative x and be clipped away.
         const indentSp = para.indent || 0;
         const indentPx = indentSp * SP_TO_PX;
@@ -2368,7 +2368,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
 
         // Pluggable breaker. A page may install an alternative paragraph
         // breaker as window.reflowtexBreak(nodes, availSp, params, helpers)
-        // — e.g. a TeX engine's own line-breaking code compiled to WebAssembly.
+        // – e.g. a TeX engine's own line-breaking code compiled to WebAssembly.
         // It returns the same line objects kpBreak does ([{nodes, ratio,
         // fitness, leftProtrusion}]), or null to decline (module still
         // loading, unsupported paragraph), in which case the built-in
@@ -2378,8 +2378,8 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
         // expansion is not applied on top of it; a line carrying `expand` (a
         // fraction: 0.012 = glyphs 1.2 % wider) was expanded by the breaker
         // itself, exactly that much. The helpers also hand over what TeX had
-        // for microtypography — each font's protrusion/expansion codes and
-        // the paragraph's \adjustspacing/\protrudechars — so an engine can
+        // for microtypography – each font's protrusion/expansion codes and
+        // the paragraph's \adjustspacing/\protrudechars – so an engine can
         // apply them as TeX did.
         const ext = typeof window !== 'undefined' && typeof window.reflowtexBreak === 'function'
             ? window.reflowtexBreak(para.nodes, availSp, p, {
@@ -2406,14 +2406,14 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
                 // ratio<0 is not a reliable proxy for "too wide to fit" on its
                 // own: kpBreak's ratio falls back to exactly 0 (not negative)
                 // when a line is overfull but every glue order has zero
-                // shrinkability to report a shrink ratio against — exactly
+                // shrinkability to report a shrink ratio against – exactly
                 // \begin{center}'s infinite-stretch, zero-shrink centring
                 // glue. Left unguarded, the center/right branch below computes
                 // a negative x0 for any centred figure wider than the column,
                 // drawing it into negative SVG coordinates: still positioned
                 // correctly relative to nothing, but visibly detached to the
                 // left of the column instead of flush with its left edge.
-                x0 = protX;  // squeezed to fit — same position as justified
+                x0 = protX;  // squeezed to fit – same position as justified
             } else {
                 switch (align) {
                     case 'right':  x0 = availPx - natPx; break;
@@ -2428,7 +2428,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
                 if (fi.order > 0 && fi.stretch > 0) {
                     // TeX packs the line with its left margin kern in it, so a
                     // protruding first character widens the slack by what it
-                    // hangs into the margin — the line still ends at the measure.
+                    // hangs into the margin – the line still ends at the measure.
                     // (Its right margin kern, when any, is a kern node in ln.nodes.)
                     const leftKernSp = p.useProtrusion ? (ln.leftProtrusion || 0) : 0;
                     const slackSp = availSp - (natSp - leftKernSp);
@@ -2526,12 +2526,12 @@ function affineDisplayItem(item, deltaSp) {
 //
 // The finished tree holds two kinds of horizontal space that shrink with the
 // measure, and they are not the same thing. Space with ink on *both* sides is
-// internal: it separates two pieces of the formula — the gap between an align's
-// columns, or between the last column and its equation number — and closing it
+// internal: it separates two pieces of the formula – the gap between an align's
+// columns, or between the last column and its equation number – and closing it
 // would run them together, so it stops at the configurable minimum. Space with
 // ink on only one side is outer: the centring glue of an align row, the margin
 // left of a short display. It belongs to the column, not to the formula, and
-// may close completely. Squeezing it to nothing is exactly right — a display
+// may close completely. Squeezing it to nothing is exactly right – a display
 // should be as narrow as its own ink before it starts to scroll.
 //
 // The test is geometric, not structural, so it holds for whatever tree TeX
@@ -2539,7 +2539,7 @@ function affineDisplayItem(item, deltaSp) {
 // display with the renderer's own traversal, note where ink lands and where each
 // floor-bearing gap lands, then ask whether ink falls on both sides of the gap.
 // It reads only the compiled tree, so it is computed once per display and cached
-// — the answer cannot change with the reader's width.
+// – the answer cannot change with the reader's width.
 const displayGapKinds = new WeakMap();   // display item → Map(node → {field: isInternal})
 
 function classifyDisplayGaps(fontInfo, item) {
@@ -2561,7 +2561,7 @@ function classifyDisplayGaps(fontInfo, item) {
         glyph(n, x)         { ink(x, gW(n) * SP_TO_PX); },
         space()             {},
         // Zero-width rules never reach this sink (renderNodes skips them), so a
-        // strut — which is exactly that — correctly does not count as ink.
+        // strut – which is exactly that – correctly does not count as ink.
         rule(n, x, y, w)    { ink(x, w); },
         picture(n, x)       { ink(x, n.width * SP_TO_PX); },
         gap(n, field, x, w) { if (n[`${field}_floor`]) gaps.push({ n, field, x1: x, x2: x + w }); },
@@ -2569,7 +2569,7 @@ function classifyDisplayGaps(fontInfo, item) {
 
     // Ink that ends within a scaled point of a gap's edge abuts it. TeX's own
     // dimensions are integral scaled points, so anything finer is arithmetic
-    // noise from accumulating two different sums to the same place — and an
+    // noise from accumulating two different sums to the same place – and an
     // equation number, whose box is pulled back onto its own right edge, lands
     // exactly there.
     const ABUT = SP_TO_PX;
@@ -2585,8 +2585,8 @@ function classifyDisplayGaps(fontInfo, item) {
 
 // The narrowest measure this node's gaps may be evaluated at. Only nodes the
 // classifier saw are considered, which is what keeps the floor to genuine gaps:
-// a box's `width` also carries a rate, but a box is not space — it is however
-// wide its contents came out — so it never fences off a measure of its own.
+// a box's `width` also carries a rate, but a box is not space – it is however
+// wide its contents came out – so it never fences off a measure of its own.
 function affineFloorWidthNode(n, sourceWidthSp, floorSp, kinds) {
     let minimum = 0;
     const fields = kinds.get(n);
@@ -2611,7 +2611,7 @@ function affineFloorWidthNode(n, sourceWidthSp, floorSp, kinds) {
 function affineFloorWidthItem(fontInfo, item, sourceWidthSp, floorSp) {
     const kinds = classifyDisplayGaps(fontInfo, item);
     let minimum = affineFloorWidthNode(item.box, sourceWidthSp, floorSp, kinds);
-    // display_shift places the whole display inside the column — centring for an
+    // display_shift places the whole display inside the column – centring for an
     // ordinary display, a fixed indent under fleqn. That is outer space by
     // construction: there is no ink on its far side to protect, so it closes to
     // zero and the display sits flush left before it starts to scroll.
@@ -2628,14 +2628,14 @@ function affineFloorWidthItem(fontInfo, item, sourceWidthSp, floorSp) {
 
 // Lay a display segment out. The affine model updates the finished tree's
 // geometry for the reader's width; placement is always the display_shift
-// supplied by TeX — there is no ink-centering fallback. Every row of the segment
+// supplied by TeX – there is no ink-centering fallback. Every row of the segment
 // is evaluated at the same measure, so an alignment's columns stay in step and
 // the display freezes as one at the first gap to reach its floor.
 // The makings of TeX's \predisplaysize for a display that would follow this
 // segment's last line (TeX §1146): w, the line's shift plus the widths of
 // everything up to and including its last piece of ink (a glyph, box, rule
-// or leaders) — \maxdimen when glue set by the line's own ratio lies before
-// that ink, so the end cannot be told, -\maxdimen for a line with no ink —
+// or leaders) – \maxdimen when glue set by the line's own ratio lies before
+// that ink, so the end cannot be told, -\maxdimen for a line with no ink –
 // and the quad of the line's last text font, the fallback for the 2em TeX
 // adds (of the font current at the display, which the bundle records).
 // Measured on the line as laid out here, so the choice TeX makes with it
@@ -2691,7 +2691,7 @@ function preDisplaySizeSp(fontInfo, lines, lrp) {
 // directly before the display, and as TeX captured it otherwise (a display
 // that opened its paragraph: -\maxdimen, or the indent box's end). An
 // alignment is always set with the full pair. null when the bundle carries
-// no skip data — the captured spacing then stands.
+// no skip data – the captured spacing then stands.
 function displaySkipsFull(L, prev) {
     const rows = L.seg.rows;
     const item = rows && rows[0] && rows[0].item;
@@ -2760,7 +2760,7 @@ function displaySkipAdjust(L, prev) {
 // formula is shrunk to z − e − 1em if its glue can give that much (a
 // formula that cannot gets its number on a line of its own, which is not
 // modelled: the captured tree stands); then the formula is centred in the
-// measure (d = (z − w)/2) unless the number would overlap it — d < 2e —
+// measure (d = (z − w)/2) unless the number would overlap it – d < 2e –
 // when it is centred in what is left of the number (d = (z − w − e)/2, or
 // 0 for a formula opening with glue). Each branch is affine in z with the
 // same slope, so the affine model carries whichever branch the source
@@ -2850,7 +2850,7 @@ function updateDisplayOverflowCue(wrap) {
 // footnote's body, or a block the author wrapped in the companion package's
 // \begin{reflowtexstream}{kind}. Its content is an ordinary content stream
 // over the block's shared paragraphs, so it is laid out by layoutDocument
-// itself, recursively, into the segment's box — with its own cache, its own
+// itself, recursively, into the segment's box – with its own cache, its own
 // lazily painted segments, and streams of its own inside if it has them. The
 // box is `<div class="latex-stream" data-kind="…">`; the kind decides how the
 // page styles it and which behaviour, if any, it gets (STREAM_KINDS).
@@ -2858,8 +2858,8 @@ function updateDisplayOverflowCue(wrap) {
 // Never cached at this level (the nested layout has its own cache) and never
 // deferred: the box must exist and hold its content's height at once, and a
 // hidden part (a collapsed body) is laid out but never painted, which is
-// cheap. The width is the box's own inner width — so CSS padding on a kind
-// narrows its measure — measured when the box is in the document; on the
+// cheap. The width is the box's own inner width – so CSS padding on a kind
+// narrows its measure – measured when the box is in the document; on the
 // first, detached layout it falls back to the column and asks for one more
 // pass (remeasureStreams).
 function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
@@ -2875,7 +2875,7 @@ function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
         innerPx = s.box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
         // A box whose CSS gives it padding or a border on a side is a frame
         // there (a boxed theorem, a note): TeX's interline glue does not
-        // reach across a frame edge — the padding is the space there. A
+        // reach across a frame edge – the padding is the space there. A
         // bare stream (an accordion, a pane) stays part of the text.
         frameTop    = parseFloat(cs.paddingTop)    + parseFloat(cs.borderTopWidth)    > 0;
         frameBottom = parseFloat(cs.paddingBottom) + parseFloat(cs.borderBottomWidth) > 0;
@@ -2884,7 +2884,7 @@ function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
     if (innerPx > 0) w = innerPx / ZOOM;
     else cache.streamsUnmeasured = true;
     // A kind whose child streams are *alternatives* (an accordion's panes:
-    // one shows at a time) has them laid out as if each alone stood here —
+    // one shows at a time) has them laid out as if each alone stood here –
     // no spacing between them, since none ever follows another on screen.
     const hooks0 = api.streamKinds[seg.stream.kind] || STREAM_KINDS[seg.stream.kind];
     s.sub.alternatives = !!(hooks0 && hooks0.alternatives);
@@ -2901,7 +2901,7 @@ function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
             if (!state) { state = {}; cache.streamState.set(seg.index, state); }
             const attrs = Object.fromEntries((seg.stream.attrs || []).map(a => [a.key, a.value || '']));
             // paint(): after a behaviour reveals hidden content, draw it now
-            // rather than on the IntersectionObserver's next report — so the
+            // rather than on the IntersectionObserver's next report – so the
             // behaviour can, say, move focus into what it just showed.
             const sub = s.sub;
             const paint = () => paintVisibleNow(fontInfo, sub);
@@ -2962,8 +2962,8 @@ function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
 //
 //     window.reflowtex = { streamKinds: { callout: { mount(box, ctx) { … } } } };
 //
-// A kind with no entry here is still rendered — as a plain box the page can
-// style — it just has no behaviour.
+// A kind with no entry here is still rendered – as a plain box the page can
+// style – it just has no behaviour.
 // A small Lean 4 highlighter: comments, strings, numbers and keywords, as
 // spans the page colours (--code-* custom properties if it has them).
 const LEAN_KEYWORDS = new Set(('theorem lemma def example instance structure class inductive where by fun '
@@ -3125,7 +3125,7 @@ const STREAM_KINDS = {
     },
     // One of several panes (reflowtex.sty's accordion): the child streams of
     // kind "pane", of which exactly one shows. The reader switches with
-    // action links inside the panes — "pane:next", "pane:prev", "pane:first",
+    // action links inside the panes – "pane:next", "pane:prev", "pane:first",
     // "pane:last", "pane:NAME" or "pane:NUMBER" (from 1). The hiding itself
     // is CSS (installStreamStyles); this keeps the current pane on the box as
     // data-pane and the pane's class latex-pane-active.
@@ -3390,12 +3390,12 @@ function sizeSegment(s, L, prev, columnPx, p) {
     const tolerancePx = Math.max(0, p.displayOverflowTolerancePx || 0);
     // A figure paragraph (isFigureParagraph) is exactly one unbreakable,
     // unshrinkable picture box, so it can overflow the column precisely the
-    // way a display can — and gets the same scroll-box treatment.
+    // way a display can – and gets the same scroll-box treatment.
     const scrollable = L.seg.kind === 'display' || L.seg.isFigure;
     const overflows = scrollable && L.W > columnPx + tolerancePx;
     // columnPx unless genuinely overflowing: an ordinary (non-scrollable)
     // text segment's own L.W is now real ink width (see layoutTextSegment),
-    // not always exactly columnPx — a paragraph with, say, one line 0.3px
+    // not always exactly columnPx – a paragraph with, say, one line 0.3px
     // narrower than another must still get the *same* surface as every
     // other non-overflowing segment, or adjacent paragraphs visibly render
     // at slightly different widths.
@@ -3413,7 +3413,7 @@ function sizeSegment(s, L, prev, columnPx, p) {
     // scroll box is also a *clipping* box: CSS forces overflow-y to 'auto'
     // once overflow-x is set, and there is no way to scroll one axis while
     // letting the other bleed. Ink that legitimately hangs outside its box
-    // — accents, protrusion, delimiter overshoot — would be cut off. So a
+    // – accents, protrusion, delimiter overshoot – would be cut off. So a
     // display that fits is mounted bare and can bleed freely; only one that
     // must pan pays for it, and its wrapper gets a little self-cancelling
     // headroom for the bleed (see the margin block below).
@@ -3436,7 +3436,7 @@ function sizeSegment(s, L, prev, columnPx, p) {
     // Between two text segments TeX inserts interline (baselineskip) glue on
     // top of any explicit \vspace, exactly as it does between the lines of a
     // paragraph. Reproduce it so a heading sits the LaTeX distance above its
-    // body — and independently of the heading's descender depth, since the
+    // body – and independently of the heading's descender depth, since the
     // glue absorbs that. Displays keep their own captured spacing.
     let margin = L.gapBefore || 0;
     if (prev && L.seg.kind === 'text' && isTextLike(prev.seg.kind) && L.firstMeta
@@ -3451,7 +3451,7 @@ function sizeSegment(s, L, prev, columnPx, p) {
     if (s.wrap) { setStyle(s.wrap, 'marginTop', ''); setStyle(s.wrap, 'marginBottom', ''); }
     if (mount === s.wrap) {
         // A scroll box clips (overflow-x forces overflow-y), so give the ink
-        // a little vertical headroom — but reserve no space for it: negative
+        // a little vertical headroom – but reserve no space for it: negative
         // margins take the padding straight back (the space above the display
         // itself is in the spacer), so a wrapped display occupies exactly the
         // vertical band the bare SVG would, and a small
@@ -3459,7 +3459,7 @@ function sizeSegment(s, L, prev, columnPx, p) {
         // glue the same way it does in print. Fixed rather than measured:
         // getBBox on SVG text reports the font's ascent/descent box, not
         // glyph ink, and the converted CM faces carry ascents far beyond any
-        // outline — padding by that phantom measure visibly inflated the
+        // outline – padding by that phantom measure visibly inflated the
         // space around every scrollable display.
         const BLEED_PAD = 6;
         setStyle(mount, 'paddingTop', `${BLEED_PAD}px`);
@@ -3473,7 +3473,7 @@ function sizeSegment(s, L, prev, columnPx, p) {
     // Scroll destinations for the labels this segment owns. Their own
     // element rather than an id on the segment: a segment can own several
     // labels, and an element has only one id. Zero height, so it takes part
-    // in nothing — scroll-margin-top is left to the page, which is the only
+    // in nothing – scroll-margin-top is left to the page, which is the only
     // thing that knows whether it has a sticky header.
     return { mount, overflows };
 }
@@ -3481,8 +3481,8 @@ function sizeSegment(s, L, prev, columnPx, p) {
 function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // Point the glyph-metrics reader at this document's table, and stash it on the
     // cache so paintDocument (which is handed only the cache) reads the same one.
-    // fontInfo is stashed too, so the IntersectionObserver — which is handed only a
-    // segment reference — can repaint it (see observeSegments / segIO).
+    // fontInfo is stashed too, so the IntersectionObserver – which is handed only a
+    // segment reference – can repaint it (see observeSegments / segIO).
     useGlyphMetrics(doc.glyph_metrics);
     cache.metrics = doc.glyph_metrics;
     cache.sourceWidthSp = doc.source_width || 0;   // the \hsize the paragraphs' widths refer to
@@ -3573,8 +3573,8 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // scroll geometry. Now each segment remembers, per width, the geometry its
     // neighbours need (height, first ascent, last depth, surface width), and the
     // full layout for the last few widths. A segment's height is taken to be
-    // monotone in the width — the same height at two widths means the same
-    // height everywhere between them — so once two observed widths agree, every
+    // monotone in the width – the same height at two widths means the same
+    // height everywhere between them – so once two observed widths agree, every
     // width in that interval is answered from the cache. A segment that is not
     // near the viewport and whose geometry is cached is then not laid out at all:
     // its layout is *deferred*, and materializeSegment runs it the moment
@@ -3664,7 +3664,7 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // spacing, replacing a margin) followed by a plain `box` holding the <svg>
     // (or the scroll wrapper of an overflowing display). Spacer, <svg> and
     // wrapper are excluded from anchor selection with overflow-anchor:none, so
-    // the box — content-sized, never restyled — is what the browser holds on
+    // the box – content-sized, never restyled – is what the browser holds on
     // to; the height changes it must compensate for are then all on siblings
     // above it, which is exactly the case anchoring handles. The child list is
     // reconciled in place rather than rebuilt, so nothing is detached.
@@ -3749,8 +3749,8 @@ function rememberLayout(hc, w, L) {
     else obs.splice(k, 0, o);
 }
 
-// Geometry for width w without laying out: an exact observation, or — heights
-// being monotone in width — the interval between two observations of equal
+// Geometry for width w without laying out: an exact observation, or – heights
+// being monotone in width – the interval between two observations of equal
 // height that brackets w (the nearer end supplies the rest of the geometry).
 function cachedGeometry(hc, w) {
     const obs = hc.obs;
@@ -3790,7 +3790,7 @@ function materializeSegment(cache, i) {
 
 // Paint one segment: reconcile its lines' glyphs into its own <svg>. The reconcile
 // is scoped to this segment (its own `live` set) because a node always lands in
-// exactly one segment — segmentation is width-independent — so segments can be
+// exactly one segment – segmentation is width-independent – so segments can be
 // painted independently. That independence is what makes per-segment painting
 // possible (see observeSegments / paintVisibleNow): a long document only pays the
 // DOM cost for the segments that have been on screen, not for all of them at once.
@@ -3842,8 +3842,8 @@ function paintSegment(fontInfo, cache, i) {
     s.painted = true;
     s.dirty = false;
 
-    // Overflow cues only. The wrapper's vertical geometry — the headroom padding
-    // and the margins that take it back — is fixed at layout time (see
+    // Overflow cues only. The wrapper's vertical geometry – the headroom padding
+    // and the margins that take it back – is fixed at layout time (see
     // layoutDocument). Measuring painted ink here with getBBox was a trap: for
     // SVG text it returns the font's ascent/descent box, not the glyph outlines,
     // so the wrapper was padded for phantom overshoot and every scrollable
@@ -3853,7 +3853,7 @@ function paintSegment(fontInfo, cache, i) {
     }
 }
 
-// Paint every segment regardless of the viewport — for printing, where nothing may
+// Paint every segment regardless of the viewport – for printing, where nothing may
 // be left as an empty placeholder.
 function paintDocument(fontInfo, cache) {
     if (!cache.layout) return;
@@ -3889,10 +3889,10 @@ function resolvePictures(doc) {
 
 // The page embeds latex.proto as base64 text; parse it at runtime into a
 // protobuf.js Document type. keepCase keeps the schema's snake_case field names
-// (glyph_metrics, stretch_order, size_sp) — the renderer reads those, not
+// (glyph_metrics, stretch_order, size_sp) – the renderer reads those, not
 // protobuf.js's default camelCase. (Runtime .proto parsing is the simple option;
 // precompiling a descriptor with pbjs + the minimal runtime is the future size
-// win — see README.)
+// win – see README.)
 function loadSchema() {
     const el = document.getElementById('latex-schema');
     if (!el?.dataset.schemaB64) throw new Error('#latex-schema element with data-schema-b64 not found');
@@ -3908,7 +3908,7 @@ function loadSchema() {
 function loadFontMap() {
     const el = document.getElementById('latex-font-map');
     if (!el) return;
-    // Optional override for where @font-face URLs resolve from — a relative
+    // Optional override for where @font-face URLs resolve from – a relative
     // value (e.g. 'fonts/') is resolved against the script's own URL, same as
     // the default above, so it stays file://-safe; an absolute one (a scheme,
     // or a leading '/') is used as-is, e.g. to point at a CDN. Malformed input
@@ -3925,7 +3925,7 @@ function loadFontMap() {
 }
 
 // Decode one block. toObject options reproduce the kiwi decode shape exactly:
-// defaults:false keeps unset scalars absent (proto2 presence — gW relies on
+// defaults:false keeps unset scalars absent (proto2 presence – gW relies on
 // width===undefined); arrays:true gives empty repeated fields as [] (not
 // undefined); enums:String yields the lowercase enum names the renderer compares
 // against ('glyph', 'display'); longs:Number keeps ints as plain numbers.
@@ -3944,7 +3944,7 @@ async function initBlock(el) {
     // Declare this block's labels before anything of it is painted, so its own
     // references resolve without needing the page map at all. Blocks initialise
     // in order, so a reference to a label defined by a *later* block on the same
-    // page still needs the map — which for a site that ships one, it has.
+    // page still needs the map – which for a site that ships one, it has.
     for (const label of doc.anchors || []) pageLabels.add(label);
     const t1        = performance.now();
     const fontsData = Object.fromEntries(doc.fonts.map(f => [String(f.id), f]));
@@ -3970,7 +3970,7 @@ async function initBlock(el) {
     remeasureStreams(fontInfo, doc, widthPt, params, cache);
     // The document's outline (sections, subsections, theorems), for a page to
     // build a table of contents from. Each entry's `id` is the id of its
-    // anchor element, which exists once the block is laid out — now. Also
+    // anchor element, which exists once the block is laid out – now. Also
     // kept on the element for a script that attaches later.
     if (doc.outline && doc.outline.length) {
         const entries = doc.outline.map(e => ({
@@ -4019,7 +4019,7 @@ async function init() {
             segPainted += t.segPainted; segTotal += t.segTotal;
             console.log(`[latex-viewer] block ${++idx}/${blocks.length}: ${t.total.toFixed(1)} ms `
                 + `(decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) `
-                + `— ${t.segPainted}/${t.segTotal} segments painted`);
+                + `– ${t.segPainted}/${t.segTotal} segments painted`);
         }
         catch (e) { el.textContent = `Render error: ${e.message}`; console.error(e); }
     }
@@ -4032,7 +4032,7 @@ async function init() {
     // some SVG glyphs may be showing in a fallback. Faces can finish in several
     // waves, and content keeps painting as the reader scrolls, so repaint on every
     // loadingdone wave (and once more when all faces settle) rather than a single
-    // time — see scheduleFontRepaint. Guarded by fontsPending so a warm load, where
+    // time – see scheduleFontRepaint. Guarded by fontsPending so a warm load, where
     // the first paint is already correct, does none of this.
     if (fontsPending && document.fonts) {
         if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', scheduleFontRepaint);

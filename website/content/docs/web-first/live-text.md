@@ -60,8 +60,8 @@ The page's own script:
 \TeX{} sets the default as it sets any text. A text the page gives instead
 is set the way a browser sets it: in the default's font and colour, word by
 word, each word measured by the browser, with no kerning or ligatures from
-one word to the next. It breaks only at its spaces --- a no-break space
-keeps two words together --- and between its words stands the interword glue
+one word to the next. It breaks only at its spaces -- a no-break space
+keeps two words together -- and between its words stands the interword glue
 of that font, with the stretch and shrink \TeX{} would give it, so the line
 it lands on is justified with the rest.
 \begin{description}

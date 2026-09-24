@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-r"""reflowtex build pipeline — framework-agnostic.
+r"""reflowtex build pipeline – framework-agnostic.
 
 Turns a LaTeX snippet into the protobuf blob the browser viewer renders, and
 provisions the fonts it needs. Integrations (vanilla, Hugo, Jekyll, …) drive this
@@ -65,7 +65,7 @@ def viewer_script() -> Path:
     minified copy when it was generated from the current source, otherwise the
     source itself. The minified file's first line records the SHA-256 of the
     source it was built from (see `make minify-viewer`), so a stale copy is
-    detected here rather than shipped — forgetting to regenerate it costs
+    detected here rather than shipped – forgetting to regenerate it costs
     bytes, never correctness. Ship it under the name latex-viewer.js either
     way: the DOM contract, the fonts resolved relative to the script URL, and
     the ?v= cache-buster all key off that name."""
@@ -79,7 +79,7 @@ def viewer_script() -> Path:
         if f'sha256 {want}' in header:
             return minified
         print('  viewer: latex-viewer.min.js is stale (source changed since it was '
-              'generated) — shipping the unminified source; run `make minify-viewer`')
+              'generated) – shipping the unminified source; run `make minify-viewer`')
     return src
 
 
@@ -149,7 +149,7 @@ class Pipeline:
                  f'--python_out={ENCODE_DIR}', self.proto.name],
                 check=True)
         except FileNotFoundError:
-            sys.exit('protoc not found — install it (e.g. "apt-get install protobuf-compiler")')
+            sys.exit('protoc not found – install it (e.g. "apt-get install protobuf-compiler")')
         print(f'  protoc: regenerated {pb2.name}')
 
     def schema_bytes(self) -> bytes:
@@ -171,8 +171,8 @@ class Pipeline:
 
     def compile_batch(self, parts: list[tuple], preamble: str = '', key: str | None = None,
                       passes: int = 1, name: str | None = None) -> dict[str, bytes]:
-        """Compile several snippets as ONE document — the chapters of a book,
-        say, published on separate pages — and return one blob per part:
+        """Compile several snippets as ONE document – the chapters of a book,
+        say, published on separate pages – and return one blob per part:
         {part key: bytes}. `parts` is [(part key, content[, name]), …] in
         document order. Because it is one LaTeX run, numbering, counters,
         macros defined along the way and cross-references between the parts
@@ -213,7 +213,7 @@ class Pipeline:
         label). Also writes build/<key>/
         (input.tex, output.json, nodelist.pb) and provisions its fonts.
 
-        `name` is how the caller knows the snippet — a filename, a page and line —
+        `name` is how the caller knows the snippet – a filename, a page and line –
         and is what progress lines and errors are labelled with, alongside the
         key (which is also the build directory's name). It never affects the
         build itself.
@@ -266,7 +266,7 @@ class Pipeline:
         # missing newer features.
         shutil.copy(self.serializer, build_dir / 'serializer.lua')
         # Repo-local fonts sit next to input.tex so fontspec finds them by bare
-        # filename — no absolute path baked into a preamble.
+        # filename – no absolute path baked into a preamble.
         for otf in self._extra_fonts:
             dst = build_dir / otf.name
             if not dst.exists() or dst.stat().st_mtime < otf.stat().st_mtime:
@@ -346,7 +346,7 @@ class Pipeline:
 
     def _run_lualatex(self, build_dir: Path, label: str, passes: int = 1) -> None:
         # Shell escape is off, deliberately. TikZ capture no longer invokes a
-        # sub-run, so nothing in the pipeline needs it — and what this compiles is
+        # sub-run, so nothing in the pipeline needs it – and what this compiles is
         # LaTeX the caller did not necessarily write: a corpus of published
         # papers, contributed Markdown a site generator walks, a CI job building
         # submitted content. With shell escape on, a `\write18{...}` or a
@@ -361,13 +361,13 @@ class Pipeline:
         #
         # This does not make compiling untrusted LaTeX safe, only less unsafe.
         # TeX Live ships `openin_any = a`, so a document can still read any file
-        # the build user can read and typeset it — and this pipeline's whole
+        # the build user can read and typeset it – and this pipeline's whole
         # purpose is to serialize what was typeset into a blob that ships to a
         # browser. Compile input you do not trust in a container without network
         # access; see docs/security.md.
         #
-        # A caller that really does need shell escape — a preamble built around
-        # minted or gnuplottex, over snippets it wrote itself — can set
+        # A caller that really does need shell escape – a preamble built around
+        # minted or gnuplottex, over snippets it wrote itself – can set
         # REFLOWTEX_SHELL_ESCAPE=1. Doing so asserts that every snippet compiled
         # in that run is trusted.
         #
@@ -395,7 +395,7 @@ class Pipeline:
 
         # A TeX error is fatal even though nonstopmode carried on and produced a
         # node list, because what it produces is a *repaired* document rather than
-        # the one that was written — it still compiles, still renders, and is
+        # the one that was written – it still compiles, still renders, and is
         # simply wrong. The only signal is this log line.
         errors = [l for l in log.read_text(encoding='utf-8', errors='replace').splitlines()
                   if l.startswith('! ')]

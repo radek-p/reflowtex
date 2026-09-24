@@ -1,8 +1,8 @@
-# Viewer — DOM contract
+# Viewer – DOM contract
 
 `latex-viewer.js` renders every Reflow TeX block on a page. It has no build step
 and no dependency beyond `protobuf.min.js`, which must load first (it exposes the
-global `protobuf`). Both files are framework-agnostic — the integrations just
+global `protobuf`). Both files are framework-agnostic – the integrations just
 arrange the DOM below.
 
 > **`latex-viewer.min.js`** is the same file minified (about a third of the
@@ -13,7 +13,7 @@ arrange the DOM below.
 > site builders do not) to regenerate it.
 
 > **`protobuf.min.js`** is [protobuf.js](https://github.com/protobufjs/protobuf.js)
-> v8.7.1, vendored (BSD-3-Clause — see [THIRD-PARTY-LICENSES.md](../../THIRD-PARTY-LICENSES.md)).
+> v8.7.1, vendored (BSD-3-Clause – see [THIRD-PARTY-LICENSES.md](../../THIRD-PARTY-LICENSES.md)).
 > It is committed so the browser side needs no Node and works offline. Refresh it
 > with `make vendor-protobuf` (bump `PROTOBUFJS_VERSION` in the Makefile first);
 > the target fetches the pinned version from npm, so users building sites never
@@ -44,28 +44,28 @@ viewport.
 | `data-latex-width` | layout width in pt (default: the element's own pixel width ÷ 2) |
 | `data-align` | `justify` (default) · `left` · `right` · `center` |
 | `data-color-map` | name of an entry in the page's `#latex-color-maps` island to recolour this block with (see Theming below); omitted = TeX/tikz colours render as-is |
-| `data-display-min-space` | Minimum space (pt) kept between two pieces of a display — an align's columns, or an equation and its number — as the measure decreases, before the display freezes and scrolls (default `10`; `0` permits zero). A display's *outer* space (centring, margin) is not covered by this and always closes to zero first |
+| `data-display-min-space` | Minimum space (pt) kept between two pieces of a display – an align's columns, or an equation and its number – as the measure decreases, before the display freezes and scrolls (default `10`; `0` permits zero). A display's *outer* space (centring, margin) is not covered by this and always closes to zero first |
 | `data-display-overflow-tolerance` | Tiny horizontal overhang ignored before adding a display scrollbar (default `2` CSS px) |
 | `data-line-penalty`, `data-adj-demerits`, `data-double-hyphen-demerits`, `data-pretolerance`, `data-tolerance`, `data-tolerance2`, `data-emergency-tolerance`, `data-last-line-min`, `data-last-line-penalty`, `data-max-expand`, `data-max-shrink`, `data-min-gap`, `data-pad`, `data-protrusion`, `data-expansion` | Knuth–Plass knobs (sensible defaults if omitted) |
 
 ## Fonts
 
 The viewer injects `@font-face` rules that load each font from a **`fonts/`
-directory next to `latex-viewer.js` itself** — resolved from the script's own
+directory next to `latex-viewer.js` itself** – resolved from the script's own
 URL (`new URL('fonts/', <script src>)`), not a fixed absolute path. That keeps
 it working unmodified under a domain root, an arbitrary subpath, a different
 domain, and a page opened straight off disk over `file://`. The build pipeline
-provisions the OTF files there (and patches their cmaps) — place them next to
+provisions the OTF files there (and patches their cmaps) – place them next to
 wherever `latex-viewer.js` is served from.
 
 A page can override this with an optional `data-fonts-base` attribute on the
-`#latex-font-map` script (below) — a relative value is still resolved against
+`#latex-font-map` script (below) – a relative value is still resolved against
 the script's own URL the same way, so this only matters for pointing fonts at
 somewhere else entirely, e.g. a CDN.
 
-A block refers to a font by its *original* name. If the page ships a font map —
+A block refers to a font by its *original* name. If the page ships a font map –
 an optional `<script id="latex-font-map" type="application/json">` island of
-`{ "original.otf": "served.otf" }` — the viewer fetches from the served name
+`{ "original.otf": "served.otf" }` – the viewer fetches from the served name
 instead. The pipeline uses this to serve a **modified** font (one whose cmap it
 patched) under a renamed, content-hashed file, leaving unmodified fonts verbatim.
 Without the island, the original name is used as-is.
@@ -94,9 +94,9 @@ minimal rule set is in each integration's page template/partial.
 
 `\ref`, `\eqref` and `\autoref` are captured at compile time: every glyph a
 reference printed carries the same link id, and each `\label` leaves a marker at
-its position in the flow. The viewer turns the first into a `data-link` group —
+its position in the flow. The viewer turns the first into a `data-link` group –
 hovering or pressing any glyph lights the whole reference, including one broken
-across two lines — and the second into a zero-height `.latex-anchor` element with
+across two lines – and the second into a zero-height `.latex-anchor` element with
 the label as its `id`.
 
 Resolving a label to a URL is *not* done here, because one LaTeX document may be
@@ -112,13 +112,13 @@ published as one page or as one page per chapter. Instead:
    </script>
    ```
 
-3. a label in neither is **not rendered as a link** — it keeps its text and its
+3. a label in neither is **not rendered as a link** – it keeps its text and its
    ordinary colour, so a reference whose target was never published cannot
    masquerade as something to click.
 
 The Hugo integration generates that island: `prebuild.py` writes
 `data/latex_link_map.json` mapping each label to the content page whose block
-defined it — taken from the compilation itself, not from scanning sources — and
+defined it – taken from the compilation itself, not from scanning sources – and
 the viewer partial turns pages into URLs, which is the only step that needs to
 know about permalinks.
 
@@ -133,8 +133,8 @@ glyphs placed only when it comes within a viewport of the screen, and a resize
 repaints the visible segments at once and the rest as they scroll into view.
 
 Layout is cached per segment. Each segment remembers, for every width it has
-been laid out at, the geometry its neighbours need — height, first ascent,
-last depth — and keeps the full layout for the last three widths. Heights are
+been laid out at, the geometry its neighbours need – height, first ascent,
+last depth – and keeps the full layout for the last three widths. Heights are
 taken to be monotone in the width, so once two observed widths give the same
 height, every width between them is answered from the cache. On a resize, a
 segment near the viewport is always laid out for real; one that is off screen
@@ -148,7 +148,7 @@ how many segments were laid out, reused, or deferred.
 
 The browser's own scroll anchoring survives a reflow: on a window resize the
 content at the top of the viewport stays where it was, as on any ordinary
-page. This depends on how segments are mounted — a spacer for the space
+page. This depends on how segments are mounted – a spacer for the space
 above, then a plain wrapper holding the `<svg>`, with the spacer, the `<svg>`
 and any display scroll box marked `overflow-anchor: none` so the browser
 anchors on the wrapper, whose style never changes. Pages that style
@@ -178,8 +178,8 @@ table of contents from this.
 ## Plugging in another paragraph breaker
 
 The viewer breaks paragraphs with its own Knuth–Plass implementation. A page
-can substitute another one — a TeX engine's line-breaking code compiled to
-WebAssembly, say — by defining, before or after the viewer loads:
+can substitute another one – a TeX engine's line-breaking code compiled to
+WebAssembly, say – by defining, before or after the viewer loads:
 
 ```js
 window.reflowtexBreak = function (nodes, availSp, params, helpers) {
@@ -191,14 +191,14 @@ It is called for every paragraph on every layout with the paragraph's node
 list, the available width in scaled points, the block's Knuth–Plass
 parameters, and `helpers`:
 
-- `gW/gH/gD` — glyph-metric accessors;
-- `align`, `bskip`, `lskip` — the paragraph's alignment and interline glue;
-- `font(id)` — the font's record: `quad` (sp), `expand`
+- `gW/gH/gD` – glyph-metric accessors;
+- `align`, `bskip`, `lskip` – the paragraph's alignment and interline glue;
+- `font(id)` – the font's record: `quad` (sp), `expand`
   (`{stretch, shrink, step}` as `\expandglyphsinfont` set them, thousandths,
   or `null`) and `codes`, a `Map` from character to `{lp, rp, ef}`
   (`\lpcode`/`\rpcode` in thousandths of the quad, `\efcode` in thousandths
-  of the width) — what microtype configured when the document was typeset;
-- `adjustSpacing`, `protrudeChars` — the paragraph's `\adjustspacing` and
+  of the width) – what microtype configured when the document was typeset;
+- `adjustSpacing`, `protrudeChars` – the paragraph's `\adjustspacing` and
   `\protrudechars`.
 
 Return the lines in the same shape the built-in breaker produces, or `null`
@@ -333,7 +333,7 @@ inside a box (`\mbox`) is left as its default.
 
 ## Theming (optional)
 
-reflowtex ships no colour palette of its own — a block with no `data-color-map`
+reflowtex ships no colour palette of its own – a block with no `data-color-map`
 renders TeX's own colours as-is, and glyphs TeX left black carry no inline fill
 and inherit `currentColor`, so basic dark mode already works with zero
 configuration as long as your page sets a light text colour per theme.
@@ -352,13 +352,13 @@ JSON island:
 
 A block opts in with `data-color-map="my-map"`, naming one entry. Nothing
 stops a page from embedding several named maps and giving different blocks
-different ones — e.g. two documents sharing a page, each with its own palette.
+different ones – e.g. two documents sharing a page, each with its own palette.
 
-- **`colors`** — flat substitution per theme, keyed by the hex TeX/tikz
+- **`colors`** – flat substitution per theme, keyed by the hex TeX/tikz
   produced. `'#000000'` is special: it is the *default* text colour (glyphs
   TeX left black carry no inline fill), so mapping it recolours all
   default-coloured text in that theme.
-- **`tints`** — colours TeX baked by mixing a base colour into the page (e.g.
+- **`tints`** – colours TeX baked by mixing a base colour into the page (e.g.
   `red!20!white` resolves to flat RGB at compile time, with no trace of how it
   was built). Re-derived at runtime as `baked-hex: [base-hex, percent]`, so
   the tint follows the *current* background rather than staying stuck to
@@ -372,19 +372,19 @@ the page's dark substitutions. Set `--latex-page-bg` on that element too, so
 tints mix with its background.
 
 A theme is matched by a class name on `<html>` (`dark`, `sepia`, `contrast`;
-unclassed is the implicit `light`) — switching the class restyles
+unclassed is the implicit `light`) – switching the class restyles
 already-rendered SVG via CSS custom properties, no re-render. Adding a theme
 to a map is just a new key plus a class your page switcher sets; reflowtex
 doesn't hardcode which themes exist.
 
 `tints` reads the ambient `--latex-page-bg` custom property (falling back to
 the CSS `Canvas` system colour), which is deliberately *not* part of the
-colour-map data — TeX has no notion of the page's colour, so that's the page's
+colour-map data – TeX has no notion of the page's colour, so that's the page's
 own theme CSS to set, typically right where it already sets its background
 per theme: `:root.dark { --latex-page-bg: #0c0a09; }`.
 
 The Hugo integration generates the island from `<site>/latex-color-maps/<name>.json`
-files, referenced with `color-map="<name>"` on the shortcode — see
+files, referenced with `color-map="<name>"` on the shortcode – see
 [integrations/hugo/README.md](../../integrations/hugo/README.md).
 
 ## Citations (optional)
