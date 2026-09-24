@@ -145,6 +145,16 @@ supersampled run (`--fine`) of the same rows; `manifest.json` has the counts
 of both checks, the share of pixels differing by more than half, and per
 tile how many rows differ – what the website's comparison page loads.
 
+**Publishing: `publish_compare.py`.** The tiles are too big for git (25 MB,
+and new at every run), so the website takes them from a GitHub release.
+`publish_compare.py <tiles out dir> --upload` copies them into the site,
+packs them into `pixel-compare-<hash>.tar` (the same pictures give the same
+file), creates the release with `gh`, and writes `website/pixel-compare.lock`,
+the file's URL and SHA-256. Commit the lock; `website/build.sh` fetches the
+file it names (`website/tools/fetch_pixel_compare.py`) and unpacks it into
+`static/pixel-compare/` and `data/pixel_compare.json`, which git ignores.
+Without `--upload` it prints how to make the release by hand.
+
 ## Files
 
     pageless.py            document → pageless.pdf, in one command
@@ -156,3 +166,4 @@ tile how many rows differ – what the website's comparison page loads.
     vector_compare.py      glyph positions, strip vs browser (+ dom_dump.js)
     compare.py             pixels, strip vs browser (+ browser_capture.js)
     tiles.py               compare.py's pictures as web tiles + manifest
+    publish_compare.py     the tiles as a release file the website fetches

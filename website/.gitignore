@@ -24,3 +24,6 @@
 /layouts/partials/reflowtex-viewer.html
 # testmath.tex as a pageless PDF, built into static/ by build.sh (Tools › Pageless PDF).
 /static/pageless/
+# The pixel comparison, fetched from a release by build.sh (pixel-compare.lock).
+/static/pixel-compare/
+/data/pixel_compare.json

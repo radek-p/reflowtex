@@ -72,7 +72,13 @@ if [ ! -f "$PL_PDF" ] || [ -n "$(find "$TESTMATH/testmath.tex" "$TESTMATH/templa
   cp "$PL_OUT/pageless.pdf" "$PL_PDF"
 fi
 
-# 4. Build (or serve) the static site.
+# 4. The accuracy page's pixel comparison: too big for git, so a release file
+#    that pixel-compare.lock names (tools/pageless-pdf/publish_compare.py makes
+#    one). Fetched once, and again only when the lock changes; offline, the page
+#    shows no comparison and the build goes on.
+"$PYTHON" "$SITE/tools/fetch_pixel_compare.py" "$SITE"
+
+# 5. Build (or serve) the static site.
 if [ "${1:-}" = "server" ]; then
   shift
   exec hugo server --source "$SITE" "$@"

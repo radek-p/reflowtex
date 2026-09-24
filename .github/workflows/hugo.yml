@@ -45,6 +45,8 @@ jobs:
             website/.reflowtex-build
             website/data/latex_blocks
             website/static/testmath
+            website/static/pixel-compare
+            website/data/pixel_compare.json
           key: website-blocks-${{ hashFiles('src/**', 'examples/**', 'website/content/**', 'website/latex-preambles/**', 'integrations/hugo/**', 'Dockerfile') }}
           restore-keys: |
             website-blocks-
