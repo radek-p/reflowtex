@@ -51,14 +51,26 @@ button { font: inherit; color: inherit; }
 .bar button.on { background: var(--sel); border-color: var(--accent); }
 .bar .toggle[aria-pressed="true"] { background: var(--sel); border-color: var(--accent); }
 .bar .close { border-color: transparent; padding: 2px 6px; font-size: 15px; line-height: 1; }
+.tabs { display: inline-flex; margin-right: 4px; }
+.bar .tabs button { border-radius: 0; margin-left: -1px; }
+.bar .tabs button:first-child { border-radius: 5px 0 0 5px; margin-left: 0; }
+.bar .tabs button:last-child { border-radius: 0 5px 5px 0; }
+.bar .tabs button[aria-selected="true"] { background: var(--sel); border-color: var(--accent); position: relative; }
 .status { margin-left: auto; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 .main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .tree { flex: 1 1 60%; min-height: 0; overflow: auto; padding: 4px 0; font-family: var(--mono); outline: none; }
 .details { flex: 0 1 40%; min-height: 0; overflow: auto; border-top: 1px solid var(--line); padding: 8px 10px; }
+/* The two views: boxes and glue, and resources. */
+.rtx[data-view="tree"] .rlist, .rtx[data-view="tree"] .rdetails,
+.rtx[data-view="res"] .tree, .rtx[data-view="res"] .details:not(.rdetails) { display: none; }
+.rlist { flex: 1 1 40%; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.rtx[data-view="res"] .rdetails { flex: 1 1 60%; min-width: 0; }
 @container (min-width: 640px) {
   .main { flex-direction: row; }
   .details { flex: 0 0 42%; border-top: 0; border-left: 1px solid var(--line); }
+  .rtx[data-view="res"] .rdetails { flex: 1 1 62%; }
+  .rlist { flex: 0 0 38%; }
 }
 
 .row { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; padding: 1px 8px 1px 0; cursor: default; }
@@ -112,3 +124,59 @@ button { font: inherit; color: inherit; }
 .empty { padding: 14px; color: var(--muted); line-height: 1.6; }
 .empty code { font-family: var(--mono); }
 kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
+
+/* Resources: the list */
+input, select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; }
+input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.rtools { display: flex; gap: 6px; margin: 6px 8px 4px; flex: none; }
+.filter { flex: 1; min-width: 0; }
+.fsort { flex: none; }
+.rbody { flex: 1; min-height: 0; overflow: auto; outline: none; padding-bottom: 4px; }
+.rhead { position: sticky; top: 0; z-index: 1; display: flex; align-items: baseline; gap: 2px; width: 100%; padding: 6px 10px 2px 0;
+  background: var(--bg); border: 0; text-align: left; cursor: pointer; user-select: none; -webkit-user-select: none;
+  color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.rhead:hover { color: var(--fg); }
+.rhead:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.rhead .twisty { width: 16px; font-size: 12px; text-transform: none; }
+.rhead .name { flex: 1; }
+.rhead .count { font-weight: 400; }
+.rhead[aria-expanded="false"] { position: static; }
+.rrow { padding: 2px 10px; }
+.rrow .label { font-weight: 500; }
+.rrow .sample { flex: none; align-self: center; width: 1.7em; height: 15px; overflow: hidden; font-size: 14px; line-height: 15px; color: var(--muted); }
+.rbody:focus .rrow.sel { box-shadow: inset 2px 0 0 var(--accent); }
+
+/* Resources: one of them */
+.actions { display: flex; flex-wrap: wrap; gap: 4px; flex: none; justify-content: flex-end; }
+.details h3 { font-size: 11px; margin: 12px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.details pre { margin: 0; padding: 6px 8px; max-height: 16em; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  font: 11.5px/1.5 var(--mono); background: var(--bar); border-radius: 5px; }
+.details pre.text { font-family: system-ui, sans-serif; font-size: 12px; }
+.preview { margin: 0 0 10px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--fg);
+  background-color: var(--bg); background-image: linear-gradient(45deg, var(--bar) 25%, transparent 25%, transparent 75%, var(--bar) 75%),
+    linear-gradient(45deg, var(--bar) 25%, transparent 25%, transparent 75%, var(--bar) 75%);
+  background-size: 12px 12px; background-position: 0 0, 6px 6px; }
+.preview svg { display: block; width: 100%; height: auto; max-height: 260px; }
+
+/* A font's glyphs */
+.gbar { display: flex; gap: 6px; align-items: center; margin: 12px 0 6px; flex-wrap: wrap; }
+.gsearch { flex: 1 1 14em; min-width: 0; }
+.gcount { white-space: nowrap; font-size: 11px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 3px; }
+.cell { position: relative; display: flex; flex-direction: column; align-items: center; overflow: hidden; height: 54px; padding: 2px 0 0;
+  background: transparent; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.cell:hover { background: var(--hover); }
+.cell.used { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.cell.sel { background: var(--sel); border-color: var(--accent); }
+.cell.missing { border-style: dashed; border-color: var(--penalty); }
+.cell .g { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--fg); }
+.cell .g svg { display: block; overflow: hidden; }
+.cell.unmapped .g::before { content: '·'; color: var(--muted); font: 22px/1 system-ui, sans-serif; }
+.cell .cap { font: 9px/1.3 var(--mono); color: var(--muted); padding-bottom: 2px; }
+.cell .uses { position: absolute; top: 1px; right: 2px; font: 8.5px/1 var(--mono); color: var(--accent); }
+.ginfo:not(:empty) { margin: 6px 0 10px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
+.gtop { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+.gtop { justify-content: space-between; }
+.gtop .big { display: block; max-width: 100%; height: auto; margin: 4px 0 2px 4px; color: var(--fg); }
+.gtop .big .base { stroke: var(--muted); }
+.gtop .big .tbox { stroke: var(--accent); }

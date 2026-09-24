@@ -4,7 +4,9 @@ A floating panel that shows the boxes and glue behind the Reflow TeX blocks
 on a page, much as a browser's element inspector shows the DOM: a tree of
 blocks → segments → lines → nodes (hbox, vbox, glyph, glue, kern, penalty,
 discretionary, math, rule, picture, widget). The page highlights the node you
-hover or select.
+hover or select. A second view, **Resources**, lists what the blocks draw
+with: fonts and their glyphs, pictures, streams (footnotes among them),
+links, citations, anchors and slots.
 
 The project's website includes it on every page. Press **Alt+Shift+I**
 (**⌥⇧I** on a Mac), click **Inspect** on an example's result, or choose
@@ -15,6 +17,9 @@ The project's website includes it on every page. Press **Alt+Shift+I**
 - **Tree.** Expand a block to its segments (text, display, stream – a
   stream's own segments sit below it), a segment to its lines, a line to its
   nodes, a box to its children, and a discretionary to its replace list.
+  A block's footnotes follow its segments, as *footnote n (popover)*: once
+  its popover has been opened, the body the viewer laid out there, segment by
+  segment, like the rest.
   Each row sums up its node:
   - a box: `w × h + d`, its shift and its glue setting;
   - a glue: its specification, its TeX name and the width it was set to on
@@ -50,7 +55,8 @@ The project's website includes it on every page. Press **Alt+Shift+I**
   menu key or Shift+F10: *Copy XML*, *Copy text* (the characters, a space per
   glue, a line break per line), *Copy row* (its label and summary).
 - **Pick:** hover the page to highlight the node under the pointer, and click
-  to select it in the tree. Esc cancels.
+  to select it in the tree. Esc cancels. Over an open footnote popover, it
+  picks from the popover.
 - **Baselines**, **Badness** and **Springs** (toolbar): the baseline of
   every line on screen; a bar past every line's end coloured by its badness
   (green decent, ≤ 12; amber loose or tight; red 100 or more; purple
@@ -63,6 +69,58 @@ The project's website includes it on every page. Press **Alt+Shift+I**
   no tag. Hovering or selecting such a row continues its outline dotted over
   the rest of the band, and its details say how much the box leaves out.
 - **Reflow:** after a resize re-breaks the lines, the open branches refresh.
+
+## Resources
+
+The **Resources** switch in the title bar shows what the blocks draw with,
+for the whole page. A font file several blocks use is listed once. Hover a
+resource to outline its uses on the page; select it to keep them outlined.
+**Show in tree** selects its first use in the Boxes view, then the next one
+each time you press it. The filter above the list matches names and notes.
+Click a heading to collapse or expand that kind of resource, or ⌥-click
+(Alt-click) to show that kind alone. The browser remembers which are
+collapsed. While the filter has text, every kind with a match is expanded.
+
+- **Fonts**, in two groups: the *originals*, served as TeX had them, and
+  those *modified by Reflow TeX*. The pipeline modifies a font in one of two
+  ways. It *converts* a classic Type 1 font to OpenType
+  (`cmmi10.reflowtex-<hash>.otf`). Or it *patches* an OpenType font's cmap
+  with code points LuaTeX used but the font did not map, and serves it
+  renamed. Either way, a glyph with no code point of its own (a variant, a
+  size of a delimiter) gets a private-use one. Each font is listed with its
+  sizes, how many distinct characters the documents use (for a modified font,
+  how many of them are private-use) and how many glyphs they set. The switch
+  beside the filter orders them by name or by use (most glyphs set first).
+  A modified font is served subset to the site's characters, so its table
+  holds only those. Selecting one reads the
+  file the page loaded it from (the viewer's `@font-face` rule) and shows a
+  table of all its glyphs, used or not, by code point. Glyphs with no code
+  point come after them, and then any character the documents use that the
+  file lacks. Search by the character itself (`→`), a code point (`U+2192`,
+  `0x2192`), a glyph index (`#12`), a decimal number (read as either), or
+  part of a glyph's name (from the CFF charset: `parenleft`,
+  `angbracketrightbigg`). Choose *Used here*, *Not used* or *Private use* to
+  narrow it. A glyph's details give its index, name, code points, advance,
+  the box TeX gave it at each size, its ink (as the browser measures the
+  outline, and how far it goes past TeX's box) and its microtype codes. It is
+  drawn large, whole, inside TeX's box (dashed) and on its baseline. In the
+  table, glyphs share a size and a baseline, and one too big for its cell is
+  shrunk to fit.
+- **From a glyph in the tree:** its details in the Boxes view have
+  **In its font**, which opens its font's table with that glyph selected.
+- **Pictures.** Each TikZ drawing or included PDF page (SVG by now): a
+  preview, its box, viewBox and size. **Copy SVG** puts it on the clipboard
+  as a standalone file.
+- **Streams.** Every `webstream` and footnote, with its kind, parameters,
+  where it stands (in the flow, in another stream, or behind a marker) and
+  its text (a Lean block's source). For a footnote, **Open popover** opens it
+  as its marker does, pinned. **Its boxes** shows the popover's boxes and
+  glue in the Boxes view. Clicks in the panel do not reach the page, so a
+  pinned popover stays open while you inspect it.
+- **Links, citations, anchors, slots.** Each `\ref` (with whether its label
+  is on this page), URL and `\webaction`; each `\lrcite` number, with its
+  entry from the page's `#lr-citations`; each `\label`; each `\webtext`
+  and `\webwidget` slot.
 
 Drag the title bar to move the panel, and its corner to resize it. The
 browser remembers both.
@@ -100,6 +158,9 @@ adds its **Inspect** buttons this way.
 - **`agent.js`** runs in the page and installs `window.__rtxInspector`:
   - ids for blocks, segments, lines and nodes, and a summary of each as plain
     JSON;
+  - the resources, keyed by strings (`font:FILE`, `pic:BLOCK:N`, …), and
+    the ids of each one's nodes on the current layout. A font's glyph table
+    comes from reading its OpenType file (`cmap`, `hmtx`, the CFF charset).
   - box extents from the nodes' own dimensions, mapped to the viewport with
     `getScreenCTM()`;
   - the overlay layer, pick mode, and element → node lookup through the
@@ -119,5 +180,10 @@ adds its **Inspect** buttons this way.
   lines yet. Scroll to it.
 - Leader copies (`\cleaders`) are drawn from clones, and do not map back to
   their leader glue.
+- A glyph with no code point in its font's `cmap` cannot be drawn in the
+  glyph table: the browser draws text only by code point. A TrueType font's
+  glyph names (in `post`) are not read. The pipeline makes CFF fonts.
+- A font file on a `file://` page cannot be fetched. The glyph table then
+  lists only the characters the documents use.
 - A glue or kern is outlined at its enclosing box's (or line's) height and
   depth; a running rule takes its box's.
