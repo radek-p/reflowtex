@@ -359,6 +359,18 @@
     .latex-example-source pre { padding: 1.2rem; }
   }
 
+  /* ── Notes (reflowtex.sty's webnote) as sticky notes ────────────────────
+     Pale yellow paper with a soft shadow instead of the viewer's framed box.
+     #lt-content in front: the viewer's own rule is injected after this one. */
+  #lt-content .latex-stream[data-kind="note"] {
+    --latex-outset-l: 1rem; --latex-outset-r: 1rem;
+    border-left: 0; border-radius: 3px; background: var(--lt-note-paper);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .07), 0 8px 18px -10px rgba(0, 0, 0, .28); }
+  html,          [data-latex-theme="light"]    { --lt-note-paper: #fff4b0; }
+  html.sepia,    [data-latex-theme="sepia"]    { --lt-note-paper: #f6e19a; }
+  html.contrast, [data-latex-theme="contrast"] { --lt-note-paper: #fff27a; }
+  html.dark,     [data-latex-theme="dark"]     { --lt-note-paper: #3b3419; }
+
   /* ── A glyph zoomed in (shortcode glyph-outline) ────────────────────────
      The outline as a vector editor shows a selected path: anchors as
      squares, handles as circles on thin lines, over the advance box and
