@@ -7,8 +7,8 @@ latexTitle: true
 {{< latex preamble="webfirst" >}}
 \pagetitle[Web-first \LaTeX]{Custom kinds}
 \bigskip
-Everything in the package is built from two primitives, and so can your own
-environments be.
+The package is built from two primitives, streams and actions. You can use
+them for environments of your own.
 \section*{Streams}
 \verb|\begin{webstream}[|\emph{key=value}\verb|]{|\emph{kind}\verb|}|
 makes what is typeset inside it a \emph{stream}: a separate run of paragraphs
@@ -33,7 +33,7 @@ stream passes four stages:
 text a control: clicking it sends \emph{action} to the page as a DOM event
 that bubbles out through the streams around it. The accordion's links are
 actions.
-\section*{Build your own: a warning}
+\section*{Example: a warning}
 \textbf{Step 1: the environment.} Name a kind and open a stream of it, in the
 preamble.
 {{< /latex >}}
@@ -71,7 +71,7 @@ kind's name in a script on the page, before or after the viewer. The viewer
 calls \texttt{mount} once for every box of that kind, with the box and a
 \texttt{ctx}; \texttt{ctx.state} outlives the box -- the viewer rebuilds
 boxes when web fonts arrive -- so a kind keeps what it must remember there.
-The built-in hint is exactly this, less its keyboard handling:
+The built-in hint is this code plus keyboard handling:
 {{< /latex >}}
 
 ```js
@@ -86,8 +86,8 @@ reflowtex.streamKinds.hint = {
 ```
 
 {{< latex preamble="webfirst" >}}
-\section*{The accordion is the same recipe}
-Its environments open streams, with the options passed on as parameters, and
+\section*{How the accordion is built}
+The same way. Its environments open streams, with the options passed on as parameters, and
 its links are actions:
 {{< /latex >}}
 

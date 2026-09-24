@@ -7,25 +7,25 @@ latexTitle: true
 {{< latex preamble="webfirst" >}}
 \pagetitle[Web-first \LaTeX]{HTML widgets}
 \bigskip
-Where \cs{webtext} gives the page words to set, \cs{webwidget} gives it a
-place for HTML of its own: a status badge, a small control. The widget
-reports its size and where it may break, as a word reports its hyphenation
-points, and the line breaker decides, for the paragraph as a whole, whether
-and where to break it -- across two lines, or more in a narrow column; the
-widget then draws each part, its cut ends marked. In print it takes no room,
-unless given a default, \verb|\webwidget[|\emph{default}\verb|]{|\emph{name}\verb|}|.
-Drag the edge of the result to watch the badge below break.
+\cs{webwidget} reserves a place in the text for the page's own HTML, such
+as a status badge or a small control. The widget reports its size and where
+it may be split, much like the hyphenation points of a word. The line
+breaker then decides, together with the rest of the paragraph, whether and
+where to split it; in a narrow column it may run over several lines. The
+widget draws each part and marks the cut ends. In print it takes no space
+unless it has a default:
+\verb|\webwidget[|\emph{default}\verb|]{|\emph{name}\verb|}|.
+Drag the edge of the result to see the badge split.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" show-source="true" >}}
-The sum of the first $n$ odd numbers is $n^2$ \webwidget{lean:sum_odd}
--- a fact checked by the Lean proof assistant, whose verdict the badge
-reports; while it is being checked, and once it has been, the paragraph is
-broken again around it.
+The sum of the first $n$ odd numbers is $n^2$ \webwidget{lean:sum_odd}.
+The badge shows whether the Lean proof assistant has checked this. When
+its status changes, the paragraph is broken again around it.
 {{< /latex >}}
 
-The widget, registered by the page, in outline (the page's source has the
-menu in full):
+The page registers the widget. In outline (the page's source has the full
+menu):
 
 ```js
 reflowtex.widgets['lean:*'] = {

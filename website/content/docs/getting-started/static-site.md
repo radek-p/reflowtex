@@ -20,8 +20,8 @@ python -m http.server -d site          # or open site/index.html from disk
 ```
 
 {{< latex preamble="docs" >}}
-The page works from any location -- a domain root, a subpath, or straight
-off disk -- because fonts are found relative to the viewer script. To embed
+The page works at a domain root, under a subpath or opened from disk,
+because fonts are found relative to the viewer script. To embed
 blocks in a page of your own, follow the DOM contract in
 \texttt{src/viewer/README.md}: one element per block carrying the encoded
 node list, the schema once per page, and the two scripts.

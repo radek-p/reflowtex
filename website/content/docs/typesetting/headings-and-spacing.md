@@ -9,7 +9,7 @@ latexTitle: true
 \bigskip
 
 Sectioning commands carry their own fonts and the space above and below them,
-and an explicit \verb|\vspace| is kept exactly; only the lines between them
+and an explicit \verb|\vspace| keeps its size; only the lines between them
 re-break.
 {{< /latex >}}
 

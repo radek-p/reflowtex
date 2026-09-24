@@ -7,10 +7,9 @@ latexTitle: true
 {{< latex preamble="docs" >}}
 \pagetitle[Getting started]{Installation}
 \bigskip
-The build step drives a real \TeX{} toolchain -- Lua\TeX, \texttt{dvisvgm},
-Ghostscript, \texttt{protoc} -- plus Python for the encoder. The easiest way
-to get all of it is the project's container: nothing to install but a
-container runtime.
+The build needs Lua\TeX, \texttt{dvisvgm}, Ghostscript, \texttt{protoc}
+and Python. The simplest way to get them all is the project's container,
+which needs only a container runtime.
 \section*{In a container}
 With Docker (or OrbStack, Colima, Podman) available, from a checkout of the
 repository:
@@ -22,7 +21,7 @@ docker compose run --rm --service-ports reflowtex make serve   # → http://loca
 ```
 
 {{< latex preamble="docs" >}}
-Open the address and resize the window: the demo text re-breaks live. A
+Open the address and resize the window: the demo text re-breaks to fit. A
 snippet's preamble may \verb|\usepackage| anything; a package the image lacks is
 installed with \texttt{tlmgr} the first time it is used.
 \section*{Locally}

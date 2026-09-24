@@ -15,7 +15,7 @@ enableInlineShortcodes = true
   github = "https://github.com/radek-p/reflowtex"
   # AGPL-3.0 §13 source offer, read by the viewer partial's footer.
   reflowtexSource = "https://github.com/radek-p/reflowtex"
-  tagline = "Real LaTeX, set by a genuine TeX run and re-flowed live in the browser."
+  tagline = "LaTeX typeset by TeX, with the lines broken in the browser to fit any screen."
   # Colour map every {{< latex >}} block uses unless it names another:
   # latex-color-maps/site.json, which remaps TeX's colours per theme.
   latexColorMap = "site"

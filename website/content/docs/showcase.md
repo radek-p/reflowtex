@@ -10,11 +10,9 @@ aliases: ["/examples/", "/testmath/", "/docs/showcase/in-the-wild/", "/docs/show
 {{< latex preamble="docs" >}}
 \pagetitle{Showcase}
 \bigskip
-Complete documents published with Reflow\,\TeX: long, dense and
-theorem-heavy, the material it was made for.
-\section*{In the wild}
-Documents published on the open web from their \LaTeX{} source, in the
-order they appeared.
+Whole documents published with Reflow\,\TeX.
+\section*{On other sites}
+Documents published from their \LaTeX{} source, oldest first.
 {{< /latex >}}
 
 <ul class="showcase-list">
@@ -25,11 +23,10 @@ order they appeared.
 
 {{< latex preamble="docs" >}}
 \section*{The AMS \texttt{testmath.tex}}
-The sample paper of the \texttt{amsmath} package, whole and unchanged: its
-own preamble, classic Computer Modern fonts, cross-references and a
-footnote. Everything below is produced by one line in this page's source --
-the file is a complete document, so it is compiled as one -- plus a
-one-line named preamble that adds microtype:
+The sample paper of the \texttt{amsmath} package, unchanged, with its own
+preamble, Computer Modern fonts, cross-references and a footnote. The file
+is a complete document, so it is compiled as one. This page shows it with
+one line of source, plus a one-line preamble that adds microtype:
 {{< /latex >}}
 
 ```markdown

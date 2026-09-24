@@ -5,19 +5,19 @@ aliases: ["/docs/"]
 ---
 
 {{< latex preamble="home" >}}
-\pagetitle[Reflow\,\TeX]{Real \TeX{} on the web}
+\pagetitle[Reflow\,\TeX]{\TeX{} typesetting on the web}
 \bigskip
-\noindent \LaTeX{}, published exactly as a genuine Lua\TeX{} run set it --
-every glyph, kern and formula -- with the lines broken again by the browser,
-for whatever screen it is read on.
+\noindent Write \LaTeX{} as usual and let Lua\TeX{} typeset it. The page keeps
+\TeX's fonts, spacing and formulas; only the line breaks are left to the
+browser, so the text fits any screen.
 {{< /latex >}}
 
 {{< hero >}}
 
 {{< latex preamble="home" >}}
-\section*{It is all real \TeX}
-Every card below is a live block: set by \TeX, laid out by the browser. The
-layout around them is plain HTML and CSS -- which is the point.
+\section*{Examples}
+Each card below is a separate block, typeset by \TeX{} and broken into lines
+by the browser. The grid around them is ordinary HTML and CSS.
 {{< /latex >}}
 
 <div class="bento">
@@ -28,12 +28,11 @@ layout around them is plain HTML and CSS -- which is the point.
 
 {{< latex preamble="home" >}}
 \cardtitle{Drag the edge}
-This paragraph was typeset once, by \TeX{}, and never again by anything
-else: every glyph, every kern, the spacing of
-$\sum_{k=1}^{n} k = \frac{n(n+1)}{2}$. What the browser does is choose
-where the lines break. Drag this field's right edge, and the Knuth--Plass
-algorithm runs again for the new width, hyphenation included, so the column
-stays justified and even at any measure.
+This paragraph was typeset once, by \TeX{}: its glyphs, its kerns and
+the spacing of $\sum_{k=1}^{n} k = \frac{n(n+1)}{2}$. The browser only
+chooses where the lines break. Drag the right edge of this box and the
+Knuth--Plass algorithm runs again for the new width, with hyphenation, so
+the text stays justified.
 {{< /latex >}}
 
 </div>
@@ -60,8 +59,8 @@ Operator sizes, limits and spacing, as \TeX{} set them.
   (a+b)^2 &= a^2 + 2ab + b^2 \\
   (a-b)^2 &= a^2 - 2ab + b^2
 \end{align*}
-This card alone is in the dark theme; the colour map recolours its
-\TeX. Point at it.
+Only this card uses the dark theme; a colour map recolours its
+\TeX. Hover over it to switch to the light theme.
 {{< /latex >}}
 
 </div>
@@ -76,7 +75,8 @@ This card alone is in the dark theme; the colour map recolours its
   C \arrow[r, "k"'] & D
 \end{tikzcd}
 \]
-A \texttt{tikz-cd} square, drawn as SVG with \TeX's own metrics.
+A \texttt{tikz-cd} diagram, drawn as SVG and placed with \TeX's
+metrics.
 {{< /latex >}}
 
 </div>
@@ -112,8 +112,8 @@ prime factor that is none of them.
   e^{i\pi} + 1 = 0
 \end{equation}
 Equation~\eqref{eq:home-euler} is a link, and this sentence ends in a
-footnote.\footnote{Typeset by \TeX{} in full, and re-broken to fit the
-popover.} Hover the marker.
+footnote.\footnote{Typeset by \TeX{}, and re-broken to fit the
+popover.} Hover over the marker.
 {{< /latex >}}
 
 </div>
@@ -121,9 +121,9 @@ popover.} Hover the marker.
 <div class="card span-3">
 
 {{< latex preamble="home" >}}
-\cardtitle{Real text}
-Select this sentence, search the page for it, copy it. It is text, drawn in
-the document's own fonts, not a picture of text.
+\cardtitle{Selectable text}
+You can select this sentence, copy it, or find it with the browser's search.
+It is ordinary text, drawn in the document's fonts.
 {{< /latex >}}
 
 </div>
@@ -140,10 +140,10 @@ the document's own fonts, not a picture of text.
 
 {{< latex preamble="home" >}}
 \raggedright
-\cardtitle{\TeX{} sets it}
-\noindent A real Lua\TeX{} run typesets your
-source, and a Lua hook records the finished node list -- before any line
-is broken.
+\cardtitle{\TeX{} typesets}
+\noindent Lua\TeX{} compiles your source. A Lua
+hook saves each paragraph's node list before \TeX{} breaks it into
+lines.
 {{< /latex >}}
 
 </div>
@@ -152,9 +152,9 @@ is broken.
 
 {{< latex preamble="home" >}}
 \raggedright
-\cardtitle{Shipped as data}
-\noindent Glyphs, kerns, glue and boxes, with
-their exact positions, travel as compact Protocol Buffers inside the page.
+\cardtitle{Stored in the page}
+\noindent The glyphs, kerns, glue and boxes,
+with their positions, are stored in the page as Protocol Buffers.
 {{< /latex >}}
 
 </div>
@@ -163,9 +163,10 @@ their exact positions, travel as compact Protocol Buffers inside the page.
 
 {{< latex preamble="home" >}}
 \raggedright
-\cardtitle{The browser breaks it}
-\noindent A small viewer runs Knuth--Plass
-at the reader's width and draws SVG; resize, and it breaks again.
+\cardtitle{The browser breaks lines}
+\noindent A small script runs Knuth--Plass
+for the current width and draws the lines as SVG. When the width changes,
+it runs again.
 {{< /latex >}}
 
 </div>
@@ -183,8 +184,8 @@ at the reader's width and draws SVG; resize, and it breaks again.
 {{< latex preamble="home" >}}
 \raggedright
 \cardtitle{Getting started}
-\noindent Install the toolchain; publish a static
-page, a Hugo site, or a book in parts.
+\noindent Install the tools, then publish a
+static page, a Hugo site or a book.
 {{< /latex >}}
 
 </a>
@@ -194,8 +195,8 @@ page, a Hugo site, or a book in parts.
 {{< latex preamble="home" >}}
 \raggedright
 \cardtitle{Typesetting}
-\noindent What a block can hold, each with a live
-result beside its source.
+\noindent What a block can contain, each
+example next to its source.
 {{< /latex >}}
 
 </a>
@@ -206,7 +207,7 @@ result beside its source.
 \raggedright
 \cardtitle{Web-first \LaTeX}
 \noindent Accordions, notes, hints, boxed
-theorems -- and kinds of your own.
+theorems and environments of your own.
 {{< /latex >}}
 
 </a>
@@ -216,8 +217,8 @@ theorems -- and kinds of your own.
 {{< latex preamble="home" >}}
 \raggedright
 \cardtitle{Showcase}
-\noindent Complete papers and books, among them the AMS
-sample paper, \texttt{testmath.tex}.
+\noindent Whole papers and books, including the
+AMS sample paper \texttt{testmath.tex}.
 {{< /latex >}}
 
 </a>

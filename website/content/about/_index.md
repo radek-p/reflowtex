@@ -6,43 +6,41 @@ latexTitle: true
 {{< latex preamble="about" >}}
 \pagetitle{About}
 \bigskip
-Reflow\,\TeX{} is an experiment in bringing genuine \TeX{} typesetting to the
-open web: real line breaking, real mathematics, real fonts -- re-flowed to
-the reader's screen instead of frozen in a PDF.
-\section*{Where this is going}
-\textbf{Today: a faithful imitation.} The viewer re-breaks every paragraph
-with its own JavaScript implementation of the Knuth--Plass algorithm. It is a
-careful port -- the same badness and demerits, the same fitness classes --
-but it is still a re-implementation, with its own arithmetic, its own line
-packing, and a simplified microtype layer. The breaks it picks are very close
-to \TeX's; they are not guaranteed to be \TeX's.
+Reflow\,\TeX{} is an experiment: \LaTeX{} documents on the web, typeset by
+\TeX, but with the lines broken for the reader's screen instead of fixed in
+a PDF.
+\section*{Plans}
+\textbf{Now.} The viewer breaks paragraphs with its own JavaScript version
+of the Knuth--Plass algorithm. It uses \TeX's badness, demerits and fitness
+classes, but its arithmetic and line packing are its own, and its microtype
+support is simplified. It usually picks the same breaks as \TeX, but not
+always.
 \medskip
 
-\textbf{Next: the real thing, in WebAssembly.} The plan is to replace that
-approximation with a genuine \TeX{} paragraph breaker, compiled to
-WebAssembly and running in the browser.
+\textbf{Next.} Replace it with \TeX's own paragraph builder, compiled to
+WebAssembly and run in the browser.
 \medskip
 
-\textbf{Why this works.} \TeX{} hyphenates, ligatures, and kerns a paragraph
-\emph{before} it breaks it, and none of that depends on the line width. The
-node list the build step already exports is precisely the input the breaker
-expects, so one \TeX{} run yields a paragraph that can be re-broken at any
-width by the same code that would have set it in print -- without porting
-the hyphenation, language, or font machinery to the browser.
+This can work because \TeX{} hyphenates a paragraph, forms its ligatures and
+kerns it \emph{before} breaking it into lines, and none of that depends on
+the line width. The node list the build already exports is what the line
+breaker takes as input. So after one \TeX{} run, \TeX's own code can break
+the paragraph at any width, and hyphenation, languages and fonts need not be
+ported to the browser.
 \section*{How it is built}
-A Lua\LaTeX{} run records the finished node list, Protocol Buffers carry it
-to the page, and the browser breaks it into lines. The repository's
+Lua\LaTeX{} records the finished node list, Protocol Buffers carry it to the
+page, and the browser breaks it into lines. The repository's
 \texttt{README} and \texttt{docs/} describe the design.
-\section*{License}
+\section*{Licence}
 Reflow\,\TeX{} is free software under the \textbf{GNU Affero General Public
 License, version 3 or later} (AGPL-3.0-or-later). Bundled third-party
 components (the protobuf.js runtime, the fonts a build ships) keep their own
-permissive licenses.
+permissive licences.
 \section*{Source and contact}
 The source code is at
 \href{https://github.com/radek-p/reflowtex}{github.com/radek-p/reflowtex}.
-Questions and bug reports go to its
-\href{https://github.com/radek-p/reflowtex/issues}{issue tracker}; security
-reports, privately, through its
+Report bugs and ask questions on the
+\href{https://github.com/radek-p/reflowtex/issues}{issue tracker}. Report
+security problems privately, through the
 \href{https://github.com/radek-p/reflowtex/security}{Security tab}.
 {{< /latex >}}

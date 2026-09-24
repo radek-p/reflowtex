@@ -8,9 +8,9 @@ latexTitle: true
 \pagetitle[Web-first \LaTeX]{Accordion}
 \bigskip
 A \texttt{webaccordion} shows one of its panes at a time, and the reader moves
-between them with links placed in the panes themselves. Anything fits in a
-pane -- here an ordinary amsthm \texttt{proof}. Every pane is typeset by
-\TeX, re-breaks with the column, and starts exactly where the others do.
+between them with links placed in the panes themselves. A pane can hold
+anything; here it is an ordinary amsthm \texttt{proof}. Each pane is typeset
+by \TeX, re-breaks with the column, and starts where the others do.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" show-source="true" >}}
@@ -70,10 +70,9 @@ share no factor. \webpanelink{first}{Back to the short answer}
 {{< latex preamble="webfirst" >}}
 \section*{In print}
 A PDF prints one pane: the last, the fullest, unless \texttt{print=} names
-another. The links are dropped there, since they have nothing to do on paper,
-but a line break around one stays -- \verb|\hfill\webprevpane\par| still
-ends the proof's first line in print; wrap it in \texttt{webonly} if the PDF
-should run on. Printing the web page shows the same pane as the PDF.
+another. The links are left out, but line breaks around them stay:
+\verb|\hfill\webprevpane\par| still ends the first line of the proof in
+print. Put it in \texttt{webonly} if the PDF should not break there. Printing the web page shows the same pane as the PDF.
 The option \texttt{initial=} picks the pane shown first (default: the first).
 {{< /latex >}}
 

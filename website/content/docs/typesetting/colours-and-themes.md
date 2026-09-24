@@ -7,11 +7,11 @@ latexTitle: true
 {{< latex preamble="docs" >}}
 \pagetitle[Typesetting]{Colours and themes}
 \bigskip
-Text \TeX{} left black takes the page's own text colour, so a dark theme
-works with no configuration. Colours the author chose are kept -- and can be
-remapped per theme by a \emph{colour map}, so that \verb|\textcolor{blue}|
-stays readable on a dark page. The switch above the example previews each
-theme on the example alone; the one in the corner switches the whole page.
+Black text takes the page's text colour, so a dark theme works without any
+configuration. Colours chosen by the author are kept, and a \emph{colour
+map} can replace them per theme, so that \verb|\textcolor{blue}| stays
+readable on a dark background. The switch above the example changes the
+theme of the example only; the one in the corner changes the whole page.
 {{< /latex >}}
 
 {{< latex preamble="docs" show-source="true" themes="light,dark,sepia,contrast" >}}
@@ -20,8 +20,8 @@ colour inside mathematics:
 \[
   \textcolor{blue}{a^2} + \textcolor{red}{b^2} = c^2 .
 \]
-And \emph{tints} -- \verb|blue!20!white|, \verb|red!20!white| -- shading a
-picture: a wave tunnelling through a barrier.
+And \emph{tints}, \verb|blue!20!white| and \verb|red!20!white|, shading a
+picture of a wave tunnelling through a barrier.
 \begin{center}
 \begin{tikzpicture}[x=1cm, y=1cm]
   % where the wave may travel, and the barrier it tunnels through
@@ -42,11 +42,11 @@ picture: a wave tunnelling through a barrier.
 {{< /latex >}}
 
 {{< latex preamble="docs" >}}
-A colour map is a small JSON file: for each theme, which colours to replace,
-and \emph{tints} -- colours \TeX{} mixed with the page, like
-\verb|blue!20!white| -- re-mixed with whatever the page's background is now.
+A colour map is a small JSON file. For each theme it lists the colours to
+replace. It also lists \emph{tints}: colours mixed with white, like
+\verb|blue!20!white|, which are mixed again with the current background.
 This site's map, \texttt{latex-color-maps/site.json}, is the default for
-every block. Drawn, for the blue and the red of the example:
+every block. Here is what it does to the blue and red of the example:
 {{< /latex >}}
 
 {{< color-map map="site" colors="#0000ff,#ff0000" >}}
@@ -67,9 +67,9 @@ In the file:
 ```
 
 {{< latex preamble="docs" >}}
-A theme is a class on the page's \verb|<html>| element -- \texttt{dark},
-\texttt{sepia}, \texttt{contrast} -- so switching it restyles what is already
-drawn, with no re-render. The Theming section of \texttt{src/viewer/README.md}
+A theme is a class on the page's \verb|<html>| element (\texttt{dark},
+\texttt{sepia} or \texttt{contrast}), so switching themes only changes
+styles; nothing is drawn again. The Theming section of \texttt{src/viewer/README.md}
 has the details.
 {{< /latex >}}
 

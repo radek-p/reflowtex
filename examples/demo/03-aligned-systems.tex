@@ -1,21 +1,21 @@
 % SPDX-License-Identifier: AGPL-3.0-or-later
 \section*{Aligned systems and matrices}
-Multi-line derivations align on their relation symbols, and matrices set exactly
-as \TeX{} builds them:
+Multi-line derivations align on their relation symbols, and matrices are set
+by \TeX:
 \begin{align*}
   (f \circ g)'(x) &= f'\bigl(g(x)\bigr)\,g'(x), \\
   \frac{d}{dx} \int_{a}^{x} f(t)\,dt &= f(x), \\
   \begin{pmatrix} a & b \\ c & d \end{pmatrix}^{-1}
     &= \textcolor{blue}{\frac{1}{ad - bc}}\begin{pmatrix} d & -b \\ -c & a \end{pmatrix}.
 \end{align*}
-The following numbered alignment exercises several independently aligned
-columns, unequal rows, and equation numbers:
+A numbered alignment with several aligned columns, rows of unequal width,
+and equation numbers:
 \begin{align}
   a&=b & ccccccc^7&=d & e&=f \\
   g&=h & i&=j & k&=\text{long entry}
 \end{align}
-A piecewise definition, using a \texttt{cases} environment (and a little colour,
-which the theme switcher remaps per palette):
+A piecewise definition in a \texttt{cases} environment, with some colour that
+changes with the theme:
 \[
   \operatorname{sgn}(x) =
   \begin{cases}

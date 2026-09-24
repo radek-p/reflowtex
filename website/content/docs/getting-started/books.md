@@ -7,20 +7,19 @@ latexTitle: true
 {{< latex preamble="docs" >}}
 \pagetitle[Getting started]{Books in parts}
 \bigskip
-A book is one \LaTeX{} document: chapter~3 refers to a theorem of chapter~1,
-counts its theorems and equations from where chapter~2 stopped, and uses the
-macros the chapters before it defined. On the web the same book is several
-pages, or several tabs. A \emph{batch} gives it both: every block with the
-same \texttt{batch=} is compiled together, as one document, in the order
-their \texttt{weight=} gives -- and each block then shows only its own
-part.
+In \LaTeX{} a book is one document: chapter~3 can refer to a theorem in
+chapter~1, continues the numbering where chapter~2 stopped, and uses macros
+defined earlier. On the web the same book is usually split over several
+pages or tabs. A \emph{batch} gives you both. All blocks with the same
+\texttt{batch=} are compiled together as one document, in the order of
+their \texttt{weight=}, and each block shows only its own part.
 {{< /latex >}}
 
 {{< latex preamble="docs" >}}
 Here is a small book of three chapters, each shown in a tab of its own.
 Chapter~2 uses the macro \verb|\N| that chapter~1 defined and refers to its
-theorem and equation; chapter~3 names theorems from both earlier chapters;
-every number is the book's own.
+theorem and equation; chapter~3 names theorems from both earlier chapters.
+All numbers are the book's.
 {{< /latex >}}
 
 {{< tabs >}}
@@ -86,7 +85,7 @@ hugo --source website
 {{< latex preamble="docs" >}}
 The tabs are this site's own shortcodes (\texttt{tabs} and \texttt{tab},
 a few lines each); nothing in the batch depends on them. The same three
-\texttt{latex} lines could as well stand on three different pages, one
+\texttt{latex} lines could just as well be on three different pages, one
 chapter each.
 {{< /latex >}}
 
@@ -94,7 +93,7 @@ chapter each.
 \section*{How it works}
 \texttt{prebuild.py} collects every block of a batch -- across all pages
 -- orders them by \texttt{weight} (ties go by page, then by position on the
-page), and compiles them as one document, exactly as if a \texttt{main.tex}
+page), and compiles them as one document, as if a \texttt{main.tex}
 had \verb|\include|d them in that order. Between the parts it places a
 marker that opens no group, so whatever one part defines is still defined in
 the next. The finished document is then cut back into one block per part,

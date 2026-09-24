@@ -8,10 +8,9 @@ latexTitle: true
 \pagetitle[Typesetting]{Inline mathematics}
 \bigskip
 
-Inline mathematics is set by \TeX{} and travels with the words around it: a
-paragraph re-breaks at any width, and a formula moves from line to line whole,
-exactly as \TeX{} spaced it. The snippet below, and its source under it, is
-the whole example.
+Inline formulas are typeset by \TeX{} and move with the words around them.
+When the paragraph re-breaks, a formula moves from line to line whole, with
+\TeX's spacing. Below is the complete example, with its source underneath.
 {{< /latex >}}
 
 {{< latex file="01-inline-math.tex" show-source="true" />}}

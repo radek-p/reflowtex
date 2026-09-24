@@ -10,7 +10,8 @@ build:
 
 {{< latex >}}
 \fontsize{15}{20}\selectfont
-Reflow\,\TeX{} sets real \LaTeX{} in your browser -- every glyph, kern, and
-$e^{i\pi}+1=0$ from a genuine \TeX{} run -- then re-breaks each paragraph
-\emph{live}, with the Knuth--Plass algorithm.
+Reflow\,\TeX{} shows \LaTeX{} documents in the browser. \TeX{} typesets
+the text and formulas such as $e^{i\pi}+1=0$; the browser breaks each
+paragraph into lines with the Knuth--Plass algorithm, again whenever the
+width changes.
 {{< /latex >}}

@@ -2,14 +2,13 @@
 \section*{Sections and vertical spacing}
 This heading, and the space it opens beneath itself, are typeset by \TeX{}: a
 \LaTeX{} sectioning command carries its own font, size, and the vertical skips
-above and below it, and Reflow TeX preserves them.
+above and below it, and Reflow TeX keeps them.
 
 \vspace{1.5cm}
 
-The gap above this sentence is an explicit \verb|\vspace{1.5cm}|. Author-requested
-vertical space is reproduced exactly, while the paragraphs on either side still
-reflow to fit whatever column width the page provides.
+The gap above this sentence is an explicit \verb|\vspace{1.5cm}|. It keeps its
+size, while the paragraphs around it still reflow to the width of the column.
 
 \subsection*{A subsection}
-Subsection headings are smaller and open less space -- again straight from the
-document class, not an approximation of it.
+Subsection headings are smaller and have less space around them. Both come
+from the document class.

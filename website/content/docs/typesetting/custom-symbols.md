@@ -9,11 +9,11 @@ latexTitle: true
 {{< /latex >}}
 
 {{< latex preamble="../examples/symbol/preamble.tex" >}}
-\noindent A symbol no font has can still be typeset: draw it as a glyph, save it as a
-font, and use it like any other symbol. Here it is $\segment$, from a paper
-on register automata: a single glyph, drawn to match the stroke weight of
-$\exists$, which \TeX{} sets as a quantifier, subscript and all. The browser
-draws the same outline.
+\noindent If no font has the symbol you need, draw it as a glyph, save it as a
+font and use it like any other symbol. The example is $\segment$, from a
+paper on register automata. It is a single glyph with the stroke weight of
+$\exists$, and \TeX{} sets it like a quantifier, with a subscript. The
+browser draws the same outline.
 {{< /latex >}}
 
 {{< latex file="segment.tex" preamble="../examples/symbol/preamble.tex" show-source="true" />}}
@@ -60,8 +60,7 @@ examples/symbol/                       --demos-dir: where file="…" is found
 \item[A math symbol.] Declared as a symbol font, the glyph takes its script
   sizes from the math machinery, so it works in a subscript or a
   superscript as well.
-\item[One outline.] \TeX{} sets the symbol with the font's metrics, and the
-  browser draws it from the same file: nothing is traced again, and nothing
-  is approximated.
+\item[One file.] \TeX{} sets the symbol with the font's metrics, and the
+  browser draws it from the same file.
 \end{description}
 {{< /latex >}}

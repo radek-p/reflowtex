@@ -8,9 +8,10 @@ latexTitle: true
 \pagetitle[Typesetting]{Links and footnotes}
 \bigskip
 Cross-references and hyperlinks -- \verb|\ref|, \verb|\eqref|,
-\verb|\autoref|, \verb|\cref| and \verb|\href| -- become links, lit as a whole on hover even when a line break splits them, and
-each \verb|\label| becomes an anchor on the page. A footnote is typeset by
-\TeX{} in full and opens in a popover from its marker.
+\verb|\autoref|, \verb|\cref| and \verb|\href| -- become links. A link is
+highlighted as a whole on hover, even when it is split across lines, and
+each \verb|\label| becomes an anchor on the page. Footnotes are typeset by
+\TeX{} and open in a popover from their marker.
 {{< /latex >}}
 
 {{< latex preamble="docs" show-source="true" >}}
@@ -25,7 +26,7 @@ The marker at the end of the last sentence opens a footnote.
 
 {{< latex preamble="docs" >}}
 A label on another page of the same site resolves through the link map the
-Hugo integration writes; a reference whose target was never published stays
-plain text rather than a link to nowhere.
+Hugo integration writes. A reference to a label that is not published
+anywhere stays plain text.
 {{< /latex >}}
 

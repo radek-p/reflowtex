@@ -17,9 +17,9 @@ paragraphs.
 it, re-broken at the width of its box.
 \end{webnote}
 \begin{webhint}
-\textbf{Hint.} A \texttt{webhint} stays blurred until the reader clicks it,
-or focuses it and presses Enter, and another click blurs it again -- for
-exercises whose hint should not be read by accident.
+\textbf{Hint.} A \texttt{webhint} stays blurred until the reader clicks it
+(or focuses it and presses Enter); another click blurs it again. It is meant
+for exercises, so that the hint is not read by accident.
 \end{webhint}
 {{< /latex >}}
 

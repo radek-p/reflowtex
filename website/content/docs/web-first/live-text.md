@@ -7,10 +7,10 @@ latexTitle: true
 {{< latex preamble="webfirst" >}}
 \pagetitle[Web-first \LaTeX]{Live text}
 \bigskip
-A \cs{webtext} is a named place in running text whose words the page can
-change: a counter, a clock, a value the page computes. \TeX{} typesets the
-default text, and that is what the PDF shows; on the web a script gives the
-name a new text, and the paragraph re-breaks around it.
+A \cs{webtext} marks a named piece of running text that the page can
+replace: a counter, a clock, a value computed by a script. \TeX{} typesets
+the default text, which is what the PDF shows. On the web a script sets new
+text, and the paragraph re-breaks around it.
 {{< /latex >}}
 
 <div class="live-demo">
@@ -23,9 +23,9 @@ name a new text, and the paragraph re-breaks around it.
 <svg class="live-arrow" aria-hidden="true"><path class="live-arrow-line" d=""/><path class="live-arrow-head" d=""/></svg>
 
 {{< latex preamble="webfirst" show-source="true" >}}
-The basket holds \webtext{apples}{no apples at all}, each counted by
-the page and set into this paragraph as it stands; press the buttons above,
-and the lines around the count move to make room for its new words.
+The basket holds \webtext{apples}{no apples at all}. The count comes
+from the page's script: press the buttons above, and the lines around it
+re-break to make room for the new words.
 {{< /latex >}}
 
 </div>
@@ -150,8 +150,8 @@ field.addEventListener('input', () => { n = Math.max(0, parseInt(field.value, 10
 \TeX{} sets the default as it sets any text. A text the page gives instead
 is set the way a browser sets it: in the default's font and colour, word by
 word, each word measured by the browser, with no kerning or ligatures from
-one word to the next. It breaks only at its spaces -- a no-break space
-keeps two words together -- and between its words stands the interword glue
+one word to the next. It breaks only at its spaces (a no-break space
+keeps two words together), and between its words stands the interword glue
 of that font, with the stretch and shrink \TeX{} would give it, so the line
 it lands on is justified with the rest.
 \begin{description}
@@ -167,6 +167,6 @@ default cannot be replaced. In print it is its default, typeset as usual.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" >}}
-For HTML rather than words -- a badge, a small control, breakable across
-lines like a hyphenated word -- see \emph{HTML widgets}, the next page.
+To insert HTML instead of words, such as a badge or a small control, see
+the next page, \emph{HTML widgets}.
 {{< /latex >}}

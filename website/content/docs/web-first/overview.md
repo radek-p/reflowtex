@@ -8,11 +8,11 @@ aliases: ["/docs/web-first/"]
 {{< latex preamble="webfirst" >}}
 \pagetitle[Web-first \LaTeX]{Overview}
 \bigskip
-Most documents reach Reflow\,\TeX{} unchanged: a paper or a book written for
-print is published as it is. A document written \emph{for} the web can ask for
-more, and the companion package \texttt{reflowtex.sty} is where that
-vocabulary lives. Every construct in it still compiles in an ordinary \LaTeX{}
-run, to its nearest print equivalent, so one source keeps producing a PDF.
+Most documents need no changes: a paper or a book written for print is
+published as it is. A document written \emph{for} the web can use the
+companion package \texttt{reflowtex.sty}. Everything in the package also
+compiles with ordinary \LaTeX, to the closest print equivalent, so the same
+source still gives a PDF.
 {{< /latex >}}
 
 ```latex
@@ -20,8 +20,8 @@ run, to its nearest print equivalent, so one source keeps producing a PDF.
 ```
 
 {{< latex preamble="webfirst" >}}
-The package ships in \texttt{src/latex/}, and the build pipeline finds it on
-its own. For a PDF of the same source, put \texttt{reflowtex.sty} next to the
+The package ships in \texttt{src/latex/}, and the build pipeline finds it
+automatically. For a PDF of the same source, put \texttt{reflowtex.sty} next to the
 document or on \texttt{TEXINPUTS}.
 \section*{Web-only and print-only}
 \cs{ifreflowtex} is true only when the pipeline compiles the source. Two

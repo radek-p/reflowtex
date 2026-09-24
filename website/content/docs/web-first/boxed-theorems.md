@@ -40,7 +40,7 @@ Every finite division ring is a field.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" >}}
-A box inside a box -- the claim inside the proof -- is a little narrower per
+A nested box, like the claim inside the proof, is a little narrower at each
 level; the space \LaTeX{} puts around an environment stays outside its box,
 and a proof's QED box stays inside.
 \section*{Three ways to use it}
@@ -55,8 +55,8 @@ and a proof's QED box stays inside.
 {{< latex preamble="webfirst" >}}
 Without the optional first argument the environment itself is boxed,
 everywhere. With it, \cs{DeclareWebBox} defines a new environment, a copy that
-shares the original's counter and heading, and boxes only the copy -- for the
-few theorems that deserve to stand out, like Wedderburn's above. The package
+shares the original's counter and heading, and boxes only the copy. This is
+for the few theorems that should stand out, like Wedderburn's above. The package
 option \texttt{boxed} boxes every environment made with
 \cs{newtheorem} and every \texttt{proof}.
 {{< /latex >}}

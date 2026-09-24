@@ -8,8 +8,8 @@ wide: true
 {{< latex preamble="docs" >}}
 \pagetitle[Tools]{Inspector}
 \bigskip
-The inspector shows what \TeX{} made of a page: the boxes, glue, kerns and
-penalties behind every block, as the browser has just set them. Hover a row
+The inspector shows the boxes, glue, kerns and penalties of every block,
+as the browser has just laid them out. Hover a row
 to outline its node on the page; select it to keep the outline and see what
 it is made of. A glue shows the width it was stretched or shrunk to on its
 line, and a line its glue ratio and font expansion. Resize the window and the
@@ -53,15 +53,15 @@ its words is stretched or shrunk to fit whatever width it is given.
   end: green where \TeX{} would call it decent, amber loose or tight, red at
   100 or more. \emph{Baselines} draws the baseline of every line.
 \item[The baseline.] Whatever is selected draws a guide along its baseline
-  across the whole window, so what shares it -- or misses it -- is plain to
-  see.
+  across the whole window, so you can see what sits on it and what does
+  not.
 \item[A reflow.] Make the window narrower. The lines re-break, and the
   open rows follow.
 \end{description}
 
 \section*{On your own pages}
 The inspector ships with the viewer, in \texttt{src/inspector/}. Serve its
-three files together and include its script after the viewer's; it costs
+three files together and include its script after the viewer's; it does
 nothing until it is opened. A page's own controls open it through
 \texttt{window.reflowtex.inspector}.
 {{< /latex >}}

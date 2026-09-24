@@ -7,10 +7,10 @@ latexTitle: true
 {{< latex preamble="webfirst" >}}
 \pagetitle[Web-first \LaTeX]{Lean beside a proof}
 \bigskip
-A theorem, its proof and the Lean code that checks it, in one place. The
-reader sees the theorem; two switches hanging under its frame, \emph{Proof}
-and \emph{Lean}, open either one beneath it, or both -- side by side on a wide
-screen, one under the other on a narrow one. Try them.
+A theorem, its proof and the Lean code that checks it can be shown
+together. The reader first sees the theorem. Two switches under its frame,
+\emph{Proof} and \emph{Lean}, open either or both below it: side by side on
+a wide screen, one under the other on a narrow one.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" show-source="true" >}}
@@ -39,14 +39,14 @@ theorem sum_odd (n : ℕ) :
 The environment \texttt{leantheorem} wraps an ordinary theorem, its proof and a
 \texttt{leancode} block; everything before \verb|\begin{proof}| is the
 statement. The Lean code sits in a frame like the proof's, in a colour of its
-own. It is never typeset: it is read verbatim, indentation and all, and shown
-as text -- highlighted, and selectable, so it can be copied into an editor.
+own. It is not typeset: it is read verbatim, with its indentation, and
+shown as highlighted text that can be copied into an editor.
 Three keys set it up: \texttt{decl=} names the declaration above the code,
 \texttt{url=} makes that name a link (to its documentation, say), and
 \texttt{show=} sets what is open at first: \texttt{none} (the default here),
 \texttt{proof}, \texttt{lean} or \texttt{both}.
 \section*{A proof on its own}
-When a proof stands away from its theorem -- after a discussion, say --
+When a proof is separated from its theorem, for example by a discussion,
 \texttt{leanproof} gives it the same switches, on a line of their own
 above it. It starts with the proof shown.
 {{< /latex >}}
