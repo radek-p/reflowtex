@@ -359,6 +359,20 @@
     .latex-example-source pre { padding: 1.2rem; }
   }
 
+  /* ── An example set off from the page's own text ───────────────────────
+     Framed like a proof, with a small label, so a reader sees it is
+     something the page demonstrates rather than something to follow. */
+  #lt-content .example-frame {
+    position: relative; max-width: 46rem; box-sizing: border-box;
+    margin: 2.25rem 0; padding: 2.1rem 1.5rem 1.2rem 1.4rem;
+    border-left: 3px solid color-mix(in srgb, currentColor 32%, transparent);
+    background: color-mix(in srgb, currentColor 3.5%, transparent); }
+  #lt-content .example-frame::before {
+    content: 'Example'; position: absolute; top: .75rem; left: 1.4rem;
+    font: 600 .68rem/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em;
+    text-transform: uppercase; opacity: .55; }
+  #lt-content .example-frame > .latex-block { margin: 0; }
+
   /* ── Notes (reflowtex.sty's webnote) as sticky notes ────────────────────
      Pale yellow paper with a soft shadow instead of the viewer's framed box.
      #lt-content in front: the viewer's own rule is injected after this one. */
