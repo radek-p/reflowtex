@@ -1,0 +1,5 @@
+# tools/pageless-pdf: pageless.py (stack.py) needs pikepdf; the comparison
+# (compare.py, vector_compare.py, tiles.py) also numpy and Pillow.
+pikepdf>=8
+numpy>=1.24
+Pillow>=10
