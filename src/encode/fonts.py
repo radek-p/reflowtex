@@ -33,8 +33,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -119,6 +121,22 @@ class Fonts:
                 self._copy_atomic(self.local_dir / fname, dst)
                 print(f'  font-provision: {fname} ← {self.local_dir / fname}')
                 continue
+            # A converted classic font (name.reflowtex-<hash>.otf) is written
+            # when a block using it compiles. A build that finds those blocks
+            # up to date (restored from a cache, as in CI) still needs the file,
+            # so convert it again: the conversion is byte-reproducible, so the
+            # same TeX installation gives the same name. A different name means
+            # the installation changed under the cached blocks — fail loudly
+            # rather than publish pages that reference a font nobody serves.
+            m = re.match(rf'^(.+)\.{MODIFIED_TAG}-[0-9a-f]{{8}}\.otf$', fname)
+            if m:
+                got = self.legacy_otf(m.group(1))
+                if got and got[0] == fname:
+                    print(f'  font-provision: {fname} ← converted again from {m.group(1)}.pfb')
+                    continue
+                sys.exit(f'ERROR: font {fname} is referenced by compiled blocks, but converting '
+                         f'{m.group(1)} now gives {got[0] if got else "nothing"}; the TeX '
+                         f'installation changed — rebuild with --force')
             result = subprocess.run(['kpsewhich', fname], capture_output=True, text=True)
             src = result.stdout.strip()
             if result.returncode != 0 or not src:
