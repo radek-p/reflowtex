@@ -45,9 +45,13 @@ const blockId = el => register(el, null, () => ({ kind: 'block', el }));
 const segId = (bid, cachePath, i) => register(null, `s${bid}/${cachePath.join('.')}/${i}`,
     () => ({ kind: 'seg', block: bid, cachePath, i }));
 const lineId = (sid, j) => register(null, `l${sid}/${j}`, () => ({ kind: 'line', seg: sid, j }));
+// A display's nodes are copies made afresh at every width (see affineRows);
+// they are keyed by the node they were made from, so a row stays the same row
+// across reflows, and point at the latest copy.
 function nodeId(n, sid, parent) {
-    const id = register(n, null, () => ({ kind: 'node', n }));
+    const id = register(n.affineSource || n, null, () => ({ kind: 'node', n }));
     const e = entries.get(id);
+    e.n = n;
     if (sid !== undefined) { e.seg = sid; e.parent = parent; }
     return id;
 }
@@ -184,6 +188,37 @@ function screenRectOf(id) {
 }
 
 // ── Describing ─────────────────────────────────────────────────────────────────
+// A display's geometry is compiled at several widths, and the fields that
+// vary carry a rate (`width_rate`, …): the viewer evaluates each as
+// v₀ + rate × (w − w₀) at the reader's measure w (w₀ the width TeX compiled
+// at), a node copy per display, remembering its source (affineSource).
+const AFFINE_FIELDS = ['width', 'height', 'depth', 'stretch', 'shrink', 'kern', 'shift',
+                       'glue_set', 'surround', 'm_a', 'm_b', 'm_c', 'm_d'];
+const affineFields = n => AFFINE_FIELDS.filter(f => n[`${f}_rate`] !== undefined);
+const DIMENSIONLESS = new Set(['glue_set', 'm_a', 'm_b', 'm_c', 'm_d']);
+function affineRows(e, rows) {
+    const n = e.n, fields = affineFields(n);
+    if (!fields.length) return;
+    const { laid } = segParts(e.seg), m = laid && laid.affine;
+    if (!m) return;
+    const w0 = m.sourceWidthSp, src = n.affineSource || n;
+    const frozen = m.evaluatedSp > m.targetSp + 1;
+    rows.push(['width model', `evaluated at w = ${pt(m.evaluatedSp)}; TeX compiled it at w₀ = ${pt(w0)}`
+        + (frozen ? ` – frozen: the column is ${pt(m.targetSp)}, but a gap between ink would close past ${pt(m.floorSp)}, so the display keeps this width and scrolls`
+                  : '')]);
+    const kinds = (m.kinds || []).map(k => k.get(src)).find(Boolean) || {};
+    for (const f of fields) {
+        const rate = n[`${f}_rate`], v0 = src[f] || 0, v = n[f] || 0;
+        const fmt = x => DIMENSIONLESS.has(f) ? String(+x.toFixed(5)) : pt(x);
+        // a dimension's rate is a pure number (sp per sp of width); a ratio's is per sp
+        const r = DIMENSIONLESS.has(f) ? `${(+rate).toExponential(3)}/sp` : String(+(+rate).toFixed(5));
+        rows.push([`${f} ↔`, `${fmt(v0)} + ${r} × (w − w₀) = ${fmt(v)}`]);
+        if (kinds[f] !== undefined) rows.push([`${f} floor`, kinds[f]
+            ? `ink on both sides: stops at the minimum space, ${pt(m.floorSp)} (the display then freezes)`
+            : 'ink on one side only (centring, margins): may close to 0']);
+        else if (n[`${f}_floor`]) rows.push([`${f} floor`, 'never negative in the compiled samples']);
+    }
+}
 // A line's badness as TeX rates it: 100·r³ of its glue ratio r (capped at
 // 10000), 0 on a line set with infinite glue (the last of a paragraph); an
 // overfull line, shrunk past its shrink, is flagged. And TeX's fitness class.
@@ -249,6 +284,9 @@ function summary(id) {
             const bad = badnessOf(lrp);
             out.note = `${L.line.nodes.length} nodes · glue ${r >= 0 ? '+' : ''}${(+r).toFixed(3)}${lrp.fillOrder ? ' ' + ORDER[lrp.fillOrder] : ''}` + (lrp.er ? ` · expansion ${(lrp.er * 100).toFixed(1)}%` : '')
                 + (laid.seg.kind === 'display' ? '' : ` · badness ${bad.overfull ? 'overfull' : bad.b}`);
+            const band = laid.seg.kind === 'display' && displayBand(id);
+            if (band && Math.abs(band.widthSp - band.boxSp) > 655)
+                out.note += ` · band ${pt(band.widthSp)}, box ${pt(band.boxSp)}`;
             out.hasChildren = L.line.nodes.length > 0;
         }
     } else {
@@ -286,7 +324,8 @@ function summary(id) {
                 out.note = `${pt(n.width || 0)} × ${pt(n.height || 0)} + ${pt(n.depth || 0)}`
                     + (n.shift ? ` · shift ${pt(n.shift)}` : '')
                     + (sign && n.glue_set ? ` · glue ${sign}${(+n.glue_set).toFixed(3)}${ORDER[n.glue_order || 0]}` : '')
-                    + (n.anchor ? ' · anchor' : '');
+                    + (n.anchor ? ' · anchor' : '')
+                    + ((n.width || 0) < 0 ? ' · backs up' : '');
                 break;
             }
             case 'rule': out.label = 'rule';
@@ -297,6 +336,7 @@ function summary(id) {
             default: out.label = n.type || 'node';
         }
         out.drawn = sw != null;
+        if (affineFields(n).length) out.affine = affineFields(n);   // width-dependent: marked in a panel
     }
     return out;
 }
@@ -318,11 +358,18 @@ function details(id) {
             const m = (I.state(entries.get(entries.get(e.seg).block).el).cache.metrics || [])[e.n.metrics - 1];
             if (m) rows.push(['metrics → w×h+d', `${pt(m.width || 0)} × ${pt(m.height || 0)} + ${pt(m.depth || 0)}`]);
         }
+        // the width model first: it says why the values below are what they are
+        const model = [];
+        affineRows(e, model);
+        rows.unshift(...model);
         const sw = setWidth(e);
         if (sw != null) rows.push([e.n.type === 'glue' || e.n.type === 'kern' ? 'set to' : 'advance', pt(sw)]);
         else rows.push(['drawn', 'no (not on the current layout)']);
     } else if (e.kind === 'line') {
         const { laid } = segParts(e.seg), lrp = laid && laid.lrp[e.j];
+        const band = displayBand(id);
+        if (band) rows.push(['display band', `${pt(band.widthSp)} wide; the row's box covers ${pt(band.boxSp)}`
+            + (band.boxSp < band.widthSp - 655 ? ` – ${pt(band.widthSp - band.boxSp)} short, drawn dotted (an amsmath row backs up over its right margin in the tag column)` : '')]);
         if (lrp) {
             const bad = badnessOf(lrp);
             rows.push(['badness', bad.overfull ? 'overfull' : String(bad.b)], ['fitness', bad.fit]);
@@ -553,6 +600,175 @@ function gapDetails(id, rows) {
     if (g.amount != null) rows.push(['recorded by TeX', pt(g.amount)]);
 }
 
+// ── As text ────────────────────────────────────────────────────────────────────
+// A fragment – a node and everything in it, a line, a vertical space, a
+// segment, a block – as compact XML: a run of glyphs in one font is one <t>,
+// every other node one element, boxes nest. Dimensions in pt; a glue's `set`
+// is the width it came out at here, where that differs from its natural one;
+// a width-dependent field carries its rate (`w-rate`, per unit of width).
+const num = sp => String(+(sp / 65536).toFixed(3));
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+    .replace(/[-]|[\u{F0000}-\u{10FFFF}]/gu, c => `&#x${c.codePointAt(0).toString(16).toUpperCase()};`);
+const glyphText = n => n.text !== undefined ? n.text : String.fromCodePoint(n.char || 32);
+function attrs(list) {
+    return list.filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => ` ${k}="${esc(String(v))}"`).join('');
+}
+const RATE_ATTR = { width: 'w', height: 'h', depth: 'd', stretch: 'plus', shrink: 'minus', kern: 'w', shift: 'shift',
+                    glue_set: 'set-ratio', surround: 'surround' };
+const rates = n => affineFields(n).filter(f => RATE_ATTR[f]).map(f => [`${RATE_ATTR[f]}-rate`, +(+n[`${f}_rate`]).toPrecision(4)]);
+const spec = (v, order) => order ? `${+(v / 65536).toFixed(3)}${ORDER[order]}` : num(v);
+function xmlNodes(list, at, ind, out) {
+    for (let i = 0; i < list.length;) {
+        const n = list[i];
+        if (n.type === 'glyph') {                    // a run of plain glyphs in one font
+            let j = i, s = '';
+            while (j < list.length && list[j].type === 'glyph' && list[j].font === n.font && list[j].color === n.color
+                   && !list[j].link && !list[j].slot) s += glyphText(list[j++]);
+            if (j === i) { s = glyphText(n); j = i + 1; }
+            out.push(`${ind}<t${attrs([['f', n.font], ['color', n.color]])}>${esc(s)}</t>`);
+            i = j; continue;
+        }
+        xmlNode(n, at, ind, out);
+        i++;
+    }
+}
+function xmlNode(n, at, ind, out) {
+    const p = at && at.get(n);
+    const setW = p ? (p.vertical ? p.h : p.w) / SP() : null;
+    const R = rates(n);
+    switch (n.type) {
+        case 'glue': {
+            const name = GLUE_SUB[n.subtype];
+            out.push(`${ind}<glue${attrs([['name', name], ['w', num(n.width || 0)],
+                ['plus', n.stretch ? spec(n.stretch, n.stretch_order) : null], ['minus', n.shrink ? spec(n.shrink, n.shrink_order) : null],
+                ['set', setW != null && Math.abs(setW - (n.width || 0)) > 1 ? num(setW) : null], ...R])}${n.leader ? '>' : '/>'}`);
+            if (n.leader) { xmlNode(n.leader, at, ind + '  ', out); out.push(`${ind}</glue>`); }
+            return;
+        }
+        case 'kern': out.push(`${ind}<kern${attrs([['w', num(n.kern || 0)], ['kind', KERN_SUB[n.subtype || 0]], ...R])}/>`); return;
+        case 'penalty': out.push(`${ind}<penalty${attrs([['v', n.penalty ?? 0]])}/>`); return;
+        case 'math': out.push(`${ind}<math ${n.subtype ? 'off' : 'on'}${attrs([['surround', n.surround ? num(n.surround) : null], ...R])}/>`); return;
+        case 'rule': out.push(`${ind}<rule${attrs([['w', n.width === RUNNING ? '*' : num(n.width || 0)],
+            ['h', n.height === RUNNING ? '*' : num(n.height || 0)], ['d', n.depth === RUNNING ? '*' : num(n.depth || 0)], ['color', n.color], ...R])}/>`); return;
+        case 'picture': out.push(`${ind}<picture${attrs([['w', num(n.width || 0)], ['h', num(n.height || 0)], ['d', num(n.depth || 0)], ...R])}/>`); return;
+        case 'widget': out.push(`${ind}<widget${attrs([['name', n.ctx && n.ctx.name], ['w', num(n.width || 0)]])}/>`); return;
+        case 'disc': case 'wdisc': {
+            const pre = n.pre || [], post = n.post || [], rep = n.replace || [];
+            const plain = l => l.every(c => c.type === 'glyph');
+            const a = [['penalty', n.penalty]];
+            if (plain(pre) && plain(post) && plain(rep)) {    // letters only (a hyphenation point, a dash): one line
+                out.push(`${ind}<disc${attrs([['pre', pre.map(glyphText).join('')], ['post', post.map(glyphText).join('')],
+                                              ['replace', rep.map(glyphText).join('')], ...a])}/>`);
+                return;
+            }
+            out.push(`${ind}<disc${attrs(a)}>`);
+            for (const [k, l] of [['pre', pre], ['post', post], ['replace', rep]]) {
+                if (!l.length) continue;
+                out.push(`${ind}  <${k}>`); xmlNodes(l, at, ind + '    ', out); out.push(`${ind}  </${k}>`);
+            }
+            out.push(`${ind}</disc>`);
+            return;
+        }
+        case 'hlist': case 'vlist': case 'transform': {
+            const tag = n.type === 'hlist' ? 'hbox' : n.type === 'vlist' ? 'vbox' : 'transform';
+            const sign = n.glue_sign === 1 ? '+' : n.glue_sign === 2 ? '-' : '';
+            const a = n.type === 'transform'
+                ? [['m', [n.m_a ?? 1, n.m_b ?? 0, n.m_c ?? 0, n.m_d ?? 1].map(v => +(+v).toFixed(4)).join(' ')]]
+                : [['w', num(n.width || 0)], ['h', num(n.height || 0)], ['d', num(n.depth || 0)],
+                   ['shift', n.shift ? num(n.shift) : null],
+                   ['glue', sign && n.glue_set ? `${sign}${+(+n.glue_set).toFixed(4)}${ORDER[n.glue_order || 0]}` : null],
+                   ['anchor', n.anchor || null]];
+            const kids = n.children || [];
+            if (!kids.length) { out.push(`${ind}<${tag}${attrs([...a, ...R])}/>`); return; }
+            out.push(`${ind}<${tag}${attrs([...a, ...R])}>`);
+            xmlNodes(kids, at, ind + '  ', out);
+            out.push(`${ind}</${tag}>`);
+            return;
+        }
+        default: out.push(`${ind}<${n.type || 'node'}/>`);
+    }
+}
+// The same fragment as plain text: its characters, a space for a glue
+// between them, a line break between lines (and around a display).
+function textOfNodes(list, out) {
+    for (const n of list || []) {
+        if (n.type === 'glyph') out.push(glyphText(n));
+        else if (n.type === 'glue') { if (out.length && out[out.length - 1] !== ' ') out.push(' '); }
+        else if (n.type === 'disc' || n.type === 'wdisc') textOfNodes(n.replace, out);
+        else if (n.children) textOfNodes(n.children, out);
+    }
+    return out;
+}
+function textOf(id) {
+    const e = entries.get(id);
+    if (!e) return '';
+    if (e.kind === 'node') return textOfNodes([e.n], []).join('').trim();
+    if (e.kind === 'line') {
+        const g = geometry(e.seg), L = g && g.lines[e.j];
+        return L ? textOfNodes(L.line.nodes, []).join('').trim() : '';
+    }
+    if (e.kind === 'vgap' || e.kind === 'vpar' || e.kind === 'vpart') return '';
+    return children(id).map(c => textOf(c.id)).filter(Boolean).join('\n');
+}
+function xmlOf(id, ind = '', out = []) {
+    const e = entries.get(id);
+    if (!e) return out;
+    const s = summary(id);
+    if (e.kind === 'node') {
+        const g = e.seg != null ? geometry(e.seg) : null;
+        xmlNode(e.n, g && g.at, ind, out);
+    } else if (e.kind === 'line') {
+        const g = geometry(e.seg), L = g && g.lines[e.j];
+        if (!L) return out;
+        const { laid } = segParts(e.seg), lrp = laid.lrp[e.j], bad = badnessOf(lrp);
+        const r = lrp.fillOrder ? lrp.fillRatio : lrp.ratio;
+        out.push(`${ind}<line${attrs([['n', e.j + 1], ['glue', `${r >= 0 ? '+' : ''}${+(+r).toFixed(4)}${lrp.fillOrder ? ORDER[lrp.fillOrder] : ''}`],
+            ['expansion', lrp.er ? +(lrp.er * 100).toFixed(2) + '%' : null],
+            ['badness', laid.seg.kind === 'display' ? null : bad.overfull ? 'overfull' : bad.b]])}>`);
+        xmlNodes(L.line.nodes, g.at, ind + '  ', out);
+        out.push(`${ind}</line>`);
+    } else if (e.kind === 'vpart') {
+        const g = gapInfo(e.gap), p = g && g.parts[e.k];
+        if (p) xmlNode(p.n, null, ind, out);
+    } else {
+        const tag = e.kind === 'block' ? 'block' : e.kind === 'seg' ? s.type : 'vspace';
+        const a = e.kind === 'block' ? [['width', num(I.state(e.el).lastWidth * 65536)]]
+                : e.kind === 'seg' ? [['kind', s.type === 'stream' ? s.label.replace(/^stream \((.*)\)$/, '$1') : null]]
+                : [['total', gapInfo(id) ? num(gapInfo(id).totalSp) : null]];
+        out.push(`${ind}<${tag}${attrs(a)}>`);
+        for (const c of children(id)) xmlOf(c.id, ind + '  ', out);
+        out.push(`${ind}</${tag}>`);
+    }
+    return out;
+}
+
+// ── A display's band ───────────────────────────────────────────────────────────
+// The stretch of the column a display row occupies, [display_indent,
+// display_indent + display_width] as evaluated at this width – which its box
+// need not fill: an amsmath alignment ends every row with a tag column that
+// opens with \kern-\tagshift@, backing the box up over the right margin, so
+// the box stops a margin short even though the margin's \tabskip is there.
+// For a display's line, or the row box on it; null for anything else.
+function displayBand(id) {
+    const e = entries.get(id);
+    if (!e) return null;
+    let sid, j;
+    if (e.kind === 'line') { sid = e.seg; j = e.j; }
+    else if (e.kind === 'node' && e.seg != null) {
+        const g = geometry(e.seg);
+        const L = g && g.lines.find(L => L.line.nodes[0] === e.n);
+        if (!L) return null;
+        sid = e.seg; j = L.j;
+    } else return null;
+    const { laid } = segParts(sid), g = geometry(sid);
+    const item = laid && laid.affine && laid.affine.items && laid.affine.items[j];   // as evaluated at this width
+    const L = g && g.lines[j];
+    if (!item || !L || item.display_width == null) return null;
+    const k = SP(), x = (item.display_indent || 0) * k;
+    return { rect: toScreen(g.svg, { x, y: L.y - L.h, w: item.display_width * k, h: L.h + L.d }),
+             widthSp: item.display_width, boxSp: (L.x1 - L.x0) / k };
+}
+
 // ── Overlay ────────────────────────────────────────────────────────────────────
 const COLORS = {
     box: ['rgba(111,168,220,.30)', '#4a90d9'], glyph: ['rgba(111,168,220,.25)', '#4a90d9'],
@@ -613,6 +829,20 @@ function drawId(id, strong, below = false) {
         if (kids.length <= 400) for (const k of kids) drawRect(screenRectOf(k.id), k.type, { children: true });
     }
     if (r.base != null) drawBaseline(r, strong);
+    // A display row's box, continued dotted over the rest of its band.
+    const band = displayBand(id);
+    if (band && band.rect) {
+        const b = band.rect, stroke = colorOf(s.type)[1];
+        const piece = (left, right) => {
+            if (right - left < 1) return;
+            const d = document.createElement('div');
+            d.style.cssText = `position:absolute;box-sizing:border-box;left:${left}px;top:${r.top}px;width:${right - left}px;height:${Math.max(r.height, 1)}px;`
+                + `border:1px dotted ${stroke};opacity:.8`;
+            layer.appendChild(d);
+        };
+        piece(b.left, r.left);
+        piece(r.left + r.width, b.left + b.width);
+    }
     // A block or segment is outlined only: filled, it would wash out what it holds.
     drawRect(r, s.type, { strong, below, outline: s.kind === 'block' || s.kind === 'seg', label: `${s.label}  ${s.note}`.trim() });
 }
@@ -633,7 +863,25 @@ function drawBaseline(r, strong) {
 // ── Page-wide guides ───────────────────────────────────────────────────────────
 // Options a panel can turn on: every line's baseline, and a bar past every
 // line's end coloured by its badness. Drawn for the segments on screen.
-const options = { baselines: false, badness: false };
+const options = { baselines: false, badness: false, springs: false };
+// A spring across a glue whose width the display model recomputes: a zigzag,
+// one coil per 6px, along the middle of the glue's height.
+function drawSpring(q) {
+    if (!q || q.width < 2) return;
+    const coils = Math.max(2, Math.round(q.width / 6)), amp = Math.min(3.5, Math.max(2, q.height / 5));
+    const mid = amp + 1, pts = [`0,${mid}`];
+    for (let i = 0; i < coils; i++) {
+        const x0 = (i + 0.25) * q.width / coils, x1 = (i + 0.75) * q.width / coils;
+        pts.push(`${x0.toFixed(1)},${(mid - amp).toFixed(1)}`, `${x1.toFixed(1)},${(mid + amp).toFixed(1)}`);
+    }
+    pts.push(`${q.width.toFixed(1)},${mid}`);
+    const h = 2 * mid;
+    const d = document.createElement('div');
+    d.style.cssText = `position:absolute;left:${q.left}px;top:${q.top + q.height / 2 - mid}px;width:${q.width}px;height:${h}px`;
+    d.innerHTML = `<svg width="${q.width}" height="${h}" viewBox="0 0 ${q.width} ${h}" style="display:block;overflow:visible">`
+        + `<polyline points="${pts.join(' ')}" fill="none" stroke="#3f8f2a" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+    layer.appendChild(d);
+}
 const BAD_COLOR = bad => bad.overfull ? '#8e24aa' : bad.b <= 12 ? '#43a047' : bad.b < 100 ? '#f0a500' : '#e53935';
 function drawGuides() {
     for (const el of I.blocks()) {
@@ -647,6 +895,14 @@ function drawGuides() {
             const g = geometry(sid);
             if (!g) continue;
             const text = laid.seg.kind !== 'display';
+            if (options.springs && !text) {
+                for (const n of g.at.keys()) {
+                    if ((n.type === 'glue' || n.type === 'kern') && affineFields(n).some(f => f === 'width' || f === 'kern')) {
+                        const r = rectOf(g, n);
+                        if (r) drawSpring(toScreen(g.svg, r));
+                    }
+                }
+            }
             for (const L of g.lines) {
                 if (options.baselines) {
                     const q = toScreen(g.svg, { x: L.x0, y: L.y, w: L.x1 - L.x0, h: 0 });
@@ -682,7 +938,7 @@ function redraw() {
     // sits where the viewport's corner is now.
     layer.style.left = scrollX + 'px';
     layer.style.top = scrollY + 'px';
-    if (options.baselines || options.badness) { drawGuides(); guidesPaints = I.paints; }
+    if (options.baselines || options.badness || options.springs) { drawGuides(); guidesPaints = I.paints; }
     const h = picking ? pickHover : hovered;
     const other = h != null && h !== selected;
     if (selected != null) { if (other) drawPale(selected); else drawId(selected, true); }
@@ -699,7 +955,7 @@ function drawPale(id, color = 'rgba(47,44,205,.07)') {
 }
 let raf = 0;
 const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0;
-    if (selected != null || hovered != null || pickHover != null || options.baselines || options.badness) redraw(); }); };
+    if (selected != null || hovered != null || pickHover != null || options.baselines || options.badness || options.springs) redraw(); }); };
 // The page's own scrolling carries the layer; a scroll box inside it (a wide
 // display) moves what it holds, and needs a redraw.
 addEventListener('scroll', e => { if (e.target !== document && e.target !== document.documentElement) schedule(); }, { passive: true, capture: true });
@@ -860,9 +1116,14 @@ function elementOf(id) {
 
 window.__rtxInspector = {
     agent: AGENT,
-    // Page-wide guides: { baselines, badness }, either or both.
+    // Page-wide guides: { baselines, badness, springs }, any of them.
     setOptions(o) { Object.assign(options, o); redraw(); },
-    status: () => ((options.baselines || options.badness) && guidesPaints !== I.paints && schedule(), {
+    // Draw the outlines again, for the layout as it is now (after a reflow).
+    redraw() { redraw(); },
+    // A fragment as XML (see "As text"): the node with this id and all it holds.
+    xml: id => xmlOf(id).join('\n'),
+    text: id => textOf(id),
+    status: () => ((options.baselines || options.badness || options.springs) && guidesPaints !== I.paints && schedule(), {
         api: true, version: I.version, blocks: I.blocks().length, paints: I.paints, picking, picked: picked && { id: picked.id, path: picked.path, seq: picked.seq },
     }),
     blocks: () => I.blocks().map(el => summary(blockId(el))),

@@ -32,11 +32,36 @@ The project's website includes it on every page. Press **Alt+Shift+I**
   penalties red. The arrow keys move through the tree.
 - **Details:** every field of the node, dimensions in sp and pt, the width it
   was set to, and its rectangle on screen.
+- **Width-dependent nodes (↔).** A display is compiled at several widths,
+  and the fields that vary carry a rate. The viewer evaluates each at the
+  reader's measure w as `v₀ + rate × (w − w₀)`, where w₀ is the width TeX
+  compiled at. Such a node is marked ↔, and its details show that formula
+  with today's numbers. They also show which floor applies: a gap with ink on
+  both sides stops at the minimum space, and the display then freezes and
+  scrolls; outer space may close to 0. The node stays selected while the width
+  changes, and its values follow in real time.
+- **Copy XML:** the selected fragment – a node and all it holds, a line, a
+  vertical space, a segment, a block – as compact XML (the button in the
+  details, or ⌘C / Ctrl+C in the tree). A run of glyphs in one font is one
+  `<t>`, each other node one element, and boxes nest; dimensions are in pt, a
+  glue's `set` is the width it came out at, and a width-dependent field
+  carries its rate (`w-rate`).
+- **Context menu:** right-click a row (or a letter of a run), or press the
+  menu key or Shift+F10: *Copy XML*, *Copy text* (the characters, a space per
+  glue, a line break per line), *Copy row* (its label and summary).
 - **Pick:** hover the page to highlight the node under the pointer, and click
   to select it in the tree. Esc cancels.
-- **Baselines** and **Badness** (toolbar): the baseline of every line on
-  screen, and a bar past every line's end coloured by its badness: green
-  decent (≤ 12), amber loose or tight, red 100 or more, purple overfull.
+- **Baselines**, **Badness** and **Springs** (toolbar): the baseline of
+  every line on screen; a bar past every line's end coloured by its badness
+  (green decent, ≤ 12; amber loose or tight; red 100 or more; purple
+  overfull); and every display glue whose width the display model recomputes,
+  drawn as a spring.
+- **A display's band.** A display row's box need not fill the band the
+  display occupies (`display_indent` to `display_indent + display_width`).
+  An amsmath alignment ends every row with a tag column that opens with
+  `\kern-\tagshift@` and backs the box up over the right margin, even with
+  no tag. Hovering or selecting such a row continues its outline dotted over
+  the rest of the band, and its details say how much the box leaves out.
 - **Reflow:** after a resize re-breaks the lines, the open branches refresh.
 
 Drag the title bar to move the panel, and its corner to resize it. The

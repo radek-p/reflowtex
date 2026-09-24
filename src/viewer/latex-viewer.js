@@ -2892,7 +2892,9 @@ const AFFINE_NODE_FIELDS = [
 const AFFINE_CHILD_LISTS = ['children', 'pre', 'post', 'replace'];
 function affineDisplayNode(n, deltaSp) {
     let out = n, changed = false;
-    const edit = () => { if (!changed) { out = { ...n }; changed = true; } };
+    // A copy remembers the node it was evaluated from (for api.inspect: the
+    // compiled values, and the gap classification, which is keyed by it).
+    const edit = () => { if (!changed) { out = { ...n }; Object.defineProperty(out, 'affineSource', { value: n.affineSource || n }); changed = true; } };
     for (const field of AFFINE_NODE_FIELDS) {
         const rate = n[`${field}_rate`];
         if (rate !== undefined) {
@@ -3207,6 +3209,7 @@ function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
     const minWidthSp = Math.max(0, ...seg.rows.map(r =>
         affineFloorWidthItem(fontInfo, r.item, displayModel.sourceWidthSp, floorSp)));
     const evaluatedSp = Math.max(targetSp, minWidthSp);
+    const kinds = seg.rows.map(r => classifyDisplayGaps(fontInfo, r.item));   // cached; for api.inspect
     seg = { ...seg, rows: seg.rows.map(r => ({
         ...r, item: placeEquationNumber(affineDisplayItem(r.item, evaluatedSp - displayModel.sourceWidthSp)),
     })) };
@@ -3231,6 +3234,12 @@ function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
         displayLeftSp: (rows[0].item.display_shift || 0)
             + ((c => c && c.type === 'kern' ? (c.kern || 0) : 0)((rows[0].item.box.children || [])[0])),
         atSourceWidth: Math.abs(evaluatedSp - displayModel.sourceWidthSp) < 32768,
+        // How the width model was applied, for api.inspect: the measure TeX
+        // compiled at, the one asked for, the narrowest the gaps allow, and
+        // the one evaluated at (the larger); each row's gap kinds, and each
+        // row's item as evaluated (its display_width and indent at this width).
+        affine: { sourceWidthSp: displayModel.sourceWidthSp, targetSp, minWidthSp, evaluatedSp, floorSp,
+                  kinds, items: seg.rows.map(r => r.item) },
     };
 }
 

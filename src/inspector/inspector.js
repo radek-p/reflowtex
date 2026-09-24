@@ -84,9 +84,10 @@ function build() {
     };
     const baselines = guide('baselines', 'Baselines', 'Show the baseline of every line');
     const badness = guide('badness', 'Badness', 'A bar past every line, coloured by its badness: green decent, amber loose or tight, red 100 or more, purple overfull');
+    const springs = guide('springs', 'Springs', 'Draw every display glue whose width is recomputed for the reader\'s width as a spring');
     const status = h('span', { class: 'status' });
     const close = h('button', { type: 'button', class: 'close', title: `Close (${SHORTCUT})`, 'aria-label': 'Close', onclick: () => closePanel() }, '×');
-    const bar = h('div', { class: 'bar' }, h('span', { class: 'title' }, 'Inspector'), pick, refreshBtn, baselines, badness, status, close);
+    const bar = h('div', { class: 'bar' }, h('span', { class: 'title' }, 'Inspector'), pick, refreshBtn, baselines, badness, springs, status, close);
     const tree = h('section', { class: 'tree', role: 'tree', tabindex: '0', 'aria-label': 'Boxes and glue' });
     const details = h('aside', { class: 'details' });
     root = h('div', { class: 'rtx', role: 'dialog', 'aria-label': 'Reflow TeX inspector' }, bar, h('div', { class: 'main' }, tree, details));
@@ -145,13 +146,13 @@ function loadGuides() {
     try { return JSON.parse(localStorage.getItem(STORE + '-guides') || '{}') || {}; } catch { return {}; }
 }
 async function setGuide(key, on) {
-    const g = { baselines: false, badness: false, ...loadGuides(), [key]: on };
+    const g = { baselines: false, badness: false, springs: false, ...loadGuides(), [key]: on };
     try { localStorage.setItem(STORE + '-guides', JSON.stringify(g)); } catch { /* not remembered */ }
     await applyGuides(g);
 }
 async function applyGuides(g = loadGuides()) {
     for (const b of $.bar.querySelectorAll('[data-guide]')) b.setAttribute('aria-pressed', String(!!g[b.dataset.guide]));
-    await call('setOptions', { baselines: !!g.baselines, badness: !!g.badness });
+    await call('setOptions', { baselines: !!g.baselines, badness: !!g.badness, springs: !!g.springs });
 }
 
 // Dark when the page is: its background's luminance decides.
@@ -212,6 +213,7 @@ function render() {
                                role: 'treeitem', 'data-id': id },
             h('span', { class: 'twisty' }, n.s.hasChildren ? (n.open ? '▾' : '▸') : ''),
             h('span', { class: 'label' }, n.s.label),
+            ...(n.s.affine ? [h('span', { class: 'affine', title: `Width-dependent: ${n.s.affine.join(', ')} recomputed for the reader's width – see the details` }, '↔')] : []),
             h('span', { class: 'note' }, n.s.note));
         if (n.s.hasChildren) row.setAttribute('aria-expanded', String(!!n.open));
         row.style.paddingLeft = `${4 + depth * 14}px`;
@@ -278,7 +280,9 @@ async function showDetails(id) {
     if (!d || d === MISSING) { $.details.replaceChildren(h('p', { class: 'muted' }, 'Gone – the layout changed.')); return; }
     const t = h('table');
     for (const [k, v] of d.rows) { const tr = t.insertRow(); tr.insertCell().textContent = k; tr.insertCell().textContent = v; }
-    $.details.replaceChildren(h('h2', {}, `${d.summary.label}  ${d.summary.note}`), t, legend());
+    const copy = h('button', { type: 'button', class: 'copy', title: `Copy this fragment – all it holds – as XML (${IS_MAC ? '⌘' : 'Ctrl+'}C in the tree)`,
+                               onclick: () => copyXml(id) }, 'Copy XML');
+    $.details.replaceChildren(h('div', { class: 'dhead' }, h('h2', {}, `${d.summary.label}  ${d.summary.note}`), copy), t, legend());
 }
 function legend() {
     const l = h('div', { class: 'legend' });
@@ -289,6 +293,29 @@ function legend() {
     }
     return l;
 }
+// The selected fragment as XML, onto the clipboard.
+async function copyXml(id) {
+    if (id == null) return;
+    const text = await call('xml', id);
+    if (typeof text === 'string') copyText(text, 'XML');
+}
+async function copyText(text, what) {
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; }
+    catch {                                         // no async clipboard (not a secure page): the old way
+        const ta = h('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;opacity:0';
+        root.appendChild(ta); ta.select();
+        try { ok = document.execCommand('copy'); } catch { ok = false; }
+        ta.remove();
+    }
+    const lines = text.split('\n').length;
+    flash = { text: ok ? `copied ${lines} line${lines === 1 ? '' : 's'} of ${what}` : 'could not copy', until: Date.now() + 2000 };
+    $.status.textContent = flash.text;
+}
+let flash = null;             // a message the status line keeps for a moment
+
 // Expand along a path (block → … → node) and select its end.
 async function reveal(path, { openLast = false } = {}) {
     if (!path || !path.length) return;
@@ -302,8 +329,50 @@ async function reveal(path, { openLast = false } = {}) {
     render();
     await select(path[path.length - 1]);
 }
+// ── The context menu ───────────────────────────────────────────────────────────
+// A right-click on a row (or a letter of a run) selects it and offers to copy
+// it. The panel's own menu, so it can say what it copies; the page's is left
+// alone everywhere else.
+let menu = null;
+function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+async function openMenu(id, x, y) {
+    closeMenu();
+    await select(id, { scroll: false });
+    const s = nodes.get(id) && nodes.get(id).s;
+    const item = (label, hint, act) => h('button', { type: 'button', role: 'menuitem',
+        onclick: async () => { closeMenu(); await act(); $.tree.focus({ preventScroll: true }); } },
+        h('span', {}, label), h('span', { class: 'hint' }, hint));
+    menu = h('div', { class: 'menu', role: 'menu' },
+        item('Copy XML', `${IS_MAC ? '⌘' : 'Ctrl+'}C`, () => copyXml(id)),
+        item('Copy text', 'the characters', async () => { const t = await call('text', id); copyText(typeof t === 'string' ? t : '', 'text'); }),
+        item('Copy row', s ? s.label : '', () => copyText(s ? `${s.label}  ${s.note}`.trim() : '', 'the row')));
+    root.appendChild(menu);
+    // inside the panel, clear of its edges
+    const rr = root.getBoundingClientRect(), mw = menu.offsetWidth, mh = menu.offsetHeight;
+    menu.style.left = Math.max(4, Math.min(x - rr.left, rr.width - mw - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(y - rr.top, rr.height - mh - 4)) + 'px';
+    menu.querySelector('button').focus();
+}
+
 function wireTree() {
     const t = $.tree;
+    t.addEventListener('contextmenu', e => {
+        const el = e.target.closest('[data-id]');
+        if (!el) return;
+        e.preventDefault();
+        openMenu(+el.dataset.id, e.clientX, e.clientY);
+    });
+    root.addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
+    root.addEventListener('keydown', e => {
+        if (!menu) return;
+        const items = [...menu.querySelectorAll('button')], i = items.indexOf(e.composedPath()[0]);
+        if (e.key === 'Escape') { e.stopPropagation(); closeMenu(); $.tree.focus({ preventScroll: true }); }
+        else if (e.key === 'ArrowDown') items[(i + 1) % items.length].focus();
+        else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length].focus();
+        else return;
+        e.preventDefault();
+    });
+    t.addEventListener('scroll', closeMenu, { passive: true });
     // A row, or one letter of a run: both carry data-id.
     t.addEventListener('click', e => {
         const row = e.target.closest('[data-id]');
@@ -323,6 +392,13 @@ function wireTree() {
     // Up and Down go row by row (a run of letters is one row); Right and Left
     // open and close, and within a run step from letter to letter.
     t.addEventListener('keydown', e => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'c' && selected != null) { e.preventDefault(); copyXml(selected); return; }
+        if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && selected != null) {
+            e.preventDefault();
+            const el = t.querySelector(`[data-id="${selected}"]`), r = el && el.getBoundingClientRect();
+            if (r) openMenu(selected, r.left + 24, r.bottom);
+            return;
+        }
         const items = [...t.querySelectorAll('[data-id]')], ids = items.map(r => +r.dataset.id), i = ids.indexOf(selected);
         const rowOf = el => el.closest('.row'), me = items[i], myRow = me && rowOf(me);
         const inRun = me && me.classList.contains('chip');
@@ -367,13 +443,32 @@ async function poll() {
     const st = await call('status');
     if (st === MISSING) { $.status.textContent = 'no inspectable viewer'; $.pick.classList.remove('on'); return; }
     $.pick.classList.toggle('on', st.picking);
-    $.status.textContent = st.picking ? 'click in the page · Esc cancels' : `${st.blocks} block${st.blocks === 1 ? '' : 's'}`;
+    $.status.textContent = st.picking ? 'click in the page · Esc cancels'
+        : flash && Date.now() < flash.until ? flash.text : `${st.blocks} block${st.blocks === 1 ? '' : 's'}`;
     if (st.picked && st.picked.seq !== lastPickSeq) { lastPickSeq = st.picked.seq; reveal(st.picked.path); }
-    if (lastPaints !== null && st.paints !== lastPaints) refreshSoon();
-    lastPaints = st.paints;
 }
-let refreshTimer = 0;
-function refreshSoon() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 250); }
+// A reflow – the window resized, an example's width dragged – repaints the
+// viewer's segments; the paint counter says so. Checked every frame while the
+// panel is open, so the rows, the details and the outlines follow the text as
+// it moves. One refresh at a time; one more if the layout moved meanwhile.
+let refreshing = false, again = false;
+function watchPaints() {
+    if (!isOpen) return;
+    const p = window.reflowtex && window.reflowtex.inspect && window.reflowtex.inspect.paints;
+    if (p !== undefined && p !== lastPaints) {
+        const first = lastPaints === null;
+        lastPaints = p;
+        if (!first) followReflow();
+    }
+    requestAnimationFrame(watchPaints);
+}
+async function followReflow() {
+    if (refreshing) { again = true; return; }
+    refreshing = true;
+    try {
+        do { again = false; await refresh(); await call('redraw'); } while (again);
+    } finally { refreshing = false; }
+}
 
 // ── Opening and closing ────────────────────────────────────────────────────────
 async function open(block) {
@@ -388,6 +483,8 @@ async function open(block) {
         pollTimer = setInterval(poll, 400);
         try { await refresh(); } catch (e) { $.status.textContent = String(e.message || e); return; }
         applyGuides();
+        lastPaints = null;
+        requestAnimationFrame(watchPaints);
         poll();
     }
     if (block) {
@@ -414,7 +511,7 @@ function closePanel() {
     isOpen = false;
     root.hidden = true;
     clearInterval(pollTimer);
-    call('cancelPick'); call('clear'); call('setOptions', { baselines: false, badness: false });
+    call('cancelPick'); call('clear'); call('setOptions', { baselines: false, badness: false, springs: false });
     selected = null;
     placeholder();
 }
@@ -424,7 +521,7 @@ addEventListener('keydown', e => {
     if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyI') {
         e.preventDefault();
         toggleOpen();
-    } else if (e.key === 'Escape' && isOpen && document.activeElement === host && !$.pick.classList.contains('on')) {
+    } else if (e.key === 'Escape' && isOpen && document.activeElement === host && !$.pick.classList.contains('on') && !menu) {
         // (while picking, Esc cancels the pick – the agent's)
         closePanel();
     }
