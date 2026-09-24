@@ -75,9 +75,18 @@ function build() {
     pick.innerHTML = ICON_PICK + ' Pick';
     const refreshBtn = h('button', { type: 'button', title: 'Reload the tree', 'aria-label': 'Refresh', onclick: () => refresh() });
     refreshBtn.innerHTML = ICON_REFRESH;
+    // Page-wide guides, remembered like the panel's place.
+    const guide = (key, label, title) => {
+        const b = h('button', { type: 'button', class: 'toggle', title, 'aria-pressed': 'false',
+                                onclick: () => setGuide(key, b.getAttribute('aria-pressed') !== 'true') }, label);
+        b.dataset.guide = key;
+        return b;
+    };
+    const baselines = guide('baselines', 'Baselines', 'Show the baseline of every line');
+    const badness = guide('badness', 'Badness', 'A bar past every line, coloured by its badness: green decent, amber loose or tight, red 100 or more, purple overfull');
     const status = h('span', { class: 'status' });
     const close = h('button', { type: 'button', class: 'close', title: `Close (${SHORTCUT})`, 'aria-label': 'Close', onclick: () => closePanel() }, '×');
-    const bar = h('div', { class: 'bar' }, h('span', { class: 'title' }, 'Inspector'), pick, refreshBtn, status, close);
+    const bar = h('div', { class: 'bar' }, h('span', { class: 'title' }, 'Inspector'), pick, refreshBtn, baselines, badness, status, close);
     const tree = h('section', { class: 'tree', role: 'tree', tabindex: '0', 'aria-label': 'Boxes and glue' });
     const details = h('aside', { class: 'details' });
     root = h('div', { class: 'rtx', role: 'dialog', 'aria-label': 'Reflow TeX inspector' }, bar, h('div', { class: 'main' }, tree, details));
@@ -130,6 +139,19 @@ function wireMove() {
     let t = 0;
     new ResizeObserver(() => { if (!root.hidden) { clearTimeout(t); t = setTimeout(saveGeometry, 300); } }).observe(root);
     addEventListener('resize', () => { if (isOpen) place(root.offsetLeft, root.offsetTop); });
+}
+
+function loadGuides() {
+    try { return JSON.parse(localStorage.getItem(STORE + '-guides') || '{}') || {}; } catch { return {}; }
+}
+async function setGuide(key, on) {
+    const g = { baselines: false, badness: false, ...loadGuides(), [key]: on };
+    try { localStorage.setItem(STORE + '-guides', JSON.stringify(g)); } catch { /* not remembered */ }
+    await applyGuides(g);
+}
+async function applyGuides(g = loadGuides()) {
+    for (const b of $.bar.querySelectorAll('[data-guide]')) b.setAttribute('aria-pressed', String(!!g[b.dataset.guide]));
+    await call('setOptions', { baselines: !!g.baselines, badness: !!g.badness });
 }
 
 // Dark when the page is: its background's luminance decides.
@@ -365,6 +387,7 @@ async function open(block) {
         syncTheme();
         pollTimer = setInterval(poll, 400);
         try { await refresh(); } catch (e) { $.status.textContent = String(e.message || e); return; }
+        applyGuides();
         poll();
     }
     if (block) {
@@ -391,7 +414,7 @@ function closePanel() {
     isOpen = false;
     root.hidden = true;
     clearInterval(pollTimer);
-    call('cancelPick'); call('clear');
+    call('cancelPick'); call('clear'); call('setOptions', { baselines: false, badness: false });
     selected = null;
     placeholder();
 }

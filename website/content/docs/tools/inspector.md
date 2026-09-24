@@ -44,6 +44,14 @@ its words is stretched or shrunk to fit whatever width it is given.
   root. The tree opens at that glyph, inside the boxes \TeX{} built for the
   radical, the numerator and the fraction; select each in turn and watch
   the outline grow.
+\item[Vertical space.] Between two paragraphs, a heading and its text,
+  or text and a display, a \emph{vertical space} row lists the glue \TeX{}
+  put there -- a \verb|\vspace|, a heading's skip, \verb|\parskip|, a
+  display skip, and the interline \verb|\baselineskip| glue -- each drawn
+  as a band in the space it takes.
+\item[Badness.] Turn on \emph{Badness} and every line gets a bar at its
+  end: green where \TeX{} would call it decent, amber loose or tight, red at
+  100 or more. \emph{Baselines} draws the baseline of every line.
 \item[The baseline.] Whatever is selected draws a guide along its baseline
   across the whole window, so what shares it -- or misses it -- is plain to
   see.

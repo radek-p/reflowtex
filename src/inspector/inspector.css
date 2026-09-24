@@ -40,6 +40,7 @@ button { font: inherit; color: inherit; }
   display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 10px;
   background: var(--bar); border-bottom: 1px solid var(--line);
   cursor: move; user-select: none; -webkit-user-select: none; touch-action: none;
+  flex-wrap: wrap;
 }
 .title { font-weight: 600; margin-right: 4px; white-space: nowrap; }
 .bar button {
@@ -48,6 +49,7 @@ button { font: inherit; color: inherit; }
 }
 .bar button:hover { background: var(--hover); }
 .bar button.on { background: var(--sel); border-color: var(--accent); }
+.bar .toggle[aria-pressed="true"] { background: var(--sel); border-color: var(--accent); }
 .bar .close { border-color: transparent; padding: 2px 6px; font-size: 15px; line-height: 1; }
 .status { margin-left: auto; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
@@ -79,7 +81,7 @@ button { font: inherit; color: inherit; }
 .note { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 .t-hlist .label, .t-vlist .label, .t-block .label, .t-text .label, .t-display .label, .t-stream .label,
 .t-rule .label, .t-picture .label, .t-widget .label { color: var(--box); }
-.t-glue .label { color: var(--glue); }
+.t-glue .label, .t-vspace .label { color: var(--glue); }
 .t-kern .label { color: var(--kern); }
 .t-penalty .label { color: var(--penalty); }
 .t-math .label { color: var(--math); }

@@ -19,7 +19,13 @@ The project's website includes it on every page. Press **Alt+Shift+I**
   - a box: `w × h + d`, its shift and its glue setting;
   - a glue: its specification, its TeX name and the width it was set to on
     this line (`\spaceskip 3.33pt plus 1.66pt minus 1.11pt → 3.43pt`);
-  - a line: its glue ratio and font expansion.
+  - a line: its glue ratio, font expansion, and badness (100·r³, as TeX
+    rates it) with its fitness class;
+  - a vertical space, between paragraphs or around a heading or a display:
+    its total. Its children are the glue TeX put there: an explicit skip
+    (`\vspace`, a heading's skip), `\parskip`, a display skip, and the
+    interline `\baselineskip` or `\lineskip` glue as it comes out for these
+    lines.
 - **Hover** a row to outline its node on the page, with a label. **Select**
   a row to keep the outline; a box or line also outlines its children one
   level down: glyphs blue, glue green and hatched, kerns purple, math orange,
@@ -28,6 +34,9 @@ The project's website includes it on every page. Press **Alt+Shift+I**
   was set to, and its rectangle on screen.
 - **Pick:** hover the page to highlight the node under the pointer, and click
   to select it in the tree. Esc cancels.
+- **Baselines** and **Badness** (toolbar): the baseline of every line on
+  screen, and a bar past every line's end coloured by its badness: green
+  decent (≤ 12), amber loose or tight, red 100 or more, purple overfull.
 - **Reflow:** after a resize re-breaks the lines, the open branches refresh.
 
 Drag the title bar to move the panel, and its corner to resize it. The
