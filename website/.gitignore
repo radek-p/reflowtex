@@ -15,6 +15,7 @@
 /static/fonts/
 /static/latex-viewer.js
 /static/protobuf.min.js
+/static/inspector/
 # Standalone testmath demo, built into static/ by build.sh (served at /testmath/).
 /static/testmath/
 

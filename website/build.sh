@@ -48,6 +48,9 @@ fi
 mkdir -p "$SITE/layouts/shortcodes" "$SITE/layouts/partials"
 cp "$HUGO_INT/layouts/shortcodes/latex.html"          "$SITE/layouts/shortcodes/latex.html"
 cp "$HUGO_INT/layouts/partials/reflowtex-viewer.html" "$SITE/layouts/partials/reflowtex-viewer.html"
+#    …and the floating inspector (src/inspector), which every page offers.
+mkdir -p "$SITE/static/inspector"
+cp "$REPO/src/inspector/inspector.js" "$REPO/src/inspector/inspector.css" "$REPO/src/inspector/agent.js" "$SITE/static/inspector/"
 
 # 2. Compile all LaTeX blocks, embed the schema, provision + patch fonts.
 #    Set PREBUILD_ARGS to pass extra flags (e.g. --force, --prune, -j 8).

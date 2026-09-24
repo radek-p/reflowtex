@@ -16,7 +16,7 @@
 {{- $here := . -}}
 {{- $idx := -1 -}}
 {{- range $i, $p := $order -}}{{- if eq $p.RelPermalink $here.RelPermalink -}}{{- $idx = $i -}}{{- end -}}{{- end -}}
-<div class="docs-layout{{ if .Params.toc }} has-toc{{ end }}">
+<div class="docs-layout{{ if .Params.toc }} has-toc{{ end }}{{ if .Params.wide }} is-wide{{ end }}">
   <details class="docs-nav-fold">
     <summary>Contents</summary>
     {{ partial "docs-nav.html" (dict "docs" $docs "here" $here) }}

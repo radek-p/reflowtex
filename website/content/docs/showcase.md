@@ -41,4 +41,5 @@ one-line named preamble that adds microtype:
 \usepackage{microtype}
 ```
 
+{{< inspect label="Inspect its boxes and glue" >}}
 {{< latex file="testmath.tex" preamble="microtype" />}}

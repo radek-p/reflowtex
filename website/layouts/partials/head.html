@@ -187,6 +187,10 @@
   .docs-layout #lt-content > .highlight,
   .docs-layout #lt-content > p,
   .docs-layout #lt-content > ul { max-width: 46rem; }
+  /* wide: true in a page's front matter – room for an example with a panel
+     beside it (the inspector's page); prose keeps its measure. */
+  .docs-layout.is-wide { max-width: 112rem; }
+  .docs-layout.is-wide #lt-content { flex: 0 1 86rem; }
   /* The reader's width is a most, never a least: the column gives way when
      the window (or larger text, since the column is zoomed) leaves less, so
      the page never scrolls sideways. The document block fills the column. */
@@ -308,6 +312,46 @@
     --lt-example-pad: 2.25rem;
   }
   .latex-example-preview .latex-display { --latex-display-peek: var(--lt-example-pad); }
+  /* "Inspect": opens the floating inspector on this example's result. In
+     the preview's top padding, clear of the width handle at its right edge. */
+  .latex-example-preview { position: relative; }
+  .lt-inspect {
+    position: absolute; top: .55rem; right: 1.1rem; z-index: 1;
+    display: inline-flex; align-items: center; gap: .3rem;
+    font: 500 .68rem/1 system-ui, -apple-system, sans-serif; letter-spacing: .02em;
+    color: inherit; background: none; cursor: pointer;
+    padding: .28rem .5rem; border-radius: 999px;
+    border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+    opacity: .45; transition: opacity .15s ease, background-color .15s ease;
+  }
+  figure.latex-example:hover .lt-inspect { opacity: .7; }
+  .lt-inspect:hover, .lt-inspect:focus-visible {
+    opacity: 1; color: var(--lt-primary);
+    border-color: color-mix(in srgb, var(--lt-primary) 45%, transparent);
+    background: color-mix(in srgb, var(--lt-primary) 7%, transparent);
+  }
+  .lt-inspect svg { width: .8rem; height: .8rem; }
+  /* The same button above a block that is not an example (the inspect shortcode). */
+  .lt-inspect-line { display: flex; justify-content: flex-end; margin: 1.25rem 0 .5rem; }
+  .lt-inspect.lt-inspect-inline { position: static; opacity: .6; }
+  @media print { .lt-inspect-line { display: none; } }
+  /* inspector-demo: an example with the inspector docked beside it, or below
+     it when the column is narrow. */
+  .inspector-demo { container-type: inline-size; margin: 2.75rem 0; }
+  .inspector-demo-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+  /* The block, framed like an example's result; the inspector gets the room. */
+  .inspector-demo-example {
+    min-width: 0; padding: 2rem 2.25rem; box-sizing: border-box; --lt-example-pad: 2.25rem;
+    border: 1px solid color-mix(in srgb, currentColor 13%, transparent); border-radius: 12px;
+  }
+  .inspector-demo-example .latex-display { --latex-display-peek: var(--lt-example-pad); }
+  .inspector-demo-dock { height: 32rem; min-width: 0; }
+  @container (min-width: 48rem) {
+    .inspector-demo-grid { grid-template-columns: minmax(18rem, 0.8fr) minmax(0, 1.2fr); }
+    .inspector-demo-dock { height: auto; min-height: 34rem; }
+  }
+  @media print { .inspector-demo-dock { display: none; } }
+  @media print { .lt-inspect { display: none; } }
   /* Theme preview (themes="…" on an example): the Result panel takes the
      chosen theme's page colours; the viewer recolours the block inside
      (data-latex-theme). Same palette as the page themes above. */
@@ -358,20 +402,6 @@
     .latex-example-preview { padding: 1.4rem 1.2rem; --lt-example-pad: 1.2rem; }
     .latex-example-source pre { padding: 1.2rem; }
   }
-
-  /* ── An example set off from the page's own text ───────────────────────
-     Framed like a proof, with a small label, so a reader sees it is
-     something the page demonstrates rather than something to follow. */
-  #lt-content .example-frame {
-    position: relative; max-width: 46rem; box-sizing: border-box;
-    margin: 2.25rem 0; padding: 2.1rem 1.5rem 1.2rem 1.4rem;
-    border-left: 3px solid color-mix(in srgb, currentColor 32%, transparent);
-    background: color-mix(in srgb, currentColor 3.5%, transparent); }
-  #lt-content .example-frame::before {
-    content: 'Example'; position: absolute; top: .75rem; left: 1.4rem;
-    font: 600 .68rem/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em;
-    text-transform: uppercase; opacity: .55; }
-  #lt-content .example-frame > .latex-block { margin: 0; }
 
   /* ── Notes (reflowtex.sty's webnote) as sticky notes ────────────────────
      Pale yellow paper with a soft shadow instead of the viewer's framed box.
@@ -664,6 +694,13 @@
   .lt-row button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
   .lt-row button:focus-visible, #lt-reader-button:focus-visible { outline: 2px solid var(--lt-accent); outline-offset: 2px; }
   .lt-caption { font-size: 11px; opacity: .6; margin: 0 0 8px; }
+  /* The inspector entry: a plain row, its shortcut on the right. */
+  .lt-inspect-row {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: 13px; padding: 6px 6px; border-radius: 10px; text-align: left;
+  }
+  .lt-inspect-row:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  .lt-inspect-row kbd, .lt-inspect kbd { font: 11px ui-monospace, Menlo, monospace; opacity: .6; }
   /* Text size: small A · percentage · large A, like Safari's reader menu. */
   .lt-size { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; }
   .lt-size button { height: 36px; border-radius: 10px; }

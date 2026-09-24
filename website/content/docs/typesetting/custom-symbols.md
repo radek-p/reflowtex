@@ -16,11 +16,7 @@ $\exists$, which \TeX{} sets as a quantifier, subscript and all. The browser
 draws the same outline.
 {{< /latex >}}
 
-<div class="example-frame">
-
-{{< latex file="segment.tex" preamble="../examples/symbol/preamble.tex" />}}
-
-</div>
+{{< latex file="segment.tex" preamble="../examples/symbol/preamble.tex" show-source="true" />}}
 
 {{< latex preamble="docs" >}}
 \section*{How the example is made}

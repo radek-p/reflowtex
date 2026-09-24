@@ -1,0 +1,9 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  An "Inspect" button for a block that is not an example (examples get theirs
+  on the result): it opens the floating inspector on the next block on the
+  page. Wired up by partials/inspector.html.
+
+    {{< inspect >}}  or  {{< inspect label="Inspect testmath.tex" >}}
+*/ -}}
+<p class="lt-inspect-line"><button type="button" class="lt-inspect lt-inspect-inline" data-inspect-next><span>{{ .Get "label" | default "Inspect" }}</span></button></p>

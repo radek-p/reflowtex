@@ -1,0 +1,58 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The floating inspector (src/inspector, copied into static/inspector/ by
+  build.sh): the boxes and glue behind every block on the page. It loads its
+  panel and agent only when opened – with Alt+Shift+I (⌥⇧I), the "Inspect"
+  button on each example's result, or the reading panel's entry.
+*/ -}}
+{{- $v := substr (print (readFile "static/inspector/inspector.js") (readFile "static/inspector/agent.js") (readFile "static/inspector/inspector.css") | crypto.MD5) 0 8 }}
+<script src="{{ "inspector/inspector.js" | relURL }}?v={{ $v }}"></script>
+<script>
+(function () {
+  var ins = window.reflowtex && window.reflowtex.inspector;
+  if (!ins) return;
+  var ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3.5" width="9" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 1.4"/><path d="M8 8l6 2.6-2.6.9-.9 2.6z" fill="currentColor"/></svg>';
+  // One button per example result, added once its block is on the page.
+  function addButtons() {
+    document.querySelectorAll('figure.latex-example .latex-example-preview').forEach(function (p) {
+      var block = p.querySelector('[data-nodelist-b64]');
+      if (!block || p.querySelector(':scope > .lt-inspect')) return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lt-inspect';
+      b.title = 'Inspect the boxes and glue of this result (' + ins.shortcut + ' opens the inspector)';
+      b.innerHTML = ICON + '<span>Inspect</span>';
+      b.addEventListener('click', function () { ins.open(block); });
+      p.appendChild(b);
+    });
+  }
+  // The inspect shortcode: the next block on the page after the button.
+  function wireInline() {
+    var blocks = [].slice.call(document.querySelectorAll('[data-nodelist-b64]'));
+    document.querySelectorAll('[data-inspect-next]').forEach(function (b) {
+      var block = blocks.find(function (el) { return b.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING; });
+      if (!block) { b.parentNode.hidden = true; return; }
+      b.insertAdjacentHTML('afterbegin', ICON);
+      b.title = 'Open the inspector on the document below (' + ins.shortcut + ' opens it anywhere)';
+      b.addEventListener('click', function () { ins.open(block); });
+    });
+  }
+  // The inspector-demo shortcode: the panel docked beside its example.
+  function wireDocks() {
+    var dock = document.querySelector('[data-inspector-dock]');
+    if (dock) ins.dock(dock, dock.parentNode.querySelector('[data-nodelist-b64]'));
+  }
+  function init() { addButtons(); wireInline(); wireDocks(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  // The reading panel's entry.
+  document.querySelectorAll('[data-inspect]').forEach(function (b) {
+    var k = b.querySelector('.lt-inspect-key');
+    if (k) k.textContent = ins.shortcut;
+    b.addEventListener('click', function () {
+      document.getElementById('lt-reader-button').click();   // close the reading panel
+      ins.open();
+    });
+  });
+})();
+</script>

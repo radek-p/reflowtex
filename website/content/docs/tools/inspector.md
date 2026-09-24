@@ -1,0 +1,68 @@
+---
+title: Inspector
+weight: 10
+latexTitle: true
+wide: true
+---
+
+{{< latex preamble="docs" >}}
+\pagetitle[Tools]{Inspector}
+\bigskip
+The inspector shows what \TeX{} made of a page: the boxes, glue, kerns and
+penalties behind every block, as the browser has just set them. Hover a row
+to outline its node on the page; select it to keep the outline and see what
+it is made of. A glue shows the width it was stretched or shrunk to on its
+line, and a line its glue ratio and font expansion. Resize the window and the
+tree follows the new line breaks.
+
+Below, the inspector is docked beside an example. On every other page it
+floats: press \texttt{Alt+Shift+I} (\texttt{Option+Shift+I} on a Mac), click
+\emph{Inspect} on an example's result, or choose \emph{Inspect boxes and
+glue} in the reading options.
+{{< /latex >}}
+
+{{< inspector-demo >}}
+{{< latex >}}
+\noindent The golden ratio $\varphi = \frac{1+\sqrt{5}}{2}$ is the
+positive root of $x^2 = x + 1$, and its continued fraction is all ones:
+\[
+  \varphi = 1 + \cfrac{1}{1 + \cfrac{1}{1 + \cfrac{1}{1 + \dotsb}}}
+\]
+Every line of this paragraph is broken in the browser, so the glue between
+its words is stretched or shrunk to fit whatever width it is given.
+{{< /latex >}}
+{{< /inspector-demo >}}
+
+{{< latex preamble="docs" >}}
+\section*{Things to try}
+\begin{description}
+\item[A line.] Expand the text segment, select a line, and the page outlines
+  every node on it: glyphs in blue, glue green and hatched, kerns purple.
+  The line's row gives its glue ratio -- positive when stretched, negative
+  when shrunk.
+\item[A fraction.] Choose \emph{Pick} and click the~$5$ under the square
+  root. The tree opens at that glyph, inside the boxes \TeX{} built for the
+  radical, the numerator and the fraction; select each in turn and watch
+  the outline grow.
+\item[The baseline.] Whatever is selected draws a guide along its baseline
+  across the whole window, so what shares it -- or misses it -- is plain to
+  see.
+\item[A reflow.] Make the window narrower. The lines re-break, and the
+  open rows follow.
+\end{description}
+
+\section*{On your own pages}
+The inspector ships with the viewer, in \texttt{src/inspector/}. Serve its
+three files together and include its script after the viewer's; it costs
+nothing until it is opened. A page's own controls open it through
+\texttt{window.reflowtex.inspector}.
+{{< /latex >}}
+
+```html
+<script src="latex-viewer.js"></script>
+<script src="inspector/inspector.js"></script>   <!-- + inspector.css, agent.js beside it -->
+<script>
+  // open it on one block, e.g. from a button of your own
+  button.onclick = () => reflowtex.inspector.open(blockElement);
+</script>
+```
