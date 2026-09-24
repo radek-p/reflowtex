@@ -305,20 +305,30 @@ async function select(id, { scroll = true } = {}) {
     showDetails(id);
 }
 function placeholder() {
+    delete $.details.dataset.id;
     $.details.replaceChildren(h('p', { class: 'muted' }, 'Select a row, or ', h('b', {}, 'Pick'),
         ' a box or glue in the page. ', h('kbd', {}, SHORTCUT), ' opens and closes this panel.'), legend());
 }
 async function showDetails(id) {
     const d = await call('details', id);
-    if (!d || d === MISSING) { $.details.replaceChildren(h('p', { class: 'muted' }, 'Gone – the layout changed.')); return; }
+    if (!d || d === MISSING) { delete $.details.dataset.id; $.details.replaceChildren(h('p', { class: 'muted' }, 'Gone – the layout changed.')); return; }
     const t = h('table');
     for (const [k, v] of d.rows) { const tr = t.insertRow(); tr.insertCell().textContent = k; tr.insertCell().textContent = v; }
     const copy = h('button', { type: 'button', class: 'copy', title: `Copy this fragment – all it holds – as XML (${IS_MAC ? '⌘' : 'Ctrl+'}C in the tree)`,
                                onclick: () => copyXml(id) }, 'Copy XML');
+    // The same node again (the layout moved): new values, the same buttons,
+    // so a click on one is not lost to a refresh between press and release.
+    const title = `${d.summary.label}  ${d.summary.note}`;
+    if ($.details.dataset.id === String(id) && $.details.querySelector('table')) {
+        $.details.querySelector('h2').textContent = title;
+        $.details.querySelector('table').replaceWith(t);
+        return;
+    }
     const acts = h('div', { class: 'actions' }, copy);
     if (d.glyph) acts.prepend(h('button', { type: 'button', class: 'copy', title: `Show ${hex(d.glyph.cp)} in the glyph table of ${d.glyph.font} (Resources)`,
                                             onclick: () => showGlyph(d.glyph.key, d.glyph.cp) }, 'In its font'));
-    $.details.replaceChildren(h('div', { class: 'dhead' }, h('h2', {}, `${d.summary.label}  ${d.summary.note}`), acts), t, legend());
+    $.details.dataset.id = id;
+    $.details.replaceChildren(h('div', { class: 'dhead' }, h('h2', {}, title), acts), t, legend());
 }
 function legend() {
     const l = h('div', { class: 'legend' });
@@ -410,13 +420,18 @@ function wireTree() {
     });
     t.addEventListener('scroll', closeMenu, { passive: true });
     // A row, or one letter of a run: both carry data-id.
-    t.addEventListener('click', e => {
+    // On the press, not the click: while the text reflows (a width that
+    // changes on its own, say) the rows are made afresh every frame, and a
+    // click – press and release on one element – would fall on a row that is
+    // gone. A second press in quick succession opens or closes, like a
+    // double click.
+    t.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
         const row = e.target.closest('[data-id]');
         if (!row) return;
         const id = +row.dataset.id;
-        if (e.target.classList.contains('twisty')) toggle(id); else select(id, { scroll: false });
+        if (e.target.classList.contains('twisty') || e.detail === 2) toggle(id); else select(id, { scroll: false });
     });
-    t.addEventListener('dblclick', e => { const row = e.target.closest('[data-id]'); if (row) toggle(+row.dataset.id); });
     // A letter hovers that glyph; the rest of a run's row, all of its letters.
     t.addEventListener('mousemove', e => {
         const el = e.target.closest('[data-id]'), run = !el && e.target.closest('.row.run');
