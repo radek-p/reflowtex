@@ -14,8 +14,16 @@
   {\LARGE\bfseries #2\par}\@afterindentfalse\@afterheading}
 \makeatother
 % A card's title: bold at the text size – the face the page's headings use,
-% so no new style – with a little space before the text.
-\newcommand\cardtitle[1]{\noindent{\bfseries #1}\par\medskip}
+% so no new style – with a little space before the text. \cardtitle* is for
+% a card that opens with a display: the title stays the line the display
+% follows, so TeX sets no empty line above the display and, the title being
+% short, uses \abovedisplayshortskip. (After \par, a display would open a
+% paragraph of its own, an empty line and the full \abovedisplayskip.) The
+% space above that display is the \medskip a text card has after its title,
+% whichever of the two skips TeX takes (an amsmath alignment always takes the
+% full one, an equation the short one after a short line).
+\NewDocumentCommand\cardtitle{s m}{\noindent{\bfseries #2}%
+  \IfBooleanTF{#1}{\abovedisplayskip=\medskipamount \abovedisplayshortskip=\medskipamount}{\par\medskip}}
 % Section headings ragged right: at a narrow measure a heading breaks onto
 % several lines, and the standard classes would justify them. Only the
 % heading's style changes, not its spacing or font.

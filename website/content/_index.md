@@ -44,7 +44,7 @@ the text stays justified.
 <div class="card span-2">
 
 {{< latex preamble="home" >}}
-\cardtitle{Displays}
+\cardtitle*{Displays}
 \[ \int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi} \]
 Operator sizes, limits and spacing, as \TeX{} set them.
 {{< /latex >}}
@@ -54,7 +54,7 @@ Operator sizes, limits and spacing, as \TeX{} set them.
 <div class="card span-2 theme-hover" data-latex-theme="dark" tabindex="0">
 
 {{< latex preamble="home" >}}
-\cardtitle{In the dark}
+\cardtitle*{Dark colour scheme}
 \begin{align*}
   (a+b)^2 &= a^2 + 2ab + b^2 \\
   (a-b)^2 &= a^2 - 2ab + b^2
@@ -68,7 +68,7 @@ Only this card uses the dark theme; a colour map recolours its
 <div class="card span-2 theme-hover" data-latex-theme="sepia" tabindex="0">
 
 {{< latex preamble="home" >}}
-\cardtitle{Diagrams, in sepia}
+\cardtitle*{Sepia colour scheme}
 \[
 \begin{tikzcd}
   A \arrow[r, "f"] \arrow[d, "g"'] & B \arrow[d, "h"] \\
