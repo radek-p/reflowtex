@@ -5,7 +5,7 @@ latexTitle: true
 ---
 
 {{< latex preamble="webfirst" >}}
-\pagetitle[Web-first \LaTeX]{Live text}
+\pagetitle[Companion package]{Live text}
 \bigskip
 A \cs{webtext} marks a named piece of running text that the page can
 replace: a counter, a clock, a value computed by a script. \TeX{} typesets

@@ -1,0 +1,11 @@
+/* \mysidenote: a rule in the accent colour, the number hanging left of the
+   note on its first baseline. The numbers in the text are in the colour
+   "sidenote" (#2F2CCD in the preamble): the page's accent, in every theme. */
+:root { --latex-color-2f2ccd: var(--lt-primary, #2f2ccd); }
+.sidenote { position: relative; padding-left: 20px; border-left: 2px solid var(--lt-primary, currentColor); }
+.sidenote-number { position: absolute; left: 7px; top: 0; width: 12px; height: 1px; overflow: visible; }
+/* The note sits in the block, so the viewer's rules for its own glyphs
+   (.latex-block svg text) reach this number too: outrank them. */
+html .latex-block .sidenote-number text {
+  fill: var(--lt-primary, currentColor); font: 700 11px ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700 !important; }

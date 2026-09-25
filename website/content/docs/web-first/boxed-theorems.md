@@ -5,7 +5,7 @@ latexTitle: true
 ---
 
 {{< latex preamble="webfirst" >}}
-\pagetitle[Web-first \LaTeX]{Boxed theorems}
+\pagetitle[Companion package]{Boxed theorems}
 \bigskip
 The declaration \cs{DeclareWebBox} makes an environment a box on the web,
 with a coloured left border; the source of the environment's uses does not

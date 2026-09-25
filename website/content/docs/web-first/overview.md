@@ -6,7 +6,7 @@ aliases: ["/docs/web-first/"]
 ---
 
 {{< latex preamble="webfirst" >}}
-\pagetitle[Web-first \LaTeX]{Overview}
+\pagetitle[Companion package]{Overview}
 \bigskip
 Most documents need no changes: a paper or a book written for print is
 published as it is. A document written \emph{for} the web can use the

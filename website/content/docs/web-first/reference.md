@@ -5,7 +5,7 @@ latexTitle: true
 ---
 
 {{< latex preamble="webfirst" >}}
-\pagetitle[Web-first \LaTeX]{Reference}
+\pagetitle[Companion package]{Reference}
 \bigskip
 \begin{description}
 \item[\cs{ifreflowtex}] true only in the pipeline's compile.
@@ -21,6 +21,13 @@ latexTitle: true
   widget (\texttt{reflowtex.widgets[name]}), which reports its size and
   where it may break; the line breaker may break it across lines. Nothing
   in print, unless given a default.
+\item[\cs{webaside}\texttt{[key=value]\{kind\}\{text\}}] text typeset
+  out of the flow, in running text too, for a page to show where it likes
+  (a popover, a margin note); left out in print. A widget gets its block's
+  asides as \texttt{ctx.asides(kind)}, a script any block's as
+  \texttt{reflowtex.asides(block, kind)}: each \texttt{\{kind, attrs,
+  width(), render(el, width?)\}}, drawn at a width or on one line at its
+  natural width. Example: \cs{mypopover} on the page Footnotes.
 \item[\cs{webtext}\texttt{\{name\}\{default\}}] text a page may replace:
   \texttt{reflowtex.setText(name, text)}, or \texttt{null} for the default
   again; the default in print.
@@ -47,8 +54,8 @@ latexTitle: true
   \texttt{kind}, \texttt{index}, \texttt{stream}, \texttt{attrs},
   \texttt{state} and \texttt{paint()}.
 \end{description}
-Streams are block-level: a \texttt{webstream} starts and ends a
-paragraph. The DOM contract is in \texttt{src/viewer/README.md}, section
+A \texttt{webstream} is block-level: it starts and ends a paragraph. A
+\cs{webaside} is not: it may stand in a sentence. The DOM contract is in \texttt{src/viewer/README.md}, section
 \emph{Streams}, and the wire format in \texttt{src/schema/latex.proto},
 message \texttt{Stream}.
 {{< /latex >}}

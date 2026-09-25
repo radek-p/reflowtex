@@ -1,0 +1,22 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% Preamble for the \mysidenote example (content/docs/typesetting/side-notes.md).
+\usepackage{microtype}
+\usepackage{reflowtex}
+\usepackage{xcolor}
+% The numbers' colour: in print this blue; on the web the page's accent
+% (examples/sidenote.css maps it).
+\definecolor{sidenote}{HTML}{2F2CCD}
+% \mysidenote{text}: a numbered side note. The number goes in the text, bold
+% and in colour; the
+% note is an aside of kind "sidenote" with place=margin, which the viewer
+% sets in the margin, and the page draws (examples/sidenote.js). In print, a
+% \marginpar with the number.
+\newcounter{sidenote}
+\NewDocumentCommand\mysidenote{+m}{%
+  \stepcounter{sidenote}%
+  \textsuperscript{\bfseries\color{sidenote}\thesidenote}%
+  \ifreflowtex
+    \webaside[place=margin, n=\thesidenote]{sidenote}{\footnotesize\raggedright #1}%
+  \else
+    \marginpar{\footnotesize\textsuperscript{\thesidenote}\,#1}%
+  \fi}

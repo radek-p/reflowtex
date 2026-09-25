@@ -5,7 +5,7 @@ latexTitle: true
 ---
 
 {{< latex preamble="webfirst" >}}
-\pagetitle[Web-first \LaTeX]{Notes and hints}
+\pagetitle[Companion package]{Notes and hints}
 \bigskip
 Two small environments for teaching material. In a PDF both are ordinary
 paragraphs.

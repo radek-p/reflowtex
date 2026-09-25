@@ -1,11 +1,11 @@
 ---
 title: Custom kinds
-weight: 50
+weight: 55
 latexTitle: true
 ---
 
 {{< latex preamble="webfirst" >}}
-\pagetitle[Web-first \LaTeX]{Custom kinds}
+\pagetitle[Companion package]{Custom kinds}
 \bigskip
 The package is built from two primitives, streams and actions. You can use
 them for environments of your own.

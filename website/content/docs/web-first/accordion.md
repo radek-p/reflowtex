@@ -5,7 +5,7 @@ latexTitle: true
 ---
 
 {{< latex preamble="webfirst" >}}
-\pagetitle[Web-first \LaTeX]{Accordion}
+\pagetitle[Companion package]{Accordion}
 \bigskip
 A \texttt{webaccordion} shows one of its panes at a time, and the reader moves
 between them with links placed in the panes themselves. A pane can hold

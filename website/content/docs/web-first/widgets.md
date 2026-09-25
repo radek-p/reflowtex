@@ -5,7 +5,7 @@ latexTitle: true
 ---
 
 {{< latex preamble="webfirst" >}}
-\pagetitle[Web-first \LaTeX]{HTML widgets}
+\pagetitle[Companion package]{HTML widgets}
 \bigskip
 \cs{webwidget} reserves a place in the text for the page's own HTML, such
 as a status badge or a small control. The widget reports its size and where

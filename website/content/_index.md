@@ -316,7 +316,7 @@ example next to its source.
 
 {{< latex preamble="home" >}}
 \raggedright
-\cardtitle{Web-first \LaTeX}
+\cardtitle{Companion package}
 \noindent Accordions, notes, hints, boxed
 theorems and environments of your own.
 {{< /latex >}}

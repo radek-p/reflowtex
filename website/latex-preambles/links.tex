@@ -1,0 +1,26 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% Preamble for content/docs/typesetting/links.md: the docs preamble, with a
+% theorem environment and hyperref (\autoref, \href). Not cleveref: with it,
+% the pipeline leaves an equation's label unresolved (\eqref prints ??).
+% \pagetitle[group]{title}: the group as a small-caps label above the title.
+% Like a sectioning command, it leaves the paragraph after it unindented.
+\makeatletter
+\NewDocumentCommand\pagetitle{o m}{%
+  \noindent\IfValueT{#1}{{\small\scshape #1}\par\smallskip\noindent}%
+  {\LARGE\bfseries #2\par}\@afterindentfalse\@afterheading}
+\makeatother
+% Section headings ragged right: at a narrow measure a heading breaks onto
+% several lines, and the standard classes would justify them. Only the
+% heading's style changes, not its spacing or font.
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd{\@sect}{\begingroup #6}{\begingroup #6\raggedright}{}{}
+\patchcmd{\@ssect}{\begingroup #4}{\begingroup #4\raggedright}{}{}
+\makeatother
+% Character protrusion and font expansion, as in the PDF: the viewer
+% protrudes and expands as the document says, and only then.
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\newtheorem{theorem}{Theorem}
+\usepackage[hidelinks]{hyperref}

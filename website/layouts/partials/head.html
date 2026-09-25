@@ -677,6 +677,19 @@
   .home-menu button:hover, .home-menu button:focus-visible {
     background: color-mix(in srgb, var(--lt-primary) 12%, transparent); outline: none; }
   .home-menu .tick { width: 1em; color: var(--lt-primary); }
+  /* An example with side notes (class="with-margin" on its block): the text
+     leaves room on its right, and the preview shows that margin as a grey
+     band, where the viewer sets the notes (--latex-margin-*, in px). On a
+     narrow screen, no margin: the notes open from marks in the text. */
+  #lt-content .latex-example-stage > .latex-block.with-margin {
+    --latex-margin-width: 170px; --latex-margin-gap: 28px; margin-right: 198px; }
+  .latex-example-preview:has(.latex-block.with-margin) {
+    background: linear-gradient(to left, color-mix(in srgb, currentColor 5%, transparent)
+      calc(170px + 14px + var(--lt-example-pad, 2.25rem)), transparent 0); }
+  @media (max-width: 40rem) {
+    #lt-content .latex-example-stage > .latex-block.with-margin { --latex-margin-width: 0; margin-right: 0; }
+    .latex-example-preview:has(.latex-block.with-margin) { background: none; }
+  }
   .step, .map-card { padding-top: 1rem; border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
   .map-card { display: block; text-decoration: none; color: inherit; padding-bottom: 1.4rem; transition: border-color .2s ease; }
   .map-card:hover { border-top-color: currentColor; }
@@ -713,6 +726,9 @@
   html.dark     { --latex-page-bg: #0c0a09; --lt-glass: rgba(34, 31, 29, .74);    --lt-seg-on: #4a4541; }
   html.sepia    { --latex-page-bg: #f4ecd8; --lt-glass: rgba(244, 236, 216, .80); --lt-seg-on: #fbf6ea; }
   html.contrast { --latex-page-bg: #ffffff; --lt-glass: rgba(255, 255, 255, .92); --lt-seg-on: #ffffff; }
+  /* Popovers (the viewer's footnotes, the companion's panels) in the reading
+     panel's glass, and the companion's buttons in its light surface. */
+  html { --latex-popover-background: var(--lt-glass); --rtx-surface: var(--lt-seg-on); }
   #lt-reader, .lt-panel {
     --lt-hair: color-mix(in srgb, currentColor 16%, transparent);
     --lt-accent: var(--lt-primary);

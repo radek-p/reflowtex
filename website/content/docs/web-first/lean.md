@@ -5,7 +5,7 @@ latexTitle: true
 ---
 
 {{< latex preamble="webfirst" >}}
-\pagetitle[Web-first \LaTeX]{Lean beside a proof}
+\pagetitle[Companion package]{Lean beside a proof}
 \bigskip
 A theorem, its proof and the Lean code that checks it can be shown
 together. The reader first sees the theorem. Two switches under its frame,
