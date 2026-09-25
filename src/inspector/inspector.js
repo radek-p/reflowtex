@@ -7,11 +7,20 @@
 // file) are made on first use. Open it with Alt+Shift+I (⌥⇧I on a Mac), or
 // from a page's own controls through window.reflowtex.inspector:
 //
-//   reflowtex.inspector.open(blockEl?)   open; with a block, show that block
+//   reflowtex.inspector.open(blockEl?, { dock }?)
+//                                        open; with a block, show that block.
+//                                        `dock` is where this page would have
+//                                        it: 'left', 'right', 'bottom',
+//                                        'float', or 'auto' (right, or bottom
+//                                        in a portrait window). The reader's
+//                                        own choice, once made, wins.
+//                                        `scroll: false` leaves the page where
+//                                        it is (opening as the page loads).
+//   reflowtex.inspector.setDock(mode)    dock to an edge of the window, or float
 //   reflowtex.inspector.close()
 //   reflowtex.inspector.toggle()
 //   reflowtex.inspector.dock(el, block?) put the panel inside el, open for
-//                                        good (a page about the inspector)
+//                                        good
 //   reflowtex.inspector.shortcut         the shortcut's label, for a tooltip
 (() => {
 const api = window.reflowtex = window.reflowtex || {};
@@ -63,7 +72,9 @@ async function call(method, ...args) {
 }
 
 // ── The panel ──────────────────────────────────────────────────────────────────
-let host = null, root = null, $ = null, isOpen = false, docked = false, pollTimer = 0;
+// `docked`: inside a page's element (dock()). `edge`: docked to an edge of the
+// window – 'left', 'right' or 'bottom' – or null while it floats.
+let host = null, root = null, $ = null, isOpen = false, docked = false, edge = null, pollTimer = 0;
 const h = (tag, props = {}, ...kids) => {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(props)) {
@@ -75,6 +86,15 @@ const h = (tag, props = {}, ...kids) => {
     return el;
 };
 const ICON_PICK = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M2 2h8v2H4v6H2zM7 7l7 3-3 1-1 3z" fill="currentColor"/></svg>';
+// The dock picker's icons: a window, with the panel's place filled in.
+const dockIcon = fill => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>${fill}</svg>`;
+const DOCK_ICONS = {
+    left: dockIcon('<rect x="2" y="3" width="5" height="10" fill="currentColor"/>'),
+    bottom: dockIcon('<rect x="2" y="8.5" width="12" height="4.5" fill="currentColor"/>'),
+    right: dockIcon('<rect x="9" y="3" width="5" height="10" fill="currentColor"/>'),
+    float: dockIcon('<rect x="6" y="6" width="6.5" height="5" rx=".8" fill="currentColor"/>'),
+};
+const DOCK_TITLES = { left: 'Dock on the left', bottom: 'Dock at the bottom', right: 'Dock on the right', float: 'Float over the page' };
 const ICON_REFRESH = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function build() {
@@ -101,13 +121,20 @@ function build() {
     const badness = guide('badness', 'Badness', 'A bar past every line, coloured by its badness: green decent, amber loose or tight, red 100 or more, purple overfull');
     const springs = guide('springs', 'Springs', 'Draw every display glue whose width is recomputed for the reader\'s width as a spring');
     const status = h('span', { class: 'status' });
+    const dockPick = h('span', { class: 'dock', role: 'group', 'aria-label': 'Where the inspector sits' },
+        ...['left', 'bottom', 'right', 'float'].map(m => {
+            const b = h('button', { type: 'button', 'data-dock': m, title: DOCK_TITLES[m], 'aria-label': DOCK_TITLES[m],
+                                    'aria-pressed': 'false', onclick: () => setDock(m) });
+            b.innerHTML = DOCK_ICONS[m];
+            return b;
+        }));
     const close = h('button', { type: 'button', class: 'close', title: `Close (${SHORTCUT})`, 'aria-label': 'Close', onclick: () => closePanel() }, '×');
     // Two views: the tree of boxes and glue, and the resources they draw with.
     const tab = (v, label, title) => h('button', { type: 'button', role: 'tab', 'data-view': v, title, onclick: () => setView(v) }, label);
     const tabs = h('span', { class: 'tabs', role: 'tablist' },
         tab('tree', 'Boxes', 'Blocks, lines, boxes and glue'),
         tab('res', 'Resources', 'Fonts and their glyphs, pictures, streams (footnotes, popovers), links, citations, anchors, slots'));
-    const bar = h('div', { class: 'bar' }, h('span', { class: 'title' }, 'Inspector'), tabs, pick, refreshBtn, baselines, badness, springs, status, close);
+    const bar = h('div', { class: 'bar' }, h('span', { class: 'title' }, 'Inspector'), tabs, pick, refreshBtn, baselines, badness, springs, status, dockPick, close);
     const tree = h('section', { class: 'tree', role: 'tree', tabindex: '0', 'aria-label': 'Boxes and glue' });
     const details = h('aside', { class: 'details' });
     const filter = h('input', { type: 'search', class: 'filter', placeholder: 'Filter', 'aria-label': 'Filter the resources', spellcheck: 'false' });
@@ -117,7 +144,9 @@ function build() {
         h('option', { value: 'name' }, 'Fonts by name'), h('option', { value: 'uses' }, 'Fonts by use'));
     const rlist = h('section', { class: 'rlist' }, h('div', { class: 'rtools' }, filter, fontSort), rbody);
     const rdetails = h('aside', { class: 'details rdetails' });
-    root = h('div', { class: 'rtx', role: 'dialog', 'aria-label': 'Reflow TeX inspector' }, bar, h('div', { class: 'main' }, tree, details, rlist, rdetails));
+    // Docked to an edge, the side facing the page is dragged to resize.
+    const grip = h('div', { class: 'grip', 'aria-hidden': 'true' });
+    root = h('div', { class: 'rtx', role: 'dialog', 'aria-label': 'Reflow TeX inspector' }, bar, h('div', { class: 'main' }, tree, details, rlist, rdetails), grip);
     root.hidden = true;
     shadow.appendChild(root);
     document.documentElement.appendChild(host);
@@ -125,7 +154,7 @@ function build() {
     // popover it has pinned open (closed by a click elsewhere) stays open
     // while the panel inspects it.
     host.addEventListener('click', e => e.stopPropagation());
-    $ = { pick, status, tree, details, bar, tabs, filter, fontSort, rbody, rdetails };
+    $ = { pick, status, tree, details, bar, tabs, filter, fontSort, rbody, rdetails, dockPick, grip };
     placeholder();
     wireTree();
     wireResources();
@@ -145,14 +174,14 @@ function loadGeometry() {
     place(x, y, w, ht);
 }
 function place(x, y, w, ht) {
-    if (docked) return;
+    if (docked || edge) return;
     w = w ?? root.offsetWidth; ht = ht ?? root.offsetHeight;
     x = Math.max(8 - w + 80, Math.min(x, innerWidth - 80));   // keep a grip on screen
     y = Math.max(8, Math.min(y, innerHeight - 40));
     Object.assign(root.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: ht + 'px' });
 }
 function saveGeometry() {
-    if (docked) return;
+    if (docked || edge) return;
     try {
         localStorage.setItem(STORE, JSON.stringify({ x: root.offsetLeft, y: root.offsetTop, w: root.offsetWidth, h: root.offsetHeight }));
     } catch { /* private mode: not remembered */ }
@@ -160,7 +189,7 @@ function saveGeometry() {
 function wireMove() {
     let drag = null;
     $.bar.addEventListener('pointerdown', e => {
-        if (docked || e.button !== 0 || e.target.closest('button')) return;
+        if (docked || edge || e.button !== 0 || e.target.closest('button')) return;
         drag = { dx: e.clientX - root.offsetLeft, dy: e.clientY - root.offsetTop };
         $.bar.setPointerCapture(e.pointerId);
         e.preventDefault();
@@ -172,7 +201,110 @@ function wireMove() {
     // The native resize grip (CSS resize) – remember the size it leaves.
     let t = 0;
     new ResizeObserver(() => { if (!root.hidden) { clearTimeout(t); t = setTimeout(saveGeometry, 300); } }).observe(root);
-    addEventListener('resize', () => { if (isOpen) place(root.offsetLeft, root.offsetTop); });
+    // Docked to an edge: the grip on the side facing the page sets the size.
+    let sizing = false, want = null, frame = 0;
+    $.grip.addEventListener('pointerdown', e => {
+        if (!edge || e.button !== 0) return;
+        sizing = true;
+        $.grip.setPointerCapture(e.pointerId);
+        e.preventDefault();
+    });
+    $.grip.addEventListener('pointermove', e => {
+        if (!sizing) return;
+        const vp = viewport();
+        want = edge === 'left' ? e.clientX : edge === 'right' ? vp.w - e.clientX : vp.h - e.clientY;
+        // one layout of the page per frame, however fast the pointer moves
+        frame = frame || requestAnimationFrame(() => { frame = 0; if (edge) placeEdge(want); });
+    });
+    const endSizing = () => { if (sizing) { sizing = false; saveDockSize(); } };
+    $.grip.addEventListener('pointerup', endSizing);
+    $.grip.addEventListener('pointercancel', endSizing);
+    // Turning a phone moves an 'auto' panel between the side and the bottom.
+    addEventListener('resize', () => {
+        if (!isOpen || docked) return;
+        const m = chosenDock();
+        if (m !== (edge || 'float')) applyDock(m);
+        else if (edge) placeEdge();
+        else place(root.offsetLeft, root.offsetTop);
+    });
+}
+
+// ── Docked to an edge of the window ────────────────────────────────────────────
+// The reader's choice of where the panel sits, remembered per browser; until
+// they make one, the page's (open's `dock`), floating if it names none.
+const DOCKS = ['left', 'bottom', 'right', 'float'];
+let pageDock = 'float';
+function chosenDock() {
+    let m = null;
+    try { m = localStorage.getItem(STORE + '-dock'); } catch { m = null; }
+    if (!DOCKS.includes(m)) m = pageDock;
+    if (m === 'auto') { const vp = viewport(); m = vp.w >= vp.h ? 'right' : 'bottom'; }
+    return DOCKS.includes(m) ? m : 'float';
+}
+function setDock(mode) {
+    if (!DOCKS.includes(mode)) return;
+    try { localStorage.setItem(STORE + '-dock', mode); } catch { /* not remembered */ }
+    if (isOpen && !docked) applyDock(mode);
+}
+function applyDock(mode) {
+    edge = mode === 'float' ? null : mode;
+    if (edge) root.dataset.edge = edge; else delete root.dataset.edge;
+    for (const b of $.dockPick.children) b.setAttribute('aria-pressed', String(b.dataset.dock === mode));
+    if (edge) { placeEdge(); return; }
+    release();
+    Object.assign(root.style, { right: '', bottom: '' });
+    loadGeometry();
+}
+function loadDockSizes() {
+    try { return JSON.parse(localStorage.getItem(STORE + '-docksize') || '{}') || {}; } catch { return {}; }
+}
+function saveDockSize() {
+    const sizes = loadDockSizes();
+    sizes[edge] = edge === 'bottom' ? root.offsetHeight : root.offsetWidth;
+    try { localStorage.setItem(STORE + '-docksize', JSON.stringify(sizes)); } catch { /* not remembered */ }
+}
+// The window a docked panel is placed in, as position: fixed sees it: without
+// the page's scroll bar, and unchanged by a phone zooming out to fit a page
+// that is wider than the screen for a moment (innerWidth is not).
+const viewport = () => ({ w: document.documentElement.clientWidth, h: document.documentElement.clientHeight });
+// Width (left, right) or height (bottom): as asked, as remembered, or a third
+// of the window or so – always leaving the page some room.
+function dockSize(want) {
+    const vp = viewport(), across = edge === 'bottom' ? vp.h : vp.w;
+    const size = want ?? loadDockSizes()[edge]
+        ?? (edge === 'bottom' ? Math.round(vp.h * 0.42) : Math.max(300, Math.min(460, Math.round(vp.w * 0.36))));
+    const least = Math.min(edge === 'bottom' ? 120 : 260, across / 2);
+    return Math.round(Math.max(least, Math.min(size, across - (edge === 'bottom' ? 120 : 240))));
+}
+function placeEdge(want) {
+    const size = dockSize(want);
+    const st = edge === 'bottom'
+        ? { left: '0px', right: '0px', top: '', bottom: '0px', width: '', height: size + 'px' }
+        : { left: edge === 'left' ? '0px' : '', right: edge === 'right' ? '0px' : '',
+            top: '0px', bottom: '0px', width: size + 'px', height: '' };
+    Object.assign(root.style, st);
+    reserve(edge, size);
+}
+// The page keeps the rest of the window: <html> gets padding on the panel's
+// side, so the page lays out in the room left (its blocks re-break to it) and
+// its end scrolls clear of a bottom panel. The size is published as a CSS
+// variable too – --rtx-dock-left, -right or -bottom – for what the page fixes
+// to the window, such as a floating button.
+const PAD = { left: 'paddingLeft', right: 'paddingRight', bottom: 'paddingBottom' };
+let reserved = null;          // { side, before: <html>'s own inline padding there }
+function reserve(side, size) {
+    const de = document.documentElement;
+    if (reserved && reserved.side !== side) release();
+    if (!reserved) reserved = { side, before: de.style[PAD[side]] };
+    de.style[PAD[side]] = size + 'px';
+    de.style.setProperty('--rtx-dock-' + side, size + 'px');
+}
+function release() {
+    if (!reserved) return;
+    const de = document.documentElement;
+    de.style[PAD[reserved.side]] = reserved.before;
+    de.style.removeProperty('--rtx-dock-' + reserved.side);
+    reserved = null;
 }
 
 function loadGuides() {
@@ -296,12 +428,13 @@ function render() {
     if (!roots.length) frag.appendChild(h('div', { class: 'empty' }, 'No blocks on this page yet.'));
     $.tree.replaceChildren(frag);
 }
-async function select(id, { scroll = true } = {}) {
+// `page: false` leaves the page where it is, even if the node is off screen.
+async function select(id, { scroll = true, page = true } = {}) {
     selected = id;
     for (const r of $.tree.querySelectorAll('[data-id].sel')) r.classList.remove('sel');
     const row = $.tree.querySelector(`[data-id="${id}"]`);
     if (row) { row.classList.add('sel'); if (scroll) row.scrollIntoView({ block: 'nearest' }); }
-    await call('select', id);
+    await call('select', id, { scroll: page });
     showDetails(id);
 }
 function placeholder() {
@@ -363,7 +496,7 @@ async function copyText(text, what) {
 let flash = null;             // a message the status line keeps for a moment
 
 // Expand along a path (block → … → node) and select its end.
-async function reveal(path, { openLast = false } = {}) {
+async function reveal(path, { openLast = false, page = true } = {}) {
     if (!path || !path.length) return;
     if (!roots.includes(path[0])) await refresh();
     const upto = openLast ? path : path.slice(0, -1);
@@ -373,7 +506,7 @@ async function reveal(path, { openLast = false } = {}) {
         if (n.s.hasChildren) { if (!n.kids) await loadKids(id); n.open = true; }
     }
     render();
-    await select(path[path.length - 1]);
+    await select(path[path.length - 1], { page });
 }
 // ── The context menu ───────────────────────────────────────────────────────────
 // A right-click on a row (or a letter of a run) selects it and offers to copy
@@ -958,14 +1091,15 @@ async function followReflow() {
 }
 
 // ── Opening and closing ────────────────────────────────────────────────────────
-async function open(block) {
+async function open(block, { dock: where, scroll = true } = {}) {
+    if (where) pageDock = where;
     if (!host) build();
     if (!isOpen) {
         // Last in the document, so nothing added since stacks above it.
         if (!docked && host !== document.documentElement.lastElementChild) document.documentElement.appendChild(host);
         root.hidden = false;
         isOpen = true;
-        if (!docked) loadGeometry();
+        if (!docked) applyDock(chosenDock());
         syncTheme();
         pollTimer = setInterval(poll, 400);
         try { await refresh(); } catch (e) { $.status.textContent = String(e.message || e); return; }
@@ -980,7 +1114,7 @@ async function open(block) {
         // The block may still be initialising (fonts, first layout): wait a little.
         let path = null;
         for (let k = 0; k < 40 && !(path = await call('blockPath', block)); k++) await new Promise(r => setTimeout(r, 150));
-        if (path && path !== MISSING) await reveal(path, { openLast: true });
+        if (path && path !== MISSING) await reveal(path, { openLast: true, page: scroll });
     }
     if (!docked) $.tree.focus({ preventScroll: true });
 }
@@ -999,6 +1133,7 @@ function closePanel() {
     if (!isOpen || docked) return;
     isOpen = false;
     root.hidden = true;
+    release();
     clearInterval(pollTimer);
     call('cancelPick'); call('clear'); call('setOptions', { baselines: false, badness: false, springs: false });
     selected = null;
@@ -1019,5 +1154,5 @@ addEventListener('keydown', e => {
     }
 }, true);
 
-api.inspector = { open, close: closePanel, toggle: toggleOpen, dock, shortcut: SHORTCUT };
+api.inspector = { open, close: closePanel, toggle: toggleOpen, setDock, dock, shortcut: SHORTCUT };
 })();

@@ -122,8 +122,11 @@ collapsed. While the filter has text, every kind with a match is expanded.
   entry from the page's `#lr-citations`; each `\label`; each `\webtext`
   and `\webwidget` slot.
 
-Drag the title bar to move the panel, and its corner to resize it. The
-browser remembers both.
+The panel floats over the page, or docks to the left, right or bottom edge
+of the window: the buttons at the end of its bar choose. Floating, drag the
+title bar to move it and its corner to resize it; docked, the page keeps the
+rest of the window and scrolls on its own, and the edge facing the page is
+dragged to resize. The browser remembers the place and the sizes.
 
 ## Adding it to a page
 
@@ -141,12 +144,21 @@ with the script's own `?v=` query. A page's controls open it through
 
 | Call | Effect |
 |---|---|
-| `open(blockEl?)` | Open the panel. Given a block element, it expands and selects that block. |
+| `open(blockEl?, { dock }?)` | Open the panel. Given a block element, it expands and selects that block. `dock` is where this page would have the panel – `'left'`, `'right'`, `'bottom'`, `'float'`, or `'auto'` (right, or bottom in a portrait window) – until the reader chooses a place; floating if not given. `scroll: false` leaves the page where it is rather than scrolling to the block. |
+| `setDock(mode)` | Dock the panel to an edge (`'left'`, `'right'`, `'bottom'`) or let it float (`'float'`), and remember that. |
 | `close()`, `toggle()` | Close or toggle the panel. |
 | `shortcut` | The shortcut's label, for a tooltip. |
 
 The website's [`layouts/partials/inspector.html`](../../website/layouts/partials/inspector.html)
 adds its **Inspect** buttons this way.
+
+Docked, the panel makes room with padding on `<html>` on its side, and sets
+`--rtx-dock-left`, `--rtx-dock-right` or `--rtx-dock-bottom` there to its
+size. Anything the page fixes to the window can keep clear with them:
+
+```css
+#my-button { right: calc(1rem + var(--rtx-dock-right, 0px)); }
+```
 
 ## How it works
 

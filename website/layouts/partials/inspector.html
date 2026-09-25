@@ -1,9 +1,10 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
 {{- /*
-  The floating inspector (src/inspector, copied into static/inspector/ by
-  build.sh): the boxes and glue behind every block on the page. It loads its
-  panel and agent only when opened – with Alt+Shift+I (⌥⇧I), the "Inspect"
-  button on each example's result, or the reading panel's entry.
+  The inspector (src/inspector, copied into static/inspector/ by build.sh):
+  the boxes and glue behind every block on the page, floating or docked to an
+  edge of the window. It loads its panel and agent only when opened – with
+  Alt+Shift+I (⌥⇧I), the "Inspect" button on each example's result, or the
+  reading panel's entry.
 */ -}}
 {{- $v := substr (print (readFile "static/inspector/inspector.js") (readFile "static/inspector/agent.js") (readFile "static/inspector/inspector.css") | crypto.MD5) 0 8 }}
 <script src="{{ "inspector/inspector.js" | relURL }}?v={{ $v }}"></script>
@@ -37,12 +38,13 @@
       b.addEventListener('click', function () { ins.open(block); });
     });
   }
-  // The inspector-demo shortcode: the panel docked beside its example.
-  function wireDocks() {
-    var dock = document.querySelector('[data-inspector-dock]');
-    if (dock) ins.dock(dock, dock.parentNode.querySelector('[data-nodelist-b64]'));
+  // The inspector-demo shortcode: the panel open on its example from the
+  // start, docked to the window unless the reader has placed it elsewhere.
+  function openDemo() {
+    var demo = document.querySelector('[data-inspector-open]');
+    if (demo) ins.open(demo.querySelector('[data-nodelist-b64]'), { dock: 'auto', scroll: false });
   }
-  function init() { addButtons(); wireInline(); wireDocks(); }
+  function init() { addButtons(); wireInline(); openDemo(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
   // The reading options' entry, in the corner panel or set into the page.

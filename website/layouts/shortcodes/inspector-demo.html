@@ -1,12 +1,10 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
 {{- /*
-  A block, framed, with the inspector docked beside it (below it when the
-  column is narrow), open for good and showing that block. One per page:
-  there is one inspector. Wired up by partials/inspector.html.
+  A block, framed, that the inspector opens on as the page loads – docked to
+  the window's right edge, or its bottom in a portrait window, unless the
+  reader has chosen another place. One per page: there is one inspector.
+  Wired up by partials/inspector.html.
 
     {{< inspector-demo >}}{{< latex >}}…{{< /latex >}}{{< /inspector-demo >}}
 */ -}}
-<div class="inspector-demo"><div class="inspector-demo-grid">
-<div class="inspector-demo-example">{{ .Inner }}</div>
-<div class="inspector-demo-dock" data-inspector-dock aria-label="Inspector"></div>
-</div></div>
+<div class="inspector-demo" data-inspector-open>{{ .Inner }}</div>

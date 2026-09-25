@@ -206,7 +206,7 @@
     --latex-display-peek: min(100px, calc(2.5rem / var(--lt-zoom, 1))); }
   .docs-sidebar {
     flex: 0 0 14rem; align-self: flex-start;
-    position: sticky; top: 0; max-height: 100vh; overflow-y: auto;
+    position: sticky; top: 0; max-height: calc(100vh - var(--rtx-dock-bottom, 0px)); overflow-y: auto;
     padding: 3rem 0 1.5rem;
   }
   /* The sidebar is one list: group titles in small capitals, every page on
@@ -255,7 +255,7 @@
   .docs-layout.has-toc #lt-content { flex: 0 1 46rem; }
   .docs-toc { flex: 0 0 14rem; min-width: 0; }
   .docs-toc nav {
-    position: sticky; top: 3rem; max-height: calc(100vh - 5rem); overflow-y: auto;
+    position: sticky; top: 3rem; max-height: calc(100vh - 5rem - var(--rtx-dock-bottom, 0px)); overflow-y: auto;
     font-size: 0.85rem; line-height: 1.35; padding: 0 0.25rem 2rem 0;
     scrollbar-width: thin;
   }
@@ -339,22 +339,14 @@
   .lt-inspect-line { display: flex; justify-content: flex-end; margin: 1.25rem 0 .5rem; }
   .lt-inspect.lt-inspect-inline { position: static; opacity: .6; }
   @media print { .lt-inspect-line { display: none; } }
-  /* inspector-demo: an example with the inspector docked beside it, or below
-     it when the column is narrow. */
-  .inspector-demo { container-type: inline-size; margin: 2.75rem 0; }
-  .inspector-demo-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
-  /* The block, framed like an example's result; the inspector gets the room. */
-  .inspector-demo-example {
-    min-width: 0; padding: 2rem 2.25rem; box-sizing: border-box; --lt-example-pad: 2.25rem;
+  /* inspector-demo: the example the inspector opens on, framed like an
+     example's result. */
+  .inspector-demo {
+    margin: 2.75rem 0; padding: 2rem 2.25rem; box-sizing: border-box; --lt-example-pad: 2.25rem;
     border: 1px solid color-mix(in srgb, currentColor 13%, transparent); border-radius: 12px;
   }
-  .inspector-demo-example .latex-display { --latex-display-peek: var(--lt-example-pad); }
-  .inspector-demo-dock { height: 32rem; min-width: 0; }
-  @container (min-width: 48rem) {
-    .inspector-demo-grid { grid-template-columns: minmax(18rem, 0.8fr) minmax(0, 1.2fr); }
-    .inspector-demo-dock { height: auto; min-height: 34rem; }
-  }
-  @media print { .inspector-demo-dock { display: none; } }
+  .inspector-demo .latex-display { --latex-display-peek: var(--lt-example-pad); }
+  @media (max-width: 30rem) { .inspector-demo { padding: 1.25rem 1rem; --lt-example-pad: 1rem; } }
   @media print { .lt-inspect { display: none; } }
   /* Theme preview (themes="…" on an example): the Result panel takes the
      chosen theme's page colours; the viewer recolours the block inside
@@ -694,9 +686,12 @@
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
+  /* Clear of the inspector when it is docked to an edge of the window: it
+     publishes its size as --rtx-dock-left, -right and -bottom. */
   #lt-reader {
     position: fixed; z-index: 1000;
-    right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
+    right: calc(max(1rem, env(safe-area-inset-right)) + var(--rtx-dock-right, 0px));
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + var(--rtx-dock-bottom, 0px));
   }
   #lt-reader-button, .lt-panel {
     background: var(--lt-glass);
@@ -770,8 +765,9 @@
     box-shadow: 0 1px 3px rgb(0 0 0 / .14), 0 0 0 .5px rgb(0 0 0 / .04);
   }
   @media (max-width: 30rem) {
-    #lt-reader-panel { position: fixed; left: 12px; right: 12px; width: auto;
-      bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 56px); }
+    #lt-reader-panel { position: fixed; width: auto;
+      left: calc(12px + var(--rtx-dock-left, 0px)); right: calc(12px + var(--rtx-dock-right, 0px));
+      bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 56px + var(--rtx-dock-bottom, 0px)); }
   }
   /* The copy set into the page (shortcodes/reading-options.html): the same
      panel, open for good, as wide as its card allows. It keeps its size

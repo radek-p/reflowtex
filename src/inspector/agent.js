@@ -1754,7 +1754,7 @@ function openPopover(key) {
     if (id == null) return 'none';
     const e = entries.get(id), { cache } = segParts(e.seg), el = cache.dom && cache.dom.byNode.get(e.n);
     const r = screenRectOf(id);
-    if (!el || !el.isConnected || !r || r.top < 0 || r.top + r.height > innerHeight) { scrollIntoViewIfNeeded(id); return 'wait'; }
+    if (!el || !el.isConnected || !r || r.top < 0 || r.top + r.height > viewBottom()) { scrollIntoViewIfNeeded(id); return 'wait'; }
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: r.left, clientY: r.top }));
     return 'ok';
 }
@@ -1790,10 +1790,13 @@ window.__rtxInspector = {
     mark(ids) { marked = ids || []; redraw(); },
     openPopover,
 };
+// Where the page stops being visible: the window's bottom, or the top of an
+// inspector docked there (which publishes its height as --rtx-dock-bottom).
+const viewBottom = () => innerHeight - (parseFloat(document.documentElement.style.getPropertyValue('--rtx-dock-bottom')) || 0);
 function scrollIntoViewIfNeeded(id) {
     const r = id != null && screenRectOf(id);
-    if (r && (r.top < 0 || r.top + r.height > innerHeight)) {
-        scrollBy({ top: r.top - innerHeight / 3, behavior: 'instant' });
+    if (r && (r.top < 0 || r.top + r.height > viewBottom())) {
+        scrollBy({ top: r.top - viewBottom() / 3, behavior: 'instant' });
         schedule();
     }
 }

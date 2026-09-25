@@ -26,7 +26,42 @@
   border-radius: 12px; box-shadow: none;
 }
 .rtx.docked .bar { cursor: default; }
-.rtx.docked .close { display: none; }
+.rtx.docked .close, .rtx.docked .dock, .rtx.docked .grip { display: none; }
+/* Docked to an edge of the window (setDock): full height at a side, or full
+   width at the bottom; the page is given the rest (see reserve()). */
+.rtx[data-edge] {
+  min-width: 0; min-height: 0; max-width: none; max-height: none; resize: none;
+  border-radius: 0; box-shadow: none; border-width: 0;
+}
+/* --grip: the strip on the side facing the page that the grip takes. */
+.rtx[data-edge] { --grip: 6px; }
+.rtx[data-edge="left"] { border-right-width: 1px; padding-right: var(--grip); }
+.rtx[data-edge="right"] { border-left-width: 1px; padding-left: var(--grip); }
+.rtx[data-edge="bottom"] { border-top-width: 1px; padding-top: var(--grip); padding-bottom: env(safe-area-inset-bottom); }
+.rtx[data-edge] .bar { cursor: default; }
+/* The grip on the side facing the page. */
+.grip { display: none; position: absolute; z-index: 2; touch-action: none; }
+.rtx[data-edge] .grip { display: block; }
+.rtx[data-edge="left"] .grip { top: 0; bottom: 0; right: 0; width: var(--grip); cursor: ew-resize; }
+.rtx[data-edge="right"] .grip { top: 0; bottom: 0; left: 0; width: var(--grip); cursor: ew-resize; }
+.rtx[data-edge="bottom"] .grip { left: 0; right: 0; top: 0; height: var(--grip); cursor: ns-resize; }
+.grip { background: var(--bar); }
+.grip:hover, .grip:active { background: color-mix(in srgb, var(--accent) 35%, var(--bar)); }
+@media (pointer: coarse) {
+  .rtx[data-edge] { --grip: 14px; }
+  /* a pill in the middle to show where to take hold */
+  .grip::after { content: ""; position: absolute; inset: 0; margin: auto; border-radius: 2px; background: var(--muted); opacity: .6; }
+  .rtx[data-edge="left"] .grip::after, .rtx[data-edge="right"] .grip::after { width: 4px; height: 36px; }
+  .rtx[data-edge="bottom"] .grip::after { width: 36px; height: 4px; }
+}
+/* A narrow panel (a phone's) keeps its bar to the buttons. */
+@container (max-width: 480px) { .title, .status { display: none; } }
+/* The dock picker: one button per place, the current one pressed. */
+.dock { display: inline-flex; }
+.bar .dock button { border-radius: 0; margin-left: -1px; padding: 2px 5px; }
+.bar .dock button:first-child { border-radius: 5px 0 0 5px; margin-left: 0; }
+.bar .dock button:last-child { border-radius: 0 5px 5px 0; }
+.bar .dock button[aria-pressed="true"] { background: var(--sel); border-color: var(--accent); position: relative; }
 .rtx.dark {
   --bg: #1f2023; --fg: #e3e3e3; --muted: #9aa0a6; --line: #3a3b3f; --hover: #2a313c;
   --sel: #33476a; --bar: #26272b; --accent: #9d9bff;

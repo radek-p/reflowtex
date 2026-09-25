@@ -2,7 +2,6 @@
 title: Inspector
 weight: 10
 latexTitle: true
-wide: true
 ---
 
 {{< latex preamble="docs" >}}
@@ -15,10 +14,14 @@ it is made of. A glue shows the width it was stretched or shrunk to on its
 line, and a line its glue ratio and font expansion. Resize the window and the
 tree follows the new line breaks.
 
-Below, the inspector is docked beside an example. On every other page it
-floats: press \texttt{Alt+Shift+I} (\texttt{Option+Shift+I} on a Mac), click
-\emph{Inspect} on an example's result, or choose \emph{Inspect boxes and
-glue} in the reading options.
+On this page the inspector is open from the start, on the example below,
+docked to the right of the window -- or below the page when the window is
+taller than it is wide. The buttons at the end of its bar dock it on the
+left, at the bottom or on the right, or let it float over the page; drag the
+edge facing the page to resize it. The browser remembers your choice for
+every page. Elsewhere, press \texttt{Alt+Shift+I} (\texttt{Option+Shift+I}
+on a Mac), click \emph{Inspect} on an example's result, or choose
+\emph{Inspect boxes and glue} in the reading options.
 {{< /latex >}}
 
 {{< inspector-demo >}}
