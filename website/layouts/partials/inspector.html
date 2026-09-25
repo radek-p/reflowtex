@@ -1,13 +1,13 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
 {{- /*
-  The inspector (src/inspector, copied into static/inspector/ by build.sh):
-  the boxes and glue behind every block on the page, floating or docked to an
-  edge of the window. It loads its panel and agent only when opened – with
+  The inspector (src/inspector, copied by build.sh into static/inspector/<a
+  hash of its files>/, named in data/inspector.json): the boxes and glue
+  behind every block on the page, floating or docked to an edge of the
+  window. It loads its panel and agent only when opened – with
   Alt+Shift+I (⌥⇧I), the "Inspect" button on each example's result, or the
   reading panel's entry.
 */ -}}
-{{- $v := substr (print (readFile "static/inspector/inspector.js") (readFile "static/inspector/agent.js") (readFile "static/inspector/inspector.css") | crypto.MD5) 0 8 }}
-<script src="{{ "inspector/inspector.js" | relURL }}?v={{ $v }}"></script>
+<script src="{{ printf "%s/inspector.js" site.Data.inspector.dir | relURL }}"></script>
 <script>
 (function () {
   var ins = window.reflowtex && window.reflowtex.inspector;

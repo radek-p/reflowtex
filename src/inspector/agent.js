@@ -2,7 +2,7 @@
 // Reflow TeX inspector – the page-side half (see README.md).
 //
 // Runs in the inspected page, where it installs window.__rtxInspector: the
-// floating panel (inspector.js) loads it as a script, and any other tool – a
+// inspector's panel (panel/bridge.js) loads it as a script, and any other tool – a
 // browser devtools panel, a test – may evaluate it there. Everything a panel
 // shows comes from here as plain JSON; everything drawn on the page (the
 // overlay) is drawn from here. It reads the viewer through window.reflowtex.inspect – the viewer's

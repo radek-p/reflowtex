@@ -239,3 +239,5 @@ input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(
 .gtop .big { display: block; max-width: 100%; height: auto; margin: 4px 0 2px 4px; color: var(--fg); }
 .gtop .big .base { stroke: var(--muted); }
 .gtop .big .tbox { stroke: var(--accent); }
+/* an icon in running text (the details' placeholder names the picker by it) */
+.muted svg { vertical-align: -3px; }

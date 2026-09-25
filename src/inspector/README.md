@@ -4,7 +4,7 @@ A floating panel that shows the boxes and glue behind the Reflow TeX blocks
 on a page, much as a browser's element inspector shows the DOM: a tree of
 blocks → segments → lines → nodes (hbox, vbox, glyph, glue, kern, penalty,
 discretionary, math, rule, picture, widget). The page highlights the node you
-hover or select. A second view, **Resources**, lists what the blocks draw
+hover, as Chrome's does. A second view, **Resources**, lists what the blocks draw
 with: fonts and their glyphs, pictures, streams (footnotes among them),
 links, citations, anchors and slots.
 
@@ -139,7 +139,8 @@ dragged to resize. The browser remembers the place and the sizes.
 
 ## Adding it to a page
 
-Serve the three files together, and include the script after the viewer:
+Serve this folder as it is – `inspector.js`, `inspector.css`, `agent.js`,
+`panel/` and `vendor/` – and include the script after the viewer:
 
 ```html
 <script src="latex-viewer.js"></script>
@@ -148,7 +149,10 @@ Serve the three files together, and include the script after the viewer:
 
 Until opened, it only listens for the shortcut. The panel,
 `inspector.css` and `agent.js` load from beside the script on first use,
-with the script's own `?v=` query. A page's controls open it through
+with the script's own `?v=` query. The panel's modules import each other by
+plain relative paths, which that query does not reach: a site that caches
+hard should serve each version from a folder of its own (the website names
+it by a hash of the files). A page's controls open it through
 `window.reflowtex.inspector`:
 
 | Call | Effect |
@@ -189,9 +193,21 @@ size. Anything the page fixes to the window can keep clear with them:
 
   Because it answers in JSON, a browser's devtools panel could drive it as
   well, by evaluating the file in the page.
-- **`inspector.js` and `inspector.css`** make the floating panel, in a shadow
-  root so the page's styles and the panel's never meet. It talks to the agent
-  only through `window.__rtxInspector`.
+- **`inspector.js`** is all a page loads up front: the API above and the
+  shortcut. On first use it imports **`panel/app.js`**, which draws the
+  panel in a shadow root, so the page's styles (`inspector.css` is the
+  panel's) and the panel's never meet. It talks to the agent only through
+  `window.__rtxInspector` (`panel/bridge.js`).
+- **The panel** is Preact components written with htm – tagged templates,
+  so there is no build step – and its state is Preact Signals
+  (`panel/store.js`): `dock.js` places it, `tree.js` is the Boxes view,
+  `resources.js` and `font.js` the Resources view, `ui.js` the shared
+  parts. The rows are keyed by node id, so a reflow changes only the text
+  that changed: the tree does not flicker while a width moves, and a press
+  on a row lands on the row it began on.
+- **`vendor/preact.js`** is Preact, htm and Preact Signals in one ES module
+  (MIT; 23 KB, 9 KB gzipped), rebuilt at pinned versions by
+  `make vendor-inspector`.
 
 ## Limitations
 

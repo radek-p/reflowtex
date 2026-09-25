@@ -50,9 +50,24 @@ fi
 mkdir -p "$SITE/layouts/shortcodes" "$SITE/layouts/partials"
 cp "$HUGO_INT/layouts/shortcodes/latex.html"          "$SITE/layouts/shortcodes/latex.html"
 cp "$HUGO_INT/layouts/partials/reflowtex-viewer.html" "$SITE/layouts/partials/reflowtex-viewer.html"
-#    …and the floating inspector (src/inspector), which every page offers.
-mkdir -p "$SITE/static/inspector"
-cp "$REPO/src/inspector/inspector.js" "$REPO/src/inspector/inspector.css" "$REPO/src/inspector/agent.js" "$SITE/static/inspector/"
+#    …and the inspector (src/inspector), which every page offers. It is served
+#    from a folder named by a hash of its files: its panel's ES modules import
+#    each other by plain relative paths, which no ?v= can follow, so a new
+#    version must be new URLs throughout – no browser then mixes a cached old
+#    module with new ones. The partial reads the folder from data/inspector.json.
+INSPECTOR_V="$("$PYTHON" - "$REPO/src/inspector" <<'PY'
+import hashlib, pathlib, sys
+root, h = pathlib.Path(sys.argv[1]), hashlib.sha256()
+for p in sorted(root.rglob('*')):
+    if p.is_file() and p.suffix in ('.js', '.css'):
+        h.update(str(p.relative_to(root)).encode()); h.update(p.read_bytes())
+print(h.hexdigest()[:10])
+PY
+)"
+rm -rf "$SITE/static/inspector"
+mkdir -p "$SITE/static/inspector/$INSPECTOR_V" "$SITE/data"
+(cd "$REPO/src/inspector" && cp -R inspector.js inspector.css agent.js panel vendor "$SITE/static/inspector/$INSPECTOR_V/")
+printf '{"dir": "inspector/%s"}\n' "$INSPECTOR_V" > "$SITE/data/inspector.json"
 
 # 2. Compile all LaTeX blocks, embed the schema, provision + patch fonts.
 #    Set PREBUILD_ARGS to pass extra flags (e.g. --force, --prune, -j 8).

@@ -73,15 +73,15 @@ its words is stretched or shrunk to fit whatever width it is given.
 \end{description}
 
 \section*{On your own pages}
-The inspector ships with the viewer, in \texttt{src/inspector/}. Serve its
-three files together and include its script after the viewer's; it does
-nothing until it is opened. A page's own controls open it through
+The inspector ships with the viewer, in \texttt{src/inspector/}. Serve the
+folder as it is and include its script after the viewer's; it does nothing
+until it is opened, and only then loads its panel. A page's own controls open it through
 \texttt{window.reflowtex.inspector}.
 {{< /latex >}}
 
 ```html
 <script src="latex-viewer.js"></script>
-<script src="inspector/inspector.js"></script>   <!-- + inspector.css, agent.js beside it -->
+<script src="inspector/inspector.js"></script>   <!-- the rest of src/inspector/ beside it -->
 <script>
   // open it on one block, e.g. from a button of your own
   button.onclick = () => reflowtex.inspector.open(blockElement);

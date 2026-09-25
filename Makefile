@@ -10,11 +10,17 @@ DEMO_OUT := build/demo-site
 # Bump this and run `make vendor-protobuf` to update it.
 PROTOBUFJS_VERSION := 8.7.1
 TERSER_VERSION     = 5.39.0
+# The inspector panel's UI library (src/inspector/vendor/preact.js): Preact,
+# htm and Preact Signals in one ES module. Bump and run `make vendor-inspector`.
+PREACT_VERSION     = 10.29.8
+HTM_VERSION        = 3.1.1
+SIGNALS_VERSION    = 2.11.2
+ESBUILD_VERSION    = 0.28.2
 
 VENV := .venv
 PYTHON := $(CURDIR)/$(VENV)/bin/python3
 
-.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check clean vendor-protobuf venv minify-viewer
+.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check clean vendor-protobuf vendor-inspector venv minify-viewer
 
 help:
 	@echo "Reflow TeX targets:"
@@ -30,6 +36,7 @@ help:
 	@echo "  make clean            remove build artefacts"
 	@echo "  make vendor-protobuf  refresh src/viewer/protobuf.min.js from protobufjs@$(PROTOBUFJS_VERSION)"
 	@echo "  make minify-viewer    regenerate src/viewer/latex-viewer.min.js (maintainers; after editing the viewer)"
+	@echo "  make vendor-inspector refresh src/inspector/vendor/preact.js (preact@$(PREACT_VERSION), htm, signals)"
 
 # Python deps live in a project-local virtualenv, not the system interpreter.
 # Everything below depends on this and calls $(PYTHON), so `make demo` etc. set
@@ -110,6 +117,24 @@ vendor-protobuf:
 	sed '/^\/\/# sourceMappingURL=/d' $$tmp/package/dist/protobuf.min.js > src/viewer/protobuf.min.js && \
 	rm -rf $$tmp && \
 	echo "vendored src/viewer/protobuf.min.js from protobufjs@$(PROTOBUFJS_VERSION)"
+
+# Maintainer-only: rebuild the inspector panel's vendored UI library at the
+# pinned versions – one minified ES module the panel imports (panel/*.js need
+# no build of their own). Needs npm; the file is committed like protobuf.min.js.
+vendor-inspector:
+	@tmp=$$(mktemp -d); out=$$(pwd)/src/inspector/vendor/preact.js; \
+	cd $$tmp && npm init -y >/dev/null && \
+	npm install --silent --no-audit --no-fund preact@$(PREACT_VERSION) htm@$(HTM_VERSION) \
+	  @preact/signals@$(SIGNALS_VERSION) esbuild@$(ESBUILD_VERSION) && \
+	printf '%s\n' "import { h } from 'preact';" "import htm from 'htm';" \
+	  "export { h, render, Fragment } from 'preact';" \
+	  "export { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'preact/hooks';" \
+	  "export { signal, computed, effect, batch, useSignal, useComputed, useSignalEffect } from '@preact/signals';" \
+	  "export const html = htm.bind(h);" > entry.js && \
+	npx esbuild entry.js --bundle --format=esm --minify --legal-comments=none --outfile=out.js --log-level=warning && \
+	{ echo "/* preact@$(PREACT_VERSION), htm@$(HTM_VERSION), @preact/signals@$(SIGNALS_VERSION) – MIT licensed; bundled by esbuild@$(ESBUILD_VERSION) (make vendor-inspector) */"; cat out.js; } > $$out && \
+	cd / && rm -rf $$tmp && \
+	echo "vendored src/inspector/vendor/preact.js ($$(wc -c < $$out | tr -d ' ') bytes)"
 
 # Maintainer-only: regenerate the committed minified viewer after editing
 # latex-viewer.js. Integrations ship the minified copy under the name
