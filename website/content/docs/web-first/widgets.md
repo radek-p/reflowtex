@@ -55,7 +55,17 @@ reflowtex.widgets['lean:*'] = {
     background: var(--lt-primary); color: #fff; transition: background-color .15s ease; }
   html.dark .lean-badge { color: #0c0a09; }
   .lean-badge .t { padding: 1px .6em; }
-  .lean-badge.checking { background: color-mix(in srgb, currentColor 13%, transparent); color: inherit; }
+  /* Still checking: the text's own colour on a faint wash of it – in the dark
+     theme too, where a filled badge's text is dark – and a ring turning
+     before the words. */
+  .lean-badge.checking, html.dark .lean-badge.checking {
+    background: color-mix(in srgb, currentColor 13%, transparent); color: inherit; }
+  .lean-badge .spin { flex: none; box-sizing: border-box; width: .8em; height: .8em; margin-left: .6em;
+    border: .14em solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor;
+    border-radius: 50%; animation: lean-spin .8s linear infinite; }
+  .lean-badge .spin + .t { padding-left: .45em; }
+  @keyframes lean-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .lean-badge .spin { animation-duration: 2.4s; } }
   /* hover and press mark every part of a split badge at once (the viewer's
      latex-widget-hover / -active on each part) */
   .latex-widget-hover .lean-badge:not(.checking) { background: var(--lt-primary-strong); }
@@ -130,7 +140,9 @@ reflowtex.widgets['lean:*'] = {
     function badge(text, left, right) {
       var checking = status === 'checking';
       return '<span class="lean-badge' + (checking ? ' checking' : '') + (left === 'cut' ? ' cut-left' : '')
-        + (right === 'cut' ? ' cut-right' : '') + '"><span class="t">' + esc(text) + '</span>'
+        + (right === 'cut' ? ' cut-right' : '') + '">'
+        + (checking && left !== 'cut' ? '<span class="spin" aria-hidden="true"></span>' : '')
+        + '<span class="t">' + esc(text) + '</span>'
         + (right !== 'cut' && !checking ? CHEVRON : '') + '</span>';
     }
     function textOf(sg, from, to) {
@@ -183,10 +195,11 @@ reflowtex.widgets['lean:*'] = {
         return {
           segments: sg.segs.map(function (t) { var m = text(t); return { width: m.width, height: whole.height, depth: whole.depth }; }),
           gaps: sg.gaps.map(function (g) { return { width: g.space ? space : 0, penalty: g.penalty }; }),
-          // closed ends: the text's padding (and the chevron, on the right);
+          // closed ends: the text's padding (and, on the left, the spinner
+          // while checking; on the right, the chevron once checked);
           // cut ends: a little more padding, for the perforation, which
           // hangs past the margin by 3.75px – its middle on the margin
-          ends: { left:  { cap: 0.6 * em, cut: 0.75 * em, overhang: 3.75 },
+          ends: { left:  { cap: (status === 'checking' ? 0.6 + 0.8 + 0.45 : 0.6) * em, cut: 0.75 * em, overhang: 3.75 },
                   right: { cap: 0.6 * em + chevron, cut: 0.75 * em, overhang: 3.75 } },
         };
       },
