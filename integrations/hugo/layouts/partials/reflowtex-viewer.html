@@ -227,12 +227,26 @@
   <a href="{{ site.Params.reflowtexSource | default "https://github.com/radek-p/reflowtex" }}">Source code</a>.
 </footer>
 
-{{/* Example tabs and theme previews (show-source="true", themes="…"):
+{{/* Example tabs and preview options (show-source="true", themes="…"):
      delegated listeners. A theme button scopes that theme to its example's
      Result panel; until one is pressed, the button of the page's theme is
-     marked. */}}
+     marked. The size buttons zoom that panel's stage alone, in the page's
+     steps: the block lays out again in the room the zoom leaves it. */}}
 <script>
   document.addEventListener('click', function (e) {
+    var zoom = e.target.closest && e.target.closest('button[data-latex-zoom]');
+    if (zoom) {
+      // (the level is kept apart from the buttons' data-latex-zoom, which
+      // says what a button does)
+      var box = zoom.closest('.latex-example-preview'), how = zoom.getAttribute('data-latex-zoom');
+      var z = parseFloat(box.getAttribute('data-latex-zoom-level') || '1');
+      z = how === 'reset' ? 1 : Math.min(3, Math.max(0.5, z * (how === 'in' ? 1.1 : 1 / 1.1)));
+      z = Math.round(z * 1000) / 1000;
+      box.setAttribute('data-latex-zoom-level', z);
+      box.querySelector('.latex-example-stage').style.zoom = z === 1 ? '' : z;
+      box.querySelector('[data-latex-zoom="reset"]').textContent = Math.round(z * 100) + '%';
+      return;
+    }
     var choice = e.target.closest && e.target.closest('[data-latex-theme-choice]');
     if (choice) {
       var panel = choice.closest('.latex-example-preview');

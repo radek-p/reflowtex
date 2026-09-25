@@ -363,20 +363,49 @@
   .latex-example-preview[data-latex-theme="dark"]     { background: #0c0a09; color: #e7e5e4; --latex-page-bg: #0c0a09; }
   .latex-example-preview[data-latex-theme="sepia"]    { background: #f4ecd8; color: #453a26; --latex-page-bg: #f4ecd8; }
   .latex-example-preview[data-latex-theme="contrast"] { background: #ffffff; color: #000000; --latex-page-bg: #ffffff; }
-  .latex-example-themes {
-    display: inline-flex; gap: 2px; padding: 3px; margin: 0 0 1.5rem;
-    border-radius: 999px; font-size: 0.72rem;
-    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
-    background: color-mix(in srgb, currentColor 6%, transparent);
+  /* The preview options (the integration's markup): the reading options'
+     card (.lt-panel-inline below) – a text size, then the four themes as
+     swatches – for this example alone. Its colours are the previewed
+     theme's (the page's glass would be the page's); like the card, it keeps
+     its size when the reader zooms the page, so its buttons stay put. */
+  .latex-example-options {
+    width: 100%; max-width: 272px; margin: 0 0 1.5rem; padding: 6px; box-sizing: border-box; border-radius: 20px;
+    background: color-mix(in srgb, currentColor 5%, var(--latex-page-bg, transparent));
+    border: .5px solid color-mix(in srgb, currentColor 16%, transparent);
+    box-shadow: 0 10px 30px rgb(0 0 0 / .08), 0 1px 3px rgb(0 0 0 / .06);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; line-height: normal;
+    zoom: calc(1 / var(--lt-zoom, 1));
   }
-  .latex-example-themes button {
-    font: inherit; color: inherit; background: none; border: 0; cursor: pointer;
-    padding: 0.3rem 0.75rem; border-radius: 999px; opacity: 0.7;
+  .latex-example-options > div { padding: 7px 6px; }
+  .latex-example-options > div + div { border-top: .5px solid color-mix(in srgb, currentColor 16%, transparent); }
+  .latex-example-options button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .latex-example-options button:focus-visible { outline: 2px solid var(--lt-primary); outline-offset: 2px; }
+  .latex-example-size { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; }
+  .latex-example-size button { height: 36px; border-radius: 10px; }
+  .latex-example-size button:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  .latex-example-size [data-latex-zoom="out"] { font: 500 14px ui-serif, "New York", Georgia, serif; }
+  .latex-example-size [data-latex-zoom="in"]  { font: 500 21px ui-serif, "New York", Georgia, serif; }
+  .latex-example-size [data-latex-zoom="reset"] { font-size: 13px; font-variant-numeric: tabular-nums; opacity: .75; }
+  /* The themes: an "Aa" in each theme's colours, its name under it, a ring
+     round the one shown (the swatch is ::before: the markup has none). */
+  .latex-example-themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .latex-example-themes button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 2px 0; font-size: 11px; }
+  .latex-example-themes button::before {
+    content: "Aa"; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    font: 400 14px ui-serif, "New York", Georgia, serif;
+    /* its edge in its own text's colour: the dark swatch still shows on a dark preview */
+    box-shadow: inset 0 0 0 .5px color-mix(in srgb, currentColor 35%, transparent);
   }
-  .latex-example-themes button:hover { opacity: 1; }
-  .latex-example-themes button[aria-pressed="true"] {
-    opacity: 1; background: color-mix(in srgb, currentColor 16%, transparent);
-  }
+  /* (the name dims, as in the panel; the swatch keeps its colours) */
+  .latex-example-themes button { color: color-mix(in srgb, currentColor 70%, transparent); }
+  .latex-example-themes button:hover, .latex-example-themes button[aria-pressed="true"] { color: inherit; }
+  .latex-example-themes button[aria-pressed="true"] { font-weight: 600; }
+  .latex-example-themes button[aria-pressed="true"]::before { outline: 2.5px solid var(--lt-primary); outline-offset: 2.5px; }
+  .latex-example-themes [data-latex-theme-choice="light"]::before    { background: #fafaf9; color: #333; }
+  .latex-example-themes [data-latex-theme-choice="dark"]::before     { background: #1c1917; color: #e7e5e4; }
+  .latex-example-themes [data-latex-theme-choice="sepia"]::before    { background: #f4ecd8; color: #453a26; }
+  .latex-example-themes [data-latex-theme-choice="contrast"]::before { background: #fff; color: #000; box-shadow: inset 0 0 0 1.5px #000; }
   #lt-content .latex-example-stage > .latex-block { margin: 0; }
   .latex-example-source pre, .latex-example-source .highlight pre.chroma {
     margin: 0; border: 0; border-radius: 0; background: transparent;

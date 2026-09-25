@@ -10,8 +10,9 @@ latexTitle: true
 Black text takes the page's text colour, so a dark theme works without any
 configuration. Colours chosen by the author are kept, and a \emph{colour
 map} can replace them per theme, so that \verb|\textcolor{blue}| stays
-readable on a dark background. The switch above the example changes the
-theme of the example only; the one in the corner changes the whole page.
+readable on a dark background. The options above the example set its text
+size and theme, for the example only; the same options in the corner set
+them for the whole page.
 {{< /latex >}}
 
 {{< latex preamble="docs" show-source="true" themes="light,dark,sepia,contrast" >}}
