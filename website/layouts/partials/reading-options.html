@@ -1,0 +1,33 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The rows of the reading options: text size, colour theme, the column width
+  (only when .width is true) and the inspector entry. Shared by the corner
+  panel (partials/switches.html) and the copy set into the home page
+  (shortcodes/reading-options.html); the script in switches.html serves every
+  copy on the page.
+*/ -}}
+    <div class="lt-row lt-size" role="group" aria-label="Text size">
+      <button type="button" data-z="out" aria-label="Smaller text" title="Smaller">A</button>
+      <button type="button" data-z="reset" data-zoom-level aria-label="Reset text size" title="Reset">100%</button>
+      <button type="button" data-z="in" aria-label="Larger text" title="Larger">A</button>
+    </div>
+    <div class="lt-row lt-themes" role="radiogroup" aria-label="Colour theme">
+      {{- range slice "light" "dark" "sepia" "contrast" }}
+      <button type="button" role="radio" data-t="{{ . }}" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>{{ . | humanize }}</span></button>
+      {{- end }}
+    </div>
+    {{- if .width }}
+    <div class="lt-row">
+      <p class="lt-caption" id="lt-width-label">Text width</p>
+      <div class="lt-seg" role="radiogroup" aria-labelledby="lt-width-label">
+        {{- range slice "auto" "narrow" "normal" "wide" }}
+        <button type="button" role="radio" data-w="{{ . }}" aria-checked="false">{{ . | humanize }}</button>
+        {{- end }}
+      </div>
+    </div>
+    {{- end }}
+    <div class="lt-row">
+      <button type="button" class="lt-inspect-row" data-inspect title="The boxes and glue behind the page">
+        <span>Inspect boxes and glue</span><kbd class="lt-inspect-key"></kbd>
+      </button>
+    </div>

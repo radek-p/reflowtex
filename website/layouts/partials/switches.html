@@ -5,35 +5,13 @@
   full paper) the column width. The width a reader picked is saved like the
   rest, but only pages that offer the control apply it (<html
   data-width-control>, see baseof.html). The buttons call the window.__zoom /
-  __setTheme / __setWidth hooks defined in partials/head.html.
+  __setTheme / __setWidth hooks defined in partials/head.html. The rows are
+  partials/reading-options.html, which the home page also sets into a card
+  (shortcodes/reading-options.html); the script here serves every copy.
 */ -}}
 <div id="lt-reader">
-  <div id="lt-reader-panel" role="dialog" aria-label="Reading options" hidden>
-    <div class="lt-row lt-size" role="group" aria-label="Text size">
-      <button type="button" data-z="out" aria-label="Smaller text" title="Smaller">A</button>
-      <button type="button" data-z="reset" id="zoom-level" aria-label="Reset text size" title="Reset">100%</button>
-      <button type="button" data-z="in" aria-label="Larger text" title="Larger">A</button>
-    </div>
-    <div class="lt-row lt-themes" role="radiogroup" aria-label="Colour theme">
-      {{- range slice "light" "dark" "sepia" "contrast" }}
-      <button type="button" role="radio" data-t="{{ . }}" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>{{ . | humanize }}</span></button>
-      {{- end }}
-    </div>
-    {{- if .Params.widthControl }}
-    <div class="lt-row">
-      <p class="lt-caption" id="lt-width-label">Text width</p>
-      <div class="lt-seg" role="radiogroup" aria-labelledby="lt-width-label">
-        {{- range slice "auto" "narrow" "normal" "wide" }}
-        <button type="button" role="radio" data-w="{{ . }}" aria-checked="false">{{ . | humanize }}</button>
-        {{- end }}
-      </div>
-    </div>
-    {{- end }}
-    <div class="lt-row">
-      <button type="button" class="lt-inspect-row" data-inspect title="The boxes and glue behind the page">
-        <span>Inspect boxes and glue</span><kbd class="lt-inspect-key"></kbd>
-      </button>
-    </div>
+  <div id="lt-reader-panel" class="lt-panel" role="dialog" aria-label="Reading options" hidden>
+{{ partial "reading-options.html" (dict "width" .Params.widthControl) }}
   </div>
   <button type="button" id="lt-reader-button" aria-haspopup="dialog" aria-expanded="false"
           aria-controls="lt-reader-panel" title="Reading options">
@@ -47,9 +25,9 @@
   var btn = document.getElementById('lt-reader-button'), panel = document.getElementById('lt-reader-panel');
   var html = document.documentElement;
   function sync() {
-    root.querySelectorAll('[data-t]').forEach(function (b) {
+    document.querySelectorAll('.lt-panel [data-t]').forEach(function (b) {
       b.setAttribute('aria-checked', String(html.getAttribute('data-theme') === b.dataset.t)); });
-    root.querySelectorAll('[data-w]').forEach(function (b) {
+    document.querySelectorAll('.lt-panel [data-w]').forEach(function (b) {
       b.setAttribute('aria-checked', String((html.getAttribute('data-width') || 'auto') === b.dataset.w)); });
   }
   function open(on) {
@@ -61,8 +39,8 @@
   document.addEventListener('pointerdown', function (e) { if (!panel.hidden && !root.contains(e.target)) open(false); });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && !panel.hidden) { open(false); btn.focus(); } });
-  panel.addEventListener('click', function (e) {
-    var b = e.target.closest('button');
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.lt-panel button');
     if (!b) return;
     if (b.dataset.t) window.__setTheme(b.dataset.t);
     if (b.dataset.w) window.__setWidth(b.dataset.w);

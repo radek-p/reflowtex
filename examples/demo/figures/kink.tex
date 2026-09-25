@@ -1,0 +1,19 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% The small picture on the home page's Figures card, drawn at about the
+% card's width so its labels stay legible: lualatex kink.tex makes kink.pdf.
+\documentclass[border=1pt]{standalone}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}[width=5.6cm, height=3.6cm, xmin=-4, xmax=4, ymin=-0.2, ymax=6.6,
+  axis lines=left, samples=120, xtick={-4,0,4}, ytick={0,6.28318},
+  yticklabels={$0$,$2\pi$}, tick label style={font=\footnotesize},
+  legend pos=north west, legend style={draw=none, fill=none, font=\footnotesize}]
+\addplot[thick, blue, domain=-4:4] {4*rad(atan(exp(x)))};
+\addlegendentry{$v=0$}
+\addplot[thick, red, dashed, domain=-4:4] {4*rad(atan(exp(x/sqrt(1-0.8^2))))};
+\addlegendentry{$v=0.8$}
+\end{axis}
+\end{tikzpicture}
+\end{document}

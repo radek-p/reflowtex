@@ -37,10 +37,13 @@
   (function () {                                   // zoom (text size)
     var KEY = 'reflowtex-zoom', MIN = 0.5, MAX = 3, STEP = 1.1, z = 1;
     function clamp(v) { return Math.min(MAX, Math.max(MIN, v)); }
+    function label() {                             // every copy of the reading options
+      document.querySelectorAll('[data-zoom-level]').forEach(function (el) {
+        el.textContent = Math.round(z * 100) + '%'; });
+    }
     function apply() {
       document.documentElement.style.setProperty('--lt-zoom', z);
-      var el = document.getElementById('zoom-level');
-      if (el) el.textContent = Math.round(z * 100) + '%';
+      label();
       try { localStorage.setItem(KEY, String(z)); } catch (e) {}
       window.dispatchEvent(new Event('resize'));
     }
@@ -48,10 +51,7 @@
     if (saved > 0) z = clamp(saved);
     document.documentElement.style.setProperty('--lt-zoom', z);
     window.__zoom = function (dir) { z = dir === 0 ? 1 : clamp(z * (dir > 0 ? STEP : 1 / STEP)); apply(); };
-    document.addEventListener('DOMContentLoaded', function () {
-      var el = document.getElementById('zoom-level');
-      if (el) el.textContent = Math.round(z * 100) + '%';
-    });
+    document.addEventListener('DOMContentLoaded', label);
   })();
 </script>
 
@@ -67,8 +67,8 @@
   /* The one accent colour, used sparingly: links in the typeset text, the
      current page in the menus, the main call to action, theorem frames,
      and what the reader drags. Lighter on dark, deeper on paper. */
-  /* Also on anything previewing a theme of its own (data-latex-theme: the
-     themed cards, an example's theme switch), and the variables made from
+  /* Also on anything previewing a theme of its own (data-latex-theme: an
+     example's theme switch), and the variables made from
      it with them, since a var() resolves where it is declared. */
   html,          [data-latex-theme="light"]    { --lt-primary: #2f2ccd; --lt-primary-strong: #221f99; }
   html.dark,     [data-latex-theme="dark"]     { --lt-primary: #9d9bff; --lt-primary-strong: #c3c2ff; }
@@ -534,7 +534,7 @@
      In the page's column, left-aligned with the text. The stage's fixed
      height reserves the tallest layout, so the paragraph reflows inside a
      stationary box and nothing below it moves; only the width animates. */
-  .hero { margin: 1.5rem 0 1rem; }
+  .hero { margin: 1.5rem 0 3rem; }
   #stage {
     box-sizing: border-box; width: 100%; max-width: 100%; min-height: 12rem;
     padding: 1.6rem 1.75rem; margin: 0; overflow: hidden;
@@ -545,7 +545,10 @@
   #hero-flow { width: 100%; transition: transform .6s cubic-bezier(.33, 0, .2, 1); }
   @media (prefers-reduced-motion: reduce) { #hero-flow { transition: none; } }
   #stage .latex-block { width: 100%; margin: 0 !important; }
-  .hero-caption { margin: 1.1rem 0 0; font-size: 0.8rem; opacity: 0.5; max-width: 46rem; }
+  /* The measure of the text above the hero (46rem, as for any block in
+     the column), not the width of the hero. */
+  .hero-caption { margin: 1.1rem 0 0; max-width: 46rem; }
+  #lt-content .hero-caption .latex-block { margin: 0; }
   .hero .cta { margin-top: 1.4rem; display: flex; gap: 0.7rem; flex-wrap: wrap; }
   .hero .cta a {
     text-decoration: none; padding: 0.5rem 1.1rem; font-size: 0.88rem;
@@ -559,7 +562,7 @@
   .hero .cta a.primary { background: var(--lt-primary); color: #fff; border-color: transparent; }
   html.dark .hero .cta a.primary { color: #0c0a09; }
   .hero .cta a.primary:hover { background: var(--lt-primary-strong); }
-  @media (prefers-reduced-motion: reduce) { .hero-caption .motion { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .hero-caption.motion { display: none; } }
 
   /* ── Home: live LaTeX in a quiet grid ────────────────────────────────────
      Typography first: sharp fields of one faint tint, no borders, no
@@ -582,26 +585,20 @@
   #lt-content .card .latex-block + .latex-block { margin-top: 1rem; }
   .span-2 { grid-column: span 2; } .span-3 { grid-column: span 3; }
   .span-4 { grid-column: span 4; } .span-6 { grid-column: span 6; }
-  /* A card in a theme of its own (the colour maps at work): the page's
-     colours for it, and data-latex-theme makes the viewer recolour the TeX. */
-  .card[data-latex-theme="dark"]  { background: #1c1917; color: #e7e5e4; --latex-page-bg: #1c1917; }
-  .card[data-latex-theme="sepia"] { background: #f4ecd8; color: #453a26; --latex-page-bg: #f4ecd8; }
-  .card[data-latex-theme="light"] { background: #f3f3f2; color: #333333; --latex-page-bg: #f3f3f2; }
-  /* On hover a themed card eases into the light theme and back (the home
-     page's script swaps data-latex-theme): the card and every glyph, rule
-     and picture colour inside it transition together. */
-  .card.theme-hover { transition: background-color .45s ease, color .45s ease; }
-  .card.theme-hover svg, .card.theme-hover svg * { transition: fill .45s ease, stroke .45s ease; }
-  @media (prefers-reduced-motion: reduce) {
-    .card.theme-hover, .card.theme-hover svg, .card.theme-hover svg * { transition: none; } }
   /* The resizable paragraph: CSS resize, and a slider for touch screens. */
   /* The resizable paragraph: the tinted field itself is what resizes (like
-     the breathing column above), so the card around it is bare. */
-  .card.card-resize { display: flex; flex-direction: column; padding: 0; background: none; }
+     the breathing column above). It fills the card's height, so it matches
+     the card beside it however many lines it has, and the card keeps a
+     fainter tint where the field was: the two tints over each other come to
+     the 3% of every other card. */
+  .card.card-resize {
+    display: flex; flex-direction: column; padding: 0;
+    background: color-mix(in srgb, currentColor 1.5%, transparent);
+  }
   .resizer {
-    position: relative; width: 100%; min-width: 14rem; max-width: 100%;
+    position: relative; flex: 1 0 auto; width: 100%; min-width: 14rem; max-width: 100%;
     box-sizing: border-box; padding: 1.6rem 1.75rem;
-    background: color-mix(in srgb, currentColor 3%, transparent);
+    background: color-mix(in srgb, currentColor 1.52%, transparent);
   }
   /* The height follows the text with an ease rather than jumping as lines
      are added or removed (the script sets it from the text's height). */
@@ -623,6 +620,38 @@
     opacity: 1; width: 3px; left: 5.5px; background: var(--lt-primary); }
   @media (hover: none) { .resizer-handle::after { opacity: .3; } }
   @media (prefers-reduced-motion: reduce) { .resizer-body { transition: none; } }
+  /* A card with two examples: a hairline between them. */
+  #lt-content .card-split .latex-block + .latex-block {
+    margin-top: 1.1rem; padding-top: 1.1rem;
+    border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  }
+  /* Live text: the stepper under the paragraph, its words in the accent. */
+  .live-card [data-slot="apples"] { fill: var(--lt-primary) !important; }
+  .home-stepper {
+    display: inline-flex; align-items: center; gap: 2px; margin-top: 1rem; padding: 3px;
+    border-radius: 999px; font: 14px/1 ui-sans-serif, system-ui, sans-serif;
+    border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  }
+  .home-stepper button {
+    width: 30px; height: 30px; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+    font: 500 18px/1 ui-sans-serif, system-ui, sans-serif; color: var(--lt-primary);
+    background: color-mix(in srgb, var(--lt-primary) 9%, transparent);
+  }
+  .home-stepper button:hover { background: color-mix(in srgb, var(--lt-primary) 18%, transparent); }
+  .home-stepper button:disabled { opacity: .35; cursor: default; }
+  .home-stepper button:focus-visible { outline: 2px solid var(--lt-primary); outline-offset: 2px; }
+  .home-stepper output { min-width: 2.2em; text-align: center; font-weight: 650; font-variant-numeric: tabular-nums; }
+  /* The widget: a pill on the baseline; a cut end has square corners. */
+  .home-badge {
+    display: inline-block; margin: 0; padding: 0 .55em; border: 0; border-radius: 999px; cursor: pointer;
+    font: 600 .72em/1.7 ui-sans-serif, system-ui, sans-serif; white-space: nowrap;
+    background: var(--lt-primary); color: #fff;
+  }
+  html.dark .home-badge { color: #0c0a09; }
+  .latex-widget-hover .home-badge { background: var(--lt-primary-strong); }
+  .home-badge.cut-right { border-top-right-radius: 3px; border-bottom-right-radius: 3px; }
+  .home-badge.cut-left  { border-top-left-radius: 3px;  border-bottom-left-radius: 3px; }
+  .home-badge:focus-visible { outline: 2px solid var(--lt-primary); outline-offset: 2px; }
   .step, .map-card { padding-top: 1rem; border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
   .map-card { display: block; text-decoration: none; color: inherit; padding-bottom: 1.4rem; transition: border-color .2s ease; }
   .map-card:hover { border-top-color: currentColor; }
@@ -659,15 +688,17 @@
   html.dark     { --latex-page-bg: #0c0a09; --lt-glass: rgba(34, 31, 29, .74);    --lt-seg-on: #4a4541; }
   html.sepia    { --latex-page-bg: #f4ecd8; --lt-glass: rgba(244, 236, 216, .80); --lt-seg-on: #fbf6ea; }
   html.contrast { --latex-page-bg: #ffffff; --lt-glass: rgba(255, 255, 255, .92); --lt-seg-on: #ffffff; }
-  #lt-reader {
+  #lt-reader, .lt-panel {
     --lt-hair: color-mix(in srgb, currentColor 16%, transparent);
     --lt-accent: var(--lt-primary);
-    position: fixed; z-index: 1000;
-    right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  #lt-reader-button, #lt-reader-panel {
+  #lt-reader {
+    position: fixed; z-index: 1000;
+    right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  #lt-reader-button, .lt-panel {
     background: var(--lt-glass);
     -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
     border: .5px solid var(--lt-hair); color: inherit;
@@ -684,9 +715,9 @@
   /* One size for both letters: a smaller capital would come out no taller
      than the lowercase a. */
   .lt-aa { font: 18px/1 ui-serif, "New York", Georgia, serif; letter-spacing: .01em; }
+  .lt-panel { padding: 6px; border-radius: 20px; box-sizing: border-box; }
   #lt-reader-panel {
-    position: absolute; right: 0; bottom: 56px; width: 272px; padding: 6px;
-    border-radius: 20px; box-sizing: border-box;
+    position: absolute; right: 0; bottom: 56px; width: 272px;
     box-shadow: 0 18px 50px rgb(0 0 0 / .18), 0 2px 6px rgb(0 0 0 / .08);
     transform-origin: bottom right; animation: lt-pop .22s cubic-bezier(.2, .9, .25, 1.05);
   }
@@ -711,7 +742,7 @@
   .lt-size button:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
   .lt-size [data-z="out"] { font: 500 14px ui-serif, "New York", Georgia, serif; }
   .lt-size [data-z="in"]  { font: 500 21px ui-serif, "New York", Georgia, serif; }
-  .lt-size #zoom-level { font-size: 13px; font-variant-numeric: tabular-nums; opacity: .75; }
+  .lt-size [data-zoom-level] { font-size: 13px; font-variant-numeric: tabular-nums; opacity: .75; }
   /* Theme: four swatches with names, like Books. */
   .lt-themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
   .lt-themes button { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; padding: 2px 0; }
@@ -742,5 +773,16 @@
     #lt-reader-panel { position: fixed; left: 12px; right: 12px; width: auto;
       bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 56px); }
   }
-  @media print { #lt-reader { display: none; } }
+  /* The copy set into the page (shortcodes/reading-options.html): the same
+     panel, open for good, as wide as its card allows. It keeps its size
+     when the reader zooms, so the buttons stay under the pointer. */
+  .lt-panel-inline {
+    width: 100%; max-width: 272px; margin-top: 1rem;
+    zoom: calc(1 / var(--lt-zoom, 1)); line-height: normal;
+    box-shadow: 0 10px 30px rgb(0 0 0 / .08), 0 1px 3px rgb(0 0 0 / .06);
+  }
+  /* Tighter rows, so the card stays about square. */
+  .lt-panel-inline .lt-row { padding: 7px 6px; }
+  .lt-panel-inline .lt-inspect-row { white-space: nowrap; }
+  @media print { #lt-reader, .lt-panel-inline { display: none; } }
 </style>

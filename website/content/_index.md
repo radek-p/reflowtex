@@ -16,8 +16,7 @@ browser, so the text fits any screen.
 
 {{< latex preamble="home" >}}
 \section*{Examples}
-Each card below is a separate block, typeset by \TeX{} and broken into lines
-by the browser. The grid around them is ordinary HTML and CSS.
+Each card below is a block of \LaTeX{} in an ordinary web page.
 {{< /latex >}}
 
 <div class="bento">
@@ -28,11 +27,11 @@ by the browser. The grid around them is ordinary HTML and CSS.
 
 {{< latex preamble="home" >}}
 \cardtitle{Drag the edge}
-This paragraph was typeset once, by \TeX{}: its glyphs, its kerns and
-the spacing of $\sum_{k=1}^{n} k = \frac{n(n+1)}{2}$. The browser only
-chooses where the lines break. Drag the right edge of this box and the
-Knuth--Plass algorithm runs again for the new width, with hyphenation, so
-the text stays justified.
+Drag the right edge of this box. The paragraph is broken into lines again
+for the new width, with \TeX's hyphenation and justification, and formulas
+such as $\sum_{k=1}^{n} k = \frac{n(n+1)}{2}$ keep their spacing. On a
+phone the same text fits the screen, with no zooming or scrolling
+sideways.
 {{< /latex >}}
 
 </div>
@@ -44,44 +43,53 @@ the text stays justified.
 <div class="card span-2">
 
 {{< latex preamble="home" >}}
+\raggedright
 \cardtitle*{Displays}
 \[ \int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi} \]
-Operator sizes, limits and spacing, as \TeX{} set them.
+Displayed equations look as they do in the PDF.
 {{< /latex >}}
 
 </div>
 
-<div class="card span-2 theme-hover" data-latex-theme="dark" tabindex="0">
+<div class="card span-2">
 
 {{< latex preamble="home" >}}
-\cardtitle*{Dark colour scheme}
-\begin{align*}
-  (a+b)^2 &= a^2 + 2ab + b^2 \\
-  (a-b)^2 &= a^2 - 2ab + b^2
-\end{align*}
-Only this card uses the dark theme; a colour map recolours its
-\TeX. Hover over it to switch to the light theme.
-{{< /latex >}}
-
-</div>
-
-<div class="card span-2 theme-hover" data-latex-theme="sepia" tabindex="0">
-
-{{< latex preamble="home" >}}
-\cardtitle*{Sepia colour scheme}
+\raggedright\hyphenpenalty=10000
+\cardtitle*{TikZ pictures and diagrams}
 \[
 \begin{tikzcd}
   A \arrow[r, "f"] \arrow[d, "g"'] & B \arrow[d, "h"] \\
   C \arrow[r, "k"'] & D
 \end{tikzcd}
 \]
-A \texttt{tikz-cd} diagram, drawn as SVG and placed with \TeX's
-metrics.
+\[
+\begin{tikzpicture}[>=stealth, thick, baseline=(p.base), every loop/.style={looseness=6}]
+  \node[draw, circle, inner sep=2pt] (p) at (0,0) {$p$};
+  \node[draw, circle, double, inner sep=2pt] (q) at (2,0) {$q$};
+  \draw[->] (-0.8,0) -- (p);
+  \draw[->, blue] (p) to[bend left] node[above] {$a$} (q);
+  \draw[->, red] (q) to[bend left] node[below] {$b$} (p);
+  \draw[->] (p) to[loop above] node[above] {$b$} (p);
+  \draw[->] (q) to[loop above] node[above] {$a$} (q);
+\end{tikzpicture}
+\]
 {{< /latex >}}
 
 </div>
 
 <div class="card span-2">
+
+{{< latex preamble="home" >}}
+\raggedright
+\cardtitle{Accessibility settings}
+\noindent Text size and colour scheme.
+{{< /latex >}}
+
+{{< reading-options >}}
+
+</div>
+
+<div class="card span-2 card-split">
 
 {{< latex preamble="home" >}}
 \cardtitle{Interactive}
@@ -101,9 +109,49 @@ prime factor that is none of them.
 \end{webaccordion}
 {{< /latex >}}
 
+{{< latex preamble="home" >}}
+\noindent\textit{Exercise.} Is $2^{11} - 1$ prime?
+\begin{webhint}
+No: $2^{11} - 1 = 2047 = 23 \cdot 89$.
+\end{webhint}
+{{< /latex >}}
+
 </div>
 
-<div class="card span-3">
+<div class="card span-2">
+
+{{< latex preamble="home" >}}
+\raggedright
+\hyphenpenalty=10000
+\cardtitle{Figures scaled to width}
+\noindent\includegraphics[width=\linewidth]{figures/kink.pdf}
+{{< /latex >}}
+
+</div>
+
+<div class="card span-2">
+
+{{< latex preamble="home" >}}
+\raggedright
+\cardtitle{Tables}
+\noindent A table as wide as the column follows the column.
+
+\medskip
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lrr@{}}
+\hline
+Planet & Mass & Day \\
+\hline
+Mercury & 0.330 & 4\,222.6 \\
+Venus   & 4.87  & 2\,802.0 \\
+Earth   & 5.97  & 24.0 \\
+Mars    & 0.642 & 24.7 \\
+\hline
+\end{tabular*}
+{{< /latex >}}
+
+</div>
+
+<div class="card span-2">
 
 {{< latex preamble="home" >}}
 \cardtitle{Footnotes and links}
@@ -111,19 +159,63 @@ prime factor that is none of them.
 \begin{equation}\label{eq:home-euler}
   e^{i\pi} + 1 = 0
 \end{equation}
-Equation~\eqref{eq:home-euler} is a link, and this sentence ends in a
-footnote.\footnote{Typeset by \TeX{}, and re-broken to fit the
-popover.} Hover over the marker.
+References such as~\eqref{eq:home-euler} are links. Footnotes open where
+you are reading, when you point at the marker.\footnote{Like this one.}
 {{< /latex >}}
+
+</div>
+
+<div class="card span-3 live-card">
+
+{{< latex preamble="home" >}}
+\raggedright
+\cardtitle{Live text}
+\noindent The basket holds \webtext{apples}{no apples at all}. The page's
+script sets these words, and the lines are broken again around them.
+{{< /latex >}}
+
+<div class="home-stepper" role="group" aria-label="Apples in the basket">
+<button type="button" data-step="-1" aria-label="One apple fewer" disabled>−</button><output>0</output><button type="button" data-step="1" aria-label="One apple more">+</button>
+</div>
 
 </div>
 
 <div class="card span-3">
 
 {{< latex preamble="home" >}}
-\cardtitle{Selectable text}
-You can select this sentence, copy it, or find it with the browser's search.
-It is ordinary text, drawn in the document's fonts.
+\raggedright
+\cardtitle{HTML widgets}
+\noindent A page can place its own HTML in the text, such as this
+badge: \webwidget{home:badge}. Click it to change its label; the badge
+may be split between lines, like a word.
+{{< /latex >}}
+
+</div>
+
+<div class="card span-6">
+
+{{< latex preamble="home" >}}
+\cardtitle{Lean beside a proof}
+\noindent Open the proof, the Lean code that checks it, or both.
+\begin{leantheorem}[decl=sum_odd]
+\begin{theorem}
+The sum of the first $n$ odd numbers is $n^2$.
+\end{theorem}
+\begin{proof}
+By induction on $n$. For $n = 0$ both sides are $0$. If the sum of the
+first $k$ odd numbers is $k^2$, adding the next one gives
+\[ k^2 + (2k + 1) = (k + 1)^2 . \]
+\end{proof}
+\begin{leancode}
+theorem sum_odd (n : ℕ) :
+    ∑ i ∈ Finset.range n, (2 * i + 1) = n ^ 2 := by
+  induction n with
+  | zero => simp
+  | succ k ih =>
+    rw [Finset.sum_range_succ, ih]
+    ring
+\end{leancode}
+\end{leantheorem}
 {{< /latex >}}
 
 </div>
@@ -262,13 +354,42 @@ AMS sample paper \texttt{testmath.tex}.
         new ResizeObserver(function () { body.style.height = block.offsetHeight + 'px'; }).observe(block);
       }
     }
-    // Themed cards ease into the light theme while pointed at or focused.
-    document.querySelectorAll('.card.theme-hover').forEach(function (card) {
-      var rest = card.getAttribute('data-latex-theme');
-      var light = function () { card.setAttribute('data-latex-theme', 'light'); };
-      var back = function () { card.setAttribute('data-latex-theme', rest); };
-      card.addEventListener('pointerenter', light); card.addEventListener('pointerleave', back);
-      card.addEventListener('focus', light); card.addEventListener('blur', back);
-    });
+    // Live text: the stepper sets the words in the basket.
+    var stepper = document.querySelector('.home-stepper');
+    if (stepper) {
+      var WORDS = ['no apples at all', 'a single apple', 'two apples', 'three apples', 'four apples',
+        'five apples', 'six apples', 'seven apples', 'eight apples', 'nine apples', 'ten apples'];
+      var n = 0, out = stepper.querySelector('output'), minus = stepper.querySelector('[data-step="-1"]');
+      stepper.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-step]'); if (!b) return;
+        n = Math.max(0, Math.min(99, n + Number(b.dataset.step)));
+        out.textContent = n; minus.disabled = n === 0;
+        if (window.reflowtex && reflowtex.setText) reflowtex.setText('apples', n === 0 ? null : (WORDS[n] || n + ' apples'));
+      });
+    }
+    // An HTML widget: a badge in the text, split at its spaces when the
+    // line needs it. A click swaps its label and the paragraph re-breaks.
+    var LABELS = ['✓ checked', '✓ checked by Lean on 25 September 2026'];
+    var esc = function (t) { return t.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); };
+    window.reflowtex = window.reflowtex || {};
+    reflowtex.widgets = reflowtex.widgets || {};
+    reflowtex.widgets['home:badge'] = {
+      measure: function (ctx) {
+        var words = LABELS[ctx.state.long ? 1 : 0].split(' ');
+        var m = function (t) { return ctx.measure('<span class="home-badge" style="padding:0"><span style="white-space:pre">' + esc(t) + '</span></span>'); };
+        var space = m('a b').width - m('ab').width, pad = 0.55 * 0.72 * ctx.fontSize;
+        return {
+          segments: words.map(function (w) { var r = m(w); return { width: r.width, height: r.height, depth: r.depth }; }),
+          gaps: words.slice(1).map(function () { return { width: space, penalty: 100 }; }),
+          ends: { left: { cap: pad, cut: pad }, right: { cap: pad, cut: pad } },
+        };
+      },
+      render: function (el, part, ctx) {
+        var words = LABELS[ctx.state.long ? 1 : 0].split(' ');
+        el.innerHTML = '<button type="button" class="home-badge' + (part.left === 'cut' ? ' cut-left' : '')
+          + (part.right === 'cut' ? ' cut-right' : '') + '">' + esc(words.slice(part.from, part.to + 1).join(' ')) + '</button>';
+        el.firstChild.addEventListener('click', function () { ctx.state.long = !ctx.state.long; ctx.invalidate(); });
+      },
+    };
   })();
 </script>

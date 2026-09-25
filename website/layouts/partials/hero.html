@@ -9,9 +9,11 @@
       {{- with site.GetPage "/hero" }}{{ .Content }}{{ end -}}
     </div>
   </div>
-  <p class="hero-caption">
-    <span class="motion">This column changes its width by itself. On every frame, your browser breaks the paragraph into lines again.</span>
-  </p>
+  {{- /* Set in footnote size by LaTeX (content/hero-caption/); only
+         shown while the column moves. */}}
+  <div class="hero-caption motion">
+    {{- with site.GetPage "/hero-caption" }}{{ .Content }}{{ end -}}
+  </div>
   <div class="cta">
     <a class="primary" href="{{ "docs/getting-started/installation/" | relURL }}">Get started</a>
     <a href="{{ "docs/showcase/testmath/" | relURL }}">See a whole paper</a>

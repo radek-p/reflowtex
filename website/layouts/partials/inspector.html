@@ -45,12 +45,13 @@
   function init() { addButtons(); wireInline(); wireDocks(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
-  // The reading panel's entry.
+  // The reading options' entry, in the corner panel or set into the page.
   document.querySelectorAll('[data-inspect]').forEach(function (b) {
     var k = b.querySelector('.lt-inspect-key');
     if (k) k.textContent = ins.shortcut;
     b.addEventListener('click', function () {
-      document.getElementById('lt-reader-button').click();   // close the reading panel
+      var panel = document.getElementById('lt-reader-panel');
+      if (panel && !panel.hidden) document.getElementById('lt-reader-button').click();   // close it
       ins.open();
     });
   });
