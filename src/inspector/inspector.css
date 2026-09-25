@@ -45,7 +45,12 @@
 .rtx[data-edge="left"] .grip { top: 0; bottom: 0; right: 0; width: var(--grip); cursor: ew-resize; }
 .rtx[data-edge="right"] .grip { top: 0; bottom: 0; left: 0; width: var(--grip); cursor: ew-resize; }
 .rtx[data-edge="bottom"] .grip { left: 0; right: 0; top: 0; height: var(--grip); cursor: ns-resize; }
-.grip { background: var(--bar); }
+.grip { background: var(--bar); box-sizing: border-box; }
+/* a hairline between the grip and the panel, so the grip does not read as
+   part of the toolbar (docked at the bottom) or of the tree (at a side) */
+.rtx[data-edge="left"] .grip { border-left: 1px solid var(--line); }
+.rtx[data-edge="right"] .grip { border-right: 1px solid var(--line); }
+.rtx[data-edge="bottom"] .grip { border-bottom: 1px solid var(--line); }
 .grip:hover, .grip:active { background: color-mix(in srgb, var(--accent) 35%, var(--bar)); }
 @media (pointer: coarse) {
   .rtx[data-edge] { --grip: 14px; }
