@@ -51,18 +51,20 @@ Displayed equations look as they do in the PDF.
 
 </div>
 
-<div class="card span-2">
+<div class="card span-2 card-split">
 
 {{< latex preamble="home" >}}
-\raggedright\hyphenpenalty=10000
-\cardtitle*{TikZ pictures and diagrams}
+\cardtitle*{TikZ pictures}
 \[
 \begin{tikzcd}
   A \arrow[r, "f"] \arrow[d, "g"'] & B \arrow[d, "h"] \\
   C \arrow[r, "k"'] & D
 \end{tikzcd}
 \]
-\[
+{{< /latex >}}
+
+{{< latex preamble="home" >}}
+\centering
 \begin{tikzpicture}[>=stealth, thick, baseline=(p.base), every loop/.style={looseness=6}]
   \node[draw, circle, inner sep=2pt] (p) at (0,0) {$p$};
   \node[draw, circle, double, inner sep=2pt] (q) at (2,0) {$q$};
@@ -71,8 +73,7 @@ Displayed equations look as they do in the PDF.
   \draw[->, red] (q) to[bend left] node[below] {$b$} (p);
   \draw[->] (p) to[loop above] node[above] {$b$} (p);
   \draw[->] (q) to[loop above] node[above] {$a$} (q);
-\end{tikzpicture}
-\]
+\end{tikzpicture}\par
 {{< /latex >}}
 
 </div>
@@ -92,7 +93,7 @@ Displayed equations look as they do in the PDF.
 <div class="card span-2 card-split">
 
 {{< latex preamble="home" >}}
-\cardtitle{Interactive}
+\cardtitle{Collapsible proofs}
 \begin{theorem}
 There are infinitely many primes.
 \end{theorem}
@@ -133,10 +134,8 @@ No: $2^{11} - 1 = 2047 = 23 \cdot 89$.
 
 {{< latex preamble="home" >}}
 \raggedright
-\cardtitle{Tables}
-\noindent A table as wide as the column follows the column.
-
-\medskip
+\hyphenpenalty=10000
+\cardtitle{Tables scaled to width}
 \begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lrr@{}}
 \hline
 Planet & Mass & Day \\
@@ -165,10 +164,9 @@ you are reading, when you point at the marker.\footnote{Like this one.}
 
 </div>
 
-<div class="card span-3 live-card">
+<div class="card span-2 live-card">
 
 {{< latex preamble="home" >}}
-\raggedright
 \cardtitle{Live text}
 \noindent The basket holds \webtext{apples}{no apples at all}. The page's
 script sets these words, and the lines are broken again around them.
@@ -180,14 +178,28 @@ script sets these words, and the lines are broken again around them.
 
 </div>
 
-<div class="card span-3">
+<div class="card span-2">
 
 {{< latex preamble="home" >}}
-\raggedright
 \cardtitle{HTML widgets}
-\noindent A page can place its own HTML in the text, such as this
-badge: \webwidget{home:badge}. Click it to change its label; the badge
-may be split between lines, like a word.
+\noindent The Moon is on average \webtext{distance}{384\,400}~\webwidget{home:unit}
+from the Earth. Pick another unit: the paragraph is broken again around it.
+{{< /latex >}}
+
+</div>
+
+<div class="card span-2">
+
+{{< latex preamble="home" >}}
+\cardtitle{Boxed theorems}
+\DeclareWebBox{theorem}\DeclareWebBox{proof}
+\begin{theorem}
+$\sqrt{2}$ is irrational.
+\end{theorem}
+\begin{proof}
+If $\sqrt{2} = p/q$ in lowest terms, then $p^2 = 2q^2$, so $p$ is even;
+then $q$ is even too.
+\end{proof}
 {{< /latex >}}
 
 </div>
@@ -197,6 +209,7 @@ may be split between lines, like a word.
 {{< latex preamble="home" >}}
 \cardtitle{Lean beside a proof}
 \noindent Open the proof, the Lean code that checks it, or both.
+\DeclareWebBox{theorem}\DeclareWebBox{proof}
 \begin{leantheorem}[decl=sum_odd]
 \begin{theorem}
 The sum of the first $n$ odd numbers is $n^2$.
@@ -367,28 +380,73 @@ AMS sample paper \texttt{testmath.tex}.
         if (window.reflowtex && reflowtex.setText) reflowtex.setText('apples', n === 0 ? null : (WORDS[n] || n + ' apples'));
       });
     }
-    // An HTML widget: a badge in the text, split at its spaces when the
-    // line needs it. A click swaps its label and the paragraph re-breaks.
-    var LABELS = ['✓ checked', '✓ checked by Lean on 25 September 2026'];
+    // An HTML widget: the unit, a pill with a menu. A new unit sets the
+    // number (live text) and the pill's label; the paragraph re-breaks.
+    // [menu entry, pill label, number (null: TeX's own, 384 400)]
+    var UNITS = [['kilometres', 'km', null], ['miles', 'miles', '238\u202f900'],
+      ['light-seconds', 'light-seconds', '1.28'], ['Earth diameters', 'Earth diameters', '30']];
+    var CHEV = '<svg class="home-chev" style="display:inline-block" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg>';
     var esc = function (t) { return t.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); };
+    var menu = null, opener = null;
+    function closeMenu() {
+      if (menu) { menu.remove(); menu = null; }
+      if (opener) { opener.setAttribute('aria-expanded', 'false'); opener = null; }
+    }
+    function openMenu(btn, ctx) {
+      if (menu) { var same = opener === btn; closeMenu(); if (same) return; }
+      opener = btn; btn.setAttribute('aria-expanded', 'true');
+      var cur = ctx.state.unit || 0;
+      menu = document.createElement('div');
+      menu.className = 'home-menu'; menu.setAttribute('role', 'menu');
+      menu.innerHTML = UNITS.map(function (u, i) {
+        return '<button type="button" role="menuitemradio" aria-checked="' + (i === cur) + '" data-i="' + i + '">'
+          + '<span class="tick">' + (i === cur ? '✓' : '') + '</span>' + esc(u[0]) + '</button>';
+      }).join('');
+      document.body.appendChild(menu);
+      var r = btn.getBoundingClientRect();
+      menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+      menu.style.top = (r.bottom + 6) + 'px';
+      menu.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-i]'); if (!b) return;
+        ctx.state.unit = Number(b.dataset.i); closeMenu(); ctx.invalidate();
+        if (reflowtex.setText) reflowtex.setText('distance', UNITS[ctx.state.unit][2]);
+      });
+      menu.addEventListener('keydown', function (e) {
+        var items = [].slice.call(menu.querySelectorAll('button')), k = items.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') { items[(k + 1) % items.length].focus(); e.preventDefault(); }
+        if (e.key === 'ArrowUp') { items[(k + items.length - 1) % items.length].focus(); e.preventDefault(); }
+      });
+      (menu.querySelector('[aria-checked="true"]') || menu.querySelector('button')).focus();
+    }
+    document.addEventListener('pointerdown', function (e) {
+      if (menu && !menu.contains(e.target) && !e.target.closest('.home-badge')) closeMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && menu) { var o = opener; closeMenu(); if (o) o.focus(); } });
+    window.addEventListener('scroll', closeMenu, { passive: true });
     window.reflowtex = window.reflowtex || {};
     reflowtex.widgets = reflowtex.widgets || {};
-    reflowtex.widgets['home:badge'] = {
+    reflowtex.widgets['home:unit'] = {
       measure: function (ctx) {
-        var words = LABELS[ctx.state.long ? 1 : 0].split(' ');
-        var m = function (t) { return ctx.measure('<span class="home-badge" style="padding:0"><span style="white-space:pre">' + esc(t) + '</span></span>'); };
+        var words = UNITS[ctx.state.unit || 0][1].split(' ');
+        var m = function (html) { return ctx.measure('<span class="home-badge" style="padding:0">' + html + '</span>'); };
         var space = m('a b').width - m('ab').width, pad = 0.55 * 0.72 * ctx.fontSize;
         return {
-          segments: words.map(function (w) { var r = m(w); return { width: r.width, height: r.height, depth: r.depth }; }),
+          segments: words.map(function (w) { var r = m('<span style="white-space:pre">' + esc(w) + '</span>'); return { width: r.width, height: r.height, depth: r.depth }; }),
           gaps: words.slice(1).map(function () { return { width: space, penalty: 100 }; }),
-          ends: { left: { cap: pad, cut: pad }, right: { cap: pad, cut: pad } },
+          // a cut end: more padding, for the perforation, which hangs past
+          // the margin by 3.75px (its middle on the margin)
+          ends: { left: { cap: pad, cut: 0.75 * 0.72 * ctx.fontSize, overhang: 3.75 },
+                  right: { cap: pad + m(CHEV).width, cut: 0.75 * 0.72 * ctx.fontSize, overhang: 3.75 } },
         };
       },
       render: function (el, part, ctx) {
-        var words = LABELS[ctx.state.long ? 1 : 0].split(' ');
+        var words = UNITS[ctx.state.unit || 0][1].split(' ');
         el.innerHTML = '<button type="button" class="home-badge' + (part.left === 'cut' ? ' cut-left' : '')
-          + (part.right === 'cut' ? ' cut-right' : '') + '">' + esc(words.slice(part.from, part.to + 1).join(' ')) + '</button>';
-        el.firstChild.addEventListener('click', function () { ctx.state.long = !ctx.state.long; ctx.invalidate(); });
+          + (part.right === 'cut' ? ' cut-right' : '') + '" aria-haspopup="menu" aria-expanded="false" aria-label="Unit: '
+          + esc(UNITS[ctx.state.unit || 0][0]) + '. Choose another">'
+          + esc(words.slice(part.from, part.to + 1).join(' ')) + (part.right === 'cap' ? CHEV : '') + '</button>';
+        el.firstChild.addEventListener('click', function (e) { openMenu(e.currentTarget, ctx); });
       },
     };
   })();
