@@ -83,10 +83,13 @@ export function resized(el) {
 
 // ── Docked to an edge ──────────────────────────────────────────────────────────
 // Width (left, right) or height (bottom): as asked, as remembered, or a third
-// of the window or so – always leaving the page some room.
+// of the window or so – always leaving the page some room. The left and the
+// right share their width: moving the panel across keeps its size.
+const slot = s => (s === 'bottom' ? 'bottom' : 'side');
+const remembered = s => { const m = recall('docksize', {}); return s === 'bottom' ? m.bottom : m.side ?? m.right ?? m.left; };
 function dockSize(s, want) {
     const vp = viewport(), across = s === 'bottom' ? vp.h : vp.w;
-    const n = want ?? recall('docksize', {})[s]
+    const n = want ?? remembered(s)
         ?? (s === 'bottom' ? Math.round(vp.h * 0.42) : Math.max(300, Math.min(460, Math.round(vp.w * 0.36))));
     const least = Math.min(s === 'bottom' ? 120 : 260, across / 2);
     return Math.round(Math.max(least, Math.min(n, across - (s === 'bottom' ? 120 : 240))));
@@ -109,7 +112,7 @@ export function startSize(e) {
         grip.removeEventListener('pointermove', move);
         grip.removeEventListener('pointerup', end);
         grip.removeEventListener('pointercancel', end);
-        keep('docksize', { ...recall('docksize', {}), [s]: size.value });
+        keep('docksize', { ...recall('docksize', {}), [slot(s)]: size.value });
     };
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', end);

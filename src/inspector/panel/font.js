@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A font, in the Resources view: what the page serves and how, and a table
 // of every glyph in its file – the ones the page uses marked. A glyph
-// selected there is drawn large, with the box TeX gave it and its ink.
+// selected there gets a pane of its own, beside the table when there is room
+// (like Chrome's Styles sidebar) and below it when not: drawn large, with the
+// box TeX gave it and its ink, and all that is known about it.
 import { html, useState, useEffect, useMemo, useRef } from '../vendor/preact.js';
 import { call, got } from './bridge.js';
-import { Table, Action, Head, Muted, copyText } from './ui.js';
+import { Table, Action, Head, Muted, IconButton, IconClose, copyText } from './ui.js';
 import { resData, resVersion, glyphSel, wantGlyph, markUses, hoverUses, showInTree } from './resources.js';
 
 export const hex = cp => 'U+' + cp.toString(16).toUpperCase().padStart(4, '0');
@@ -15,6 +17,10 @@ const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 const glyphKey = (d, c) => (c && c.uses ? `glyph:${c.cps.find(cp => cp != null)}:${d.key}` : null);
 function selectGlyph(d, i) {
     glyphSel.value = { i, key: glyphKey(d, d.cells[i]) };
+    markUses();
+}
+function deselectGlyph() {
+    glyphSel.value = null;
     markUses();
 }
 
@@ -56,7 +62,8 @@ export function FontDetails({ fontKey }) {
     const res = resData.value && [...resData.value.fonts, ...resData.value.modifiedFonts].find(r => r.key === fontKey);
     const sel = glyphSel.value;
     const cellOf = e => e.target.closest('.cell');
-    return html`
+    return html`<div class="fsplit">
+        <div class="fmain">
         <${Head} title=${res ? res.label : fontKey.slice(5)}>
             <${Action} title="Select its next glyph in the Boxes view" onClick=${() => showInTree(fontKey)}>Show in tree<//>
         <//>
@@ -72,13 +79,15 @@ export function FontDetails({ fontKey }) {
             </select>
             <span class="gcount muted">${shown.length} of ${d.cells.length}</span>
         </div>
-        <div class="ginfo">${sel && d.cells[sel.i] && html`<${GlyphInfo} key=${sel.i} d=${d} i=${sel.i}/>`}</div>
         <div class="grid" role="grid" aria-label="Glyphs" ref=${grid}
                 onClick=${e => { const c = cellOf(e); if (c) selectGlyph(d, +c.dataset.i); }}
                 onMouseMove=${e => { const c = cellOf(e); if (c) hoverUses(glyphKey(d, d.cells[+c.dataset.i])); }}
                 onMouseLeave=${() => hoverUses(null)}>
             ${shown.map(i => html`<${Cell} key=${i} i=${i} c=${d.cells[i]} family=${d.family} sel=${!!sel && sel.i === i}/>`)}
-        </div>`;
+        </div>
+        </div>
+        ${sel && d.cells[sel.i] && html`<${GlyphPane} key=${sel.i} d=${d} i=${sel.i}/>`}
+    </div>`;
 }
 // (Between two cells – the grid's gaps – the hover stays as it was: it changes
 // on the next glyph, and clears when the pointer leaves the grid.)
@@ -149,7 +158,7 @@ function Cell({ i, c, family, sel }) {
 }
 
 // ── A glyph ────────────────────────────────────────────────────────────────────
-function GlyphInfo({ d, i }) {
+function GlyphPane({ d, i }) {
     const c = d.cells[i], key = glyphKey(d, c);
     const [drawn, setDrawn] = useState(null);          // how many of its uses are on the page now
     const version = resVersion.value;
@@ -173,15 +182,18 @@ function GlyphInfo({ d, i }) {
     if (oh) rows.push([`ink at ${ptOf(c.tex ? c.tex[0][0] : d.sizes[0])}`, oh]);
     rows.push(['used', c.uses ? `${plural(c.uses, 'time')} in the documents` : 'not in these documents']);
     if (key) rows.push(['on the page now', drawn == null ? '…' : `${drawn} drawn`]);
-    return html`
-        <div class="gtop">
-            <${GlyphFigure} c=${c} d=${d}/>
-            <div class="actions">
-                ${key && drawn ? html`<${Action} title="Select its next use in the Boxes view" onClick=${() => showInTree(key)}>Show in tree<//>` : null}
-                ${c.cps.length ? html`<${Action} title="Copy the character" onClick=${() => copyText(String.fromCodePoint(c.cps[0]), 'the character')}>Copy<//>` : null}
-            </div>
-        </div>
-        <${Table} rows=${rows}/>`;
+    const cp = c.cps[0];
+    const title = [cp != null && `‘${String.fromCodePoint(cp)}’`, c.name, cp != null ? hex(cp) : c.gid != null && `#${c.gid}`]
+        .filter(Boolean).join('  ');
+    return html`<section class="gpane" aria-label="The selected glyph">
+        <${Head} title=${title}>
+            ${key && drawn ? html`<${Action} title="Select its next use in the Boxes view" onClick=${() => showInTree(key)}>Show in tree<//>` : null}
+            ${cp != null ? html`<${Action} title="Copy the character" onClick=${() => copyText(String.fromCodePoint(cp), 'the character')}>Copy<//>` : null}
+            <${IconButton} class="gclose" title="Close the glyph" onClick=${deselectGlyph}><${IconClose}/><//>
+        <//>
+        <div class="gfig"><${GlyphFigure} c=${c} d=${d}/></div>
+        <${Table} rows=${rows}/>
+    </section>`;
 }
 
 // A glyph's ink, as the browser draws it: its extent about the pen's origin on

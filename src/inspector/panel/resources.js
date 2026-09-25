@@ -194,7 +194,7 @@ export function ResourceDetails() {
         const x = detail.value;
         body = !x || x.key !== key ? null : !x.d ? html`<${Muted}>Gone – the page changed.<//>` : html`<${Resource} rkey=${key} d=${x.d}/>`;
     }
-    return html`<aside class="details rdetails">${body}</aside>`;
+    return html`<aside class=${'details rdetails' + (key && key.startsWith('font:') ? ' font' : '')}>${body}</aside>`;
 }
 function Resource({ rkey, d }) {
     // The drawing, scaled to the panel; its colours are the page's custom
