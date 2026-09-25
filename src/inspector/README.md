@@ -31,10 +31,13 @@ The project's website includes it on every page. Press **Alt+Shift+I**
     (`\vspace`, a heading's skip), `\parskip`, a display skip, and the
     interline `\baselineskip` or `\lineskip` glue as it comes out for these
     lines.
-- **Hover** a row to outline its node on the page, with a label. **Select**
-  a row to keep the outline; a box or line also outlines its children one
-  level down: glyphs blue, glue green and hatched, kerns purple, math orange,
-  penalties red. The arrow keys move through the tree.
+- **Hover** a row to outline its node on the page, with a label; a box or
+  line also outlines its children one level down: glyphs blue, glue green
+  and hatched, kerns purple, math orange, penalties red (the legend is in
+  the bottom bar). As in Chrome, the page shows only what the pointer is
+  over: **select** a row to see its details, and the outline goes when the
+  pointer leaves the tree. The arrow keys move through the tree, outlining
+  the selection as they go.
 - **Details:** every field of the node, dimensions in sp and pt, the width it
   was set to, and its rectangle on screen.
 - **Width-dependent nodes (↔).** A display is compiled at several widths,
@@ -54,10 +57,12 @@ The project's website includes it on every page. Press **Alt+Shift+I**
 - **Context menu:** right-click a row (or a letter of a run), or press the
   menu key or Shift+F10: *Copy XML*, *Copy text* (the characters, a space per
   glue, a line break per line), *Copy row* (its label and summary).
-- **Pick:** hover the page to highlight the node under the pointer, and click
+- **Pick** (the pointer-in-a-box icon at the left of the toolbar, as in
+  Chrome): hover the page to highlight the node under the pointer, and click
   to select it in the tree. Esc cancels. Over an open footnote popover, it
   picks from the popover.
-- **Baselines**, **Badness** and **Springs** (toolbar): the baseline of
+- **Baselines**, **Badness** and **Springs** (the **Overlays** menu, beside
+  Pick; it turns blue while any is on): the baseline of
   every line on screen; a bar past every line's end coloured by its badness
   (green decent, ≤ 12; amber loose or tight; red 100 or more; purple
   overfull); and every display glue whose width the display model recomputes,
@@ -69,12 +74,15 @@ The project's website includes it on every page. Press **Alt+Shift+I**
   no tag. Hovering or selecting such a row continues its outline dotted over
   the rest of the band, and its details say how much the box leaves out.
 - **Reflow:** after a resize re-breaks the lines, the open branches refresh.
+  Blocks that start after the panel opens join the tree, and their
+  resources the list, on their own.
 
 ## Resources
 
-The **Resources** switch in the title bar shows what the blocks draw with,
+The **Resources** tab shows what the blocks draw with,
 for the whole page. A font file several blocks use is listed once. Hover a
-resource to outline its uses on the page; select it to keep them outlined.
+resource to outline its uses on the page; select it for its details, and
+walk the list with the arrow keys to keep its uses outlined.
 **Show in tree** selects its first use in the Boxes view, then the next one
 each time you press it. The filter above the list matches names and notes.
 Click a heading to collapse or expand that kind of resource, or ⌥-click
@@ -123,8 +131,9 @@ collapsed. While the filter has text, every kind with a match is expanded.
   and `\webwidget` slot.
 
 The panel floats over the page, or docks to the left, right or bottom edge
-of the window: the buttons at the end of its bar choose. Floating, drag the
-title bar to move it and its corner to resize it; docked, the page keeps the
+of the window: the four dock icons in the toolbar's corner choose (folded
+into one button, with a menu, when the panel is narrow). Floating, drag the
+toolbar to move it and its corner to resize it; docked, the page keeps the
 rest of the window and scrolls on its own, and the edge facing the page is
 dragged to resize. The browser remembers the place and the sizes.
 

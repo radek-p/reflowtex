@@ -4,7 +4,7 @@
 :host { all: initial; }
 .rtx {
   --bg: #fff; --fg: #1f1f1f; --muted: #6b6b6b; --line: #e3e3e3; --hover: #eef3fd;
-  --sel: #d5e3fb; --bar: #f5f5f7; --accent: #2f2ccd;
+  --sel: #d3e3fd; --bar: #f3f3f3; --accent: #0b57d0; --icon: #474747;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --box: #3f7fcc; --glue: #4f8f33; --kern: #8e44ad; --penalty: #c0392b; --math: #c7741f; --line-c: #a88614; --glyph: #1f1f1f;
   position: fixed; z-index: 2147483647;
@@ -26,7 +26,7 @@
   border-radius: 12px; box-shadow: none;
 }
 .rtx.docked .bar { cursor: default; }
-.rtx.docked .close, .rtx.docked .dock, .rtx.docked .grip { display: none; }
+.rtx.docked .corner, .rtx.docked .grip { display: none; }
 /* Docked to an edge of the window (setDock): full height at a side, or full
    width at the bottom; the page is given the rest (see reserve()). */
 .rtx[data-edge] {
@@ -54,17 +54,9 @@
   .rtx[data-edge="left"] .grip::after, .rtx[data-edge="right"] .grip::after { width: 4px; height: 36px; }
   .rtx[data-edge="bottom"] .grip::after { width: 36px; height: 4px; }
 }
-/* A narrow panel (a phone's) keeps its bar to the buttons. */
-@container (max-width: 480px) { .title, .status { display: none; } }
-/* The dock picker: one button per place, the current one pressed. */
-.dock { display: inline-flex; }
-.bar .dock button { border-radius: 0; margin-left: -1px; padding: 2px 5px; }
-.bar .dock button:first-child { border-radius: 5px 0 0 5px; margin-left: 0; }
-.bar .dock button:last-child { border-radius: 0 5px 5px 0; }
-.bar .dock button[aria-pressed="true"] { background: var(--sel); border-color: var(--accent); position: relative; }
 .rtx.dark {
   --bg: #1f2023; --fg: #e3e3e3; --muted: #9aa0a6; --line: #3a3b3f; --hover: #2a313c;
-  --sel: #33476a; --bar: #26272b; --accent: #9d9bff;
+  --sel: #33476a; --bar: #26272b; --accent: #7cacf8; --icon: #c4c7c5;
   --box: #7fb2ec; --glue: #8fcf6f; --kern: #c89ce8; --penalty: #ef7a7a; --math: #f0a860; --line-c: #e0c060; --glyph: #e3e3e3;
   box-shadow: 0 12px 40px rgba(0,0,0,.5);
 }
@@ -72,26 +64,47 @@
 button { font: inherit; color: inherit; }
 
 .bar {
-  display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 10px;
+  display: flex; align-items: stretch; flex: none; height: 30px; padding: 0 2px;
   background: var(--bar); border-bottom: 1px solid var(--line);
   cursor: move; user-select: none; -webkit-user-select: none; touch-action: none;
-  flex-wrap: wrap;
 }
-.title { font-weight: 600; margin-right: 4px; white-space: nowrap; }
-.bar button {
-  display: inline-flex; gap: 4px; align-items: center; cursor: pointer;
-  background: transparent; border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px;
-}
-.bar button:hover { background: var(--hover); }
-.bar button.on { background: var(--sel); border-color: var(--accent); }
-.bar .toggle[aria-pressed="true"] { background: var(--sel); border-color: var(--accent); }
-.bar .close { border-color: transparent; padding: 2px 6px; font-size: 15px; line-height: 1; }
-.tabs { display: inline-flex; margin-right: 4px; }
-.bar .tabs button { border-radius: 0; margin-left: -1px; }
-.bar .tabs button:first-child { border-radius: 5px 0 0 5px; margin-left: 0; }
-.bar .tabs button:last-child { border-radius: 0 5px 5px 0; }
-.bar .tabs button[aria-selected="true"] { background: var(--sel); border-color: var(--accent); position: relative; }
-.status { margin-left: auto; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* The page tools and the tabs give way first; the corner never does. */
+.tools { display: flex; align-items: center; min-width: 0; flex: 0 1 auto; overflow: hidden; }
+.corner { display: flex; align-items: center; flex: none; margin-left: auto; }
+.docks { display: flex; align-items: center; }
+/* the current place, blue like any of Chrome's toggled icons */
+.docks .ib[aria-pressed="true"] { color: var(--accent); }
+.ib.more { display: none; }
+@container (max-width: 360px) { .docks { display: none; } .ib.more { display: inline-flex; } }
+.fill { flex: 1 1 0; min-width: 0; }
+/* The bottom bar: the outlines' legend, and the status on the right. */
+.foot { display: flex; align-items: center; gap: 12px; flex: none; padding: 3px 10px; min-height: 22px;
+  background: var(--bar); border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+.foot .legend { margin: 0; gap: 8px; flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+.foot .legend .key { gap: 4px; }
+.foot .sw { width: 10px; }
+.status { flex: 1 0 auto; text-align: right;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sep { flex: none; width: 1px; height: 16px; margin: 0 3px; background: var(--line); }
+/* Icon buttons, Chrome's size: 28px, the icon in its middle. */
+.ib { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 1px;
+  min-width: 26px; height: 26px; padding: 0 3px; border: 0; border-radius: 6px;
+  background: none; color: var(--icon); cursor: pointer; }
+.ib:hover { background: var(--hover); color: var(--fg); }
+.ib[aria-expanded="true"] { background: var(--hover); }
+.ib:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* the picker while picking, the overlays while any is on */
+.ib.on { color: var(--accent); }
+.ib svg { flex: none; }
+.ib.text { gap: 3px; padding: 0 5px; white-space: nowrap; }
+/* Tabs, Chrome's: text, underlined when selected. */
+.tabs { display: flex; align-self: stretch; min-width: 0; }
+.tabs button { min-width: 0; padding: 0 8px; border: 0; border-bottom: 2px solid transparent; border-top: 2px solid transparent;
+  background: none; color: var(--icon); cursor: pointer; white-space: nowrap; }
+.tabs button span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.tabs button:hover { background: var(--hover); color: var(--fg); }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .tree { flex: 1 1 60%; min-height: 0; overflow: auto; padding: 4px 0; font-family: var(--mono); outline: none; }
@@ -141,7 +154,18 @@ button { font: inherit; color: inherit; }
   box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 .menu button { display: flex; justify-content: space-between; gap: 16px; text-align: left; cursor: default;
   background: none; border: 0; border-radius: 5px; padding: 4px 8px; font-size: 12px; }
-.menu button:hover, .menu button:focus { background: var(--sel); outline: none; }
+/* Hover, or focus from the keyboard: the menu takes focus as it opens, and
+   that alone must not look like a choice. */
+.menu button:hover, .menu button:focus-visible { background: var(--sel); outline: none; }
+.menu button:focus { outline: none; }
+.menu [role="menuitemcheckbox"] { justify-content: flex-start; gap: 6px; padding-left: 4px; }
+.menu .check { width: 14px; display: inline-flex; visibility: hidden; color: var(--accent); }
+.menu [aria-checked="true"] .check { visibility: visible; }
+/* "Dock side" and its icons on one row, as in Chrome's menu. */
+.menu .mrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 2px 2px 2px 8px; }
+.menu .docks { display: flex; gap: 2px; }
+.menu .docks .ib { width: 28px; height: 26px; padding: 0; justify-content: center; }
+.menu .docks .ib[aria-pressed="true"] { color: var(--accent); background: var(--sel); }
 .menu .hint { color: var(--muted); font-family: var(--mono); font-size: 11px; max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .muted { color: var(--muted); }
 .dhead { display: flex; align-items: flex-start; gap: 8px; }

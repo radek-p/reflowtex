@@ -42,7 +42,7 @@ const STORE = 'reflowtex-inspector';
 // already in the page – installed by another copy of the panel, or served
 // from a stale cache – is replaced: agent.js is loaded again, with a query of
 // its own so no cache can hand back the old file.
-const AGENT = 3;
+const AGENT = 4;
 let agentLoading = null, agentRetried = false;
 function loadAgent() {
     const a = window.__rtxInspector;
@@ -85,17 +85,28 @@ const h = (tag, props = {}, ...kids) => {
     el.append(...kids);
     return el;
 };
-const ICON_PICK = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M2 2h8v2H4v6H2zM7 7l7 3-3 1-1 3z" fill="currentColor"/></svg>';
-// The dock picker's icons: a window, with the panel's place filled in.
-const dockIcon = fill => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>${fill}</svg>`;
+// The toolbar's icons, drawn like Chrome DevTools' (16px on a 20px grid).
+const icon = (body, size = 16) => `<svg viewBox="0 0 20 20" width="${size}" height="${size}" aria-hidden="true">${body}</svg>`;
+// Chrome's "Select an element in the page": a box, and the pointer going in.
+const ICON_PICK = icon('<path d="M8.5 16.5h-4a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 10l8 3.1-3.3 1.4-1.4 3.4z" fill="currentColor"/>');
+const ICON_CARET = '<svg viewBox="0 0 8 8" width="8" height="8" aria-hidden="true"><path d="M1 2.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+const ICON_CLOSE = icon('<path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>');
+const ICON_CHECK = icon('<path d="M4.5 10.5l3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>', 14);
+// Chrome's "Dock side" icons: a window, with the panel's place filled in.
+const dockIcon = fill => icon(`<rect x="2.5" y="3.5" width="15" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/>${fill}`);
 const DOCK_ICONS = {
-    left: dockIcon('<rect x="2" y="3" width="5" height="10" fill="currentColor"/>'),
-    bottom: dockIcon('<rect x="2" y="8.5" width="12" height="4.5" fill="currentColor"/>'),
-    right: dockIcon('<rect x="9" y="3" width="5" height="10" fill="currentColor"/>'),
-    float: dockIcon('<rect x="6" y="6" width="6.5" height="5" rx=".8" fill="currentColor"/>'),
+    float: dockIcon('<rect x="6" y="7" width="8" height="6" rx="1" fill="currentColor"/>'),
+    left: dockIcon('<rect x="3" y="4" width="5.5" height="12" fill="currentColor"/>'),
+    bottom: dockIcon('<rect x="3" y="10" width="14" height="6" fill="currentColor"/>'),
+    right: dockIcon('<rect x="11.5" y="4" width="5.5" height="12" fill="currentColor"/>'),
 };
-const DOCK_TITLES = { left: 'Dock on the left', bottom: 'Dock at the bottom', right: 'Dock on the right', float: 'Float over the page' };
-const ICON_REFRESH = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const DOCK_TITLES = { float: 'Float over the page', left: 'Dock to left', bottom: 'Dock to bottom', right: 'Dock to right' };
+// The page overlays, in the overlays menu: [key, label, what it draws].
+const OVERLAYS = [
+    ['baselines', 'Baselines', 'The baseline of every line'],
+    ['badness', 'Badness', 'A bar past every line, coloured by its badness: green decent, amber loose or tight, red 100 or more, purple overfull'],
+    ['springs', 'Springs', 'Every display glue whose width is recomputed for the reader\'s width, drawn as a spring'],
+];
 
 function build() {
     host = document.createElement('div');
@@ -105,36 +116,39 @@ function build() {
     host.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647';
     const shadow = host.attachShadow({ mode: 'open' });
     shadow.appendChild(h('link', { rel: 'stylesheet', href: asset('inspector.css') }));
-    const pick = h('button', { type: 'button', title: 'Pick a box or glue in the page (Esc cancels)', onclick: togglePick });
-    pick.innerHTML = ICON_PICK + ' Pick';
-    const refreshBtn = h('button', { type: 'button', title: 'Reload the tree and the resources', 'aria-label': 'Refresh',
-                                     onclick: () => (view === 'res' ? loadResources() : refresh()) });
-    refreshBtn.innerHTML = ICON_REFRESH;
-    // Page-wide guides, remembered like the panel's place.
-    const guide = (key, label, title) => {
-        const b = h('button', { type: 'button', class: 'toggle', title, 'aria-pressed': 'false',
-                                onclick: () => setGuide(key, b.getAttribute('aria-pressed') !== 'true') }, label);
-        b.dataset.guide = key;
+    // One row, like Chrome's: the page tools, the tabs, and – always in the
+    // corner, however narrow the panel – its menu and the close button.
+    const iconButton = (cls, svg, title, onclick, extra = {}) => {
+        const b = h('button', { type: 'button', class: 'ib ' + cls, title, 'aria-label': title, onclick, ...extra });
+        b.innerHTML = svg;
         return b;
     };
-    const baselines = guide('baselines', 'Baselines', 'Show the baseline of every line');
-    const badness = guide('badness', 'Badness', 'A bar past every line, coloured by its badness: green decent, amber loose or tight, red 100 or more, purple overfull');
-    const springs = guide('springs', 'Springs', 'Draw every display glue whose width is recomputed for the reader\'s width as a spring');
-    const status = h('span', { class: 'status' });
-    const dockPick = h('span', { class: 'dock', role: 'group', 'aria-label': 'Where the inspector sits' },
-        ...['left', 'bottom', 'right', 'float'].map(m => {
-            const b = h('button', { type: 'button', 'data-dock': m, title: DOCK_TITLES[m], 'aria-label': DOCK_TITLES[m],
-                                    'aria-pressed': 'false', onclick: () => setDock(m) });
-            b.innerHTML = DOCK_ICONS[m];
-            return b;
-        }));
-    const close = h('button', { type: 'button', class: 'close', title: `Close (${SHORTCUT})`, 'aria-label': 'Close', onclick: () => closePanel() }, '×');
+    const pick = iconButton('pick', ICON_PICK, 'Pick a box or glue in the page (Esc cancels)', togglePick);
+    // A text dropdown, like the Console's "Default levels".
+    const overlays = h('button', { type: 'button', class: 'ib text overlays', title: 'Page overlays: baselines, badness, springs',
+                                   'aria-haspopup': 'menu', 'aria-expanded': 'false',
+                                   onclick: e => toggleMenu(e.currentTarget, overlaysMenu) }, h('span', {}, 'Overlays'));
+    overlays.insertAdjacentHTML('beforeend', ICON_CARET);
     // Two views: the tree of boxes and glue, and the resources they draw with.
-    const tab = (v, label, title) => h('button', { type: 'button', role: 'tab', 'data-view': v, title, onclick: () => setView(v) }, label);
+    const tab = (v, label, title) => h('button', { type: 'button', role: 'tab', 'data-view': v, title, onclick: () => setView(v) }, h('span', {}, label));
     const tabs = h('span', { class: 'tabs', role: 'tablist' },
         tab('tree', 'Boxes', 'Blocks, lines, boxes and glue'),
         tab('res', 'Resources', 'Fonts and their glyphs, pictures, streams (footnotes, popovers), links, citations, anchors, slots'));
-    const bar = h('div', { class: 'bar' }, h('span', { class: 'title' }, 'Inspector'), tabs, pick, refreshBtn, baselines, badness, springs, status, dockPick, close);
+    const status = h('span', { class: 'status' });
+    // Where it docks, in plain sight; folded into one button (the current
+    // place, opening Chrome's "Dock side" menu) when the panel is too narrow.
+    const docks = h('span', { class: 'docks', role: 'group', 'aria-label': 'Dock side' },
+        h('span', { class: 'sep' }),
+        ...['float', 'left', 'bottom', 'right'].map(m =>
+            iconButton('', DOCK_ICONS[m], DOCK_TITLES[m], () => setDock(m), { 'data-dock': m, 'aria-pressed': 'false' })));
+    const more = iconButton('more', DOCK_ICONS.float + ICON_CARET, 'Dock side',
+                            e => toggleMenu(e.currentTarget, moreMenu), { 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+    const close = iconButton('close', ICON_CLOSE, `Close (${SHORTCUT})`, () => closePanel());
+    const bar = h('div', { class: 'bar' },
+        h('span', { class: 'tools' }, pick, overlays, h('span', { class: 'sep' }), tabs),
+        h('span', { class: 'fill' }), h('span', { class: 'corner' }, docks, more, close));
+    // The bottom bar: what the outlines' colours mean, and what is going on.
+    const foot = h('div', { class: 'foot' }, legend(), status);
     const tree = h('section', { class: 'tree', role: 'tree', tabindex: '0', 'aria-label': 'Boxes and glue' });
     const details = h('aside', { class: 'details' });
     const filter = h('input', { type: 'search', class: 'filter', placeholder: 'Filter', 'aria-label': 'Filter the resources', spellcheck: 'false' });
@@ -146,7 +160,7 @@ function build() {
     const rdetails = h('aside', { class: 'details rdetails' });
     // Docked to an edge, the side facing the page is dragged to resize.
     const grip = h('div', { class: 'grip', 'aria-hidden': 'true' });
-    root = h('div', { class: 'rtx', role: 'dialog', 'aria-label': 'Reflow TeX inspector' }, bar, h('div', { class: 'main' }, tree, details, rlist, rdetails), grip);
+    root = h('div', { class: 'rtx', role: 'dialog', 'aria-label': 'Reflow TeX inspector' }, bar, h('div', { class: 'main' }, tree, details, rlist, rdetails), foot, grip);
     root.hidden = true;
     shadow.appendChild(root);
     document.documentElement.appendChild(host);
@@ -154,7 +168,11 @@ function build() {
     // popover it has pinned open (closed by a click elsewhere) stays open
     // while the panel inspects it.
     host.addEventListener('click', e => e.stopPropagation());
-    $ = { pick, status, tree, details, bar, tabs, filter, fontSort, rbody, rdetails, dockPick, grip };
+    $ = { pick, overlays, status, tree, details, bar, tabs, filter, fontSort, rbody, rdetails, grip, docks, more };
+    root.addEventListener('pointermove', () => setShowSel(false));
+    root.addEventListener('keydown', e => {
+        if (NAV_KEYS.test(e.key) && e.composedPath().some(el => el === $.tree || el === $.rbody)) setShowSel(true);
+    }, true);
     placeholder();
     wireTree();
     wireResources();
@@ -249,7 +267,8 @@ function setDock(mode) {
 function applyDock(mode) {
     edge = mode === 'float' ? null : mode;
     if (edge) root.dataset.edge = edge; else delete root.dataset.edge;
-    for (const b of $.dockPick.children) b.setAttribute('aria-pressed', String(b.dataset.dock === mode));
+    for (const b of $.docks.querySelectorAll('[data-dock]')) b.setAttribute('aria-pressed', String(b.dataset.dock === mode));
+    $.more.innerHTML = DOCK_ICONS[mode] + ICON_CARET;
     if (edge) { placeEdge(); return; }
     release();
     Object.assign(root.style, { right: '', bottom: '' });
@@ -316,7 +335,8 @@ async function setGuide(key, on) {
     await applyGuides(g);
 }
 async function applyGuides(g = loadGuides()) {
-    for (const b of $.bar.querySelectorAll('[data-guide]')) b.setAttribute('aria-pressed', String(!!g[b.dataset.guide]));
+    $.overlays.classList.toggle('on', OVERLAYS.some(([k]) => g[k]));
+    if (menu) for (const b of menu.querySelectorAll('[data-overlay]')) b.setAttribute('aria-checked', String(!!g[b.dataset.overlay]));
     await call('setOptions', { baselines: !!g.baselines, badness: !!g.badness, springs: !!g.springs });
 }
 
@@ -330,7 +350,7 @@ function syncTheme() {
 
 // ── Tree ───────────────────────────────────────────────────────────────────────
 const nodes = new Map();         // id → { s: summary, kids: [id] | null, open }
-let roots = [], selected = null, lastPaints = null, lastPickSeq = 0, hoverId = null;
+let roots = [], selected = null, lastPaints = null, lastPickSeq = 0, lastBlocks = null, hoverId = null;
 
 function remember(list) {
     return list.map(s => {
@@ -440,7 +460,7 @@ async function select(id, { scroll = true, page = true } = {}) {
 function placeholder() {
     delete $.details.dataset.id;
     $.details.replaceChildren(h('p', { class: 'muted' }, 'Select a row, or ', h('b', {}, 'Pick'),
-        ' a box or glue in the page. ', h('kbd', {}, SHORTCUT), ' opens and closes this panel.'), legend());
+        ' a box or glue in the page. ', h('kbd', {}, SHORTCUT), ' opens and closes this panel.'));
 }
 async function showDetails(id) {
     const d = await call('details', id);
@@ -461,7 +481,7 @@ async function showDetails(id) {
     if (d.glyph) acts.prepend(h('button', { type: 'button', class: 'copy', title: `Show ${hex(d.glyph.cp)} in the glyph table of ${d.glyph.font} (Resources)`,
                                             onclick: () => showGlyph(d.glyph.key, d.glyph.cp) }, 'In its font'));
     $.details.dataset.id = id;
-    $.details.replaceChildren(h('div', { class: 'dhead' }, h('h2', {}, title), acts), t, legend());
+    $.details.replaceChildren(h('div', { class: 'dhead' }, h('h2', {}, title), acts), t);
 }
 function legend() {
     const l = h('div', { class: 'legend' });
@@ -512,8 +532,69 @@ async function reveal(path, { openLast = false, page = true } = {}) {
 // A right-click on a row (or a letter of a run) selects it and offers to copy
 // it. The panel's own menu, so it can say what it copies; the page's is left
 // alone everywhere else.
-let menu = null;
-function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+// Like Chrome's: the page outlines what the pointer is over in the panel, and
+// the selection only while it is walked with the keyboard – not while the
+// pointer is over a menu, the details or anywhere else.
+let showSel = null;
+function setShowSel(on) {
+    if (on === showSel) return;
+    showSel = on;
+    call('setOptions', { selection: on });
+}
+const NAV_KEYS = /^(Arrow(Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/;
+let menu = null, menuAnchor = null, menuClosed = null;
+function closeMenu() {
+    if (!menu) return;
+    menu.remove(); menu = null;
+    if (menuAnchor) { menuAnchor.setAttribute('aria-expanded', 'false'); menuClosed = { anchor: menuAnchor, at: performance.now() }; }
+    menuAnchor = null;
+}
+// A toolbar button's menu, under it and inside the panel. A second click on
+// the button closes it (the pointerdown that closed it is that click's own).
+function toggleMenu(anchor, make) {
+    if (menu && menuAnchor === anchor) { closeMenu(); return; }            // (from the keyboard)
+    if (menuClosed && menuClosed.anchor === anchor && performance.now() - menuClosed.at < 400) { menuClosed = null; return; }
+    closeMenu();
+    menu = make();
+    menuAnchor = anchor;
+    anchor.setAttribute('aria-expanded', 'true');
+    root.appendChild(menu);
+    const rr = root.getBoundingClientRect(), ar = anchor.getBoundingClientRect(), mw = menu.offsetWidth;
+    // left-aligned with its button, or right-aligned in the corner
+    const x = anchor.closest('.corner') ? ar.right - rr.left - mw : ar.left - rr.left;
+    menu.style.left = Math.max(4, Math.min(x, rr.width - mw - 4)) + 'px';
+    menu.style.top = (ar.bottom - rr.top + 2) + 'px';
+    const first = menu.querySelector('[aria-checked="true"], [aria-pressed="true"], button');
+    if (first) first.focus();
+}
+// Chrome's checkmark menu (like the Console's levels): a click toggles, and
+// the menu stays open for the next.
+function overlaysMenu() {
+    const g = loadGuides();
+    return h('div', { class: 'menu', role: 'menu', 'aria-label': 'Page overlays' },
+        ...OVERLAYS.map(([key, label, title]) => {
+            const b = h('button', { type: 'button', role: 'menuitemcheckbox', 'data-overlay': key, title,
+                                    'aria-checked': String(!!g[key]),
+                                    onclick: () => setGuide(key, b.getAttribute('aria-checked') !== 'true') });
+            const check = h('span', { class: 'check' });
+            check.innerHTML = ICON_CHECK;
+            b.append(check, h('span', { class: 'label' }, label));
+            return b;
+        }));
+}
+// Chrome's "Dock side" and its four places, for a panel too narrow to show them.
+function moreMenu() {
+    const now = edge || 'float';
+    return h('div', { class: 'menu', role: 'menu', 'aria-label': 'Inspector options' },
+        h('div', { class: 'mrow' }, h('span', { class: 'label' }, 'Dock side'),
+            h('span', { class: 'docks', role: 'group', 'aria-label': 'Dock side' },
+                ...['float', 'left', 'bottom', 'right'].map(m => {
+                    const b = h('button', { type: 'button', class: 'ib', 'data-dock': m, title: DOCK_TITLES[m], 'aria-label': DOCK_TITLES[m],
+                                            'aria-pressed': String(m === now), onclick: () => { closeMenu(); setDock(m); } });
+                    b.innerHTML = DOCK_ICONS[m];
+                    return b;
+                }))));
+}
 async function openMenu(id, x, y) {
     closeMenu();
     await select(id, { scroll: false });
@@ -545,7 +626,7 @@ function wireTree() {
     root.addEventListener('keydown', e => {
         if (!menu) return;
         const items = [...menu.querySelectorAll('button')], i = items.indexOf(e.composedPath()[0]);
-        if (e.key === 'Escape') { e.stopPropagation(); closeMenu(); $.tree.focus({ preventScroll: true }); }
+        if (e.key === 'Escape') { e.stopPropagation(); const a = menuAnchor; closeMenu(); (a || $.tree).focus({ preventScroll: true }); }
         else if (e.key === 'ArrowDown') items[(i + 1) % items.length].focus();
         else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length].focus();
         else return;
@@ -1063,6 +1144,13 @@ async function poll() {
     const st = await call('status');
     if (st === MISSING) { $.status.textContent = 'no inspectable viewer'; $.pick.classList.remove('on'); return; }
     $.pick.classList.toggle('on', st.picking);
+    // Blocks that start (or go) after the panel opened: the tree, and the
+    // resources they bring, follow without being asked.
+    if (st.blocks !== lastBlocks) {
+        const first = lastBlocks === null;
+        lastBlocks = st.blocks;
+        if (!first) { followReflow(); if (view === 'res') loadResources(); }
+    }
     $.status.textContent = st.picking ? 'click in the page · Esc cancels'
         : flash && Date.now() < flash.until ? flash.text : `${st.blocks} block${st.blocks === 1 ? '' : 's'}`;
     if (st.picked && st.picked.seq !== lastPickSeq) { lastPickSeq = st.picked.seq; setView('tree'); reveal(st.picked.path); }
@@ -1102,10 +1190,11 @@ async function open(block, { dock: where, scroll = true } = {}) {
         if (!docked) applyDock(chosenDock());
         syncTheme();
         pollTimer = setInterval(poll, 400);
+        showSel = null; setShowSel(false);
         try { await refresh(); } catch (e) { $.status.textContent = String(e.message || e); return; }
         if (view === 'res') loadResources();
         applyGuides();
-        lastPaints = null;
+        lastPaints = null; lastBlocks = null;
         requestAnimationFrame(watchPaints);
         poll();
     }

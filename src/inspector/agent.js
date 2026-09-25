@@ -12,7 +12,7 @@
 // The file's value, when evaluated as a script, is the result of installing: 'ok', or 'no-api' when the page has no inspectable viewer yet.
 // window.__rtxInspectorInstall() tries again.
 window.__rtxInspectorInstall = () => {
-const AGENT = 3;
+const AGENT = 4;
 const prev = window.__rtxInspector;
 if (prev && prev.agent === AGENT) return 'ok';
 const I = window.reflowtex && window.reflowtex.inspect;
@@ -930,7 +930,10 @@ function drawBaseline(r, strong) {
 // ── Page-wide guides ───────────────────────────────────────────────────────────
 // Options a panel can turn on: every line's baseline, and a bar past every
 // line's end coloured by its badness. Drawn for the segments on screen.
-const options = { baselines: false, badness: false, springs: false };
+// selection: whether the selected node (and a resource's marked uses) is
+// drawn at all. A panel that outlines only what the pointer is over, as
+// Chrome's does, turns it off and on again for keyboard navigation.
+const options = { baselines: false, badness: false, springs: false, selection: true };
 // A spring across a glue whose width the display model recomputes: a zigzag,
 // one coil per 6px, along the middle of the glue's height.
 function drawSpring(q) {
@@ -1005,12 +1008,14 @@ function redraw() {
     ink = document.createDocumentFragment(); ctms = new Map(); culled = false;
     try {
         if (options.baselines || options.badness || options.springs) { drawGuides(); guidesPaints = I.paints; }
-        for (const id of marked) drawMark(id);
+        const sel = options.selection ? selected : null;
+        if (options.selection) for (const id of marked) drawMark(id);
         const h = picking ? pickHover : hovered;
-        const other = h != null && h !== selected;
-        if (selected != null) { if (other) drawPale(selected); else drawId(selected, true); }
+        const other = h != null && h !== sel;
+        if (sel != null) { if (other) drawPale(sel); else drawId(sel, true); }
         if (Array.isArray(h)) for (const id of h) drawPale(id, 'rgba(111,168,220,.35)', true);
-        else if (other) drawId(h, false);
+        // with no selection drawn, what is hovered is shown in full
+        else if (other) drawId(h, !picking && sel == null);
     } finally {
         // Everything is placed in viewport coordinates, inside a layer that
         // sits where the viewport's corner is now.

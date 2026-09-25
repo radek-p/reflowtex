@@ -9,15 +9,16 @@ latexTitle: true
 \bigskip
 The inspector shows the boxes, glue, kerns and penalties of every block,
 as the browser has just laid them out. Hover a row
-to outline its node on the page; select it to keep the outline and see what
-it is made of. A glue shows the width it was stretched or shrunk to on its
+to outline its node on the page, and select it to see what it is made of.
+As in Chrome's, the outline follows the pointer: it goes when the pointer
+leaves the tree, and the arrow keys bring it back for the selected row. A glue shows the width it was stretched or shrunk to on its
 line, and a line its glue ratio and font expansion. Resize the window and the
 tree follows the new line breaks.
 
 On this page the inspector is open from the start, on the example below,
 docked to the right of the window -- or below the page when the window is
-taller than it is wide. The buttons at the end of its bar dock it on the
-left, at the bottom or on the right, or let it float over the page; drag the
+taller than it is wide. The icons beside its close button float it over
+the page or dock it on the left, at the bottom or on the right; drag the
 edge facing the page to resize it. The browser remembers your choice for
 every page. Elsewhere, press \texttt{Alt+Shift+I} (\texttt{Option+Shift+I}
 on a Mac), click \emph{Inspect} on an example's result, or choose
@@ -39,23 +40,24 @@ its words is stretched or shrunk to fit whatever width it is given.
 {{< latex preamble="docs" >}}
 \section*{Things to try}
 \begin{description}
-\item[A line.] Expand the text segment, select a line, and the page outlines
+\item[A line.] Expand the text segment, hover a line, and the page outlines
   every node on it: glyphs in blue, glue green and hatched, kerns purple.
   The line's row gives its glue ratio -- positive when stretched, negative
   when shrunk.
-\item[A fraction.] Choose \emph{Pick} and click the~$5$ under the square
-  root. The tree opens at that glyph, inside the boxes \TeX{} built for the
-  radical, the numerator and the fraction; select each in turn and watch
-  the outline grow.
+\item[A fraction.] Choose the picker (the arrow in a box, at the left of
+  the inspector's toolbar) and click the~$5$ under the square root. The
+  tree opens at that glyph, inside the boxes \TeX{} built for the radical,
+  the numerator and the fraction; hover each in turn and watch the outline
+  grow.
 \item[Vertical space.] Between two paragraphs, a heading and its text,
   or text and a display, a \emph{vertical space} row lists the glue \TeX{}
   put there -- a \verb|\vspace|, a heading's skip, \verb|\parskip|, a
   display skip, and the interline \verb|\baselineskip| glue -- each drawn
   as a band in the space it takes.
-\item[Badness.] Turn on \emph{Badness} and every line gets a bar at its
-  end: green where \TeX{} would call it decent, amber loose or tight, red at
-  100 or more. \emph{Baselines} draws the baseline of every line.
-\item[The baseline.] Whatever is selected draws a guide along its baseline
+\item[Badness.] Turn on \emph{Badness} in the overlays menu (beside the
+  picker) and every line gets a bar at its end: green where \TeX{} would
+  call it decent, amber loose or tight, red at 100 or more. \emph{Baselines} draws the baseline of every line.
+\item[The baseline.] Whatever you hover draws a guide along its baseline
   across the whole window, so you can see what sits on it and what does
   not.
 \item[A reflow.] Make the window narrower. The lines re-break, and the
