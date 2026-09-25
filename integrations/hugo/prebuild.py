@@ -88,8 +88,12 @@ def batch_key(content: str, preamble: str, batch: str) -> str:
     return content_key(content, preamble + '\n===REFLOWTEX-BATCH===\n' + batch)
 HASH_RE = re.compile(r'^[0-9a-f]{16}$')
 # \ref, \eqref, \autoref, \cref, \Cref, \nameref, \pageref: printing one
-# needs the label's number from the previous pass.
-REF_RE = re.compile(r'\\(?:eq|auto|c|C|name|page)?ref\*?\{')
+# needs the label's number from the previous pass. So does a table of contents
+# or a list of figures (read back from .toc/.lof) and a citation.
+REF_RE = re.compile(r'\\(?:(?:eq|auto|c|C|name|page)?ref\*?\{|tableofcontents|listof(?:figures|tables)|cite)')
+# Up to three passes (revtex sets its ToC's number column from the .aux of the
+# pass before); the pipeline stops as soon as nothing read back changes.
+REF_PASSES = 3
 
 
 # Preambles given by path (preamble="….tex"), by that path: their text.
@@ -285,8 +289,10 @@ def main() -> None:
         sys.exit(f'error: {content_dir} not found – is {site} a Hugo site?')
     data_dir.mkdir(parents=True, exist_ok=True)
 
+    # A file ref's figures (\includegraphics) are found beside it.
     pipe = Pipeline(build_root=build_root, fonts_dir=fonts_dir,
-                    local_fonts_dir=local_fonts if local_fonts.is_dir() else None)
+                    local_fonts_dir=local_fonts if local_fonts.is_dir() else None,
+                    search_dirs=demos_dirs)
 
     # Embed the schema once (the browser parses latex.proto at runtime).
     schema_file.parent.mkdir(parents=True, exist_ok=True)
@@ -338,8 +344,8 @@ def main() -> None:
             print(f'  {name} ({key}): up to date')
             continue
         # A block that refers to its own labels needs the .aux round trip, or
-        # every \ref prints "??": one more pass (cheap, and only for these).
-        passes = 2 if REF_RE.search(content) else 1
+        # every \ref prints "??": more passes (cheap, and only for these).
+        passes = REF_PASSES if REF_RE.search(content) else 1
         stale.append((key, content, preamble, name, passes))
 
     if stale:
@@ -382,7 +388,7 @@ def main() -> None:
         if fresh:
             print(f'  batch "{bname}" ({len(parts)} part(s)): up to date')
             continue
-        passes = 2 if any(REF_RE.search(p[3]) for p in parts) else 1
+        passes = REF_PASSES if any(REF_RE.search(p[3]) for p in parts) else 1
         print(f'reflowtex: compiling batch "{bname}" ({len(parts)} part(s), {passes} pass(es))…')
         blobs = pipe.compile_batch([(p[2], p[3], p[5]) for p in parts], preamble,
                                    key=bhash, passes=passes, name=f'batch "{bname}"')

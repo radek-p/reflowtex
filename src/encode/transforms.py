@@ -274,9 +274,11 @@ def normalise_legacy_font_addressing(data: dict, fonts) -> int:
 # anywhere) and gains an SVG payload the browser can draw. Two rewrites make the
 # payload safe to inline:
 #
-#  * ids – dvisvgm names glyph paths "g1-4855" and refers to them with <use>.
-#    Those names restart per file, so two pictures on one page would collide and
-#    silently draw each other's glyphs. Every id gets a per-picture prefix.
+#  * ids – dvisvgm names glyph paths "g1-4855" and clip paths "cp0", and
+#    refers to them with <use> and url(#…). Those names restart per file, so
+#    two pictures on one page would collide and silently draw each other's
+#    glyphs and clips. Every id gets a prefix unique to its picture and its
+#    document (a page holds many documents, each numbering its pictures).
 #  * colours – rewritten to CSS custom properties so a theme can recolour
 #    drawings exactly as it recolours text. Black is special: it is the default
 #    text colour and dvisvgm often omits fill for it (SVG's initial fill is
@@ -285,6 +287,7 @@ def normalise_legacy_font_addressing(data: dict, fonts) -> int:
 
 SVG_ID_RE    = re.compile(r"\bid='([^']+)'")
 SVG_USE_RE   = re.compile(r"(xlink:href|href)='#([^']+)'")
+SVG_URL_RE   = re.compile(r"url\(#([^)]+)\)")
 # dvisvgm shortens colours to 3-digit hex under --optimize (#f00, not #ff0000),
 # so both forms must be recognised or the rewrite silently does nothing and the
 # drawing stays un-themed. Non-hex values (none, currentColor) are left alone.
@@ -325,6 +328,9 @@ def _rewrite_picture_svg(svg: str, prefix: str, *, strip_page_background: bool =
             lambda mm: f"{mm.group(1)}='#{prefix}{mm.group(2)}'"
                        if mm.group(2) in ids else mm.group(0),
             inner)
+        inner = SVG_URL_RE.sub(
+            lambda mm: f"url(#{prefix}{mm.group(1)})" if mm.group(1) in ids else mm.group(0),
+            inner)
 
     def colour(mm):
         attr, digits = mm.group(1), mm.group(2).lower()
@@ -340,6 +346,9 @@ def _rewrite_picture_svg(svg: str, prefix: str, *, strip_page_background: bool =
 
 def convert_pictures(data: dict, build_dir: Path) -> int:
     """Turn every picture node's PDF page into inline SVG, indexed per document."""
+    # The build directory is named by the document's content key: its first
+    # characters tell this document's pictures from another's on the same page.
+    doc_tag = re.sub(r'[^0-9A-Za-z]', '', build_dir.name)[:8]
     pictures = data.setdefault('pictures', [])
     by_source: dict[tuple[str, int, bool, bool], int] = {}
     rgb_pdfs: dict[Path, Path] = {}
@@ -356,8 +365,12 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
         if pdf not in rgb_pdfs:
             normalised = Path(pdf_tmp.name) / f'source-{len(rgb_pdfs) + 1}.pdf'
             r = subprocess.run(
+                # -r72: at its default 720 dpi, pdfwrite puts the page under a
+                # 0.1 scale, and dvisvgm folds that scale into coordinates and
+                # line widths but not into dash patterns – every dashed line
+                # came out with dashes ten times too long.
                 ['gs', '-q', '-dSAFER', '-dNOPAUSE', '-dBATCH',
-                 '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.7',
+                 '-sDEVICE=pdfwrite', '-r72', '-dCompatibilityLevel=1.7',
                  '-sColorConversionStrategy=RGB',
                  '-dProcessColorModel=/DeviceRGB', '-dUseCIEColor=false',
                  f'-sOutputFile={normalised}', str(pdf)],
@@ -419,7 +432,7 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
                     if not out.exists():
                         sys.exit(f'ERROR: dvisvgm failed on {pdf}:\n{r.stderr[-2000:]}')
                     inner, vb_w, vb_h = _rewrite_picture_svg(
-                        out.read_text(encoding='utf-8'), f'p{len(pictures)+1}-',
+                        out.read_text(encoding='utf-8'), f'p{doc_tag}-{len(pictures)+1}-',
                         strip_page_background=not externalized and not generated)
                     pictures.append({'svg': inner, 'vb_w': vb_w, 'vb_h': vb_h})
                     by_source[source_key] = len(pictures)      # 1-based

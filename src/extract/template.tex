@@ -104,6 +104,9 @@
   \par\addvspace{\intextsep}%
   \begingroup
   \def\@captype{#1}%
+  % no indent, as in the box LaTeX sets a float in (\@parboxrestore): a
+  % tabular* or picture \linewidth wide fills the line exactly
+  \parindent\z@
   % spaced as LaTeX's \@makecaption spaces it: \abovecaptionskip above,
   % \belowcaptionskip below, whatever the class set them to
   \RenewDocumentCommand{\caption}{o m}{%
@@ -232,8 +235,9 @@
 % each entry becomes a link to its heading: the k-th line read from the .toc
 % was written by the k-th \addcontentsline{toc} of the run before, so it links
 % to the anchor that one places this run (reflowtex-toc-k, in the outline
-% capture below) – whether or not hyperref is loaded, whose \contentsline
-% takes a fourth argument (its own anchor name), passed on untouched.
+% capture below). A .toc line has a fourth argument when whatever wrote it
+% reads one (hyperref's anchor name, the kernel's destination since 2023), and
+% it is passed on untouched exactly then.
 \newcount\reflowtexTocEntryCount
 \newcount\reflowtexTocAnchorCount
 \makeatletter
@@ -241,7 +245,8 @@
 \def\reflowtex@newstarttoc#1{%
   \def\reflowtex@tocfile{#1}\reflowtex@starttoc{#1}\let\reflowtex@tocfile\@empty}
 \def\reflowtex@newcontentsline#1#2#3{%
-  \@ifnextchar\bgroup{\reflowtex@contentsline{#1}{#2}}{\reflowtex@contentsline{#1}{#2}{}}}
+  \@ifnextchar\bgroup{\reflowtex@contentsline{#1}{#2}}{\reflowtex@contentsline{#1}{#2}\reflowtex@noarg}}
+\def\reflowtex@noarg{\reflowtex@noarg}   % stands for a fourth argument the line did not have
 \def\reflowtex@contentsline#1#2#3{%
   \def\reflowtex@tmp{toc}%
   \ifx\reflowtex@tocfile\reflowtex@tmp
@@ -258,14 +263,16 @@
   \else
     \reflowtex@origcontentsline{#1}{#2}{#3}%
   \fi}
-% the original, with the page number left out (and hyperref's anchor, when
-% it takes one)
+% the original, with the page number left out, and the fourth argument if
+% the line had one (outside the conditional: the original reads its arguments)
 \def\reflowtex@origcontentsline#1#2#3{%
-  \ifreflowtex@hyperref \reflowtexOrigContentsline{#1}{#2}{}{#3}%
-  \else \reflowtexOrigContentsline{#1}{#2}{}\fi}
-\newif\ifreflowtex@hyperref
+  \def\reflowtex@tmpa{#3}%
+  \ifx\reflowtex@tmpa\reflowtex@noarg \expandafter\@firstoftwo\else \expandafter\@secondoftwo\fi
+  {\reflowtexOrigContentsline{#1}{#2}{}}{\reflowtexOrigContentsline{#1}{#2}{}{#3}}}
+% With no page number, the dotted leaders of the standard classes would lead
+% to nothing: spaced wider than any line, not one dot fits.
 \AtBeginDocument{%
-  \@ifpackageloaded{hyperref}{\reflowtex@hyperreftrue}{}%
+  \def\@dotsep{10000}%
   \let\reflowtexOrigContentsline\contentsline
   \let\contentsline\reflowtex@newcontentsline
   \let\reflowtex@starttoc\@starttoc
@@ -299,10 +306,12 @@
 % a display that skip is the below-display glue, which the renderer swaps for
 % its own choice – so it must know the minimum too. Every \addvspace reports
 % the \lastskip it found and what it asked for; the serializer attaches the
-% minimum to the display whose skip it was (Serializer.note_addvspace).
+% minimum to the display whose skip it was (Serializer.note_addvspace). The
+% argument may stretch (\addvspace{1em plus 1pt} above a ToC section entry):
+% its natural width is what counts.
 \let\reflowtexAddvspace\addvspace
 \def\addvspace#1{%
-  \ifvmode\directlua{Serializer.note_addvspace(\number\dimexpr\lastskip\relax, \number\dimexpr#1\relax)}\fi
+  \ifvmode\directlua{Serializer.note_addvspace(\number\dimexpr\lastskip\relax, \number\glueexpr#1\relax)}\fi
   \reflowtexAddvspace{#1}}
 
 % Capture the finished TikZ hbox rather than scanning its source. This also
