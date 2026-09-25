@@ -250,10 +250,13 @@ let   fontsPending        = false;  // a face still had to be fetched at first p
 // cache holds width-independent layout state (break candidates) and the
 // previously rendered SVG so resize can move elements instead of recreating.
 const blockData = new WeakMap(); // el → { doc, lastWidth, lastAlign, params, cache }
+// Set while reflowBlock runs a quick reflow (a resize under way): layoutDocument
+// then lets the segments far from the screen keep their boxes (see settleAll).
+let quickLayout = false;
 
 // Re-layout one block for its current width/alignment. Returns false if nothing
 // needed doing (so the caller can stay quiet).
-function reflowBlock(el) {
+function reflowBlock(el, quick = false) {
     const data = blockData.get(el);
     if (!data) return false;
     // A block inside a collapsed section is display:none and reports clientWidth
@@ -272,12 +275,21 @@ function reflowBlock(el) {
     data.lastAlign = newAlign;
     const params = { ...data.params, align: newAlign };
     const t0  = performance.now();
-    // Layout always runs for the whole block so its height (and the page's scroll
-    // geometry) stays correct – it is pure computation and cheap. Painting, the
-    // DOM-heavy part, is then gated to the visible segments.
-    const root = layoutDocument(data.fontInfo, data.doc, newWidth, params, data.cache);
-    if (root !== el.firstElementChild) el.replaceChildren(root);
-    remeasureStreams(data.fontInfo, data.doc, newWidth, params, data.cache);
+    // Layout covers the whole block so its height (and the page's scroll
+    // geometry) stays correct. Painting, the DOM-heavy part, is then gated to
+    // the visible segments. A quick reflow (a resize under way) lays out only
+    // the segments near the viewport, and those whose height is cached; the
+    // rest keep their boxes until the resize stops (settleBlock).
+    quickLayout = quick && !!data.cache.layout;
+    let root;
+    try {
+        root = layoutDocument(data.fontInfo, data.doc, newWidth, params, data.cache);
+        if (root !== el.firstElementChild) el.replaceChildren(root);
+        remeasureStreams(data.fontInfo, data.doc, newWidth, params, data.cache);
+    } finally {
+        if (quickLayout) scheduleSettle(el);
+        quickLayout = false;
+    }
     // Re-layout moved every line: painted segments now hold ink at stale positions.
     // Mark them dirty so they get re-drawn in place – the on-screen ones now (below),
     // each off-screen one when it next scrolls into view (segIO). They are never
@@ -379,9 +391,91 @@ const ro = new ResizeObserver(entries => {
         roScheduled = false;
         const els = [...roPending];
         roPending.clear();
-        for (const el of els) reflowBlock(el);
+        for (const el of els) reflowBlock(el, true);
     });
 });
+
+// ── Settling after a resize ───────────────────────────────────────────────────
+// A resize reflows quickly (see reflowBlock): only what is on or near the
+// screen is re-broken, so a continuous drag stays cheap however long the page.
+// Once the width has held still for SETTLE_MS, every segment that kept its old
+// box is laid out at the new width. That changes heights off screen, above the
+// reader as well as below, so the pass holds the scroll position itself: it
+// notes where the first segment on screen is, turns the browser's scroll
+// anchoring off for the pass (so the correction is not applied twice, and is
+// applied in browsers without anchoring too), and scrolls by however far that
+// segment moved.
+const SETTLE_MS = 150;
+const unsettled = new Set();
+let settleTimer = 0;
+function scheduleSettle(el) {
+    unsettled.add(el);
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(settleAll, SETTLE_MS);
+}
+function settleAll() {
+    settleTimer = 0;
+    const els = [...unsettled].filter(el => el.isConnected);
+    unsettled.clear();
+    if (!els.length) return;
+    const t0 = performance.now();
+    const scroller = scrollerOf(els[0]);
+    const viewTop = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+    let anchor = null;
+    for (const el of els) {
+        const data = blockData.get(el);
+        const a = data && firstSegmentOnScreen(data.cache, viewTop);
+        if (a && (!anchor || a.top < anchor.top)) anchor = a;
+    }
+    const restore = holdScrollAnchoring(scroller);
+    for (const el of els) settleBlock(el);
+    if (anchor) {
+        const d = anchor.el.getBoundingClientRect().top - anchor.top;
+        if (d) scroller.scrollTop += d;
+    }
+    requestAnimationFrame(restore);
+    debugLog(`[latex-viewer] settled ${els.length} block(s) in ${(performance.now() - t0).toFixed(1)} ms`);
+}
+// Lay out, at the width it was last reflowed to, every segment of a block
+// that a quick reflow left with its old box. The segments near the screen
+// come straight from the cache, so nothing visible changes.
+function settleBlock(el) {
+    const data = blockData.get(el);
+    if (!data || !data.cache.layout) return;
+    const params = { ...data.params, align: data.lastAlign };
+    layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
+    paintVisibleNow(data.fontInfo, data.cache);
+}
+// The first segment box, in document order, that reaches below the top of
+// the scroller's viewport – the innermost one, inside a stream – and where it
+// is now. Holding its top still holds what the reader is looking at.
+function firstSegmentOnScreen(cache, viewTop) {
+    if (!cache.dom) return null;
+    for (const s of cache.dom.segs) {
+        if (!s.box.getClientRects().length) continue;   // not rendered (a collapsed stream)
+        const r = s.box.getBoundingClientRect();
+        if (r.bottom <= viewTop) continue;
+        if (r.top >= viewTop + (window.innerHeight || 800)) return null;
+        return (s.sub && firstSegmentOnScreen(s.sub, viewTop)) || { el: s.box, top: r.top };
+    }
+    return null;
+}
+function scrollerOf(el) {
+    for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+        const oy = getComputedStyle(p).overflowY;
+        if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') && p.scrollHeight > p.clientHeight) return p;
+    }
+    return document.scrollingElement || document.documentElement;
+}
+// Turn the browser's scroll anchoring off on a scroller (for the page, on
+// <html> and <body>); returns what turns it back on.
+function holdScrollAnchoring(scroller) {
+    const els = scroller === document.scrollingElement
+        ? [document.documentElement, document.body] : [scroller];
+    const was = els.map(e => e.style.overflowAnchor);
+    for (const e of els) e.style.overflowAnchor = 'none';
+    return () => els.forEach((e, k) => { e.style.overflowAnchor = was[k]; });
+}
 
 // ── Per-segment painting (grow-only) ──────────────────────────────────────────
 // Layout always covers the whole block (cheap pure computation, and it must, so
@@ -1643,7 +1737,10 @@ function setLinkState(key, cls, on) {
 // press colours carry over.
 function drawLinkUnderline(key, els) {
     for (const old of document.querySelectorAll('.latex-link-underline')) old.remove();
-    const hover = [...els].filter(el => el.classList.contains('latex-link-hover'));
+    // Glyphs only: a hit area (paintLinkHits) spans the same extent, and is
+    // transparent – its fill is no colour for the line.
+    const hover = [...els].filter(el => el.classList.contains('latex-link-hover')
+                                        && !el.classList.contains('latex-link-hit'));
     if (!hover.length) return;
     const lines = [];   // { svg, base, left, right, em, colour }
     for (const el of hover) {
@@ -2436,6 +2533,7 @@ function affineMul(m1, m2) {
 function reconcileSink(byNode, used, stats, cache) {
     let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
     const stack = [];
+    const linkRuns = new Map();   // data-link key → { el, x0, x1, top, bottom }
 
     function place(parent, last, el, isNew) {
         const expected = last ? last.nextSibling : parent.firstChild;
@@ -2468,8 +2566,10 @@ function reconcileSink(byNode, used, stats, cache) {
             used.add(g); lastRect = g;
             stack.push({ textParent, auxParent, lastTspan, lastRect });
             textParent = g.firstChild; auxParent = g;
+            // The group's own <text> is not in `used`: it lives and goes with
+            // the group. Swept on its own, it was taken out of a group that a
+            // later paint reused, empty (and g.firstChild null from then on).
             lastTspan = null; lastRect = g.firstChild;
-            used.add(g.firstChild);
         },
         endTransform() {
             const s = stack.pop();
@@ -2507,7 +2607,21 @@ function reconcileSink(byNode, used, stats, cache) {
             }
             place(textParent, lastTspan, el, isNew);
             used.add(el); lastTspan = el;
+            // The extent of each reference on this line, for its hit area
+            // (see paintLinkHits). Not inside a transform: that has its own
+            // coordinates.
+            if (el.dataset.link && !stack.length) {
+                const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
+                const r = linkRuns.get(el.dataset.link);
+                if (!r) linkRuns.set(el.dataset.link, { el, x0: x, x1, top, bottom });
+                else {
+                    r.x0 = Math.min(r.x0, x); r.x1 = Math.max(r.x1, x1);
+                    r.top = Math.min(r.top, top); r.bottom = Math.max(r.bottom, bottom);
+                }
+            }
         },
+        // The references' extents on the line just drawn; starts afresh.
+        takeLinkRuns() { const runs = [...linkRuns.values()]; linkRuns.clear(); return runs; },
         // A glyph whose font could not be loaded: draw its TeX metric boxes – the
         // advance width by the height above the baseline, and by the depth below –
         // as two outlined rects, so the missing ink's place and size are visible.
@@ -2546,6 +2660,9 @@ function reconcileSink(byNode, used, stats, cache) {
             if (isNew) {
                 el = svgEl('tspan', {x, y});
                 el.textContent = ' ';
+                // Not a target: the pointer between two words of a reference
+                // must reach the reference's hit area below (paintLinkHits).
+                el.style.pointerEvents = 'none';
                 byNode.set(n, el); stats.created++;
             } else {
                 el.setAttribute('x', x); el.setAttribute('y', y); stats.repositioned++;
@@ -4227,9 +4344,19 @@ function sizeSegment(s, L, prev, columnPx, p) {
     const box = onGridCarried(L.H, gap.carry);
     const H = box.r;
     L.gridCarry = box.carry;
-    s.svg.setAttribute('width', surfaceW);
-    s.svg.setAttribute('height', H);
-    s.svg.setAttribute('viewBox', `0 0 ${surfaceW} ${H}`);
+    // A segment held over by a quick reflow (see layoutDocument) keeps its
+    // <svg> exactly as it is. Resizing it would make the browser lay out all
+    // the text it holds again – once painted, a segment keeps its glyphs – and
+    // once a reader has scrolled down a long page, that is most of the page,
+    // on every frame of a drag. Its box clips it horizontally meanwhile, so the
+    // old, wider surface cannot widen the page. The box is far from the screen,
+    // so it is never the scroll anchor whose style must not change.
+    if (!L.held) {
+        s.svg.setAttribute('width', surfaceW);
+        s.svg.setAttribute('height', H);
+        s.svg.setAttribute('viewBox', `0 0 ${surfaceW} ${H}`);
+    }
+    setStyle(s.box, 'overflowX', L.held ? 'clip' : '');
 
     // Only a display that genuinely overflows gets a scroll box, because a
     // scroll box is also a *clipping* box: CSS forces overflow-y to 'auto'
@@ -4429,7 +4556,12 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         // height attribute changes on every reflow, and a change to the anchor
         // node's own computed height is a suppression trigger (see the mounting
         // notes below). The anchor lands on `box` instead, whose style never changes.
-        svg.style.cssText = 'display:block;overflow:visible;font-weight:normal;font-style:normal;overflow-anchor:none';
+        // max-width:none overrides a page's `svg { max-width: 100% }`: the
+        // viewer sizes every segment itself, and under that cap a column that
+        // narrows shrinks the whole picture (it has a viewBox) for the frame or
+        // two before the reflow lands. Uncapped, the lines keep their size and
+        // hang past the column until they are re-broken.
+        svg.style.cssText = 'display:block;overflow:visible;max-width:none;font-weight:normal;font-style:normal;overflow-anchor:none';
         const box = document.createElement('div');
         box.appendChild(svg);
         const gap = document.createElement('div');
@@ -4440,6 +4572,7 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     const paramsKey = JSON.stringify(p);
     cache.layoutCtx = { layoutOne, segs, widthPt, p, columnPx, paramsKey };
     const stats = cache.layoutStats = { computed: 0, reused: 0, deferred: 0, materialized: 0 };
+    const prevLaid = cache.layout && cache.layout.laid.length === segs.length ? cache.layout.laid : null;
     const laid = segs.map((seg, i) => {
         const s = dom.segs[i];
         if (seg.kind === 'stream') {
@@ -4450,10 +4583,15 @@ function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         const exact = hc.exact.get(widthPt);
         if (exact) { stats.reused++; return { ...exact, seg }; }
         if (!s.intersecting) {
-            const g = cachedGeometry(hc, widthPt);
+            // While the width is still changing (see reflowBlock), a segment
+            // with nothing cached for this width keeps the geometry it had:
+            // its box does not move, and settleBlock lays it out once the
+            // resize stops.
+            const cached = cachedGeometry(hc, widthPt);
+            const g = cached || (quickLayout && prevLaid && prevLaid[i]);
             if (g) {
                 stats.deferred++;
-                return { seg, deferred: true, lines: [], H: g.H, W: g.W, firstAscent: g.firstAscent,
+                return { seg, deferred: true, held: !cached, lines: [], H: g.H, W: g.W, firstAscent: g.firstAscent,
                          lastDepth: g.lastDepth, firstMeta: g.firstMeta, gapBefore: seg.gapBefore || 0,
                          preDisplaySizeSp: g.preDisplaySizeSp, displayLeftSp: g.displayLeftSp, atSourceWidth: g.atSourceWidth };
             }
@@ -4617,6 +4755,7 @@ function paintSegment(fontInfo, cache, i) {
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
     const used  = new Set();
     const sink  = reconcileSink(dom.byNode, used, stats, cache);
+    const linkRuns = [];
 
     // Grow/shrink the pool of per-line group pairs. Detached pairs are kept for
     // later regrowth; their stale children are swept by the live set.
@@ -4646,7 +4785,9 @@ function paintSegment(fontInfo, cache, i) {
         // single ratio slot carries the fill ratio and fillOrder selects the fill.
         renderNodes(fontInfo, sink, L.lines[j].nodes, x0, L.baselineYs[j],
                     fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+        linkRuns.push(...sink.takeLinkRuns());
     }
+    paintLinkHits(s, linkRuns);
 
     // Detach this segment's elements no longer rendered (disc paths toggled off,
     // spaces consumed by new break points). They stay cached in byNode.
@@ -4664,6 +4805,30 @@ function paintSegment(fontInfo, cache, i) {
     if (s.wrap && s.svg.parentNode === s.wrap) {
         updateDisplayOverflowCue(s.wrap);
     }
+}
+
+// A reference's hit area: one transparent rect per line it is on, from its
+// first glyph to its last, as tall as its glyphs, carrying the reference's
+// data-link attributes. The spaces inside a reference are glue, drawn as
+// nothing, so without it the pointer between two words of "Section 2" is on
+// no link: no underline, and a click does nothing. The rects lie under the
+// glyphs (first in the <svg>), so a glyph still takes the pointer over its
+// own ink. Rebuilt on every paint – a segment holds a handful at most.
+function paintLinkHits(s, runs) {
+    if (!runs.length && !s.hits) return;
+    if (!s.hits) {
+        s.hits = svgEl('g', { 'aria-hidden': 'true' });
+        s.svg.insertBefore(s.hits, s.svg.firstChild);
+    }
+    s.hits.replaceChildren(...runs.map(r => {
+        const rect = svgEl('rect', { x: r.x0, y: r.top, width: Math.max(0, r.x1 - r.x0),
+                                     height: Math.max(0, r.bottom - r.top) });
+        rect.setAttribute('class', 'latex-link-hit');
+        for (const k of ['link', 'linkHref', 'linkLabel', 'linkAction'])
+            if (r.el.dataset[k] !== undefined) rect.dataset[k] = r.el.dataset[k];
+        rect.style.cssText = 'fill:transparent;cursor:pointer';
+        return rect;
+    }));
 }
 
 // Paint every segment regardless of the viewport – for printing, where nothing may
