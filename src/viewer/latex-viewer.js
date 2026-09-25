@@ -4116,12 +4116,15 @@ function installStreamStyles() {
         padding: .6rem 1rem;
         border-left: 3px solid var(--latex-note-accent, #2f6fb3);
         background: color-mix(in srgb, var(--latex-note-accent, #2f6fb3) 8%, transparent); }
-      .latex-stream[data-kind="hint"] {
-        --latex-outset-l: 1rem; --latex-outset-r: 1rem;
-        padding: .6rem 1rem; cursor: pointer;
-        background: color-mix(in srgb, currentColor 5%, transparent);
-        filter: blur(5px); transition: filter .2s; }
-      .latex-stream[data-kind="hint"].latex-revealed { filter: none; }
+      /* The hint's content is blurred, not the box, so a label can sit
+         sharp over it while it is hidden (--latex-hint-label, a string). */
+      .latex-stream[data-kind="hint"] { position: relative; cursor: pointer; }
+      .latex-stream[data-kind="hint"] > * { filter: blur(5px); transition: filter .2s; }
+      .latex-stream[data-kind="hint"].latex-revealed > * { filter: none; }
+      .latex-stream[data-kind="hint"]:not(.latex-revealed)::after {
+        content: var(--latex-hint-label, "Click to reveal");
+        position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+        font: 600 .8rem/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: .01em; }
       .latex-stream[data-kind="hint"]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
       /* Vertical padding from the content's own edges: --latex-box-space
          (default one x-height of 10pt Latin Modern, 4.31pt) between the box
@@ -4154,7 +4157,8 @@ function installStreamStyles() {
         background: var(--latex-box-background,
           color-mix(in srgb, var(--latex-box-accent, var(--latex-proof-accent, #8a8f98)) 6%, transparent)); }
       @media print {
-        .latex-stream[data-kind="hint"] { filter: none; }
+        .latex-stream[data-kind="hint"] > * { filter: none; }
+        .latex-stream[data-kind="hint"]::after { content: none; }
       }
       .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"]:not(.latex-pane-active) {
         display: none; }
@@ -4201,9 +4205,17 @@ function installStreamStyles() {
       .latex-stream[data-kind="leantheorem"] > div:first-child > .latex-stream[data-kind="leanstatement"] { grid-column: 1 / -1; }
       :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]):not(.latex-show-proof) > div:first-child > .latex-stream[data-kind="leantex"],
       :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]):not(.latex-show-lean) > div:first-child > .latex-stream[data-kind="leancode"] { display: none; }
+      /* Side by side, the proof and the code are one height: the row
+         stretches both, and the proof's own box (inside leantex) with it. */
       @container (min-width: 44rem) {
         :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]).latex-show-proof.latex-show-lean > div:first-child {
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 3.2rem; } }
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 3.2rem; align-items: stretch; }
+        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]).latex-show-proof.latex-show-lean .latex-stream[data-kind="leantex"] {
+          display: flex; flex-direction: column; }
+        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]).latex-show-proof.latex-show-lean .latex-stream[data-kind="leantex"] > div {
+          flex: 1 0 auto; display: flex; flex-direction: column; }
+        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]).latex-show-proof.latex-show-lean .latex-stream[data-kind="leantex"] > div > .latex-stream {
+          flex: 1 0 auto; } }
       /* The code's frame: the proof's, in the Lean colour (--latex-lean-accent). */
       .latex-stream[data-kind="leancode"] {
         --latex-outset-l: calc(.85rem + 3px); --latex-outset-r: .7rem;
