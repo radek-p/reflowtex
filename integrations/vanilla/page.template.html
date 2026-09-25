@@ -13,7 +13,7 @@
      the default (no class); `dark`, `sepia`, `contrast` each remap default ink,
      red/blue, and the page background. Set the class before first paint (from the
      saved choice, else the OS preference) so text is never briefly invisible; the
-     switcher (bottom-right) calls window.__setTheme to change it live. -->
+     reading panel (bottom-right) calls window.__setTheme to change it live. -->
 <script>
   (function () {
     var KEY = 'reflowtex-theme';
@@ -34,7 +34,7 @@
      'narrow'/'normal'/'wide' pin it to a fixed measure that overflows into a
      horizontal scroll when the window is narrower. Set from the saved choice
      before first paint – like the theme – so the blocks lay out at the chosen
-     width immediately rather than reflowing once after load. The switcher (bottom-
+     width immediately rather than reflowing once after load. The reading panel (bottom-
      right) calls window.__setWidth, which resizes #lt-content; the viewer's
      ResizeObserver reflows each block to the new width. -->
 <script>
@@ -122,7 +122,7 @@
   /* ── The content column ──────────────────────────────────────────────────
      Holds the title and every block, centred with a reading measure. The width
      switch retargets it and the zoom control scales it (see the head scripts);
-     both act here rather than on <body> so the floating switches and the
+     both act here rather than on <body> so the reading panel and the
      citation popover – siblings in <body> – are neither resized nor scaled. */
   #lt-content {
     max-width: 46rem; margin: 3rem auto; padding: 0 1.25rem;
@@ -136,53 +136,100 @@
   html[data-width="normal"] #lt-content { max-width: none; width: 46rem; }
   html[data-width="wide"]   #lt-content { max-width: none; width: 64rem; }
 
-  /* ── Floating switches (bottom-right) ────────────────────────────────────
-     A content-width switch and a colour-theme switch, side by side and fixed in
-     view as the reader scrolls. Anchored at the right edge; when the viewport is
-     too narrow to hold both on one row they stack (the container grows upward, so
-     it stays put). Buttons call window.__setWidth / window.__setTheme (defined in
-     <head>); the active one is marked via the data-width / data-theme attribute
-     the setters write on <html>. */
-  #lt-switches {
-    position: fixed; right: 1rem; bottom: 1rem; z-index: 1000;
-    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem;
+  /* ── Reading options (bottom-right) ─────────────────────────────────────
+     One round "Aa" button that opens a small panel: text size, colour theme,
+     column width, and the inspector. A frosted material in the page's own
+     colour per theme. The buttons call window.__zoom / __setTheme /
+     __setWidth (defined in <head>); it sits outside #lt-content, so the
+     width and zoom it sets do not resize or scale it. */
+  html          { --lt-glass: rgba(250, 250, 249, .74); --lt-seg-on: #ffffff; }
+  html.dark     { --lt-glass: rgba(34, 31, 29, .74);    --lt-seg-on: #4a4541; }
+  html.sepia    { --lt-glass: rgba(244, 236, 216, .80); --lt-seg-on: #fbf6ea; }
+  html.contrast { --lt-glass: rgba(255, 255, 255, .92); --lt-seg-on: #ffffff; }
+  #lt-reader {
+    --lt-hair: color-mix(in srgb, currentColor 16%, transparent);
+    --lt-accent: var(--latex-link, #2f6fb3);
+    position: fixed; z-index: 1000;
+    right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
+    line-height: normal; -webkit-font-smoothing: antialiased;
   }
-  @media (max-width: 32rem) { #lt-switches { flex-direction: column; align-items: flex-end; } }
-  .lt-switch {
-    display: flex; gap: 2px; padding: 3px; border-radius: 999px;
-    font-size: 0.72rem;
-    background: color-mix(in srgb, currentColor 12%, transparent);
-    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-    box-shadow: 0 1px 8px color-mix(in srgb, currentColor 14%, transparent);
-    backdrop-filter: blur(6px);
+  #lt-reader-button, #lt-reader-panel {
+    background: var(--lt-glass);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    border: .5px solid var(--lt-hair); color: inherit;
   }
-  .lt-switch button {
-    border: 0; background: none; color: inherit; cursor: pointer;
-    padding: 0.3rem 0.6rem; border-radius: 999px; opacity: 0.7;
-    font: inherit; letter-spacing: 0.02em; white-space: nowrap;
+  #lt-reader-button {
+    width: 44px; height: 44px; border-radius: 50%; padding: 0; cursor: pointer;
+    display: grid; place-items: center;
+    box-shadow: 0 6px 20px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .08);
+    transition: transform .15s ease, box-shadow .15s ease;
   }
-  .lt-switch button:hover { opacity: 1; }
-  /* The zoom readout (middle button) shows the current level and doubles as the
-     reset. A fixed min-width and tabular figures keep 90% / 100% / 125% the same
-     width, so cycling zoom never jiggles the right-anchored row. */
-  #zoom-switch button[data-z="reset"] {
-    min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums;
+  #lt-reader-button:hover { box-shadow: 0 8px 26px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .1); }
+  #lt-reader-button:active, #lt-reader-button[aria-expanded="true"] { transform: scale(.94); }
+  /* One size for both letters: a smaller capital would come out no taller
+     than the lowercase a. */
+  .lt-aa { font: 18px/1 ui-serif, "New York", Georgia, serif; letter-spacing: .01em; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  #lt-reader-panel {
+    position: absolute; right: 0; bottom: 56px; width: 272px; padding: 6px;
+    border-radius: 20px; box-sizing: border-box;
+    box-shadow: 0 18px 50px rgb(0 0 0 / .18), 0 2px 6px rgb(0 0 0 / .08);
+    transform-origin: bottom right; animation: lt-pop .22s cubic-bezier(.2, .9, .25, 1.05);
   }
-  /* Active state is background + full opacity only – deliberately NOT a weight
-     change, which would make the active button wider and reflow the row (and,
-     since the switcher is anchored at its right edge, visibly shift it) on every
-     switch. */
-  html[data-width="auto"]     #width-switch button[data-w="auto"],
-  html:not([data-width])      #width-switch button[data-w="auto"],
-  html[data-width="narrow"]   #width-switch button[data-w="narrow"],
-  html[data-width="normal"]   #width-switch button[data-w="normal"],
-  html[data-width="wide"]     #width-switch button[data-w="wide"],
-  html[data-theme="light"]    #theme-switch button[data-t="light"],
-  html[data-theme="dark"]     #theme-switch button[data-t="dark"],
-  html[data-theme="sepia"]    #theme-switch button[data-t="sepia"],
-  html[data-theme="contrast"] #theme-switch button[data-t="contrast"] {
-    opacity: 1; background: color-mix(in srgb, currentColor 18%, transparent);
+  #lt-reader-panel[hidden] { display: none; }
+  @keyframes lt-pop { from { opacity: 0; transform: translateY(6px) scale(.92); } }
+  @media (prefers-reduced-motion: reduce) { #lt-reader-panel { animation: none; } #lt-reader-button { transition: none; } }
+  .lt-row { padding: 10px 8px; }
+  .lt-row + .lt-row { border-top: .5px solid var(--lt-hair); }
+  .lt-row button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .lt-row button:focus-visible, #lt-reader-button:focus-visible { outline: 2px solid var(--lt-accent); outline-offset: 2px; }
+  .lt-caption { font-size: 11px; opacity: .6; margin: 0 0 8px; }
+  /* The inspector entry: a plain row, its shortcut on the right. */
+  .lt-inspect-row {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: 13px; padding: 6px 6px; border-radius: 10px; text-align: left;
   }
+  .lt-inspect-row:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  .lt-inspect-row kbd { font: 11px ui-monospace, Menlo, monospace; opacity: .6; }
+  /* Text size: small A · percentage · large A. The percentage is the reset. */
+  .lt-size { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; }
+  .lt-size button { height: 36px; border-radius: 10px; }
+  .lt-size button:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  .lt-size [data-z="out"] { font: 500 14px ui-serif, "New York", Georgia, serif; }
+  .lt-size [data-z="in"]  { font: 500 21px ui-serif, "New York", Georgia, serif; }
+  .lt-size #zoom-level { font-size: 13px; font-variant-numeric: tabular-nums; opacity: .75; }
+  /* Theme: four swatches with names. */
+  .lt-themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .lt-themes button { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; padding: 2px 0; }
+  .lt-themes button span { opacity: .7; }
+  .lt-themes button[aria-checked="true"] span { opacity: 1; font-weight: 600; }
+  .lt-swatch {
+    width: 34px; height: 34px; border-radius: 50%;
+    box-shadow: inset 0 0 0 .5px rgb(0 0 0 / .22);
+    font-family: ui-serif, "New York", Georgia, serif; font-size: 14px;
+    display: grid; place-items: center; opacity: 1 !important; font-weight: 400 !important;
+  }
+  [data-t="light"]    .lt-swatch { background: #fafaf9; color: #333; }
+  [data-t="dark"]     .lt-swatch { background: #1c1917; color: #e7e5e4; }
+  [data-t="sepia"]    .lt-swatch { background: #f4ecd8; color: #453a26; }
+  [data-t="contrast"] .lt-swatch { background: #fff; color: #000; box-shadow: inset 0 0 0 1.5px #000; }
+  .lt-themes button[aria-checked="true"] .lt-swatch { outline: 2.5px solid var(--lt-accent); outline-offset: 2.5px; }
+  /* Width: a segmented control. */
+  .lt-seg {
+    display: grid; grid-template-columns: repeat(4, 1fr); padding: 2px; gap: 2px;
+    border-radius: 9px; background: color-mix(in srgb, currentColor 9%, transparent);
+  }
+  .lt-seg button { font-size: 12px; padding: 6px 0; border-radius: 7px; opacity: .8; }
+  .lt-seg button[aria-checked="true"] {
+    opacity: 1; font-weight: 600; background: var(--lt-seg-on);
+    box-shadow: 0 1px 3px rgb(0 0 0 / .14), 0 0 0 .5px rgb(0 0 0 / .04);
+  }
+  @media (max-width: 30rem) {
+    #lt-reader-panel { position: fixed; left: 12px; right: 12px; width: auto;
+      bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 56px); }
+  }
+  @media print { #lt-reader { display: none; } }
   /* ── The viewer's rendering surface ──────────────────────────────────────
      latex-viewer.js reads each block's pixel width from its box, lays the SVG
      out to that width, and (for a display that overflows the column) wraps it
@@ -287,25 +334,71 @@
 </style>
 </head>
 <body>
-<div id="lt-switches">
-  <nav id="width-switch" class="lt-switch" aria-label="Content width">
-    <button type="button" data-w="auto"   onclick="window.__setWidth('auto')">Auto</button>
-    <button type="button" data-w="narrow" onclick="window.__setWidth('narrow')">Narrow</button>
-    <button type="button" data-w="normal" onclick="window.__setWidth('normal')">Normal</button>
-    <button type="button" data-w="wide"   onclick="window.__setWidth('wide')">Wide</button>
-  </nav>
-  <nav id="zoom-switch" class="lt-switch" aria-label="Zoom">
-    <button type="button" data-z="out"   onclick="window.__zoom(-1)" title="Zoom out"   aria-label="Zoom out">&minus;</button>
-    <button type="button" data-z="reset" onclick="window.__zoom(0)"  title="Reset zoom"  aria-label="Reset zoom" id="zoom-level">100%</button>
-    <button type="button" data-z="in"    onclick="window.__zoom(1)"  title="Zoom in"     aria-label="Zoom in">+</button>
-  </nav>
-  <nav id="theme-switch" class="lt-switch" aria-label="Colour theme">
-    <button type="button" data-t="light"    onclick="window.__setTheme('light')">Light</button>
-    <button type="button" data-t="dark"     onclick="window.__setTheme('dark')">Dark</button>
-    <button type="button" data-t="sepia"    onclick="window.__setTheme('sepia')">Sepia</button>
-    <button type="button" data-t="contrast" onclick="window.__setTheme('contrast')">Contrast</button>
-  </nav>
+<div id="lt-reader">
+  <div id="lt-reader-panel" role="dialog" aria-label="Reading options" hidden>
+    <div class="lt-row lt-size" role="group" aria-label="Text size">
+      <button type="button" data-z="out" aria-label="Smaller text" title="Smaller">A</button>
+      <button type="button" data-z="reset" id="zoom-level" aria-label="Reset text size" title="Reset">100%</button>
+      <button type="button" data-z="in" aria-label="Larger text" title="Larger">A</button>
+    </div>
+    <div class="lt-row lt-themes" role="radiogroup" aria-label="Colour theme">
+      <button type="button" role="radio" data-t="light" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Light</span></button>
+      <button type="button" role="radio" data-t="dark" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Dark</span></button>
+      <button type="button" role="radio" data-t="sepia" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Sepia</span></button>
+      <button type="button" role="radio" data-t="contrast" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Contrast</span></button>
+    </div>
+    <div class="lt-row">
+      <p class="lt-caption" id="lt-width-label">Text width</p>
+      <div class="lt-seg" role="radiogroup" aria-labelledby="lt-width-label">
+        <button type="button" role="radio" data-w="auto" aria-checked="false">Auto</button>
+        <button type="button" role="radio" data-w="narrow" aria-checked="false">Narrow</button>
+        <button type="button" role="radio" data-w="normal" aria-checked="false">Normal</button>
+        <button type="button" role="radio" data-w="wide" aria-checked="false">Wide</button>
+      </div>
+    </div>
+    <div class="lt-row">
+      <button type="button" class="lt-inspect-row" data-inspect title="The boxes and glue behind the page">
+        <span>Inspect boxes and glue</span><kbd class="lt-inspect-key"></kbd>
+      </button>
+    </div>
+  </div>
+  <button type="button" id="lt-reader-button" aria-haspopup="dialog" aria-expanded="false"
+          aria-controls="lt-reader-panel" title="Reading options">
+    <span class="lt-aa" aria-hidden="true">Aa</span>
+    <span class="sr-only">Reading options</span>
+  </button>
 </div>
+<script>
+(function () {
+  var root = document.getElementById('lt-reader');
+  var btn = document.getElementById('lt-reader-button'), panel = document.getElementById('lt-reader-panel');
+  var html = document.documentElement;
+  function sync() {
+    root.querySelectorAll('[data-t]').forEach(function (b) {
+      b.setAttribute('aria-checked', String(html.getAttribute('data-theme') === b.dataset.t)); });
+    root.querySelectorAll('[data-w]').forEach(function (b) {
+      b.setAttribute('aria-checked', String((html.getAttribute('data-width') || 'auto') === b.dataset.w)); });
+  }
+  function open(on) {
+    panel.hidden = !on;
+    btn.setAttribute('aria-expanded', String(on));
+    if (on) { sync(); (panel.querySelector('[aria-checked="true"]') || panel.querySelector('button')).focus(); }
+  }
+  btn.addEventListener('click', function () { open(panel.hidden); });
+  document.addEventListener('pointerdown', function (e) { if (!panel.hidden && !root.contains(e.target)) open(false); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !panel.hidden) { open(false); btn.focus(); } });
+  panel.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.t) window.__setTheme(b.dataset.t);
+    if (b.dataset.w) window.__setWidth(b.dataset.w);
+    if (b.dataset.z) window.__zoom(b.dataset.z === 'out' ? -1 : b.dataset.z === 'in' ? 1 : 0);
+    sync();
+  });
+  sync();
+})();
+</script>
 
 <main id="lt-content">
 <h1>{{TITLE}}</h1>
@@ -323,5 +416,20 @@
 <!-- protobuf.min.js must load before latex-viewer.js (it exposes global `protobuf`). -->
 <script src="protobuf.min.js"></script>
 <script src="latex-viewer.js"></script>
+<!-- The inspector (src/inspector): the boxes and glue behind the blocks.
+     Alt+Shift+I (⌥⇧I) or the reading panel's entry opens it; its panel and
+     agent load from beside inspector.js only then. -->
+<script src="inspector/inspector.js"></script>
+<script>
+(function () {
+  var ins = window.reflowtex && window.reflowtex.inspector, b = document.querySelector('[data-inspect]');
+  if (!ins) { b.parentNode.hidden = true; return; }
+  b.querySelector('.lt-inspect-key').textContent = ins.shortcut;
+  b.addEventListener('click', function () {
+    document.getElementById('lt-reader-button').click();   // close the reading panel
+    ins.open();
+  });
+})();
+</script>
 </body>
 </html>

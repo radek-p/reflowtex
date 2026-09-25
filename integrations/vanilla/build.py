@@ -132,6 +132,11 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     shutil.copy(viewer_script(), out / 'latex-viewer.js')
     shutil.copy(SRC / 'viewer' / 'protobuf.min.js', out / 'protobuf.min.js')
+    # The inspector: its script, and the panel's stylesheet and page agent it
+    # loads from beside itself when opened.
+    (out / 'inspector').mkdir(exist_ok=True)
+    for name in ('inspector.js', 'inspector.css', 'agent.js'):
+        shutil.copy(SRC / 'inspector' / name, out / 'inspector' / name)
 
     import json
     page = (PAGE_TEMPLATE.read_text(encoding='utf-8')

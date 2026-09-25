@@ -681,9 +681,9 @@
   #lt-reader-button:hover { box-shadow: 0 8px 26px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .1); }
   #lt-reader-button:active { transform: scale(.94); }
   #lt-reader-button[aria-expanded="true"] { transform: scale(.94); }
-  .lt-aa { font-family: ui-serif, "New York", Georgia, serif; line-height: 1; display: flex; align-items: baseline; }
-  .lt-aa span:first-child { font-size: 13px; }
-  .lt-aa span:last-child  { font-size: 19px; }
+  /* One size for both letters: a smaller capital would come out no taller
+     than the lowercase a. */
+  .lt-aa { font: 18px/1 ui-serif, "New York", Georgia, serif; letter-spacing: .01em; }
   #lt-reader-panel {
     position: absolute; right: 0; bottom: 56px; width: 272px; padding: 6px;
     border-radius: 20px; box-sizing: border-box;
