@@ -20,6 +20,9 @@
 %                                    words a page may replace from JavaScript
 %   \webwidget[default]{name}        a place in running text where a page
 %                                    draws HTML, breakable across lines
+%   \webaside[attrs]{kind}{text}     primitive: text typeset out of the flow,
+%                                    for the page to show around it (a
+%                                    popover, a margin note)
 %   webaccordion / webpane           built from the two: a block showing one
 %                                    of several panes, switched by links in
 %                                    them (\webpanelink, \webnextpane,
@@ -142,6 +145,31 @@
     \begingroup\attribute913=\reflowtexSlotCount\relax #2\endgroup}
 \else
   \NewDocumentCommand\webtext{m m}{#2}
+\fi
+
+% ── Out of the flow: \webaside ───────────────────────────────────────────────
+% \webaside[key=value, …]{kind}{text}
+%
+% On the web, `text` is typeset where \webaside stands – in the current font,
+% as paragraphs as wide as the text, and in running text too – but it is not
+% part of the flow: like a footnote's text it goes into an insertion, and
+% from there into a stream of kind `kind` that nothing in the text shows. A
+% page shows it where it likes: the viewer hands a widget the asides of its
+% block (ctx.asides), and a script those of any block (reflowtex.asides),
+% each drawn on demand at a width, or on one line at its natural width.
+% Parameters are the stream's, as for webstream; a page finds an aside by
+% them (and its kind). In running text an aside also leaves a mark where it
+% stood, an empty box (attribute 915), that flows with the text: a page asks
+% where it came to rest, to put the aside beside it – in the margin, say.
+%
+% The pipeline's template does the work (\reflowtexAside, which \marginpar
+% uses too); in print an aside is left out.
+\ifreflowtex
+  \NewDocumentCommand\webaside{O{} m +m}{%
+    \protected@edef\reflowtex@attrs{#1}%
+    \reflowtexAside{#2}{\reflowtex@attrs}{#3}}
+\else
+  \NewDocumentCommand\webaside{O{} m +m}{\ignorespaces}
 \fi
 
 % ── A widget: \webwidget ─────────────────────────────────────────────────────

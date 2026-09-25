@@ -189,6 +189,29 @@
 % are numbered by this one counter, which the package uses when it finds it.
 \newcount\reflowtexStreamCount
 
+% ── Asides ──────────────────────────────────────────────────────────────────
+% \reflowtexAside{kind}{key=value,…}{text}: `text` typeset where it stands, in
+% running text too, but kept out of the flow – a stream of `kind`, which the
+% serializer marks aside=true and the viewer shows on demand (a margin note,
+% a popover). Like a footnote's text it goes into an insertion (attribute 914
+% on the insertion, 911 on its contents); in running text it also leaves an
+% empty box where it stood (attribute 915), which flows with the text, for
+% the viewer to place the aside by. \marginpar (below) and reflowtex.sty's
+% \webaside are made of it. Parameters are taken as written: expand them first.
+\newinsert\reflowtexAsideIns
+\count\reflowtexAsideIns=0 \dimen\reflowtexAsideIns=\maxdimen \skip\reflowtexAsideIns=0pt
+\long\def\reflowtexAside#1#2#3{%
+  \global\advance\reflowtexStreamCount by 1
+  \directlua{Serializer.note_stream(\the\reflowtexStreamCount,
+    "\luaescapestring{#1}", 0, "\luaescapestring{#2}")}%
+  \begingroup
+    \ifhmode\attribute915=\reflowtexStreamCount\relax\hbox{}\attribute915=-"7FFFFFFF\fi
+    \attribute914=\reflowtexStreamCount\relax
+    \insert\reflowtexAsideIns{%
+      \attribute911=\reflowtexStreamCount\relax
+      \hsize\linewidth \parindent0pt \everypar{}#3\par}%
+  \endgroup}
+
 % ── Batch parts ──────────────────────────────────────────────────────────────
 % Pipeline.compile_batch compiles several snippets (a book's chapters) as one
 % document, joined by \reflowtexbatchpart{N}. Everything typeset after it
@@ -644,6 +667,13 @@
     \reflowtexOrigFootnotetext{#1}%
   \endgroup}
 \makeatother
+
+% ── Margin notes ─────────────────────────────────────────────────────────────
+% \marginpar[left]{right} as an aside of kind "marginpar", place=margin: the
+% viewer sets it in the margin by its line, or behind a mark where there is
+% none. There is one margin on the web, so the text for a left margin is not
+% used. After the user preamble, so a class's own \marginpar is replaced too.
+\renewcommand\marginpar[2][]{\reflowtexAside{marginpar}{place=margin}{#2}}
 
 \begin{document}
 %%CONTENT%%

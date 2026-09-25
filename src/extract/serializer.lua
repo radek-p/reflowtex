@@ -203,6 +203,8 @@ local STREAM_ATTR        = 911 -- nodes typeset inside \begin{webstream} (reflow
 -- Stamped on every glyph and glue of the default text, like a link, so the
 -- viewer can find the whole run wherever the line breaks fall.
 local SLOT_ATTR          = 913
+local ASIDE_ATTR         = 914 -- the insertion of a \webaside (reflowtex.sty): its stream id
+local ASIDE_MARK_ATTR    = 915 -- the empty box a \webaside leaves where it stood: the same id
 local RULE_IMAGE  = 2
 local picture_files = {}
 local source_width = 0
@@ -648,6 +650,9 @@ local function serialize_nodelist(head)
                 -- kind is needed – it is an ordinary box that happens to be
                 -- empty, and it draws and advances nothing either way.
                 anchor     = node.get_attribute(n, ANCHOR_ATTR),
+                -- A \webaside's mark, likewise an empty box: where the aside
+                -- stood, for a page to place it by.
+                aside      = node.get_attribute(n, ASIDE_MARK_ATTR),
                 children   = n.head and serialize_nodelist(n.head) or {},
             }
 
@@ -1236,16 +1241,26 @@ local function walk_flow(head, pending, ctx)
             -- (see remap_footnote_refs). Keeping ContentItems (rather than
             -- flattening text) preserves inline math, colours, citations, and
             -- the ordinary browser reflow machinery.
+            -- A \webaside is the same, into the stream it noted: its
+            -- insertion's contents fill that stream, which is never opened in
+            -- the flow, and is marked aside=true for the viewer.
+            local aside = node.get_attribute(n, ASIDE_ATTR)
+            local s = aside and aside > 0 and streams[aside] or nil
             local id = node.get_attribute(n, FOOTNOTE_INS_ATTR)
             local fn_content = {}
             local saved_band = { indent = cur_band.indent, width = cur_band.width }
             local saved_last = last_box
             walk_flow(n.head, { sp = 0, explicit = 0 },
-                      { out = fn_content, base = stream_attr(n) })
+                      s and { out = s.content, base = aside }
+                        or { out = fn_content, base = stream_attr(n) })
             cur_band = saved_band
             last_box = saved_last
-            streams[#streams + 1] = { kind = "footnote", content = fn_content }
-            if id and id > 0 then footnote_index[id] = #streams end
+            if s then
+                s.attrs[#s.attrs + 1] = { key = "aside", value = "true" }
+            else
+                streams[#streams + 1] = { kind = "footnote", content = fn_content }
+                if id and id > 0 then footnote_index[id] = #streams end
+            end
         elseif t == "glue" then
             note_part(pending, n, t)
             pending.sp = (pending.sp or 0) + (n.width or 0)

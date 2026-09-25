@@ -41,7 +41,7 @@ viewport.
 
 | Attribute | Meaning |
 |---|---|
-| `data-latex-width` | layout width in pt (default: the element's own pixel width ÷ 2) |
+| `data-latex-width` | layout width in pt (default: the element's own pixel width ÷ 2); `natural`: the width of its text set on one line, like an `\hbox`, which the viewer also gives the element as its CSS width – for a word in the page's own HTML |
 | `data-align` | `justify` (default) · `left` · `right` · `center` |
 | `data-color-map` | name of an entry in the page's `#latex-color-maps` island to recolour this block with (see Theming below); omitted = TeX/tikz colours render as-is |
 | `data-display-min-space` | Minimum space (pt) kept between two pieces of a display – an align's columns, or an equation and its number – as the measure decreases, before the display freezes and scrolls (default `10`; `0` permits zero). A display's *outer* space (centring, margin) is not covered by this and always closes to zero first |
@@ -410,6 +410,26 @@ widget marks every part of it – `latex-widget-hover` and `latex-widget-active`
 on each part's `foreignObject` – so a split widget can be styled as one
 (`.latex-widget-hover .my-badge { … }`). Keep menus and popovers out of it: open
 them in the page (a fixed panel), where nothing of the text can cover them.
+
+## Asides (optional)
+
+`\webaside[key=value]{kind}{text}` (reflowtex.sty) typesets `text` where it
+stands, in running text too, but out of the flow: the serializer files it as
+a stream of `kind`, marked `aside=true`, that nothing in the text shows. A
+page shows it where it likes. A widget gets its own block's asides as
+`ctx.asides(kind?)`, a script any block's as `reflowtex.asides(block, kind?)`:
+
+```js
+{ kind, attrs,          // its kind and parameters (attrs.for, …)
+  width(),              // natural width in px: each paragraph on one line
+  render(el, widthPx?)  // lay out and paint in el, at widthPx or the natural
+}                       // width; returns { width, baseline } (px from el's top)
+```
+
+Every `render` is a layout of its own, so one aside may be shown in several
+places, at any width. The page Footnotes on the website builds a popover
+from a widget and two asides (`website/latex-preambles/popover.tex`,
+`website/examples/popover.js`).
 
 ## Theming (optional)
 

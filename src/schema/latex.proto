@@ -121,6 +121,10 @@ message Node {
   // glyph/glue: part of a \webtext slot's default text – a 1-based index into
   // Document.slots. A page may replace the text from JavaScript (see Slot).
   optional uint32 slot   = 53;
+  // hlist: an empty, zero-sized box marking where a \webaside stood in the
+  // text (reflowtex.sty) – a 1-based index into Document.streams, the aside's
+  // own stream. A page asks for its position to place the aside by it.
+  optional uint32 aside  = 55;
 }
 
 // A named placeholder in running text (\webtext{name}{default} in

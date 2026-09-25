@@ -254,6 +254,32 @@ const blockData = new WeakMap(); // el → { doc, lastWidth, lastAlign, params, 
 // then lets the segments far from the screen keep their boxes (see settleAll).
 let quickLayout = false;
 
+// data-latex-width="natural": the block is as wide as its text set on one
+// line, like a TeX \hbox – for a word or a label placed in the page's own
+// HTML (a button, say). Laid out once at a measure no line of text reaches,
+// where each paragraph stays one line at its natural spacing, painted, and
+// measured from the left of the block to the farthest reach of its ink (in
+// the block's own scale, whatever CSS zoom it sits under). The block then
+// keeps that width; its element is given it as a CSS width. Meant for a line
+// of text: a display would be centred in the probe and measured from there.
+const NATURAL_PROBE_PT = 5000;
+function naturalWidthPt(el, fontInfo, cache, probePt) {
+    paintDocument(fontInfo, cache);
+    const root = el.firstElementChild;
+    if (!root) return probePt;
+    const left = root.getBoundingClientRect().left;
+    let right = 0;                                         // unzoomed px from the block's left
+    for (const svg of root.querySelectorAll('svg')) {
+        const ctm = svg.getScreenCTM();
+        if (!ctm || !ctm.a) continue;
+        const inv = ctm.inverse(), at = (svg.getBoundingClientRect().left - left) / ctm.a;
+        for (const e of svg.querySelectorAll('text, foreignObject'))
+            right = Math.max(right, at + new DOMPoint(e.getBoundingClientRect().right, 0).matrixTransform(inv).x);
+    }
+    // A hair more than the ink, so rounding never breaks the line again.
+    return right ? right / ZOOM + 0.5 : probePt;
+}
+
 // Re-layout one block for its current width/alignment. Returns false if nothing
 // needed doing (so the caller can stay quiet).
 function reflowBlock(el, quick = false) {
@@ -265,9 +291,9 @@ function reflowBlock(el, quick = false) {
     // Keep the last good layout; being shown again resizes the element, which
     // fires the observer once more.
     if (el.clientWidth === 0 && !el.dataset.latexWidth) return false;
-    const newWidth = el.dataset.latexWidth
+    const newWidth = data.naturalPt || (el.dataset.latexWidth
         ? parseInt(el.dataset.latexWidth)
-        : (el.clientWidth / ZOOM) || DEFAULT_WIDTH_PT;
+        : (el.clientWidth / ZOOM) || DEFAULT_WIDTH_PT);
     // Re-read alignment every time: a media query may have changed --latex-align.
     const newAlign = alignFromEl(el);
     if (Math.abs(newWidth - data.lastWidth) < 0.5 && newAlign === data.lastAlign) return false;
@@ -301,6 +327,7 @@ function reflowBlock(el, quick = false) {
     const st = data.cache.stats || {};
     const ls = data.cache.layoutStats || {};
     debugLog(`[latex-viewer] re-render at ${newWidth.toFixed(0)}pt: layout ${(tp - t0).toFixed(1)} ms, paint ${(performance.now() - tp).toFixed(1)} ms (${repainted} visible segment(s); ${st.repositioned||0} repositioned, ${st.created||0} created; segments: ${ls.computed||0} laid out, ${ls.reused||0} reused, ${ls.deferred||0} deferred to scroll)`);
+    announceLayout(el);
     return true;
 }
 
@@ -324,6 +351,7 @@ function rerenderBlock(el) {
     el.replaceChildren(layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache));
     remeasureStreams(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
     paintVisibleNow(data.fontInfo, data.cache);
+    announceLayout(el);
 }
 
 // Stream segments (see layoutStreamSegment) nest a whole layout, with its own
@@ -497,13 +525,20 @@ function holdScrollAnchoring(scroller) {
 const observedBlocks = new Set();       // blocks (for font-repaint + print)
 const segRef = new WeakMap();           // a segment's <svg> → { cache, i }
 const segIO = new IntersectionObserver(entries => {
+    const painted = new Set();
     for (const e of entries) {
         const ref = segRef.get(e.target);
         const s = ref && ref.cache.dom && ref.cache.dom.segs[ref.i];
         if (!s) continue;
         s.intersecting = e.isIntersecting;
-        if (e.isIntersecting && (!s.painted || s.dirty)) paintSegment(ref.cache.fontInfo, ref.cache, ref.i);
+        if (e.isIntersecting && (!s.painted || s.dirty)) {
+            paintSegment(ref.cache.fontInfo, ref.cache, ref.i);
+            const block = ref.cache.dom.root.closest('[data-nodelist-b64]');
+            if (block) painted.add(block);
+        }
     }
+    // Newly drawn lines may hold aside marks a page places things by.
+    for (const block of painted) announceLayout(block);
 }, { rootMargin: '100% 0px' });         // one-viewport vertical lookahead
 
 // Observe each not-yet-observed segment of a block. Idempotent: a segment's <svg>
@@ -1997,6 +2032,187 @@ function widgetFor(name) {
         if (k.endsWith('*') && name.startsWith(k.slice(0, -1)) && (!best || k.length > best.length)) best = k;
     return best ? w[best] : null;
 }
+// ── Asides (\webaside) ─────────────────────────────────────────────────────
+// Streams typeset out of the flow (marked aside=true by the serializer),
+// which a page shows where it likes. A handle per aside, for a widget
+// (ctx.asides) or a page script (reflowtex.asides(block)):
+//
+//   { kind, attrs,                  its kind and parameters (attrs.for, …)
+//     block,                        the block element it belongs to
+//     width(),                      its natural width in px: every paragraph
+//                                   on one line, as TeX would set an \hbox
+//     render(el, widthPx?),         lays it out in el, at widthPx or its
+//                                   natural width, and paints it; returns
+//                                   { width, baseline } – the first
+//                                   baseline, px down from el's top
+//     anchor() }                    where it stood in the text, if it stood in
+//                                   running text and that line is drawn: a
+//                                   DOMRect of zero size on the baseline, in
+//                                   the window; else null
+//
+// A query is a kind ('margin'), or an object of which `kind` and any
+// parameters must all match ({ kind: 'popover-note', for: '1' }); nothing
+// matches every aside. Each render is a layout of its own, so an aside may be
+// drawn in several places at once and at any width. After every layout, and
+// whenever lines are drawn as they near the window, a block sends
+// reflowtex:layout (bubbling), for a page that places asides by their anchors
+// to place them again.
+const docData = new WeakMap();          // a block's decoded document → its data
+const allData = [];                     // every block's data, in page order
+let docSeq = 0;
+function asideMatch(query, kind, attrs) {
+    if (!query) return true;
+    if (typeof query === 'string') return kind === query;
+    return Object.entries(query).every(([k, v]) => (k === 'kind' ? kind : attrs[k]) === String(v));
+}
+function asideHandles(data, query) {
+    if (!data) return [];
+    const out = [];
+    (data.doc.streams || []).forEach((s, i) => {
+        const attrs = Object.fromEntries((s.attrs || []).map(a => [a.key, a.value]));
+        if (attrs.aside === 'true' && asideMatch(query, s.kind, attrs)) out.push(asideHandle(data, s, attrs, i + 1));
+    });
+    return out;
+}
+function asideHandle(data, stream, attrs, index) {
+    const doc = { ...data.doc, content: stream.content };
+    const lay = widthPx => {
+        const cache = { bcs: null, dom: null, layout: null, stats: null };
+        const root = layoutDocument(data.fontInfo, doc, widthPx / ZOOM, data.params, cache);
+        return { cache, root };
+    };
+    let natural = null;
+    const width = () => {
+        if (natural === null) {
+            const { cache } = lay(NATURAL_PROBE_PT * ZOOM);
+            let w = 0;
+            for (const L of cache.layout.laid)
+                (L.lines || []).forEach((ln, j) => {
+                    w = Math.max(w, ((L.lrp && L.lrp[j]) ? L.lrp[j].x0 : 0) + sumWidthSp(ln.nodes) * SP_TO_PX);
+                });
+            natural = Math.ceil(w + 0.5);
+        }
+        return natural;
+    };
+    return {
+        kind: stream.kind, attrs, width, block: data.el, index,
+        anchor() {
+            // From the mark's own point and transform: WebKit gives an empty
+            // rect's box as its <svg>'s corner.
+            const m = data.el && data.el.querySelector(`.latex-aside-mark[data-aside="${index}"]`);
+            const ctm = m && m.getScreenCTM();
+            if (!ctm) return null;
+            const p = new DOMPoint(+m.getAttribute('x'), +m.getAttribute('y')).matrixTransform(ctm);
+            return new DOMRect(p.x, p.y, 0, 0);
+        },
+        render(el, widthPx) {
+            const w = widthPx || width();
+            const { cache, root } = lay(w);
+            const box = document.createElement('div');
+            box.className = 'latex-block latex-aside';
+            // Its own size and nothing else: no margin a page gives its blocks.
+            box.style.cssText = `width:${w}px;margin:0`;
+            box.appendChild(root);
+            el.replaceChildren(box);
+            paintDocument(data.fontInfo, cache);
+            const first = cache.layout.laid[0], baseline = first ? first.firstAscent : 0;
+            box.dataset.baseline = baseline;   // for whoever aligns it (placeMarginNotes)
+            return { width: w, baseline };
+        },
+    };
+}
+// reflowtex.asides(block, query): one block's asides; asides(query): every block's.
+api.asides = (block, query) => block instanceof Element
+    ? asideHandles(blockData.get(block), query)
+    : allData.flatMap(d => asideHandles(d, block));
+function announceLayout(el) {
+    placeMarginNotes(blockData.get(el));
+    el.dispatchEvent(new CustomEvent('reflowtex:layout', { bubbles: true, detail: { block: el } }));
+}
+
+// ── Margin notes ────────────────────────────────────────────────────────────
+// Asides with place=margin (\marginpar; \webaside[place=margin]) go in the
+// right margin, each with its first baseline on the baseline of the line its
+// mark is on, in a layer inside the block, so they move with it; one close
+// below another is pushed down. Where the window leaves less than
+// MARGIN.min beside the block, the note is hidden and its mark becomes a
+// small button (.latex-margin-mark) opening it in the footnote popover.
+// A page styles notes by .latex-margin-note[data-kind=…], or draws a kind
+// itself: reflowtex.marginNotes[kind] = (el, aside, widthPx) => …, filling el
+// (with aside.render(…) somewhere in it, whose baseline is then the one set
+// on the line). A page may set the margin itself, on the block, in px:
+// --latex-margin-width (the notes' width, taken as given – 0 for marks
+// only) and --latex-margin-gap (from the text); else the margin is what the
+// window leaves beside the block, up to MARGIN.max. Placed again after every
+// layout, drawing and resize.
+const MARGIN = { gap: 28, min: 150, max: 260 };   // px, by default
+api.marginNotes = api.marginNotes || {};
+function placeMarginNotes(data) {
+    const el = data && data.el;
+    if (!el || !el.isConnected) return;
+    const notes = asideHandles(data, { place: 'margin' });
+    if (!notes.length) return;
+    const M = data.margin = data.margin || { layer: document.createElement('div'), items: new Map() };
+    M.layer.className = 'latex-margin';
+    if (M.layer.parentNode !== el) el.appendChild(M.layer);
+    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    const br = el.getBoundingClientRect(), k = br.width / el.offsetWidth || 1;   // CSS zoom above
+    const cs = getComputedStyle(el), px = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
+    const gap = px(cs.getPropertyValue('--latex-margin-gap'), MARGIN.gap);
+    const set = px(cs.getPropertyValue('--latex-margin-width'), null);
+    const room = set !== null ? set : (document.documentElement.clientWidth - br.right) / k - gap;
+    const width = Math.floor(Math.min(set !== null ? set : MARGIN.max, room));
+    const wide = set !== null ? width > 0 : room >= MARGIN.min;
+    const placed = [];
+    for (const a of notes) {
+        let it = M.items.get(a.index);
+        if (!it) {
+            const note = document.createElement('div');
+            note.className = 'latex-margin-note';
+            note.dataset.kind = a.kind;
+            const mark = document.createElement('button');
+            mark.type = 'button';
+            mark.className = 'latex-margin-mark';
+            mark.textContent = '*';
+            mark.setAttribute('aria-label', 'Note');
+            registerFootnoteSource(mark, a.index);
+            it = { note, mark, width: 0 };
+            M.items.set(a.index, it);
+            M.layer.append(note, mark);
+        }
+        const at = a.anchor();
+        it.note.hidden = !(wide && at);
+        it.mark.hidden = !(!wide && at);
+        if (!at) continue;
+        const x = (at.left - br.left) / k, y = (at.top - br.top) / k;
+        if (!wide) { it.mark.style.left = x + 'px'; it.mark.style.top = y + 'px'; continue; }
+        if (it.width !== width) {
+            const draw = api.marginNotes[a.kind];
+            if (draw) draw(it.note, a, width); else a.render(it.note, width);
+            it.width = width;
+        }
+        it.note.style.left = el.offsetWidth + gap + 'px';
+        it.note.style.width = width + 'px';
+        const box = it.note.querySelector('.latex-aside');
+        const baseline = box ? (box.getBoundingClientRect().top - it.note.getBoundingClientRect().top) / k
+                               + parseFloat(box.dataset.baseline || 0) : 0;
+        placed.push({ note: it.note, top: y - baseline });
+    }
+    placed.sort((p, q) => p.top - q.top);
+    let bottom = -Infinity, reach = 0;
+    for (const p of placed) {
+        const top = Math.max(p.top, bottom);
+        p.note.style.top = top + 'px';
+        bottom = top + p.note.offsetHeight + 8;
+        reach = Math.max(reach, top + p.note.offsetHeight);
+    }
+    // Notes reaching below the block's text: room for them under it.
+    el.style.paddingBottom = '';
+    const over = reach - el.offsetHeight;
+    el.style.paddingBottom = over > 0 ? Math.ceil(over) + 'px' : '';
+}
+window.addEventListener('resize', () => { for (const d of allData) if (d.margin) placeMarginNotes(d); });
+
 // Size some HTML the way it sits in a line: its box against the baseline.
 function measureHTML(html, fontPx) {
     const probe = document.createElement('div');
@@ -2022,7 +2238,7 @@ function measureHTML(html, fontPx) {
 }
 api.refreshWidgets = () => scheduleSlots();
 
-function widgetNodes(fontInfo, slot, id, run, before, after) {
+function widgetNodes(fontInfo, slot, id, run, before, after, doc) {
     const widget = widgetFor(slot.name);
     if (!widget || typeof widget.measure !== 'function') return null;
     // The text's size and colour: the default's first glyph, else the nearest
@@ -2037,9 +2253,12 @@ function widgetNodes(fontInfo, slot, id, run, before, after) {
         name: slot.name, fontSize: fontPx, color: t && t.color ? colorFill(t.color) : null,
         state: widgetState.get(slot.name),
         measure: html => measureHTML(html, fontPx),
+        // The asides of this widget's block (\webaside) that match a query.
+        asides: query => asideHandles(docData.get(doc), query),
         invalidate: () => { widgetVersion.set(slot.name, (widgetVersion.get(slot.name) || 0) + 1); scheduleSlots(); },
     };
-    const key = `${slot.name}|${fontPx}|${version}`;
+    // Per block too: a widget may draw its block's own asides.
+    const key = `${(docData.get(doc) || {}).seq}|${slot.name}|${fontPx}|${version}`;
     let m = widgetMeasure.get(key);
     if (!m) {
         try { m = widget.measure(ctx); } catch (e) { console.warn(`[latex-viewer] widget ${slot.name}:`, e); return null; }
@@ -2153,7 +2372,7 @@ function applySlots(fontInfo, doc) {
             let j = i;
             for (let k = i + 1; k < orig.length; k++) if (orig[k].slot === id) j = k;
             const run = orig.slice(i, j + 1);
-            const nodes = isWidget ? widgetNodes(fontInfo, slot, id, run, orig.slice(0, i), orig.slice(j + 1))
+            const nodes = isWidget ? widgetNodes(fontInfo, slot, id, run, orig.slice(0, i), orig.slice(j + 1), doc)
                                    : slotNodes(fontInfo, slot, id, run, text);
             if (!nodes) { out.push(orig[i]); continue; }
             out.push(...nodes); made.push(...nodes);
@@ -2291,22 +2510,24 @@ function installFootnotes() {
     if (footnotePop) return;
     const style = document.createElement('style');
     style.textContent = `
-      .latex-footnote-source { cursor: help; text-decoration: underline dotted;
-        text-underline-offset: .14em; pointer-events: auto; }
+      .latex-footnote-source { cursor: pointer; pointer-events: auto; }
+      /* A frosted panel: the page's colour, mostly opaque, over a blur of
+         what lies behind (a page may set --latex-popover-background). No
+         arrow: the panel opens right by its mark. */
       #latex-footnote-pop { position: fixed; z-index: 2147483000; display: none;
         width: max-content; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
-        overflow: auto; padding: .65rem .75rem; border: 1px solid color-mix(in srgb,
-        currentColor 28%, transparent); border-radius: .45rem;
-        background: var(--latex-page-bg, Canvas); color: inherit;
-        box-shadow: 0 .5rem 1.6rem rgb(0 0 0 / .24); }
-      #latex-footnote-pop.latex-footnote-open { display: block; }
-      #latex-footnote-pop .latex-footnote-arrow { position: absolute; width: .7rem;
-        height: .7rem; top: -.42rem; transform: rotate(45deg);
-        background: var(--latex-page-bg, Canvas); border-left: 1px solid
-        color-mix(in srgb, currentColor 28%, transparent); border-top: 1px solid
-        color-mix(in srgb, currentColor 28%, transparent); }
-      #latex-footnote-pop.latex-footnote-above .latex-footnote-arrow {
-        top: auto; bottom: -.42rem; transform: rotate(225deg); }
+        overflow: auto; box-sizing: border-box; padding: 1.05rem 1.25rem 1.15rem;
+        border: .5px solid color-mix(in srgb, currentColor 16%, transparent); border-radius: 16px;
+        background: var(--latex-popover-background,
+          color-mix(in srgb, var(--latex-page-bg, Canvas) 84%, transparent));
+        -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+        color: inherit;
+        box-shadow: 0 18px 50px rgb(0 0 0 / .18), 0 2px 6px rgb(0 0 0 / .08); }
+      #latex-footnote-pop.latex-footnote-open { display: block;
+        animation: latex-footnote-in .16s cubic-bezier(.2, .9, .25, 1.05); }
+      @keyframes latex-footnote-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+      @media (prefers-reduced-motion: reduce) { #latex-footnote-pop.latex-footnote-open { animation: none; } }
+      #latex-footnote-pop .latex-footnote-arrow { display: none; }
       #latex-footnote-pop .latex-footnote-content { margin: 0; overflow: visible; }
       #latex-footnote-pop .latex-footnote-content svg { max-width: 100%; }
     `;
@@ -2403,7 +2624,8 @@ function renderFootnote(block, id) {
     const data = blockData.get(block);
     if (!data) return false;
     const note = (data.doc.streams || [])[Number(id) - 1];
-    if (!note || note.kind !== 'footnote') return false;
+    // A footnote, or an aside opened from its mark (placeMarginNotes).
+    if (!note || (note.kind !== 'footnote' && !(note.attrs || []).some(a => a.key === 'aside'))) return false;
     data.footnoteCaches = data.footnoteCaches || new Map();
     let fc = data.footnoteCaches.get(String(id));
     if (!fc) {
@@ -2689,6 +2911,22 @@ function reconcileSink(byNode, used, stats, cache) {
             place(auxParent, lastRect, el, isNew);
             used.add(el); lastRect = el;
         },
+        // Where a \webaside stood (see Asides): an empty rect at the pen
+        // position on the baseline, drawing nothing, for aside.anchor().
+        aside(n, x, y) {
+            let el = byNode.get(n), isNew = !el;
+            if (isNew) {
+                el = svgEl('rect', { x, y, width: 0, height: 0 });
+                el.setAttribute('class', 'latex-aside-mark');
+                el.dataset.aside = n.aside;
+                byNode.set(n, el); stats.created++;
+            } else {
+                el.setAttribute('x', x); el.setAttribute('y', y);
+                stats.repositioned++;
+            }
+            place(auxParent, lastRect, el, isNew);
+            used.add(el); lastRect = el;
+        },
         // A widget part (see Widgets): HTML in a foreignObject over the part's
         // box, so it moves with the text on every reflow. Drawn by the widget
         // once, when the element is made: a new measurement makes new nodes.
@@ -2926,6 +3164,7 @@ function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fi
                 x+=w; break;
             }
             case 'hlist':{
+                if(n.aside&&sink.aside) sink.aside(n,x,baselineY);
                 const{ratio:hr,fillOrder:hfo}=hlistGlueRatio(n);
                 renderNodes(fontInfo,sink,n.children,x,baselineY+(n.shift??0)*SP_TO_PX,hr,0,hfo,n.height,n.depth);
                 x+=n.width*SP_TO_PX; break;
@@ -4156,7 +4395,18 @@ function installStreamStyles() {
         border-left-color: var(--latex-box-accent, var(--latex-proof-accent, #8a8f98));
         background: var(--latex-box-background,
           color-mix(in srgb, var(--latex-box-accent, var(--latex-proof-accent, #8a8f98)) 6%, transparent)); }
+      /* Margin notes (placeMarginNotes): the layer is the block's, the notes
+         beside it; where there is no room, a mark in the text opens one. */
+      .latex-margin { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+      .latex-margin-note { position: absolute; }
+      .latex-margin-note .latex-block { margin: 0; }
+      .latex-margin-mark { position: absolute; transform: translate(-15%, -120%); margin: 0; padding: 0 .15em;
+        border: 0; border-radius: 3px; background: none; color: inherit; opacity: .7; cursor: pointer;
+        font: 600 .75em/1 ui-sans-serif, system-ui, sans-serif; }
+      .latex-margin-mark:hover, .latex-margin-mark:focus-visible { opacity: 1; background: color-mix(in srgb, currentColor 10%, transparent); }
+      .latex-margin-mark[hidden], .latex-margin-note[hidden] { display: none; }
       @media print {
+        .latex-margin { display: none; }
         .latex-stream[data-kind="hint"] > * { filter: none; }
         .latex-stream[data-kind="hint"]::after { content: none; }
       }
@@ -4942,12 +5192,16 @@ async function initBlock(el) {
     const t2        = performance.now();
 
     const params  = paramsFromEl(el);
-    const widthPt = el.dataset.latexWidth
+    const natural = el.dataset.latexWidth === 'natural';
+    let widthPt = natural ? NATURAL_PROBE_PT : el.dataset.latexWidth
         ? parseInt(el.dataset.latexWidth)
         : (el.clientWidth / ZOOM) || DEFAULT_WIDTH_PT;
     const cache = { bcs: null, dom: null, layout: null, stats: null };  // bcs: Map(paraIdx → break candidates), built lazily
-    const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false };
+    const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false,
+                    seq: ++docSeq, el };
     blockData.set(el, data);
+    docData.set(doc, data);
+    allData.push(data);
     inspectable.add(el);
     if (doc.slots && doc.slots.length) {
         slotBlocks.add(el);
@@ -4958,6 +5212,12 @@ async function initBlock(el) {
     // are initialised top to bottom, so earlier blocks already have their
     // final heights when later ones measure their distance to the viewport.
     el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
+    if (natural) {
+        widthPt = data.naturalPt = naturalWidthPt(el, fontInfo, cache, widthPt);
+        data.lastWidth = widthPt;
+        el.style.width = (widthPt * ZOOM) + 'px';
+        el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
+    }
     remeasureStreams(fontInfo, doc, widthPt, params, cache);
     // The document's outline (sections, subsections, theorems), for a page to
     // build a table of contents from. Each entry's `id` is the id of its
@@ -4978,6 +5238,7 @@ async function initBlock(el) {
     // are scrolled toward. Never un-painted.
     paintVisibleNow(fontInfo, cache);
     data.painted = true;
+    announceLayout(el);
     observedBlocks.add(el);
     const t4 = performance.now();
     ro.observe(el);
