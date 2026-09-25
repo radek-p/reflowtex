@@ -4,7 +4,7 @@ latexTitle: true
 ---
 
 {{< latex preamble="about" >}}
-\pagetitle{About}
+\pagetitle[Reflow\,\TeX]{About}
 \bigskip
 Reflow\,\TeX{} is an experiment: \LaTeX{} documents on the web, typeset by
 \TeX, but with the lines broken for the reader's screen instead of fixed in

@@ -6,7 +6,7 @@ aliases: ["/examples/", "/docs/showcase/in-the-wild/"]
 ---
 
 {{< latex preamble="about" >}}
-\pagetitle{Showcase}
+\pagetitle[Reflow\,\TeX]{Showcase}
 \bigskip
 Whole documents published with Reflow\,\TeX.
 

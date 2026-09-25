@@ -182,7 +182,14 @@
   }
   /* The column is wide enough for an example's Result and LaTeX side by
      side; prose and code keep a reading measure inside it. */
-  .docs-layout #lt-content { margin: 3rem 0 6rem; padding: 0; flex: 0 1 64rem; min-width: 0; max-width: none; }
+  /* The top of the page title's letters level with the top of the menu's
+     first group title ("Getting started", 52px down the sidebar), its
+     small-capitals line above. The title's tops are 46.3px down the column
+     (every \pagetitle has that line), times the text size, as is this
+     margin, so the margin is divided by it. */
+  .docs-layout #lt-content {
+    margin: calc(52px / var(--lt-zoom, 1) - 46.3px) 0 6rem;
+    padding: 0; flex: 0 1 64rem; min-width: 0; max-width: none; }
   .docs-layout #lt-content > .latex-block,
   .docs-layout #lt-content > .highlight,
   .docs-layout #lt-content > p,
