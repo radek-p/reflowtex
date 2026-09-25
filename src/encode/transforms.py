@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
+import zlib
 from pathlib import Path
 
 from fonts import fonts_of
@@ -344,6 +345,26 @@ def _rewrite_picture_svg(svg: str, prefix: str, *, strip_page_background: bool =
     return inner.strip(), vb_w, vb_h
 
 
+_PDF_STREAM_RE = re.compile(rb'stream\r?\n')
+
+
+def _uses_icc_colour(pdf: Path) -> bool:
+    """Whether a PDF paints in an ICC-based colour space. The colour space can
+    sit in a page's resources or inside a compressed object stream, so each
+    Flate stream is inflated and searched as well."""
+    data = pdf.read_bytes()
+    if b'/ICCBased' in data:
+        return True
+    view = memoryview(data)
+    for m in _PDF_STREAM_RE.finditer(data):
+        try:
+            if b'/ICCBased' in zlib.decompressobj().decompress(view[m.end():]):
+                return True
+        except zlib.error:
+            pass                                   # not a Flate stream
+    return False
+
+
 def convert_pictures(data: dict, build_dir: Path) -> int:
     """Turn every picture node's PDF page into inline SVG, indexed per document."""
     # The build directory is named by the document's content key: its first
@@ -361,7 +382,12 @@ def convert_pictures(data: dict, build_dir: Path) -> int:
     # document; several pages commonly come from the same Figma export.
     pdf_tmp = tempfile.TemporaryDirectory(prefix='picture-pdf-')
 
+    # Only a PDF that uses ICC colour goes through Ghostscript: pdfwrite turns
+    # a rotation drawn with `cm` into a rotated text matrix, and dvisvgm drops
+    # text set under one without a warning (a pgfplots y label disappeared).
     def normalise_included_pdf(pdf: Path) -> Path:
+        if pdf not in rgb_pdfs and not _uses_icc_colour(pdf):
+            rgb_pdfs[pdf] = pdf
         if pdf not in rgb_pdfs:
             normalised = Path(pdf_tmp.name) / f'source-{len(rgb_pdfs) + 1}.pdf'
             r = subprocess.run(
