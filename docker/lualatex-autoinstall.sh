@@ -47,11 +47,19 @@ while true; do
   [ -n "$logfile" ] && [ -f "$logfile" ] || exit "$status"
 
   missing=$(find_missing_package "$logfile") || exit "$status"
+  # Both tlmgr calls go to a random CTAN mirror; one that is broken or behind
+  # fails where the next succeeds, so each gets a second try.
   pkg=$(find_owning_tlpkg "$missing")
-  [ -n "$pkg" ] || exit "$status"
+  [ -n "$pkg" ] || { sleep 5; pkg=$(find_owning_tlpkg "$missing"); }
+  if [ -z "$pkg" ]; then
+    echo "lualatex-autoinstall: '$missing' missing – no tlmgr package found for it (is CTAN reachable?)" >&2
+    exit "$status"
+  fi
 
   echo "lualatex-autoinstall: '$missing' missing – installing tlmgr package '$pkg' (attempt $attempt/$MAX_ATTEMPTS)" >&2
-  if ! tlmgr install "$pkg" >&2; then
+  # tlmgr exits 0 even when the download failed; check the file arrived.
+  if ! { tlmgr install "$pkg" >&2 && kpsewhich "$missing" >/dev/null; } &&
+     ! { sleep 5; tlmgr install "$pkg" >&2 && kpsewhich "$missing" >/dev/null; }; then
     # The image's tlmgr can fall behind CTAN's rolling tlnet repo the longer
     # it goes un-rebuilt, at which point tlmgr refuses to install anything
     # ("tlmgr itself needs to be updated") until it updates its own client.

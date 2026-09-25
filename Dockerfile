@@ -25,16 +25,36 @@ FROM texlive/texlive:latest-basic@sha256:d54587cc7093dee8cc41c3a6317a37eb33164ba
 # legacy Type1 math route). amsmath, amscls, amsfonts, lm and luaotfload ship
 # with scheme-basic already. dvisvgm (converts externalised TikZ pictures to
 # SVG) is a separate tlmgr package, not part of any scheme-basic install.
+# microtype is loaded by every website preamble (website/latex-preambles/).
+#
+# tlmgr exits 0 when some packages fail to download (mirror.ctan.org hands
+# each request to a random mirror, and some are broken or behind), so the
+# image could build without the packages it lists here. Check the files
+# themselves, and retry the install before giving up.
 RUN tlmgr update --self && \
-    tlmgr install \
-      mathtools \
-      fontspec \
-      unicode-math \
-      lm-math \
-      pgf \
-      tikz-cd \
-      xcolor \
-      dvisvgm && \
+    for attempt in 1 2 3; do \
+      tlmgr install \
+        mathtools \
+        fontspec \
+        unicode-math \
+        lm-math \
+        pgf \
+        tikz-cd \
+        xcolor \
+        microtype \
+        dvisvgm; \
+      missing=; \
+      for f in mathtools.sty fontspec.sty unicode-math.sty lualatex-math.sty \
+               filehook.sty latinmodern-math.otf pgf.sty tikz-cd.sty xcolor.sty \
+               microtype.sty; do \
+        kpsewhich "$f" >/dev/null || missing="$missing $f"; \
+      done; \
+      [ -x "$(kpsewhich -var-value SELFAUTOLOC)/dvisvgm" ] || missing="$missing dvisvgm"; \
+      [ -z "$missing" ] && break; \
+      echo "tlmgr install left out:$missing (attempt $attempt/3)" >&2; \
+      [ "$attempt" -lt 3 ] || exit 1; \
+      sleep 10; \
+    done && \
     tlmgr path add
 
 # ── protoc + Python + PDF tools ──────────────────────────────────────────────

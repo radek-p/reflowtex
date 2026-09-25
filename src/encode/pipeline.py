@@ -421,8 +421,14 @@ class Pipeline:
             before = after
         log = build_dir / 'input.log'
         if not output_json.exists():
-            detail = log.read_text() if log.exists() else result.stdout + result.stderr
-            sys.exit(f'ERROR: lualatex failed for block {label}:\n{detail[-3000:]}')
+            detail = log.read_text() if log.exists() else result.stdout
+            # stderr is where a lualatex wrapper says what it tried – the
+            # container's lazy package install, say – so it is shown as well.
+            if result.stderr.strip():
+                detail = f'{detail[-3000:]}\n--- stderr ---\n{result.stderr[-2000:]}'
+            else:
+                detail = detail[-3000:]
+            sys.exit(f'ERROR: lualatex failed for block {label}:\n{detail}')
 
         # A TeX error is fatal even though nonstopmode carried on and produced a
         # node list, because what it produces is a *repaired* document rather than
