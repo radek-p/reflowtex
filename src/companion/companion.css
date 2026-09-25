@@ -1,0 +1,33 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* reflowtex-companion (companion.js): the looks of its parts. Colours come
+   from the page's theme: --latex-page-bg, and optionally --rtx-surface (a
+   button's face) and --latex-popover-background (a panel's). */
+.rtx-aside .latex-block { margin: 0; }
+
+/* A pill in a line of text (InlineButton). Restyle it with these, on the
+   button or anything around it, or with a class of your own. */
+.rtx-button {
+  --rtx-button-face: var(--rtx-surface, var(--latex-page-bg, Canvas));
+  --rtx-button-face-on: color-mix(in srgb, currentColor 7%, var(--rtx-button-face));
+  --rtx-button-edge: color-mix(in srgb, currentColor 16%, transparent);
+  --rtx-button-radius: 999px;
+  --rtx-button-shadow: 0 1px 2px rgb(0 0 0 / .1), 0 3px 10px rgb(0 0 0 / .08);
+  position: relative; display: block; width: 100%; height: 100%; margin: 0; padding: 0;
+  border: .5px solid var(--rtx-button-edge); border-radius: var(--rtx-button-radius);
+  background: var(--rtx-button-face); color: inherit; cursor: pointer; box-shadow: var(--rtx-button-shadow);
+}
+.rtx-button:hover, .rtx-button[aria-expanded="true"] { background: var(--rtx-button-face-on); }
+.rtx-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.rtx-button-content { position: absolute; top: 0; white-space: nowrap; pointer-events: none; }
+
+/* A panel below an element. */
+.rtx-popover {
+  position: fixed; z-index: 2147482000; box-sizing: border-box; width: min(20rem, calc(100vw - 16px));
+  padding: 1rem 1.2rem 1.1rem; border-radius: 16px;
+  border: .5px solid color-mix(in srgb, currentColor 16%, transparent);
+  background: var(--latex-popover-background, var(--latex-page-bg, Canvas)); color: inherit;
+  -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 18px 50px rgb(0 0 0 / .18), 0 2px 6px rgb(0 0 0 / .08);
+}
+
+@media print { .rtx-popover { display: none; } }

@@ -68,6 +68,17 @@ rm -rf "$SITE/static/inspector"
 mkdir -p "$SITE/static/inspector/$INSPECTOR_V" "$SITE/data"
 (cd "$REPO/src/inspector" && cp -R inspector.js inspector.css agent.js panel vendor "$SITE/static/inspector/$INSPECTOR_V/")
 printf '{"dir": "inspector/%s"}\n' "$INSPECTOR_V" > "$SITE/data/inspector.json"
+#    …and the companion package's browser side (src/companion), with the
+#    Preact it is written in (the inspector's vendored copy), served the same
+#    way: a folder named by a hash of its files. Pages import it by name, from
+#    an import map (layouts/partials/companion.html, data/companion.json).
+COMPANION_V="$(cat "$REPO/src/companion/companion.js" "$REPO/src/companion/companion.css" \
+                   "$REPO/src/inspector/vendor/preact.js" | shasum -a 256 | cut -c1-10)"
+rm -rf "$SITE/static/companion"
+mkdir -p "$SITE/static/companion/$COMPANION_V"
+cp "$REPO/src/companion/companion.js" "$REPO/src/companion/companion.css" \
+   "$REPO/src/inspector/vendor/preact.js" "$SITE/static/companion/$COMPANION_V/"
+printf '{"dir": "companion/%s"}\n' "$COMPANION_V" > "$SITE/data/companion.json"
 
 # 2. Compile all LaTeX blocks, embed the schema, provision + patch fonts.
 #    Set PREBUILD_ARGS to pass extra flags (e.g. --force, --prune, -j 8).

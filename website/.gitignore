@@ -17,6 +17,8 @@
 /static/protobuf.min.js
 /static/inspector/
 /data/inspector.json
+/static/companion/
+/data/companion.json
 # Standalone testmath demo, built into static/ by build.sh (served at /testmath/).
 /static/testmath/
 

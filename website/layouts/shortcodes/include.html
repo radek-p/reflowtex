@@ -1,0 +1,17 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  A file of the site (a path from website/), once in the page, so that what a
+  page shows and what it runs are the same file:
+    {{< include file="examples/popover.js" >}}              highlighted (by extension)
+    {{< include file="examples/popover.js" as="script" >}}  run as a <script>
+    {{< include file="examples/popover.js" as="module" >}}  run as a module script
+    {{< include file="examples/popover.css" as="style" >}}  applied as a <style>
+*/ -}}
+{{- $file := .Get "file" -}}
+{{- $text := os.ReadFile $file -}}
+{{- $as := .Get "as" -}}
+{{- if eq $as "script" -}}<script>{{ $text | safeJS }}</script>
+{{- else if eq $as "module" -}}<script type="module">{{ $text | safeJS }}</script>
+{{- else if eq $as "style" -}}<style>{{ $text | safeCSS }}</style>
+{{- else -}}{{ transform.Highlight (strings.TrimSpace $text) (path.Ext $file | strings.TrimPrefix ".") }}
+{{- end -}}

@@ -1,0 +1,13 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The companion package's browser side (src/companion, copied by build.sh):
+  its stylesheet, and an import map so that a page's own scripts import it
+  by name – import { … } from 'reflowtex/companion' – wherever the site is
+  served from. In <head>: an import map must come before any module script.
+*/ -}}
+{{- with site.Data.companion }}
+{{- $map := dict "imports" (dict "reflowtex/companion" (printf "%s/companion.js" .dir | relURL)) }}
+{{- /* Written whole: Go templates escape a script of a type they do not know. */}}
+{{ printf "<script type=\"importmap\">%s</script>" ($map | jsonify) | safeHTML }}
+<link rel="stylesheet" href="{{ printf "%s/companion.css" .dir | relURL }}">
+{{- end }}
