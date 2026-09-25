@@ -58,6 +58,9 @@ def sample_display_model(build: Path, base: dict, passes: int) -> dict:
     shell_escape = '-shell-escape' if os.environ.get('REFLOWTEX_SHELL_ESCAPE') == '1' else '-no-shell-escape'
     env = dict(os.environ)
     env['TEXINPUTS'] = f"{SRC / 'latex'}{os.pathsep}{env.get('TEXINPUTS', '')}"
+    # the document's own files, where pageless.py found them
+    if (build / 'source-dir.txt').exists():
+        env['TEXINPUTS'] = (build / 'source-dir.txt').read_text(encoding='utf-8').strip() + os.pathsep + env['TEXINPUTS']
 
     def compile_at(extra: int, name: str, required: bool = True) -> dict | None:
         """The document with \\reflowtexWidthExtra = extra, compiled in
@@ -71,7 +74,8 @@ def sample_display_model(build: Path, base: dict, passes: int) -> dict:
             and (d / 'output.json').exists()
         if not fresh:
             (d / 'input.tex').write_text(tex, encoding='utf-8')
-            for f in ('serializer.lua', 'input.aux'):
+            # the files TeX reads back – references, contents, lists, bibliography
+            for f in ('serializer.lua', 'input.aux', 'input.toc', 'input.lof', 'input.lot', 'input.bbl'):
                 if (build / f).exists():
                     shutil.copy(build / f, d / f)
             (d / 'output.json').unlink(missing_ok=True)
@@ -128,7 +132,7 @@ def main() -> None:
     args = ap.parse_args()
 
     data = json.loads((args.build / 'output.json').read_text())
-    if not args.single_width and display_model.has_displays(data):
+    if not args.single_width and display_model.wants_model(data):
         data = sample_display_model(args.build, data, args.passes)
     site = args.site
     site.mkdir(parents=True, exist_ok=True)
@@ -163,7 +167,10 @@ def main() -> None:
         extra = Path(extra)
         shutil.copy(extra, site / extra.name)
         extra_tags += f'\n<script src="{html.escape(extra.name, quote=True)}"></script>'
-    block = f'<div class="latex-block" data-nodelist-b64="{base64.b64encode(blob).decode()}"></div>'
+    # A replay of TeX: its breaks always, an overfull line included (the
+    # viewer's default gives way to a looser line when TeX's would overflow).
+    block = (f'<div class="latex-block" data-tex-final-pass="strict" '
+             f'data-nodelist-b64="{base64.b64encode(blob).decode()}"></div>')
     page = ((VANILLA / 'page.template.html').read_text(encoding='utf-8')
             .replace('{{TITLE}}', html.escape(args.title))
             .replace('{{SCHEMA_B64}}', pipe.schema_b64())

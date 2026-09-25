@@ -2905,7 +2905,14 @@ function isFigureParagraph(para) {
             if (n.leader) walk([n.leader]);
         }
     })(para.nodes);
-    v = hasPicture && !hasGlyph;
+    // No running text, only boxes – a table, a framed box, a picture: it is
+    // one unbreakable piece, which scrolls when it is wider than the column.
+    // (Glyphs inside the boxes are theirs, not running text; a tabular's box
+    // stands between two math nodes, markers of the $...$ LaTeX builds it in.)
+    const top = para.nodes || [];
+    const boxOnly = !top.some(n => n.type === 'glyph' || n.type === 'disc')
+        && top.some(n => (n.type === 'hlist' || n.type === 'vlist') && (n.width || 0) > 0 && (n.children || []).length);
+    v = (hasPicture && !hasGlyph) || boxOnly;
     figureParaCache.set(para, v);
     return v;
 }
@@ -3000,6 +3007,45 @@ function segmentsOf(doc) {
 
 // Lay a text segment out: KP-break each paragraph at the reader's width and
 // stack the lines with the adaptive collision-based leading.
+// A paragraph's nodes at a measure. Boxes the pipeline found set to the
+// measure carry *_rate fields (display_model.attach_paragraph_rates); they are
+// evaluated like a display's tree, but never narrower than their floors allow –
+// a table's column gaps closed, its natural width – and a paragraph without
+// rates is returned as it is. The evaluation is kept for the last width asked.
+const paraEval = new WeakMap();
+function nodesHaveRates(ns) {
+    for (const n of ns || []) {
+        for (const k in n) if (k.endsWith('_rate')) return true;
+        if (nodesHaveRates(n.children) || nodesHaveRates(n.pre) || nodesHaveRates(n.post)
+            || nodesHaveRates(n.replace) || (n.leader && nodesHaveRates([n.leader]))) return true;
+    }
+    return false;
+}
+function paragraphFloorWidth(n, sourceWidthSp) {
+    let minimum = 0;
+    for (const field of ['width', 'kern', 'surround']) {
+        const rate = n[`${field}_rate`];
+        if (n[`${field}_floor`] && rate > 0) minimum = Math.max(minimum, sourceWidthSp - (n[field] || 0) / rate);
+    }
+    if (n.glue_set_floor && n.glue_set_rate > 0)
+        minimum = Math.max(minimum, sourceWidthSp - (n.glue_set || 0) / n.glue_set_rate);
+    for (const key of AFFINE_CHILD_LISTS)
+        for (const c of n[key] || []) minimum = Math.max(minimum, paragraphFloorWidth(c, sourceWidthSp));
+    if (n.leader) minimum = Math.max(minimum, paragraphFloorWidth(n.leader, sourceWidthSp));
+    return Math.min(minimum, sourceWidthSp);
+}
+function paragraphAtWidth(para, widthSp, sourceWidthSp) {
+    if (!(sourceWidthSp > 0)) return para.nodes;
+    let memo = paraEval.get(para);
+    if (!memo) { memo = { rated: nodesHaveRates(para.nodes) }; paraEval.set(para, memo); }
+    if (!memo.rated) return para.nodes;
+    const box = { type: 'hlist', children: para.nodes };
+    if (memo.floorSp === undefined) memo.floorSp = paragraphFloorWidth(box, sourceWidthSp);
+    const deltaSp = Math.max(widthSp, memo.floorSp) - sourceWidthSp;
+    if (memo.deltaSp !== deltaSp) { memo.deltaSp = deltaSp; memo.nodes = affineDisplayNode(box, deltaSp).children || para.nodes; }
+    return memo.nodes;
+}
+
 function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
     const widthSp  = Math.round(widthPt * 65536);
     const columnPx = widthPt * ZOOM;
@@ -3015,8 +3061,14 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
 
     for (const { index, para } of seg.items) {
         itemStarts.push(lines.length);
-        let bcs = cache.bcs.get(index);
-        if (!bcs) { bcs = buildBreakCandidates(para.nodes, fontInfo, para); cache.bcs.set(index, bcs); }
+        // A paragraph holding a box set to the measure (a tabular*, a figure
+        // scaled to \linewidth) carries rates: its nodes follow this width.
+        const nodes = paragraphAtWidth(para, widthSp, cache.sourceWidthSp);
+        let bcs = nodes === para.nodes ? cache.bcs.get(index) : null;
+        if (!bcs) {
+            bcs = buildBreakCandidates(nodes, fontInfo, para);
+            if (nodes === para.nodes) cache.bcs.set(index, bcs);
+        }
 
         // Alignment is per paragraph: TeX's \centering/\raggedright/\raggedleft
         // set the paragraph's \leftskip/\rightskip, which the serializer reads and
@@ -3051,7 +3103,11 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
         // natural width, 22pt wider than in the PDF.)
         const rightSp  = (cache.sourceWidthSp > 0 && para.width > 0)
             ? Math.max(0, cache.sourceWidthSp - indentSp - para.width) : 0;
-        const availSp  = Math.max(1, widthSp - indentSp - rightSp);
+        // A figure paragraph (a picture, a table, a framed box – no running
+        // text) is one piece: wider than the column it scrolls whole, so it is
+        // broken against its own width and stays one line, as TeX set it.
+        const availSp  = Math.max(1, widthSp - indentSp - rightSp,
+                                  seg.isFigure ? sumWidthSp(nodes) : 0);
         const availPx  = columnPx - indentPx - rightSp * SP_TO_PX;
 
         // Pluggable breaker. A page may install an alternative paragraph
@@ -3072,7 +3128,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
         // the paragraph's \adjustspacing/\protrudechars – so an engine can
         // apply them as TeX did.
         const ext = typeof window !== 'undefined' && typeof window.reflowtexBreak === 'function'
-            ? window.reflowtexBreak(para.nodes, availSp, p, {
+            ? window.reflowtexBreak(nodes, availSp, p, {
                   gW, gH, gD, align,
                   bskip: para.baselineskip || 0,
                   lskip: para.lineskip || 0,
@@ -3081,7 +3137,7 @@ function layoutTextSegment(fontInfo, seg, widthPt, p, cache) {
                   protrudeChars: para.protrude_chars || 0,
               })
             : null;
-        for (const ln of (ext || kpBreak(bcs, para.nodes, availSp, justify ? p : { ...p, ragged: true }))) {
+        for (const ln of (ext || kpBreak(bcs, nodes, availSp, justify ? p : { ...p, ragged: true }))) {
             ln.nodes = mergeWidgetRuns(ln.nodes);
             // For non-justified modes: allow glue shrink (ratio<0) but never stretch.
             // When the line must shrink, rendering and positioning are identical to justify.

@@ -62,10 +62,12 @@ def instrument(template: str, margin: str) -> str:
     hook = ('\\AddToHook{enddocument/afterlastpage}{%\n'
             f'  \\pdfvariable horigin={margin} \\pdfvariable vorigin=0pt\n'
             f'  \\directlua{{Pageless.ship{{margin = tex.sp("{margin}")}}}}}}\n')
-    begin = '\\begin{document}'
-    if begin not in template:
-        sys.exit('template has no \\begin{document}')
-    return template.replace(begin, hook + begin, 1)
+    # the line that begins the document – not a mention in a comment above it
+    m = list(re.finditer(r'^\\begin\{document\}', template, re.M))
+    if not m:
+        sys.exit('template has no \\begin{document} line')
+    at = m[-1].start()
+    return template[:at] + hook + template[at:]
 
 
 def fill(template: str, document: str, width_extra_sp: int) -> str:
@@ -117,15 +119,19 @@ def main() -> None:
     shell_escape = '-shell-escape' if os.environ.get('REFLOWTEX_SHELL_ESCAPE') == '1' else '-no-shell-escape'
     env = dict(os.environ)
     env['TEXINPUTS'] = f"{LATEX_DIR}{os.pathsep}{env.get('TEXINPUTS', '')}"
-    # the document's own files (\input, graphics) resolve beside it
+    # the document's own files (\input, graphics) resolve beside it; noted in
+    # the build dir for site_from_run.py, which compiles the document again
     env['TEXINPUTS'] = f"{args.document.resolve().parent}{os.pathsep}{env['TEXINPUTS']}"
+    (out / 'source-dir.txt').write_text(str(args.document.resolve().parent) + '\n', encoding='utf-8')
     for n in range(max(1, args.passes)):
         r = subprocess.run(['lualatex', shell_escape, '-interaction=nonstopmode', 'input.tex'],
                            cwd=out, capture_output=True, text=True, env=env)
         log_path = out / 'input.log'
         log = log_path.read_text(encoding='utf-8', errors='replace') if log_path.exists() else ''
         errors = [l for l in log.splitlines() if l.startswith('! ')]
-        if r.returncode != 0 or errors or not (out / 'input.pdf').exists():
+        # judged as the pipeline judges a run: by TeX's errors and its output,
+        # not the exit status (nonzero after warnings some packages raise)
+        if errors or not (out / 'input.pdf').exists():
             sys.exit(f'lualatex pass {n + 1} failed:\n' + '\n'.join(errors[:10]) + f'\n  see {log_path}')
         shipped = [l for l in log.splitlines() if l.startswith('pageless: ')]
         print(f'  pass {n + 1}: {shipped[-1] if shipped else "no pageless line in the log"}')

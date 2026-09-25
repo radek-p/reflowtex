@@ -91,28 +91,52 @@
 % Reflow TeX produces a continuous, pageless document, so TeX's page-oriented
 % float placement is both unnecessary and actively harmful: the serializer
 % learns document order from the shipped vertical list, after a figure may have
-% moved ahead of the prose that introduced it. Make figures ordinary flow
-% containers instead. Their captions are ordinary paragraphs (rather than the
-% direct boxes LaTeX's float machinery builds, which are invisible to the
-% paragraph content stream), while the standard counter and \label semantics
-% are retained. Placement options are accepted for source compatibility and
-% deliberately ignored.
+% moved ahead of the prose that introduced it. Make figures and tables
+% ordinary flow containers instead – the starred, full-width forms too: left
+% as floats on a page that never fills, they would all wait for the final
+% \clearpage and land after the last paragraph. Their captions are ordinary
+% paragraphs (rather than the direct boxes LaTeX's float machinery builds,
+% which are invisible to the paragraph content stream), while the standard
+% counter and \label semantics are retained. Placement options are accepted
+% for source compatibility and deliberately ignored.
 \makeatletter
-\RenewDocumentEnvironment{figure}{O{}}{%
+\def\reflowtex@flowfloat#1{%
   \par\addvspace{\intextsep}%
   \begingroup
-  \def\@captype{figure}%
+  \def\@captype{#1}%
+  % spaced as LaTeX's \@makecaption spaces it: \abovecaptionskip above,
+  % \belowcaptionskip below, whatever the class set them to
   \RenewDocumentCommand{\caption}{o m}{%
-    \refstepcounter{figure}%
-    \par\small\centering\figurename~\thefigure: ##2\par}%
-}{%
-  \par\endgroup\addvspace{\intextsep}%
-}
+    \refstepcounter{#1}%
+    \par\vskip\abovecaptionskip
+    {\small\centering\csname fnum@#1\endcsname: ##2\par}%
+    \vskip\belowcaptionskip}}
+\def\reflowtex@flowfloatend{\par\endgroup\addvspace{\intextsep}}
+\RenewDocumentEnvironment{figure}{O{}}{\reflowtex@flowfloat{figure}}{\reflowtex@flowfloatend}
+\@ifundefined{table}{}{%
+  \RenewDocumentEnvironment{table}{O{}}{\reflowtex@flowfloat{table}}{\reflowtex@flowfloatend}}
+\@ifundefined{figure*}{}{%
+  \RenewDocumentEnvironment{figure*}{O{}}{\reflowtex@flowfloat{figure}}{\reflowtex@flowfloatend}}
+\@ifundefined{table*}{}{%
+  \RenewDocumentEnvironment{table*}{O{}}{\reflowtex@flowfloat{table}}{\reflowtex@flowfloatend}}
 \makeatother
 
 % ── reflowtex node-list serializer ─────────────────────────────────────────────
 % Exports the finished node list as output.json (see src/extract/serializer.lua).
 \directlua{dofile("serializer.lua")}
+
+% Nothing here ships pages in the normal course: the serializer keeps the page
+% from filling. An output routine that never settles against that (a class's
+% own page grid) ships empty pages without end instead, so a run is stopped
+% at 2000 pages, with an error the pipeline reports, rather than left to run
+% for an hour. (Captured pictures ship through the primitive, uncounted. The
+% run ends from Lua: \end is not allowed inside an output routine.)
+\AddToHook{shipout/after}{%
+  \ifnum\ReadonlyShipoutCounter>2000
+    \PackageError{reflowtex}{More than 2000 pages shipped: the document's
+      output routine does not settle}{}%
+    \directlua{os.exit(1)}%
+  \fi}
 
 % ── TikZ picture capture ─────────────────────────────────────────────────────
 % TikZ pictures contain backend pdf_literal nodes, which the browser cannot
@@ -183,6 +207,71 @@
 % affine geometry without knowing whether the source used equation, align,
 % gather, multline, or a package-defined display. This hook runs after the user
 % preamble so it scales the final configured text width.
+% A web page has no columns. A two-column document is set in one, at its full
+% \textwidth, so its paragraphs are as wide as the measure the viewer re-breaks
+% them from (set at the column instead, they would keep the other column's
+% width as a margin). The switches a document uses later – \twocolumn[...]
+% for a title block, revtex's \twocolumngrid after its front matter – stay in
+% one column too.
+\makeatletter
+\AtBeginDocument{%
+  \if@twocolumn
+    \global\@twocolumnfalse
+    \columnwidth=\textwidth \hsize=\textwidth \linewidth=\textwidth
+  \fi
+  \@ifundefined{onecolumngrid}{}{%
+    \onecolumngrid
+    \global\let\twocolumngrid\onecolumngrid}%
+  \global\let\reflowtexOrigOnecolumn\onecolumn
+  \gdef\twocolumn{\@ifnextchar[{\reflowtexOneColumnWith}{\reflowtexOrigOnecolumn}}}
+\long\def\reflowtexOneColumnWith[#1]{\reflowtexOrigOnecolumn #1\par}
+\makeatother
+
+% A table of contents, rebuilt for a page. A pageless document never turns a
+% page, so the page numbers it would print are all 1: they are left out. And
+% each entry becomes a link to its heading: the k-th line read from the .toc
+% was written by the k-th \addcontentsline{toc} of the run before, so it links
+% to the anchor that one places this run (reflowtex-toc-k, in the outline
+% capture below) – whether or not hyperref is loaded, whose \contentsline
+% takes a fourth argument (its own anchor name), passed on untouched.
+\newcount\reflowtexTocEntryCount
+\newcount\reflowtexTocAnchorCount
+\makeatletter
+\let\reflowtex@tocfile\@empty
+\def\reflowtex@newstarttoc#1{%
+  \def\reflowtex@tocfile{#1}\reflowtex@starttoc{#1}\let\reflowtex@tocfile\@empty}
+\def\reflowtex@newcontentsline#1#2#3{%
+  \@ifnextchar\bgroup{\reflowtex@contentsline{#1}{#2}}{\reflowtex@contentsline{#1}{#2}{}}}
+\def\reflowtex@contentsline#1#2#3{%
+  \def\reflowtex@tmp{toc}%
+  \ifx\reflowtex@tocfile\reflowtex@tmp
+    \global\advance\reflowtexTocEntryCount by 1
+    \global\advance\reflowtexLinkCount by 1
+    \directlua{Serializer.note_link(\the\reflowtexLinkCount,
+      "reflowtex-toc-\the\reflowtexTocEntryCount")}%
+    % no group around the entry: revtex's \l@section hands the widest
+    % number it measured to \aftergroup, which a group of ours would eat
+    \edef\reflowtex@tocattr{\the\attribute909}%
+    \attribute909=\reflowtexLinkCount\relax
+    \reflowtex@origcontentsline{#1}{#2}{#3}%
+    \attribute909=\reflowtex@tocattr\relax
+  \else
+    \reflowtex@origcontentsline{#1}{#2}{#3}%
+  \fi}
+% the original, with the page number left out (and hyperref's anchor, when
+% it takes one)
+\def\reflowtex@origcontentsline#1#2#3{%
+  \ifreflowtex@hyperref \reflowtexOrigContentsline{#1}{#2}{}{#3}%
+  \else \reflowtexOrigContentsline{#1}{#2}{}\fi}
+\newif\ifreflowtex@hyperref
+\AtBeginDocument{%
+  \@ifpackageloaded{hyperref}{\reflowtex@hyperreftrue}{}%
+  \let\reflowtexOrigContentsline\contentsline
+  \let\contentsline\reflowtex@newcontentsline
+  \let\reflowtex@starttoc\@starttoc
+  \let\@starttoc\reflowtex@newstarttoc}
+\makeatother
+
 \newdimen\reflowtexWidthExtra
 \reflowtexWidthExtra=%%WIDTH-EXTRA-SP%%sp\relax
 \AtBeginDocument{%
@@ -461,8 +550,22 @@
       \let\reflowtex@ol@none\@empty
       \reflowtex@outline@mark\reflowtex@ol@kind{0}\reflowtex@ol@none\reflowtex@ol@text
     \endgroup
+    \reflowtex@toc@anchor
   \fi
   \reflowtex@acl{#1}{#2}{#3}}
+% The anchor a table of contents' k-th line links to (see \contentsline above).
+\def\reflowtex@toc@anchor{%
+  \global\advance\reflowtexTocAnchorCount by 1
+  \global\advance\reflowtexAnchorCount by 1
+  \directlua{Serializer.note_label(\the\reflowtexAnchorCount,
+    "reflowtex-toc-\the\reflowtexTocAnchorCount")}%
+  \ifvmode
+    \dimen@=\prevdepth \nointerlineskip
+    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
+    \prevdepth=\dimen@
+  \else
+    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
+  \fi}
 % #1 heading name (Theorem), #2 number, #3 note (may be empty).
 \def\reflowtex@outline@thm#1#2#3{%
   \begingroup

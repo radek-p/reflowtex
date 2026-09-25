@@ -75,24 +75,25 @@ def _affine_error(a: float, b: float, c: float,
 
 
 def _node_affine_error(a: dict, b: dict, c: dict,
-                       xa: int, xb: int, xc: int, path: str) -> str | None:
+                       xa: int, xb: int, xc: int, path: str, tol_sp: float = 3.0,
+                       tol_ratio: float = 1e-6) -> str | None:
     for field in NODE_GEOMETRY:
         va, vb, vc = a.get(field, 0), b.get(field, 0), c.get(field, 0)
         err = _affine_error(va, vb, vc, xa, xb, xc,
                             integral=field not in {'glue_set', 'm_a', 'm_b', 'm_c', 'm_d'})
-        tol = 3.0 if field not in {'glue_set', 'm_a', 'm_b', 'm_c', 'm_d'} \
-            else 1e-6 * max(1.0, abs(va), abs(vb), abs(vc))
+        tol = tol_sp if field not in {'glue_set', 'm_a', 'm_b', 'm_c', 'm_d'} \
+            else tol_ratio * max(1.0, abs(va), abs(vb), abs(vc))
         if err > tol:
             return f'{path}.{field}: non-affine residual {err:g} (tolerance {tol:g})'
     for key in CHILD_LISTS:
         for i, (na, nb, nc) in enumerate(zip(a.get(key, []), b.get(key, []), c.get(key, []))):
             err = _node_affine_error(na, nb, nc, xa, xb, xc,
-                                     f'{path}.{key}[{i}]')
+                                     f'{path}.{key}[{i}]', tol_sp, tol_ratio)
             if err:
                 return err
     if a.get('leader'):
         return _node_affine_error(a['leader'], b['leader'], c['leader'],
-                                  xa, xb, xc, f'{path}.leader')
+                                  xa, xb, xc, f'{path}.leader', tol_sp, tol_ratio)
     return None
 
 
@@ -153,6 +154,14 @@ def _mark_node_floors(oldest: dict, previous: dict, newest: dict, dx: int) -> No
         rate = (vc - vb) / dx
         if rate > 0 and va >= 0 and vb >= 0 and vc >= 0:
             oldest[f'{field}_floor'] = True
+    # A box whose glue stretches more as the measure grows – the \extracolsep
+    # of a tabular*, a \hfill spread across \linewidth – is spaced by its
+    # glue_set: that ratio is the gap, and it closes at zero, where the box
+    # reaches its natural width. Narrower, TeX would have to shrink or overfill.
+    if newest.get('type') in ('hlist', 'vlist') and newest.get('glue_sign') == 1:
+        ga, gb, gc = (d.get('glue_set', 0) or 0 for d in (oldest, previous, newest))
+        if (gc - gb) / dx > 0 and ga >= 0 and gb >= 0 and gc >= 0:
+            oldest['glue_set_floor'] = True
     for key in CHILD_LISTS:
         for na, nb, nc in zip(oldest.get(key, []), previous.get(key, []), newest.get(key, [])):
             _mark_node_floors(na, nb, nc, dx)
@@ -191,6 +200,7 @@ def attach_model(oldest: dict, previous: dict, newest: dict) -> dict:
         shift_rate = (shifts[2] - shifts[1]) / dx
         if shift_rate > 0 and all(v >= 0 for v in shifts):
             first_item['display_shift_floor'] = True
+    attach_paragraph_rates(oldest, previous, newest)
     oldest['display_model'] = True
     return oldest
 
@@ -232,6 +242,7 @@ def anchor_model(first: dict, previous: dict, newest: dict) -> tuple[dict, int]:
         shift_rate = (shifts[2] - shifts[1]) / dx
         if shift_rate > 0 and all(v >= 0 for v in shifts):
             first_item['display_shift_floor'] = True
+    attach_paragraph_rates(first, previous, newest)
     first['display_model'] = True
     return first, fixed
 
@@ -384,3 +395,76 @@ def wide_variants(first: dict, previous: dict, newest: dict, probe) -> tuple[int
                     item[f'{field}_rate'] = delta / dn
             _attach_node_rates(item['box'], item['box'], near['box'], dn)
     return len(todo), len(probes)
+
+
+# ── Paragraphs: boxes set to the measure ────────────────────────────────────
+#
+# A box inside a paragraph can be as wide as the text: a tabular* spread over
+# \textwidth, a figure scaled to \linewidth, a rule across the column. Such a
+# box is modelled like a display – the same tree at every sampled width, its
+# geometry affine – so it follows the reader's measure. Unlike a display, a
+# paragraph that does not fit the law is not a reason to reject a sample (a
+# \parbox of text re-breaks at every width and never will): it simply keeps
+# the geometry TeX gave it at the document's width.
+
+WIDE_BOX_SHARE = 0.5      # a box at least this share of the text width is worth sampling for
+# How far off the affine law a paragraph box may be and still follow it. A
+# picture scaled to the measure gets its height from the width in TeX's
+# integer arithmetic, some hundreds of sp off a straight line; a sixteenth of
+# a point cannot be seen. (Displays keep the strict 3 sp: they are compared
+# with TeX to the hundredth of a point.)
+PARAGRAPH_TOL_SP = 4096
+# and for ratios – a glue_set, a scaling matrix – which graphicx writes with
+# five decimals
+PARAGRAPH_TOL_RATIO = 1e-4
+
+
+def has_width_boxes(data: dict) -> bool:
+    """Whether a paragraph holds a box wide enough to have been set to the
+    measure – reason enough to compile the document at other widths."""
+    sw = int(data.get('source_width', 0) or 0)
+    if sw <= 0:
+        return False
+    for p in data.get('paragraphs', []):
+        for n in p.get('nodes', []):
+            if n.get('type') in ('hlist', 'vlist', 'picture') and (n.get('width') or 0) >= WIDE_BOX_SHARE * sw:
+                return True
+    return False
+
+
+def wants_model(data: dict) -> bool:
+    return has_displays(data) or has_width_boxes(data)
+
+
+def attach_paragraph_rates(first: dict, previous: dict, newest: dict) -> int:
+    """Rates on the nodes of each paragraph of ``first`` whose tree has the
+    same shape at the three widths and is affine across them (``first`` at
+    its own width, ``previous`` and ``newest`` wider). Returns how many
+    paragraphs changed with the width and were given rates."""
+    x0, xb, xc = (int(d.get('source_width', 0)) for d in (first, previous, newest))
+    pa, pb, pc = (d.get('paragraphs', []) for d in (first, previous, newest))
+    if not (len(pa) == len(pb) == len(pc)) or not (0 < x0 < xb < xc):
+        return 0
+    dx = xc - xb
+    modelled = 0
+    for a, b, c in zip(pa, pb, pc):
+        ta, tb, tc = ({'type': 'hlist', 'children': p.get('nodes', [])} for p in (a, b, c))
+        if _node_topology_error(ta, tb, 'para') or _node_topology_error(tb, tc, 'para'):
+            continue
+        if _node_affine_error(ta, tb, tc, x0, xb, xc, 'para', PARAGRAPH_TOL_SP, PARAGRAPH_TOL_RATIO):
+            continue
+        before = _count_rates(ta)
+        _attach_node_rates(ta, tb, tc, dx)
+        _mark_node_floors(ta, tb, tc, dx)
+        if _count_rates(ta) > before:
+            modelled += 1
+    return modelled
+
+
+def _count_rates(n: dict) -> int:
+    k = sum(1 for key in n if key.endswith('_rate'))
+    for key in CHILD_LISTS:
+        k += sum(_count_rates(c) for c in n.get(key, []))
+    if n.get('leader'):
+        k += _count_rates(n['leader'])
+    return k

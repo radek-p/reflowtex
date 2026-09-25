@@ -115,6 +115,7 @@ def content_key(content: str, preamble: str = '') -> str:
 class Pipeline:
     def __init__(self, build_root, fonts_dir, *,
                  local_fonts_dir=None,
+                 search_dirs=(),
                  template=DEFAULT_TEMPLATE,
                  serializer=DEFAULT_SERIALIZER,
                  proto=DEFAULT_PROTO):
@@ -122,6 +123,10 @@ class Pipeline:
         # (lualatex, dvisvgm) with cwd set, so a relative path would be
         # re-interpreted against the child's cwd and break.
         self.build_root = Path(build_root).resolve()
+        # Where TeX also looks for what a document reads – its figures, files
+        # it \input s – before the standard tree: a document is compiled in
+        # its own build dir, away from the directory it came from.
+        self.search_dirs = [Path(d).resolve() for d in search_dirs]
         self.template = Path(template)
         self.serializer = Path(serializer)
         self.proto = Path(proto)
@@ -285,7 +290,7 @@ class Pipeline:
             write_input(width_extra_sp)
             self._run_lualatex(build_dir, label, passes if sample_index == 0 else 1)
             data = json.loads((build_dir / 'output.json').read_text())
-            if not display_model.has_displays(data):
+            if not display_model.wants_model(data):
                 break
             if first_sample is None:
                 first_sample = data
@@ -392,14 +397,28 @@ class Pipeline:
         # being installed into a TeX tree. The trailing separator keeps the
         # standard search path behind it; a TEXINPUTS the caller set is kept.
         env = dict(os.environ)
-        env['TEXINPUTS'] = f"{LATEX_DIR}{os.pathsep}{env.get('TEXINPUTS', '')}"
+        env['TEXINPUTS'] = os.pathsep.join([str(LATEX_DIR), *map(str, self.search_dirs),
+                                            env.get('TEXINPUTS', '')])
         output_json = build_dir / 'output.json'
         output_json.unlink(missing_ok=True)
         result = None
-        for _ in range(max(1, passes)):
+        # `passes` is a ceiling: like latexmk, stop once the files TeX reads
+        # back are the same after a run as before it. A table of contents
+        # often needs three – revtex measures its section numbers in one run
+        # and sets their column in the next.
+        def read_back() -> bytes:
+            return b''.join((build_dir / f'input.{ext}').read_bytes()
+                            for ext in ('aux', 'toc', 'lof', 'lot')
+                            if (build_dir / f'input.{ext}').exists())
+        before = read_back()
+        for n in range(max(1, passes)):
             result = subprocess.run(
                 ['lualatex', shell_escape, '-interaction=nonstopmode', 'input.tex'],
                 cwd=build_dir, capture_output=True, text=True, env=env)
+            after = read_back()
+            if n > 0 and after == before:
+                break
+            before = after
         log = build_dir / 'input.log'
         if not output_json.exists():
             detail = log.read_text() if log.exists() else result.stdout + result.stderr

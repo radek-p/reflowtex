@@ -105,6 +105,10 @@ message Node {
   optional bool width_floor    = 47;
   optional bool kern_floor     = 48;
   optional bool surround_floor = 49;
+  // A box whose glue stretches with the measure (a tabular*'s \extracolsep)
+  // is spaced by its glue_set, which closes at zero: the box's natural width,
+  // below which it scrolls rather than overfills.
+  optional bool glue_set_floor = 54;
 
   // glyph: the cross-reference this glyph is part of – a 1-based index into
   // Document.links. Every glyph a \ref printed carries the same id, so a

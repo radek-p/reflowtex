@@ -782,13 +782,27 @@ local function strip_anchor_markers(head)
     return head
 end
 
+-- The fixed part of a margin skip: every line of the paragraph is set that far
+-- in from its band – a table of contents' entries are, with their numbers
+-- hanging back into the \leftskip.
+local function skip_width(name)
+    local ok, w = pcall(tex.getglue, name)
+    return (ok and w) or 0
+end
+
 local function capture_paragraph(head, groupcode)
     local idx = #all_paragraphs + 1
     local indent, width = para_band()
+    local ls, rs = skip_width("leftskip"), skip_width("rightskip")
     all_paragraphs[idx] = {
         index  = idx,
-        indent = indent,
-        width  = width,
+        -- where its text is set: the band less the margin skips' fixed parts
+        indent = indent + ls,
+        width  = width - ls - rs,
+        -- the band itself, which a display inside the paragraph takes
+        -- (TeX's \displayindent comes from \parshape alone); not encoded
+        band_indent = indent,
+        band_width  = width,
         baselineskip  = param_dimen("baselineskip"),
         lineskip      = param_dimen("lineskip"),
         lineskiplimit = param_dimen("lineskiplimit"),
@@ -884,7 +898,13 @@ local function capture_flow()
             elseif t == "kern" then
                 trailing_sp = trailing_sp + (n.kern or 0)
             end
-        elseif t == "hlist" or t == "vlist" or t == "rule" then
+        -- A box under a point tall is left as it is: it cannot fill a page,
+        -- and packages use such boxes as markers they later recognise by size
+        -- – revtex's page grid protects its penalties with a 1986sp box and
+        -- repairs its dead cycles by it; zeroed, its \clearpage at the end of
+        -- the document never settles and ships empty pages without end.
+        elseif (t == "hlist" or t == "vlist" or t == "rule")
+               and (n.height or 0) + (n.depth or 0) >= 65536 then
             n.height, n.depth = 0, 0
         elseif t == "glue" then
             n.width, n.stretch, n.shrink = 0, 0, 0
@@ -1141,8 +1161,8 @@ local function walk_flow(head, pending, ctx)
             end
             pending.interline = nil
             if p then
-                cur_band.indent = all_paragraphs[p].indent
-                cur_band.width  = all_paragraphs[p].width
+                cur_band.indent = all_paragraphs[p].band_indent or all_paragraphs[p].indent
+                cur_band.width  = all_paragraphs[p].band_width or all_paragraphs[p].width
             end
             if p and not seen_para[p] and has_visible_nodes(all_paragraphs[p].nodes) then
                 seen_para[p] = true

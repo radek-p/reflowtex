@@ -93,18 +93,29 @@ def main() -> None:
     if not snippets:
         sys.exit(f'error: no .tex snippets found in {src_dir}')
 
-    pipe = Pipeline(build_root=build_root, fonts_dir=fonts_dir, local_fonts_dir=local_fonts)
+    # A snippet's figures and \input files are found next to it.
+    pipe = Pipeline(build_root=build_root, fonts_dir=fonts_dir, local_fonts_dir=local_fonts,
+                    search_dirs=[src_dir])
 
     print(f'reflowtex: compiling {len(snippets)} snippet(s) from {src_dir}')
     # Each snippet owns its heading (a \section, if any), so no HTML heading is
     # added here – the block is one self-contained rendering.
     # A snippet that refers to its own labels needs the .aux round trip, or
-    # every \\ref prints "??": give it a second pass.
-    ref_re = re.compile(r'\\(?:eq|auto|c|C|name|page)?ref\*?\{')
+    # every \\ref prints "??": give it more passes. So does one with a table
+    # of contents or a list of figures (read back from .toc/.lof) or citations.
+    # Up to three: the pipeline stops as soon as nothing read back changes.
+    ref_re = re.compile(r'\\(?:(?:eq|auto|c|C|name|page)?ref\*?\{|tableofcontents|listof(?:figures|tables)|cite)')
     jobs = [(content_key(p.read_text(encoding='utf-8'), preamble),
              p.read_text(encoding='utf-8'), preamble, p.name,
-             2 if ref_re.search(p.read_text(encoding='utf-8')) else 1)
+             3 if ref_re.search(p.read_text(encoding='utf-8')) else 1)
             for p in snippets]
+    # A snippet's own bibliography (paper.bbl beside paper.tex) is read as
+    # \\jobname.bbl, and every snippet compiles as input.tex in its build dir.
+    for key, _c, _p, name, _passes in jobs:
+        bbl = (src_dir / name).with_suffix('.bbl')
+        if bbl.exists():
+            (build_root / key).mkdir(parents=True, exist_ok=True)
+            shutil.copy(bbl, build_root / key / 'input.bbl')
     # Compile (optionally in parallel), then assemble blocks in filename order.
     if args.batch:
         blobs = pipe.compile_batch([(k, c, n) for k, c, _p, n, _passes in jobs], preamble,

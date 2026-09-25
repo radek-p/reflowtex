@@ -43,6 +43,7 @@ convert() is unavailable and the caller keeps the metric-box fallback.
 from __future__ import annotations
 
 import hashlib
+import re
 import subprocess
 from pathlib import Path
 
@@ -114,10 +115,58 @@ def _addressing(slots: dict[int, str]) -> dict[int, int]:
     return addressing
 
 
-def find_pfb(name: str) -> str | None:
-    """Locate a font's Type1 outline in the TeX tree (None if it is bitmap-only)."""
-    r = subprocess.run(['kpsewhich', f'{name}.pfb'], capture_output=True, text=True)
+def _kpsewhich(fname: str) -> str | None:
+    r = subprocess.run(['kpsewhich', fname], capture_output=True, text=True)
     return r.stdout.strip() or None
+
+
+_font_map: dict[str, tuple[str | None, str | None]] | None = None
+
+
+def _map_entries() -> dict[str, tuple[str | None, str | None]]:
+    """TeX font name → (outline file, encoding file) from pdftex.map, the map
+    the TeX installation itself uses to embed Type1 fonts."""
+    global _font_map
+    if _font_map is None:
+        _font_map = {}
+        path = _kpsewhich('pdftex.map')
+        if path:
+            for line in Path(path).read_text(encoding='latin-1').splitlines():
+                if not line.strip() or line.lstrip()[0] in '%#*;':
+                    continue
+                words = re.findall(r'"[^"]*"|\S+', line)
+                files = [w.lstrip('<[') for w in words[1:] if w.startswith('<')]
+                outline = next((w for w in files if w.endswith(('.pfb', '.pfa'))), None)
+                enc = next((w for w in files if w.endswith('.enc')), None)
+                if outline:
+                    _font_map.setdefault(words[0], (outline, enc))
+    return _font_map
+
+
+def _read_encoding(path: str) -> list[str]:
+    """The 256 glyph names of a PostScript encoding vector (.enc)."""
+    text = re.sub(r'%[^\n]*', '', Path(path).read_text(encoding='latin-1'))
+    body = text[text.index('[') + 1:text.rindex(']')]
+    names = re.findall(r'/([^\s/\[\]{}()<>%]+)', body)
+    return (names + ['.notdef'] * 256)[:256]
+
+
+def find_pfb(name: str) -> tuple[str, list[str] | None] | None:
+    """Locate a font's Type1 outline in the TeX tree, and the encoding it is
+    used with: its own (None) when the outline is named after the font, or
+    the one the font map gives – a T1-encoded face such as ec-lmr10 is
+    lmr10.pfb re-encoded through lm-ec.enc. None if it has no outline."""
+    own = _kpsewhich(f'{name}.pfb')
+    if own:
+        return own, None
+    outline, enc = _map_entries().get(name, (None, None))
+    if not outline:
+        return None
+    pfb = _kpsewhich(outline)
+    if not pfb:
+        return None
+    enc_path = _kpsewhich(enc) if enc else None
+    return pfb, (_read_encoding(enc_path) if enc_path else None)
 
 
 def convert(name: str, out_dir: Path) -> tuple[str, dict[int, int]] | None:
@@ -130,22 +179,26 @@ def convert(name: str, out_dir: Path) -> tuple[str, dict[int, int]] | None:
     """
     if not _AVAILABLE:
         return None
-    pfb = find_pfb(name)
-    if not pfb:
+    found = find_pfb(name)
+    if not found:
         return None
+    pfb, encoding = found
     try:
-        return _convert(pfb, name, Path(out_dir))
+        return _convert(pfb, name, Path(out_dir), encoding)
     except Exception as e:                                  # noqa: BLE001
         print(f'  t1-convert: {name} skipped ({type(e).__name__}: {e}) – keeps metric boxes')
         return None
 
 
-def _convert(pfb: str, name: str, out_dir: Path) -> tuple[str, dict[int, int]]:
+def _convert(pfb: str, name: str, out_dir: Path,
+             encoding: list[str] | None = None) -> tuple[str, dict[int, int]]:
     # latin-1, not the default ascii: some faces (e.g. eurosym's fey*) carry a
     # non-ASCII byte in their PostScript header that the ascii decoder rejects.
     t1 = t1Lib.T1Font(pfb, encoding='latin-1')
     t1.parse()
-    encoding = t1.font['Encoding']             # 256 entries: slot -> glyph name
+    # 256 entries: slot -> glyph name – the outline's own, unless the font
+    # map re-encodes it
+    encoding = encoding or t1.font['Encoding']
     glyphs = t1.getGlyphSet()
     upm = round(1 / t1.font['FontMatrix'][0])  # units per em (1000 for CM/AMS)
 
