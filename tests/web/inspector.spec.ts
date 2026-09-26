@@ -63,7 +63,7 @@ test('colour maps: listed, edited live, exported, imported, reset', async ({ ope
   const d = await A(page, 'colourMaps');
   expect(d.maps.map((m: any) => m.name)).toEqual(['test']);
   const m = d.maps[0];
-  expect(m.used.length).toBe(1);
+  expect([m.used, m.usedBy]).toEqual([1, 'block 1']);
   expect(m.themes).toEqual(['light', 'dark']);
   expect(m.colors.find((c: any) => c.src === '#0000ff').by.dark).toBe('#99ccff');
   expect(m.tints).toEqual([expect.objectContaining({ hex: '#ccccff', base: '#0000ff', pct: 20 })]);
@@ -89,7 +89,7 @@ test('the Colours tab shows the maps', async ({ openPage }) => {
   await agent(page);
   await page.locator('[data-rtx-ui] [role="tab"][data-view="col"]').click();
   await expect(page.locator('[data-rtx-ui] .colours .cmap h3')).toContainText('test');
-  expect(await page.locator('[data-rtx-ui] .colours .cgrid input[type="color"]').count()).toBeGreaterThan(1);
+  expect(await page.locator('[data-rtx-ui] .colours .cgrid .pk-swatch').count()).toBeGreaterThan(1);
 });
 
 // A colour cell is one line, the picker before the field: its class once
@@ -101,10 +101,66 @@ test('a colour cell is one line', async ({ openPage }) => {
   const cell = page.locator('[data-rtx-ui] .colours .cgrid td .ccell').first();
   await cell.waitFor();
   const r = await cell.evaluate(c => {
-    const [pick, field] = [c.querySelector('input[type="color"]')!, c.querySelector('input[type="text"]')!].map(e => e.getBoundingClientRect());
+    const [pick, field] = [c.querySelector('.pk-swatch')!, c.querySelector('input[type="text"]')!].map(e => e.getBoundingClientRect());
     return { h: c.getBoundingClientRect().height, beside: pick.right <= field.left + 1, border: getComputedStyle(c).borderTopWidth };
   });
   expect(r.h).toBeLessThan(28);
   expect(r.beside).toBe(true);
   expect(r.border).toBe('0px');
+});
+
+// A theme's heading switches the page, as its own switcher would.
+test("a theme's heading switches the page's theme", async ({ openPage }) => {
+  const page = await openPage('colours');
+  await agent(page);
+  await page.locator('[data-rtx-ui] [role="tab"][data-view="col"]').click();
+  await page.locator('[data-rtx-ui] .colours th button.theme', { hasText: 'dark' }).click();
+  await expect.poll(() => page.evaluate(() => [document.documentElement.classList.contains('dark'), document.documentElement.dataset.theme])).toEqual([true, 'dark']);
+  expect(await blueFill(page), "the map's dark colour").toBe('rgb(153, 204, 255)');
+  await expect(page.locator('[data-rtx-ui] .colours th button.theme[aria-pressed="true"]')).toHaveText('dark');
+  await page.locator('[data-rtx-ui] .colours th button.theme', { hasText: 'light' }).click();
+  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(false);
+});
+
+// The panel's own picker, not the browser's (a system dialog on a Mac):
+// the square, the hue, the hex; a drag edits live, Escape takes it back.
+test('the colour picker', async ({ openPage }) => {
+  const page = await openPage('colours');
+  await agent(page);
+  await page.locator('[data-rtx-ui] [role="tab"][data-view="col"]').click();
+  expect(await page.locator('[data-rtx-ui] .colours input[type="color"]').count(), "no browser pickers").toBe(0);
+  await page.locator('[data-rtx-ui] .colours .ccell .pk-swatch').first().click();
+  const picker = page.locator('[data-rtx-ui] .picker');
+  await expect(picker).toBeVisible();
+  const hex = picker.locator('.pk-hex');
+  await hex.fill('#008000');
+  await expect.poll(() => blueFill(page)).toBe('rgb(0, 128, 0)');
+  const sv = await picker.locator('.pk-sv').boundingBox();
+  await page.mouse.click(sv!.x + sv!.width - 2, sv!.y + 2);       // saturated, bright: the hue's pure colour
+  const [r, g, b] = (await hex.inputValue()).match(/[0-9a-f]{2}/g)!.map(x => parseInt(x, 16));
+  expect(g > 240 && r < 16 && b < 16, 'near pure green').toBe(true);
+  await expect.poll(() => blueFill(page)).toBe(`rgb(${r}, ${g}, ${b})`);
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
+  await expect.poll(() => blueFill(page), 'Escape puts back the colour it opened with').toBe('rgb(0, 0, 255)');
+});
+
+// In the dark theme the Colours view's buttons are the panel's, not the
+// browser's light ones with light text.
+test("the panel's buttons in the dark", async ({ openPage }) => {
+  const page = await openPage('colours');
+  await page.evaluate(() => { document.body.style.background = '#111'; document.body.style.color = '#eee'; });
+  await agent(page);
+  await page.locator('[data-rtx-ui] [role="tab"][data-view="col"]').click();
+  await page.locator('[data-rtx-ui] .colours .cbar button', { hasText: 'Paste JSON' }).click();
+  const r = await page.locator('[data-rtx-ui] .colours').evaluate(v => [...v.querySelectorAll('button:not(.pk-swatch):not(.x):not(.theme)')].map(b => {
+    const cs = getComputedStyle(b), lum = (c: string) => { const [r, g, bl] = c.match(/[\d.]+/g)!.map(Number); return 0.2126 * r + 0.7152 * g + 0.0722 * bl; };
+    return { text: b.textContent, bg: cs.backgroundColor, fg: lum(cs.color) };
+  }));
+  const lum = (c: string) => { const [r, g, bl] = c.match(/[\d.]+/g)!.map(Number); return 0.2126 * r + 0.7152 * g + 0.0722 * bl; };
+  expect(r.length).toBeGreaterThan(4);
+  for (const b of r) {
+    expect(b.bg === 'rgba(0, 0, 0, 0)' || lum(b.bg) < 80, `${b.text}: ${b.bg}`).toBe(true);
+    expect(b.fg, b.text!).toBeGreaterThan(150);
+  }
 });

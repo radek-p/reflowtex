@@ -8,7 +8,7 @@ import { say } from './store.js';
 // already in the page – installed by another copy of the panel, or served
 // from a stale cache – is replaced: agent.js is loaded again, with a query of
 // its own so no cache can hand back the old file.
-export const AGENT = 4;
+export const AGENT = 6;
 export const MISSING = Symbol('missing');
 
 let asset = name => name;                     // (set by the loader: a file beside it)

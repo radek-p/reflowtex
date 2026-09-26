@@ -6,6 +6,9 @@
 // column is marked). Then its tints: colours TeX mixed into the page,
 // re-mixed against the page's background.
 //
+// A theme's heading switches the page to that theme, as the page's own
+// switcher would (a class on <html>), to see the colours where they apply.
+//
 // Every edit applies at once (the viewer's host.setColorMaps: the colours are
 // CSS custom properties, so nothing is laid out again). Export copies the
 // maps as the island's JSON and downloads them; Import takes such JSON, from
@@ -14,6 +17,7 @@ import { html, signal, useRef } from '../vendor/preact.js';
 import { call, got } from './bridge.js';
 import { Action, Muted, copyText } from './ui.js';
 import { say } from './store.js';
+import { ColourPicker } from './picker.js';
 
 const data = signal(null);
 const pasting = signal(false);
@@ -30,25 +34,38 @@ async function run(what, ...args) {
 }
 const HEX = /^#[0-9a-f]{6}$/i;
 
+// A picker's drag sends a colour per frame; the page is asked one at a time,
+// and only the latest waiting colour is sent next.
+function live(fn) {
+    let busy = false, next = null;
+    const go = async args => { busy = true; await fn(...args); busy = false;
+        if (next) { const a = next; next = null; go(a); } };
+    return (...args) => { if (busy) next = args; else go(args); };
+}
+
 const Swatch = ({ c }) => c
     ? html`<span class="swatch" title=${c}><i style=${{ background: c }}></i><code>${c}</code></span>`
     : html`<span class="swatch none">–</span>`;
 
 // One theme's colour for one TeX colour: a picker (for #rrggbb) and a field
 // (any CSS colour); empty or × drops the mapping.
-function Cell({ map, theme, src, value }) {
-    const set = v => run('setMapColour', map, theme, src, v);
+function Cell({ map, theme, src, value, swatches }) {
+    const set = useRef(null);
+    set.current = set.current || live(v => run('setMapColour', map, theme, src, v));
     return html`<span class="ccell">
-        <input type="color" value=${value && HEX.test(value) ? value : src} title=${`${theme}: pick a colour`}
-               onInput=${e => set(e.currentTarget.value)}/>
+        <${ColourPicker} value=${value} fallback=${src} swatches=${swatches} title=${`${theme}: choose a colour`}
+                         onInput=${v => set.current(v)}/>
         <input type="text" class="cval" value=${value || ''} placeholder=${src} spellcheck="false"
-               title="Any CSS colour; empty: the colour as TeX set it" onChange=${e => set(e.currentTarget.value.trim() || null)}/>
-        ${value ? html`<button type="button" class="x" title="Drop this mapping" onClick=${() => set(null)}>×</button>` : null}
+               title="Any CSS colour; empty: the colour as TeX set it" onChange=${e => set.current(e.currentTarget.value.trim() || null)}/>
+        ${value ? html`<button type="button" class="x" title="Drop this mapping" onClick=${() => set.current(null)}>×</button>` : null}
     </span>`;
 }
 
 function ColourMap({ m, theme }) {
-    const add = useRef(null), tint = useRef(null);
+    const add = useRef(null), tint = useRef(null), setTint = useRef(null);
+    setTint.current = setTint.current || live((hex, base, pct) => run('setMapTint', m.name, hex, base, pct));
+    // The colours already in the map, to pick from.
+    const swatches = [...new Set(m.colors.flatMap(c => [c.src, ...Object.values(c.by)]).filter(c => c && HEX.test(c)).map(c => c.toLowerCase()))].slice(0, 24);
     const addColour = () => {
         const v = add.current.value.trim().toLowerCase();
         if (!HEX.test(v)) { say('a TeX colour is #rrggbb'); return; }
@@ -59,20 +76,21 @@ function ColourMap({ m, theme }) {
         run('setMapTint', m.name, hex, base, pct);
     };
     return html`<section class="cmap">
-        <h3>${m.name} <span class="muted">${m.used.length ? `used by ${m.used.join(', ')}` : 'used by no block on this page'}</span></h3>
-        <table class="cgrid"><thead><tr><th>TeX</th>
-            ${m.themes.map(t => html`<th key=${t} class=${t === theme ? 'now' : ''}>${t}</th>`)}<th>shown now</th></tr></thead>
+        <h3>${m.name} <span class="muted">${m.used ? `used by ${m.usedBy}` : 'not used on this page'}</span></h3>
+        <table class="cgrid"><thead><tr><th>TeX colour</th>
+            ${m.themes.map(t => html`<th key=${t} class=${t === theme ? 'now' : ''}><button type="button" class="theme" aria-pressed=${t === theme}
+                title=${t === theme ? `The page is in the ${t} theme` : `Switch the page to the ${t} theme`} onClick=${() => run('setPageTheme', t)}>${t}</button></th>`)}<th>Current</th></tr></thead>
             <tbody>${m.colors.map(c => html`<tr key=${c.src}><td><${Swatch} c=${c.src}/></td>
-                ${m.themes.map(t => html`<td key=${t} class=${t === theme ? 'now' : ''}><${Cell} map=${m.name} theme=${t} src=${c.src} value=${c.by[t]}/></td>`)}
+                ${m.themes.map(t => html`<td key=${t} class=${t === theme ? 'now' : ''}><${Cell} map=${m.name} theme=${t} src=${c.src} value=${c.by[t]} swatches=${swatches}/></td>`)}
                 <td><${Swatch} c=${c.now}/></td></tr>`)}
             <tr class="add"><td colspan=${m.themes.length + 2}>
                 <input ref=${add} type="text" placeholder="#rrggbb" spellcheck="false" title="A colour TeX produced, to map"
                        onKeyDown=${e => { if (e.key === 'Enter') addColour(); }}/>
                 <button type="button" onClick=${addColour}>Add colour</button></td></tr></tbody></table>
-        <table class="cgrid tints"><thead><tr><th>tint (as TeX baked it)</th><th>of</th><th>%</th><th>shown now</th><th></th></tr></thead>
+        <table class="cgrid tints"><thead><tr><th>Tint in the TeX output</th><th>Base colour</th><th>Share</th><th>Current</th><th></th></tr></thead>
             <tbody>${m.tints.map(t => html`<tr key=${t.hex}><td><${Swatch} c=${t.hex}/></td>
-                <td><input type="color" value=${t.base} title="The colour mixed in" onInput=${e => run('setMapTint', m.name, t.hex, e.currentTarget.value, t.pct)}/>
-                    <code>${t.base}</code></td>
+                <td><span class="ccell"><${ColourPicker} value=${t.base} swatches=${swatches} title="The colour mixed into the page's background"
+                    onInput=${v => setTint.current(t.hex, v, t.pct)}/><code>${t.base}</code></span></td>
                 <td><input type="number" class="pct" min="0" max="100" value=${t.pct} onChange=${e => run('setMapTint', m.name, t.hex, t.base, e.currentTarget.value)}/></td>
                 <td><${Swatch} c=${t.now}/></td>
                 <td><button type="button" class="x" title="Drop this tint" onClick=${() => run('setMapTint', m.name, t.hex, null)}>×</button></td></tr>`)}

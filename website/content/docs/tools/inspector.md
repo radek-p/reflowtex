@@ -75,8 +75,9 @@ its words is stretched or shrunk to fit whatever width it is given.
   the kinds a script has defined, and the marks made with \verb|\webid|
   and \verb|\webclass|. Hover one to outline it on the page.
 \item[Colours.] \emph{Colours} shows every colour map the page uses, one
-  cell per colour and tint. Change a cell with its picker or type any CSS
-  colour, and the page is redrawn at once. \emph{Export} copies the maps as
+  cell per colour and tint. Click a theme's name to switch the page to it.
+  Change a cell with its picker or type any CSS colour, and the page is
+  redrawn at once; \texttt{Escape} in the picker puts the colour back. \emph{Export} copies the maps as
   JSON and saves them to a file; \emph{Import} and \emph{Paste} load them
   back, and \emph{Reset} returns to the page's own.
 \end{description}

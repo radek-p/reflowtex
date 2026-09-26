@@ -12,7 +12,7 @@
 // The file's value, when evaluated as a script, is the result of installing: 'ok', or 'no-api' when the page has no inspectable viewer yet.
 // window.__rtxInspectorInstall() tries again.
 window.__rtxInspectorInstall = () => {
-const AGENT = 5;
+const AGENT = 6;
 const prev = window.__rtxInspector;
 if (prev && prev.agent === AGENT) return 'ok';
 const I = window.reflowtex && window.reflowtex.inspect;
@@ -1309,6 +1309,17 @@ function streamText(doc, stream, depth = 0) {
 }
 const clip = (t, k) => (t.length > k ? t.slice(0, k) + '…' : t);
 const blockLabel = b => `block ${b}`;
+// A set of blocks (numbers from 1) in a few words: "block 3", "blocks 1–4, 9",
+// or "every block (28)" when it is all of them.
+function blocksLabel(nums) {
+    const b = [...new Set(nums)].sort((x, y) => x - y), all = I.blocks().length;
+    if (!b.length) return 'no block';
+    if (b.length === 1) return blockLabel(b[0]);
+    if (b.length === all) return `every block (${all})`;
+    const runs = [];
+    for (const n of b) { const r = runs[runs.length - 1]; if (r && n === r[1] + 1) r[1] = n; else runs.push([n, n]); }
+    return 'blocks ' + runs.map(([a, z]) => a === z ? a : `${a}${z === a + 1 ? ', ' : '–'}${z}`).join(', ');
+}
 // Bibliography entries the page ships for its citation popovers (#lr-citations).
 function citeEntries() {
     const raw = document.getElementById('lr-citations');
@@ -1405,7 +1416,7 @@ function resources() {
                          note: `${where} · ${k} glyph${k === 1 ? '' : 's'}` });
         });
     });
-    const range = set => { const b = [...set].sort((x, y) => x - y); return b.length === 1 ? blockLabel(b[0]) : b.length === I.blocks().length && b.length > 2 ? 'every block' : `blocks ${b.join(', ')}`; };
+    const range = set => blocksLabel([...set]);
     const fontName = r => (r.file ? r.file.replace(/\.otf$/i, '') : [...r.names][0]) || '';
     const fontRows = [...fonts.values()].sort((a, b) => fontName(a).localeCompare(fontName(b), 'en', { numeric: true, sensitivity: 'base' })).map(r => {
         const origin = fontOrigin(r.file, r.family), pua = [...r.chars].filter(isPUA).length;
@@ -1914,11 +1925,29 @@ function importColourMaps(json) {
 const exportColourMaps = () => JSON.stringify(currentMaps(), null, 2);
 const resetColourMaps = () => applyMaps(originalMaps === null ? islandMaps() : originalMaps);
 
+// The page's theme, and switching it. By the viewer's convention (its
+// README, Theming) a theme other than light is a class on <html>, which the
+// maps' rules key on; data-theme says the same for the page's own CSS. A
+// page's switcher (the companion's reading options, say) follows the change.
+const themeNames = maps => new Set(['dark', 'sepia', 'contrast',
+    ...Object.values(maps).flatMap(m => Object.keys(m.colors || {}))].filter(t => t !== 'light'));
+function pageTheme(maps = currentMaps()) {
+    const root = document.documentElement, a = root.getAttribute('data-theme');
+    return a || [...themeNames(maps)].find(t => root.classList.contains(t)) || 'light';
+}
+function setPageTheme(t) {
+    if (typeof t !== 'string' || !/^[\w-]+$/.test(t)) return 'a theme is a class name';
+    const root = document.documentElement;
+    for (const n of themeNames(currentMaps())) root.classList.remove(n);
+    if (t !== 'light') root.classList.add(t);
+    root.setAttribute('data-theme', t);
+    return 'ok';
+}
+
 function colourMaps() {
     const maps = currentMaps();
     const blocks = I.blocks();
-    const theme = document.documentElement.getAttribute('data-theme')
-        || ['dark', 'sepia', 'contrast'].find(t => document.documentElement.classList.contains(t)) || 'light';
+    const theme = pageTheme(maps);
     const out = Object.entries(maps).map(([name, map]) => {
         const users = blocks.filter(el => el.dataset.colorMap === name);
         const probeIn = users[0] || null;
@@ -1936,7 +1965,7 @@ function colourMaps() {
         const themes = [...new Set(['light', ...Object.keys(map.colors || {}), theme])];
         const srcs = [...new Set(themes.flatMap(t => Object.keys((map.colors || {})[t] || {})))].sort();
         return {
-            name, themes, used: users.map(el => blockLabel(blocks.indexOf(el) + 1)),
+            name, themes, used: users.length, usedBy: blocksLabel(users.map(el => blocks.indexOf(el) + 1)),
             colors: srcs.map(src => ({ src, by: Object.fromEntries(themes.map(t => [t, ((map.colors || {})[t] || {})[src] ?? null])), now: now(src) })),
             tints: Object.entries(map.tints || {}).map(([hex, [base, pct]]) => ({ hex, base, pct, now: now(hex) })),
         };
@@ -1989,7 +2018,7 @@ window.__rtxInspector = {
     // footnote's popover.
     resources, resource, uses, fontGlyphs, pathTo,
     mark(ids) { marked = ids || []; redraw(); },
-    openPopover, colourMaps, setMapColour, setMapTint, importColourMaps, exportColourMaps, resetColourMaps,
+    openPopover, colourMaps, setPageTheme, setMapColour, setMapTint, importColourMaps, exportColourMaps, resetColourMaps,
 };
 // Where the page stops being visible: the window's bottom, or the top of an
 // inspector docked there (which publishes its height as --rtx-dock-bottom).

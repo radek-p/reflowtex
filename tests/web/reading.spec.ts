@@ -58,3 +58,12 @@ test('a click outside closes', async ({ openPage }) => {
   await page.mouse.click(5, 5);
   await page.waitForSelector('.rtx-reading-panel', { state: 'detached' });
 });
+
+// A theme set from elsewhere (the inspector's Colours view) by the same
+// convention, data-theme on <html>, is the one the options show.
+test('the options follow a theme set from outside', async ({ openPage }) => {
+  const page = await openPage('reading');
+  await page.evaluate(() => { const h = document.documentElement; h.classList.add('dark'); h.setAttribute('data-theme', 'dark'); });
+  await page.locator('.rtx-reading-button').click();
+  await expect(page.locator('.rtx-reading-panel [data-t="dark"]')).toHaveAttribute('aria-checked', 'true');
+});

@@ -189,9 +189,11 @@ button { font: inherit; color: inherit; }
 .muted { color: var(--muted); }
 .dhead { display: flex; align-items: flex-start; gap: 8px; }
 .dhead h2 { flex: 1; min-width: 0; }
-.details button.copy { flex: none; cursor: pointer; font-size: 11px; color: inherit; background: transparent;
+/* A text button (ui.js Action, and the Colours view's): the panel's colours,
+   never the browser's, which stay light in the dark theme. */
+button.copy, .cgrid tr.add button, .cpaste button { flex: none; cursor: pointer; font-size: 11px; color: inherit; background: transparent;
   border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; }
-.details button.copy:hover { background: var(--hover); }
+button.copy:hover, .cgrid tr.add button:hover, .cpaste button:hover { background: var(--hover); }
 .details h2 { font-size: 12.5px; margin: 0 0 8px; font-family: var(--mono); font-weight: 600; }
 .details table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 11.5px; }
 .details td { padding: 2px 6px 2px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
@@ -275,14 +277,36 @@ input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(
 .ccell { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
 .ccell .x { visibility: hidden; padding: 0 2px; }
 .ccell:hover .x, .ccell:focus-within .x { visibility: visible; }
-.ccell input[type="color"], .cgrid input[type="color"] { width: 20px; height: 18px; padding: 0; border: 0; background: none; cursor: pointer; }
+.cgrid th .theme { font: inherit; color: inherit; background: none; border: 0; padding: 1px 4px; margin-left: -4px; border-radius: 3px; cursor: pointer; }
+.cgrid th .theme:hover { background: var(--hover); }
+.cgrid th .theme[aria-pressed="true"] { color: var(--accent); font-weight: 600; cursor: default; }
+/* The colour picker (panel/picker.js). */
+.pk-swatch { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; cursor: pointer; flex: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 25%, transparent); }
+.pk-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.picker { position: fixed; z-index: 10; width: 196px; padding: 8px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+.pk-sv { position: relative; height: 120px; border-radius: 4px; cursor: crosshair; touch-action: none;
+  background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); }
+.pk-hue { position: relative; height: 12px; border-radius: 6px; cursor: ew-resize; touch-action: none;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.pk-sv i, .pk-hue i { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.4); pointer-events: none; box-sizing: border-box; }
+.pk-hue i { top: 50%; }
+.pk-sv:focus-visible, .pk-hue:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pk-row { display: flex; align-items: center; gap: 6px; }
+.pk-now { width: 22px; height: 22px; border-radius: 4px; flex: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 25%, transparent); }
+.pk-hex { flex: 1; min-width: 0; font: 11px var(--mono); padding: 2px 4px; border: 1px solid var(--line); border-radius: 3px; background: none; color: inherit; }
+.pk-swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+.pk-swatches button { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 3px; cursor: pointer;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 25%, transparent); }
 .ccell .cval { width: 6.2em; font: 10.5px var(--mono); padding: 1px 3px; border: 1px solid var(--line); border-radius: 3px; background: none; color: inherit; }
 .cgrid td { white-space: nowrap; }
 .cgrid .pct { width: 4em; }
 .cgrid .x { border: 0; background: none; color: inherit; opacity: .5; cursor: pointer; }
 .cgrid .x:hover { opacity: 1; }
 .cgrid tr.add input[type="text"] { width: 8em; font: 11px var(--mono); }
-.cgrid tr.add button, .cpaste button { font: inherit; font-size: 11px; }
 .cpaste { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .cpaste textarea { min-height: 8em; font: 11px var(--mono); color: inherit; background: none; border: 1px solid var(--line); border-radius: 4px; padding: 6px; }
 .cpaste span { display: flex; gap: 6px; }

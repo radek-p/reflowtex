@@ -71,3 +71,13 @@ test("example options start from the page's theme, and theme one example", async
   expect(await page.evaluate(() => [document.documentElement.getAttribute('data-theme'),
     document.querySelector('.latex-example-preview')!.getAttribute('data-latex-theme')])).toEqual([null, 'dark']);
 });
+
+// The page's theme changed from elsewhere (the inspector's Colours view, the
+// corner options): an example's options not yet used show the new one.
+test("example options follow the page's theme until used", async ({ openPage }) => {
+  const page = await openPage('hugo/alpha/');
+  const opts = page.locator('figure.latex-example [data-rtx="preview-options"]');
+  await opts.locator('[data-t]').first().waitFor();
+  await page.evaluate(() => { const h = document.documentElement; h.classList.add('dark'); h.setAttribute('data-theme', 'dark'); });
+  await expect(opts.locator('[aria-checked="true"]')).toHaveAttribute('data-t', 'dark');
+});

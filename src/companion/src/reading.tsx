@@ -93,6 +93,14 @@ export const reading: ReadingState & { setZoom(z: number): void } = {
     },
 };
 
+// The theme set from elsewhere (the inspector's Colours view, a page's own
+// script) by the same convention, data-theme on <html>: the options show it.
+if (typeof MutationObserver !== 'undefined')
+    new MutationObserver(() => {
+        const t = html().getAttribute('data-theme');
+        if (t && t !== reading.theme.peek()) reading.theme.value = t;
+    }).observe(html(), { attributes: true, attributeFilter: ['data-theme'] });
+
 const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Choices for one element alone – an example's preview – not remembered:
@@ -116,6 +124,8 @@ export function scopedReading(target: HTMLElement, themes: Theme[], stage: HTMLE
         },
         setWidth() {},
     };
+    // Until the reader picks one here, the page's theme, as it changes.
+    reading.theme.subscribe(t => { if (!target.hasAttribute('data-latex-theme')) state.theme.value = t; });
     return state;
 }
 
