@@ -123,12 +123,11 @@ test-render: test-render-deps
 test-render-all: test-render-deps
 	REFLOWTEX_RENDER_ALL=1 node --test tests/render/render.test.ts
 
-# The web tests (tests/web/README.md): pytest and Playwright for Python, with
-# Chromium and WebKit (downloaded once); Hugo for the integration's site.
-test-web: venv
-	@$(PYTHON) -m pip install -q -r tests/web/requirements.txt
-	@$(PYTHON) -m playwright install chromium webkit
-	$(PYTHON) -m pytest tests/web
+# The web tests (tests/web/README.md): Playwright Test, in Chromium and WebKit
+# (downloaded once); Hugo for the integration's site.
+test-web: node-deps
+	@npx playwright install chromium webkit
+	npx playwright test -c tests/web
 
 website-clean:
 	cd website && rm -rf public resources .reflowtex-build .hugo_build.lock \

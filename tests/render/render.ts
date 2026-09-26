@@ -11,13 +11,14 @@
 //     the PDF's width and matches each glyph the viewer drew with the PDF's.
 //
 // Builds go to tests/render/build/<case>/ (ignored by git).
-import { appendFileSync, createReadStream, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { createServer, type Server } from 'node:http';
-import { extname, join, normalize, relative, resolve, sep } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import type { Server } from 'node:http';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pageless } from '../../tools/pageless-pdf/pageless.ts';
 import { siteFromRun } from '../../tools/pageless-pdf/site-from-run.ts';
 import { vectorCompare } from '../../tools/pageless-pdf/vector-compare.ts';
+import { serveDirectory } from '../../tools/lib/static-server.ts';
 import { cases as settings, defaults, type CaseSettings } from './cases.ts';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -87,19 +88,7 @@ export async function compare(c: Case, extra: number, urlRoot: string): Promise<
 /** build/ over HTTP on a free port, for the run. */
 export function serve(): Promise<{ url: string; server: Server }> {
   mkdirSync(BUILD, { recursive: true });
-  const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.otf': 'font/otf', '.svg': 'image/svg+xml' };
-  const server = createServer((req, res) => {
-    let file = normalize(join(BUILD, decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)));
-    if (!file.startsWith(BUILD)) { res.writeHead(403).end(); return; }
-    if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
-    if (!existsSync(file)) { res.writeHead(404).end(); return; }
-    res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
-    createReadStream(file).pipe(res);
-  });
-  return new Promise(ok => server.listen(0, '127.0.0.1', () => {
-    const a = server.address() as { port: number };
-    ok({ url: `http://127.0.0.1:${a.port}`, server });
-  }));
+  return serveDirectory(BUILD);
 }
 
 /** The largest offset (pt, across or down) of a matched glyph, and of a

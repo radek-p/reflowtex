@@ -31,7 +31,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-py-${{ hashFiles('tests/web/requirements.txt') }}
+          key: playwright-${{ hashFiles('package-lock.json') }}
 
       - name: Run the web tests
         run: |
@@ -39,9 +39,7 @@ jobs:
             -v "$HOME/.cache/ms-playwright":/root/.cache/ms-playwright \
             reflowtex:ci bash -lc '
               set -e
-              make venv
-              .venv/bin/python3 -m pip install -q -r tests/web/requirements.txt
-              .venv/bin/python3 -m playwright install --with-deps chromium webkit
+              npm ci --no-audit --no-fund && npx playwright install --with-deps chromium webkit
               make test-web
             '
 
@@ -49,5 +47,7 @@ jobs:
         if: failure()
         with:
           name: web-test-logs
-          path: tests/web/build/*.log
+          path: |
+            tests/web/build/*.log
+            tests/web/build/test-results/
           if-no-files-found: ignore
