@@ -92,8 +92,10 @@ Both sides have the same size: the page's width, and the longer side's
 height. Past the end of a side there is a checkerboard, so a side that ends
 early shows. The lock (on by default) scrolls them together, at the same x
 and y. **View** chooses the theme, and whether the two sides are side by
-side or stacked (**Auto**: side by side when there is more width than
-height).
+side or stacked. **Auto** takes the one in which the two, each scaled to
+fit its pane whole, are larger – a page wider than it is tall is often
+better stacked – and chooses again as the room changes: the window, or the
+inspector docking.
 
 **View → Page colours** sets the live page's: **TeX** – black on white, as
 the PDF is (the page's own light theme is #333 on #fafaf9) – the page's four
@@ -104,10 +106,10 @@ dark.
 The pointer over either pane is a hairline crosshair – four arms around a
 one-pixel point, on device pixels – that inverts what is under it, and the
 same crosshair marks the same place on the other side, anywhere in the
-pane, the margins and past the end too. A drag draws an area on both – on
-the live page with **Select area** on (M), since a drag there selects text
-– and the bottom bar gives its size and place in pt, and the pointer's; a
-click or Esc clears it.
+pane, the margins and past the end too. A drag on either side draws an
+area on both – on the live page too, where a drag then selects no text;
+while the inspector picks, a click there picks. The bottom bar gives the
+area's size and place in pt, and the pointer's; a click or Esc clears it.
 
 The PDF side is MuPDF's drawing of `pageless.pdf` as SVG – vectors, sharp
 at any zoom – made by the same library that reads TeX's glyph positions for

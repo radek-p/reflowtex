@@ -82,7 +82,6 @@ const IconInspect = () => html`<${Svg}>
     <path d="M8.5 16.5h-4a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4" ...${stroke}/>
     <path d="M10 10l8 3.1-3.3 1.4-1.4 3.4z" fill="currentColor"/><//>`;
 const IconReload = () => html`<${Svg}><path d="M15.5 10a5.5 5.5 0 1 1-1.6-3.9M15.5 3.5v3h-3" ...${stroke}/><//>`;
-const IconArea = () => html`<${Svg}><rect x="3.5" y="4.5" width="13" height="11" rx="1" ...${stroke} stroke-dasharray="2.2 2"/><//>`;
 
 const Seg = ({ value, options, onChange, title }) => html`<span class="seg" role="group" aria-label=${title} title=${title}>
     ${options.map(([v, label]) => html`<button type="button" aria-pressed=${String(v === value)} onClick=${() => onChange(v)}>${label}</button>`)}</span>`;
@@ -192,14 +191,13 @@ const onDevicePixel = v => (Math.floor(v * devicePixelRatio) + .5) / devicePixel
 /** A side's pane. Over its content, the marks both sides share (makeMarks):
  *  the selected area (in pt), and the pointer and its ghost (in CSS px). The
  *  pointer counts anywhere in the pane, the page's margins and past its end
- *  too (in the stage's pt). With `capture`, a layer over the content takes the
- *  pointer (the live page would). */
-const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, capture, children }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}
+ *  too (in the stage's pt); a drag draws the area, here or in the live page
+ *  (makeMarks.frame). */
+const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, children }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}
         onPointerMove=${e => marks.move(side, e)} onPointerLeave=${() => marks.leave(side)}
         onPointerDown=${e => marks.down(side, e)} onPointerUp=${e => marks.up(side, e)}>
     <div class="stage" style=${{ width: `${stage[0]}px`, height: `${stage[1]}px` }}>
         ${children}
-        ${capture ? html`<div class="capture"></div>` : null}
         <div class="overlay" ref=${el => marks.attach(side, el)}>
             <svg class="marks" viewBox=${`0 0 ${stagePt[0]} ${stagePt[1]}`} width=${stage[0]} height=${stage[1]}><rect class="area"/></svg>
             <svg class="cursor" width=${stage[0]} height=${stage[1]}><g class="ghost"></g></svg>
@@ -279,11 +277,34 @@ function makeMarks({ scale, status }) {
         },
         clear() { area = null; draw(); },
         hasArea: () => !!area,
-        // the live page takes the pointer itself: its moves, in its own px (2 per pt)
+        // The live page takes the pointer itself: its moves, in its own px (2
+        // per pt), and a drag there draws the area as on the PDF – but not while
+        // the inspector picks a node from the page (its agent says so).
         frame(win) {
             const d = win.document;
-            d.addEventListener('pointermove', e => point('right', (e.clientX + win.scrollX) / PX_PER_PT, (e.clientY + win.scrollY) / PX_PER_PT), { passive: true });
-            d.documentElement.addEventListener('mouseleave', () => { if (pointer?.side === 'right') { pointer = null; draw(); } });
+            const pt = e => [(e.clientX + win.scrollX) / PX_PER_PT, (e.clientY + win.scrollY) / PX_PER_PT];
+            d.addEventListener('pointermove', e => point('right', ...pt(e)), { passive: true });
+            d.documentElement.addEventListener('mouseleave', () => { if (pointer?.side === 'right' && !drag) { pointer = null; draw(); } });
+            let dragged = false;
+            d.addEventListener('pointerdown', e => {
+                if (e.button !== 0 || win.__rtxInspector?.status?.().picking) return;
+                e.preventDefault();                                     // (not a text selection)
+                d.documentElement.setPointerCapture(e.pointerId);
+                const [x, y] = pt(e);
+                drag = { side: 'right', moved: false };
+                area = { x0: x, y0: y, x1: x, y1: y };
+                draw();
+            }, true);
+            d.addEventListener('pointerup', e => {
+                if (drag?.side !== 'right') return;
+                dragged = drag.moved;
+                if (!drag.moved) area = null;
+                drag = null;
+                d.documentElement.releasePointerCapture?.(e.pointerId);
+                draw();
+            }, true);
+            // a drag is not a click: a link it ended on is not followed
+            d.addEventListener('click', e => { if (dragged) { dragged = false; e.preventDefault(); e.stopPropagation(); } }, true);
         },
     };
 }
@@ -378,6 +399,18 @@ function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, colours, fra
                  visibility: ready ? 'visible' : 'hidden' }}/>`;
 }
 
+
+// ── Side by side, or stacked ────────────────────────────────────────────────
+// A pane loses its heading's height and its padding across (report.css).
+const HEADING_PX = 30, PANE_PAD_PX = 18;
+/** 'row' (side by side) or 'column' (stacked) for a room of w × h px and a
+ *  page of `content` pt: the one in which each side, scaled to fit its pane
+ *  whole, is larger – two panes alike, so one side's area decides. */
+function betterSplit(w, h, [cw, ch]) {
+    const fit = (pw, ph) => { const s = Math.max(0, Math.min((pw - PANE_PAD_PX) / cw, (ph - HEADING_PX) / ch)); return s * s * cw * ch; };
+    return fit(w / 2, h) >= fit(w, h / 2) ? 'row' : 'column';
+}
+
 // ── The page ───────────────────────────────────────────────────────────────────
 const idFromHash = () => decodeURIComponent(location.hash.slice(1));
 const inField = e => /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
@@ -404,7 +437,6 @@ function App() {
     const [autoDir, setAutoDir] = useState('row');
     const left = useRef(null), right = useRef(null), frame = useRef(null), compare = useRef(null);
     const page = useRef(null);                            // the live page: [win, block]
-    const [areaTool, setAreaTool] = useState(false);   // drawing an area on the live page
     const scaleRef = useRef(1), statusRef = useRef(null);
     const marks = useMemo(() => makeMarks({ scale: () => scaleRef.current, status: () => statusRef.current }), []);
     const inspectorUsed = useRef(false);
@@ -453,21 +485,24 @@ function App() {
     const widthPt = hsizePt + 2 * marginPt;
     const stagePt = [widthPt, Math.max(stripSize?.[1] ?? 0, viewerSize?.[1] ?? 0, liveH) + TAIL_PT];
 
-    // side by side or stacked: 'auto' by the shape of the room for the two
+    // Side by side or stacked. 'auto': the one where the two, each scaled to fit
+    // its pane whole, cover more of the screen – a page wider than it is tall
+    // is often better stacked.
     const dir = split === 'auto' ? autoDir : split;
+    const contentPt = [widthPt, stagePt[1] - TAIL_PT || widthPt];
     useLayoutEffect(() => {
         if (!compare.current) return;
         const ro = new ResizeObserver(() => {
             const c = compare.current;
             if (!c) return;
-            setAutoDir(c.clientWidth >= c.clientHeight ? 'row' : 'column');
+            setAutoDir(betterSplit(c.clientWidth, c.clientHeight, contentPt));
             const pane = c.querySelector('.scroll');
             if (pane) setFitScale(Math.max(.2, (pane.clientWidth - 18) / widthPt));
         });
         ro.observe(compare.current);
         for (const p of compare.current.querySelectorAll('.scroll')) ro.observe(p);
         return () => ro.disconnect();
-    }, [widthPt, !!report, dir, !!noVec]);
+    }, [widthPt, contentPt[1], !!report, dir, !!noVec]);
     const scale = zoom === 'fit' ? fitScale : zoom;
     scaleRef.current = scale;
     useEffect(() => marks.draw());
@@ -531,7 +566,6 @@ function App() {
             else if (e.key === 'ArrowRight') { go(idx + 1); e.preventDefault(); }
             else if (e.key === 'n' || e.key === 'j') reveal(Math.min(items.length - 1, sel + 1));
             else if (e.key === 'p' || e.key === 'k') reveal(Math.max(0, sel - 1));
-            else if (e.key === 'm') setAreaTool(!areaTool);
             else if (e.key === 'Escape' && marks.hasArea()) marks.clear();
         };
         addEventListener('keydown', key);
@@ -562,9 +596,6 @@ function App() {
                 <${Seg} title="Zoom" value=${zoom} onChange=${setZoom} options=${[['fit', 'Fit'], [1, '1×'], [2, '2×'], [4, '4×']]}/>
                 <button class=${`ib ${lock ? 'on' : ''}`} aria-pressed=${String(lock)} title=${lock ? 'Scrolling together: both sides at the same x and y' : 'Scrolling apart'}
                     aria-label="Scroll together" onClick=${() => setLock(!lock)}><${IconLock} on=${lock}/></button>
-                <button class=${`ib ${areaTool ? 'on' : ''}`} aria-pressed=${String(areaTool)} aria-label="Select an area"
-                    title="Select an area on the live page too (M): drag on either side, and the area shows on both; a click or Esc clears it. On the PDF and the snapshot a drag always does."
-                    onClick=${() => setAreaTool(!areaTool)}><${IconArea}/></button>
             </div>
             <div class="group end" role="group" aria-label="Tools">
                 <button class=${`ib text ${inspecting ? 'on' : ''}`} aria-pressed=${String(inspecting)} disabled=${!liveSrc}
@@ -588,8 +619,7 @@ function App() {
                     <h2><span class="title">Browser · reflowed</span>
                         <${Seg} title="The browser's side: the page itself (the inspector works on it), or the screenshot the test compared" value=${mode}
                             onChange=${setSide} options=${[['live', 'Live page'], ['snapshot', 'Snapshot']]}/></h2>
-                    ${empty ?? html`<${Pane} paneRef=${right} onScroll=${onRight} stage=${stage} stagePt=${stagePt} side="right" marks=${marks}
-                        capture=${areaTool && mode === 'live' && !!liveSrc}>
+                    ${empty ?? html`<${Pane} paneRef=${right} onScroll=${onRight} stage=${stage} stagePt=${stagePt} side="right" marks=${marks}>
                         ${mode === 'live' && liveSrc
                             ? html`<${Live} key=${`${r.id}|${r.at}`} src=${liveSrc} items=${items} sel=${sel} scale=${scale} stagePt=${stagePt}
                                 marginPt=${marginPt} hsizePt=${hsizePt} colours=${colours} frameRef=${frame} onPage=${onPage} onHeight=${setLiveH}/>`

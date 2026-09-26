@@ -149,7 +149,6 @@ h2 .seg button { padding: 0 7px; }
 .overlay > svg { position: absolute; left: 0; top: 0; overflow: visible; }
 /* the crosshair inverts what is under it */
 .overlay > .cursor { mix-blend-mode: difference; }
-.stage > .capture { position: absolute; inset: 0; }
 .overlay .ghost, .overlay .area { display: none; }
 .overlay .ghost[data-on], .overlay .area[data-on] { display: inline; }
 .marks .area { fill: rgba(11,87,208,.08); stroke: #0b57d0; stroke-width: 1.5px; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
