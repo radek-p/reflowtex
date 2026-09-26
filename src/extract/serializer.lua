@@ -1,13 +1,22 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
--- Experiment 07: JSON export with math support
---
--- Extends experiment 04's serializer with:
---   - hlist/vlist nodes now recurse into children and include `shift`
---   - math open/close nodes are included with their `surround` field
---   - a `fonts` table maps font ID → {name, size_sp, filename}
---     so the renderer can load the right OTF file at the right size
+-- The capture side of the pipeline, loaded by template.tex into LuaTeX: every
+-- paragraph is recorded unbroken as TeX is about to break it, every display
+-- in its finished form, and the main vertical list in document order; at the
+-- end of the run they are written to output.json (the encoder turns that into
+-- the protobuf the viewer reads). See docs/architecture.md.
 
--- ── JSON encoder (unchanged from experiment 04) ───────────────────────────
+-- ── JSON encoder ──────────────────────────────────────────────────────────
+-- A Lua table does not say whether it is a list or a map, so a table can be
+-- marked as one: json_array / json_object. An unmarked table is a list when
+-- its keys are exactly 1..n – every node list, every record with string keys,
+-- and so on, where that guess is always right. It is wrong for a map keyed by
+-- numbers (font ids, 1..n by chance) and for an empty map, so those are
+-- marked. An empty unmarked table is written as [].
+
+local SHAPE = {}          -- metatable key: "array" | "object"
+
+local function json_array(t)  return setmetatable(t or {}, { [SHAPE] = "array" })  end
+local function json_object(t) return setmetatable(t or {}, { [SHAPE] = "object" }) end
 
 local function json_encode(val)
     local t = type(val)
@@ -26,9 +35,16 @@ local function json_encode(val)
                :gsub('\t', '\\t')
             .. '"'
     elseif t == "table" then
-        local count = 0
-        for _ in pairs(val) do count = count + 1 end
-        local is_array = (count == #val)
+        local mt = getmetatable(val)
+        local shape = mt and mt[SHAPE]
+        local is_array
+        if shape then
+            is_array = (shape == "array")
+        else
+            local count = 0
+            for _ in pairs(val) do count = count + 1 end
+            is_array = (count == #val)
+        end
         if is_array then
             local parts = {}
             for _, v in ipairs(val) do parts[#parts + 1] = json_encode(v) end
@@ -185,8 +201,6 @@ end
 -- and records the corresponding PDF/page metadata here.
 
 local PIC_ATTR    = 902
-local CITE_ATTR   = 903   -- glyphs of a citation number \lrcite{...}
-local CITETGT_ATTR = 904  -- glyphs of a bibliography label [n]
 local FOOTNOTE_MARK_ATTR = 906 -- glyphs of the superscript marker
 local FOOTNOTE_INS_ATTR  = 907 -- the matching insertion node
 local TIKZ_PIC_ATTR      = 908 -- placeholder hbox for an internally captured TikZ page
@@ -542,10 +556,6 @@ local function serialize_nodelist(head)
                 height = n.height,
                 depth  = n.depth,
                 color  = current_color,
-                -- Citation wiring: `cite` on a \lrcite number, `citetarget` on a
-                -- bibliography [n] label. The browser links the two.
-                cite       = node.get_attribute(n, CITE_ATTR),
-                citetarget = node.get_attribute(n, CITETGT_ATTR),
                 footnote   = node.get_attribute(n, FOOTNOTE_MARK_ATTR),
                 link       = node.get_attribute(n, LINK_ATTR),
                 slot       = node.get_attribute(n, SLOT_ATTR),
@@ -853,10 +863,10 @@ end
 -- builder sees a non-empty page whose height never grows, so delayed writes
 -- still execute during normal (final or explicitly requested) shipouts.
 local flow_head, flow_tail
--- Keep this distinct from the public node annotations above. In particular,
--- 904 belongs to bibliography targets; reusing it here can make a contribution
--- look as if it has already been copied when an attribute happens to propagate
--- onto its top-level box.
+-- Keep this distinct from the node annotations above: reusing one of theirs
+-- can make a contribution look as if it has already been copied when that
+-- attribute happens to propagate onto its top-level box. (903 and 904 were
+-- the \lrcite citation attributes, now gone; leave them unused a while.)
 local FLOW_ATTR = 905
 
 local function append_flow(n)
@@ -1327,6 +1337,31 @@ function Serializer.flow_head()
     return flow_head
 end
 
+-- The id-keyed tables (links, anchors, slots) are lists on the wire: an id is
+-- its entry's 1-based position. The ids come from counters in template.tex and
+-- reflowtex.sty and so run 1..n; a gap (a counter stepped with nothing noted)
+-- would otherwise turn the table into a map, which the encoder cannot read,
+-- so it is filled with an empty entry, and reported.
+local function dense(name, t, blank)
+    local n = 0
+    for k in pairs(t) do
+        if type(k) == "number" and k > n then n = k end
+    end
+    local out, gaps = json_array({}), 0
+    for i = 1, n do
+        if t[i] == nil then
+            out[i] = blank()
+            gaps = gaps + 1
+        else
+            out[i] = t[i]
+        end
+    end
+    if gaps > 0 then
+        texio.write_nl(string.format("serializer: %d gap(s) among the %d %s ids, filled", gaps, n, name))
+    end
+    return out
+end
+
 local function write_output()
     walk_flow(flow_head, { sp = 0, explicit = 0 })
     for _, p in ipairs(all_paragraphs) do remap_footnote_refs(p.nodes) end
@@ -1348,14 +1383,14 @@ local function write_output()
     local f = assert(io.open("output.json", "w"))
     f:write(json_encode({
         source_width = source_width,
-        fonts      = used_fonts,
-        paragraphs = all_paragraphs,
-        content    = content,
-        streams    = stream_list,
-        links      = link_labels,
-        anchors    = anchor_labels,
-        slots      = slot_table,
-        outline    = outline,
+        fonts      = json_object(used_fonts),      -- keyed by LuaTeX font id
+        paragraphs = json_array(all_paragraphs),
+        content    = json_array(content),
+        streams    = json_array(stream_list),
+        links      = dense("link", link_labels, function() return json_object({}) end),
+        anchors    = dense("anchor", anchor_labels, function() return "" end),
+        slots      = dense("slot", slot_table, function() return json_object({ name = "" }) end),
+        outline    = json_array(outline),
     }))
     f:close()
     local n_disp, n_fn = 0, 0
