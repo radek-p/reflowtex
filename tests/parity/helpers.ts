@@ -4,6 +4,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 
 export const REPO = resolve(import.meta.dirname, '../..');
 /** The venv's Python, or another (REFLOWTEX_PYTHON: a worktree can borrow the
@@ -80,4 +81,18 @@ export function asDocument(d: any): any {
     d.paragraphs ??= []; d.content ??= []; d.streams ??= [];
   }
   return d;
+}
+
+/** A picture's SVG with dvisvgm's run-to-run arbitrariness taken out: it
+ *  numbers glyph fonts (g1-, g2-…) in an order that varies between runs, so
+ *  each glyph definition is renamed after its path data and the definitions
+ *  are sorted. What is drawn, and where, is compared exactly. */
+export function canonicalSvg(svg: string): string {
+  const names = new Map<string, string>();
+  for (const m of svg.matchAll(/<path id='([^']+)' d='([^']*)'\/>/g)) {
+    names.set(m[1], `glyph-${createHash('sha1').update(m[2]).digest('hex').slice(0, 12)}`);
+  }
+  let out = svg.replace(/(id='|#)([^')]+)/g, (all, pre, id) => (names.has(id) ? pre + names.get(id) : all));
+  out = out.replace(/<defs>([\s\S]*?)<\/defs>/g, (_, body: string) => `<defs>${body.split('\n').filter(Boolean).sort().join('\n')}</defs>`);
+  return out;
 }

@@ -87,11 +87,11 @@ export function usesIccColour(pdf: string): boolean {
 }
 
 /** Turn every picture node's PDF page into inline SVG (Document.pictures);
- *  returns how many pictures were converted. */
-export async function convertPictures(data: SerializerOutput, buildDir: string, block?: string): Promise<number> {
-  // The build directory is named by the document's content key: its first
-  // characters tell this document's pictures from another's on the same page.
-  const docTag = basename(buildDir).replace(/[^0-9A-Za-z]/g, '').slice(0, 8);
+ *  returns how many pictures were converted. `docTag` tells this document's
+ *  pictures from another's on the same page: by default the first characters
+ *  of the build directory's name, which is the document's content key. */
+export async function convertPictures(data: SerializerOutput, buildDir: string, block?: string,
+                                      docTag = basename(buildDir).replace(/[^0-9A-Za-z]/g, '').slice(0, 8)): Promise<number> {
   if (!Array.isArray(data.pictures)) data.pictures = [];
   const pictures = data.pictures as Picture[];
   const bySource = new Map<string, number>();

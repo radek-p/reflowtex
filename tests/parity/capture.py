@@ -8,10 +8,14 @@ Python.
 Runs the build script (integrations/hugo/prebuild.py, integrations/vanilla/
 build.py, examples/testmath/build.py) with the pipeline's modules wrapped.
 Per block (<capture dir>/<key>/), numbered in call order:
+  NNN-compile.json         a compile()/compile_batch() call's arguments and the
+  NNN-compile_batch.json   pipeline's configuration (the first file of a block)
   NNN-lualatex.json        the serializer's own output of each LuaTeX run
   NNN-<function>.json      {args (as given), result, after (mutated args)} of
                            each display_model and transforms function called
   legacy-fonts.json        (<capture dir>/) each Type 1 conversion's result
+  _site/NNN-patch_fonts.json  the build root, fonts directory and served map
+                           of each patch_fonts call
 """
 import copy, functools, json, runpy, sys, threading
 from pathlib import Path
@@ -91,6 +95,37 @@ def compile_data(self, content, preamble='', key=None, passes=1, name=None):
 
 
 pipeline.Pipeline._compile_data = compile_data
+
+
+def config(self) -> dict:
+    return {'template': str(self.template), 'serializer': str(self.serializer),
+            'search_dirs': [str(d) for d in self.search_dirs], 'fonts_dir': str(self.fonts.output_dir),
+            'local_fonts_dir': str(self.fonts.local_dir) if self.fonts.local_dir else None}
+
+
+orig_compile = pipeline.Pipeline.compile
+
+
+def compile_(self, content, preamble='', key=None, passes=1, name=None):
+    k = key or pipeline.content_key(content, preamble)
+    tls.key = k
+    record('compile', {'content': content, 'preamble': preamble, 'key': key, 'passes': passes, 'name': name, **config(self)})
+    return orig_compile(self, content, preamble, key, passes, name)
+
+
+pipeline.Pipeline.compile = compile_
+orig_batch = pipeline.Pipeline.compile_batch
+
+
+def compile_batch(self, parts, preamble='', key=None, passes=1, name=None):
+    joined = '\n'.join(f'\\reflowtexbatchpart{{{i}}}\n{p[1]}' for i, p in enumerate(parts, 1))
+    tls.key = key or pipeline.content_key(joined, preamble)
+    record('compile_batch', {'parts': [list(p) for p in parts], 'preamble': preamble, 'key': key, 'passes': passes,
+                             'name': name, **config(self)})
+    return orig_batch(self, parts, preamble, key, passes, name)
+
+
+pipeline.Pipeline.compile_batch = compile_batch
 orig_run = pipeline.Pipeline._run_lualatex
 
 
@@ -101,6 +136,19 @@ def run_lualatex(self, build_dir, label, passes=1):
 
 
 pipeline.Pipeline._run_lualatex = run_lualatex
+orig_patch_fonts = pipeline.Pipeline.patch_fonts
+
+
+def patch_fonts(self, output_jsons=None, subset=True):
+    orig_patch_fonts(self, output_jsons, subset)
+    tls.key = '_site'
+    record('patch_fonts', {'build_root': str(self.build_root), 'fonts_dir': str(self.fonts.output_dir),
+                           'local_dir': str(self.fonts.local_dir) if self.fonts.local_dir else None,
+                           'subset': subset, 'served': dict(self.fonts.served),
+                           'explicit': output_jsons is not None})
+
+
+pipeline.Pipeline.patch_fonts = patch_fonts
 orig_legacy = fonts.Fonts.legacy_otf
 
 

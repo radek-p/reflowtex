@@ -13,6 +13,8 @@
     "test:parity": "node --test \"tests/parity/**/*.test.ts\""
   },
   "dependencies": {
+    "harfbuzzjs": "^1.6.2",
+    "opentype.js": "^2.0.0",
     "protobufjs": "^8.8.0"
   },
   "devDependencies": {

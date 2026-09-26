@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/shared/**/*.ts", "src/pipeline/**/*.ts", "tests/unit/**/*.ts", "tests/parity/**/*.ts"]
+  "include": ["src/shared/**/*.ts", "src/pipeline/**/*.ts", "src/pipeline/**/*.d.ts", "integrations/**/*.ts", "examples/**/*.ts", "tools/**/*.ts", "tests/unit/**/*.ts", "tests/parity/**/*.ts"]
 }
