@@ -141,3 +141,14 @@ h2 .seg button { padding: 0 7px; }
   .bar { display: flex; flex-wrap: wrap; }
   .bar .middle { margin: 0 auto; }
 }
+
+/* ── The pointer's ghost and the selected area, on both sides ─────────────── */
+.stage { cursor: crosshair; }
+.stage > .marks { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.stage > .capture { position: absolute; inset: 0; }
+.marks .ghost, .marks .area { display: none; }
+.marks .ghost[data-on], .marks .area[data-on] { display: inline; }
+/* a crosshair with a white halo, readable on the page and on the pattern alike */
+.marks .ghost { fill: none; stroke: #d81b60; stroke-width: 1.5px; filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
+.marks .area { fill: rgba(11,87,208,.08); stroke: #0b57d0; stroke-width: 1.5px; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+.foot .where { white-space: pre; color: var(--fg); }

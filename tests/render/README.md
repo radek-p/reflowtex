@@ -95,6 +95,11 @@ and y. **View** chooses the theme, and whether the two sides are side by
 side or stacked (**Auto**: side by side when there is more width than
 height).
 
+Where the pointer is on one side, a crosshair shows the same place on the
+other. A drag draws an area on both – on the live page with **Select
+area** on (M), since a drag there selects text – and the bottom bar gives
+its size and place in pt, and the pointer's; a click or Esc clears it.
+
 The PDF side is MuPDF's drawing of `pageless.pdf` as SVG – vectors, sharp
 at any zoom – made by the same library that reads TeX's glyph positions for
 the comparison. The browser's side (its heading switches it) is the **live

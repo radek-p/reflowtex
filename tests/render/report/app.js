@@ -82,6 +82,7 @@ const IconInspect = () => html`<${Svg}>
     <path d="M8.5 16.5h-4a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4" ...${stroke}/>
     <path d="M10 10l8 3.1-3.3 1.4-1.4 3.4z" fill="currentColor"/><//>`;
 const IconReload = () => html`<${Svg}><path d="M15.5 10a5.5 5.5 0 1 1-1.6-3.9M15.5 3.5v3h-3" ...${stroke}/><//>`;
+const IconArea = () => html`<${Svg}><rect x="3.5" y="4.5" width="13" height="11" rx="1" ...${stroke} stroke-dasharray="2.2 2"/><//>`;
 
 const Seg = ({ value, options, onChange, title }) => html`<span class="seg" role="group" aria-label=${title} title=${title}>
     ${options.map(([v, label]) => html`<button type="button" aria-pressed=${String(v === value)} onClick=${() => onChange(v)}>${label}</button>`)}</span>`;
@@ -168,15 +169,97 @@ function useImageSize(src) {
     return size;
 }
 
-const Pane = ({ paneRef, onScroll, stage, children }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}>
-    <div class="stage" style=${{ width: `${stage[0]}px`, height: `${stage[1]}px` }}>${children}</div></div>`;
+/** A side's pane. Over its content, the marks both sides share (makeMarks):
+ *  the ghost of the pointer on the other side, and the selected area. With
+ *  `capture`, a layer over the content takes the pointer (the live page would). */
+const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, capture, children }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}>
+    <div class="stage" style=${{ width: `${stage[0]}px`, height: `${stage[1]}px` }}
+        onPointerMove=${e => marks.move(side, e)} onPointerLeave=${() => marks.leave(side)}
+        onPointerDown=${e => marks.down(side, e)} onPointerUp=${e => marks.up(side, e)}>
+        ${children}
+        ${capture ? html`<div class="capture"></div>` : null}
+        <svg class="marks" ref=${el => marks.attach(side, el)} viewBox=${`0 0 ${stagePt[0]} ${stagePt[1]}`} width=${stage[0]} height=${stage[1]}>
+            <rect class="area"/>
+            <g class="ghost"><circle r="5"/><path d="M-13 0H-7M7 0H13M0-13V-7M0 7V13"/></g>
+        </svg>
+    </div></div>`;
+
+/** The pointer and the selected area, in pt, drawn on both sides: where the
+ *  pointer is on one side, its ghost on the other; an area dragged out on
+ *  either, on both. Drawn straight into each side's SVG (in the stage's pt),
+ *  not through a render: the pointer moves every frame. */
+function makeMarks({ scale, status }) {
+    let pointer = null, area = null, drag = null;
+    const svgs = {};
+    const f2 = x => x.toFixed(2);
+    function draw() {
+        const s = scale();
+        for (const [side, svg] of Object.entries(svgs)) {
+            if (!svg?.isConnected) continue;
+            const g = svg.querySelector('.ghost'), r = svg.querySelector('.area');
+            const ghost = pointer && pointer.side !== side;
+            g.toggleAttribute('data-on', !!ghost);
+            if (ghost) g.setAttribute('transform', `translate(${pointer.x} ${pointer.y}) scale(${1 / s})`);
+            r.toggleAttribute('data-on', !!area);
+            if (area) {
+                r.setAttribute('x', Math.min(area.x0, area.x1)); r.setAttribute('y', Math.min(area.y0, area.y1));
+                r.setAttribute('width', Math.abs(area.x1 - area.x0)); r.setAttribute('height', Math.abs(area.y1 - area.y0));
+            }
+        }
+        const el = status();
+        if (el) el.textContent = [
+            pointer && `x ${f2(pointer.x)}  y ${f2(pointer.y)} pt`,
+            area && `area ${f2(Math.abs(area.x1 - area.x0))} × ${f2(Math.abs(area.y1 - area.y0))} pt at (${f2(Math.min(area.x0, area.x1))}, ${f2(Math.min(area.y0, area.y1))})`,
+        ].filter(Boolean).join('   ·   ');
+    }
+    const at = e => {
+        const r = e.currentTarget.getBoundingClientRect(), s = scale();
+        return [(e.clientX - r.left) / s, (e.clientY - r.top) / s];
+    };
+    const point = (side, x, y) => {
+        pointer = { side, x, y };
+        if (drag && drag.side === side) { area = { ...area, x1: x, y1: y }; drag.moved ||= Math.hypot(x - area.x0, y - area.y0) * scale() > 3; }
+        draw();
+    };
+    return {
+        attach(side, el) { svgs[side] = el; if (el) draw(); },
+        draw,
+        move(side, e) { point(side, ...at(e)); },
+        leave(side) { if (pointer?.side === side && !drag) { pointer = null; draw(); } },
+        // a drag draws an area; a click with no drag clears it
+        down(side, e) {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.currentTarget.setPointerCapture(e.pointerId);
+            const [x, y] = at(e);
+            drag = { side, moved: false, before: area };
+            area = { x0: x, y0: y, x1: x, y1: y };
+            draw();
+        },
+        up(side, e) {
+            if (!drag) return;
+            if (!drag.moved) area = null;
+            drag = null;
+            e.currentTarget.releasePointerCapture?.(e.pointerId);
+            draw();
+        },
+        clear() { area = null; draw(); },
+        hasArea: () => !!area,
+        // the live page takes the pointer itself: its moves, in its own px (2 per pt)
+        frame(win) {
+            const d = win.document;
+            d.addEventListener('pointermove', e => point('right', (e.clientX + win.scrollX) / PX_PER_PT, (e.clientY + win.scrollY) / PX_PER_PT), { passive: true });
+            d.documentElement.addEventListener('mouseleave', () => { if (pointer?.side === 'right') { pointer = null; draw(); } });
+        },
+    };
+}
 
 /** An image of one side, with its boxes. */
 function Sheet({ src, size, items, side, sel, scale }) {
     const svg = useMemo(() => boxesSvg(items, side, sel), [items, side, sel]);
     if (size === false) return html`<p class="empty">No image: run the test again (make test-render) to make one.</p>`;
     if (!size) return null;
-    return html`<img class="sheet" src=${src} alt="" style=${{ width: `${size[0] * scale}px`, height: `${size[1] * scale}px` }}/>
+    return html`<img class="sheet" src=${src} alt="" draggable="false" style=${{ width: `${size[0] * scale}px`, height: `${size[1] * scale}px` }}/>
         <svg class="boxes" viewBox=${`0 0 ${size[0]} ${size[1]}`} width=${size[0] * scale} height=${size[1] * scale}
             dangerouslySetInnerHTML=${{ __html: svg }}/>`;
 }
@@ -266,6 +349,9 @@ function App() {
     const [autoDir, setAutoDir] = useState('row');
     const left = useRef(null), right = useRef(null), frame = useRef(null), compare = useRef(null);
     const page = useRef(null);                            // the live page: [win, block]
+    const [areaTool, setAreaTool] = useState(false);   // drawing an area on the live page
+    const scaleRef = useRef(1), statusRef = useRef(null);
+    const marks = useMemo(() => makeMarks({ scale: () => scaleRef.current, status: () => statusRef.current }), []);
     const inspectorUsed = useRef(false);
 
     const setTheme = t => { setThemeKept(t); applyTheme(t); };
@@ -325,6 +411,8 @@ function App() {
         return () => ro.disconnect();
     }, [widthPt, !!report, dir, !!noVec]);
     const scale = zoom === 'fit' ? fitScale : zoom;
+    scaleRef.current = scale;
+    useEffect(() => marks.draw());
     const stage = [stagePt[0] * scale, stagePt[1] * scale];
 
     // Scrolling together: the same x and y on both, the stages being alike.
@@ -357,6 +445,7 @@ function App() {
     // shown.
     const onPage = (win, block) => {
         page.current = [win, block];
+        marks.frame(win);
         if (inspectorUsed.current) inspector()?.inspect(win);
     };
     const toggleInspector = async () => {
@@ -384,6 +473,8 @@ function App() {
             else if (e.key === 'ArrowRight') { go(idx + 1); e.preventDefault(); }
             else if (e.key === 'n' || e.key === 'j') reveal(Math.min(items.length - 1, sel + 1));
             else if (e.key === 'p' || e.key === 'k') reveal(Math.max(0, sel - 1));
+            else if (e.key === 'm') setAreaTool(!areaTool);
+            else if (e.key === 'Escape' && marks.hasArea()) marks.clear();
         };
         addEventListener('keydown', key);
         return () => removeEventListener('keydown', key);
@@ -413,6 +504,9 @@ function App() {
                 <${Seg} title="Zoom" value=${zoom} onChange=${setZoom} options=${[['fit', 'Fit'], [1, '1×'], [2, '2×'], [4, '4×']]}/>
                 <button class=${`ib ${lock ? 'on' : ''}`} aria-pressed=${String(lock)} title=${lock ? 'Scrolling together: both sides at the same x and y' : 'Scrolling apart'}
                     aria-label="Scroll together" onClick=${() => setLock(!lock)}><${IconLock} on=${lock}/></button>
+                <button class=${`ib ${areaTool ? 'on' : ''}`} aria-pressed=${String(areaTool)} aria-label="Select an area"
+                    title="Select an area on the live page too (M): drag on either side, and the area shows on both; a click or Esc clears it. On the PDF and the snapshot a drag always does."
+                    onClick=${() => setAreaTool(!areaTool)}><${IconArea}/></button>
             </div>
             <div class="group end" role="group" aria-label="Tools">
                 <button class=${`ib text ${inspecting ? 'on' : ''}`} aria-pressed=${String(inspecting)} disabled=${!liveSrc}
@@ -429,14 +523,15 @@ function App() {
             <div class="compare" ref=${compare} data-dir=${dir}>
                 <section class="side">
                     <h2><span class="title">TeX · pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></span></h2>
-                    ${empty ?? html`<${Pane} paneRef=${left} onScroll=${onLeft} stage=${stage}>
+                    ${empty ?? html`<${Pane} paneRef=${left} onScroll=${onLeft} stage=${stage} stagePt=${stagePt} side="left" marks=${marks}>
                         <${Sheet} src=${stripSrc} size=${stripSize} items=${items} side="strip" sel=${sel} scale=${scale}/><//>`}
                 </section>
                 <section class="side">
                     <h2><span class="title">Browser · reflowed</span>
                         <${Seg} title="The browser's side: the page itself (the inspector works on it), or the screenshot the test compared" value=${mode}
                             onChange=${setSide} options=${[['live', 'Live page'], ['snapshot', 'Snapshot']]}/></h2>
-                    ${empty ?? html`<${Pane} paneRef=${right} onScroll=${onRight} stage=${stage}>
+                    ${empty ?? html`<${Pane} paneRef=${right} onScroll=${onRight} stage=${stage} stagePt=${stagePt} side="right" marks=${marks}
+                        capture=${areaTool && mode === 'live' && !!liveSrc}>
                         ${mode === 'live' && liveSrc
                             ? html`<${Live} key=${`${r.id}|${r.at}`} src=${liveSrc} items=${items} sel=${sel} scale=${scale} stagePt=${stagePt}
                                 marginPt=${marginPt} hsizePt=${hsizePt} frameRef=${frame} onPage=${onPage} onHeight=${setLiveH}/>`
@@ -464,9 +559,10 @@ function App() {
             </section>
         </div>
         <div class="foot">
-            <span class="key"><span class="sw"></span>off, or on one side only</span>
-            <span class="key"><span class="sw dash"></span>TeX's rule not drawn, within the case's allowance</span>
+            <span class="key" title="A glyph or rule further off than the error threshold, or on one side only"><span class="sw"></span>error</span>
+            <span class="key" title="A rule of TeX's the browser did not draw, within the case's rules_missing"><span class="sw dash"></span>allowed</span>
             <span class="key"><span class="sw sel"></span>selected</span>
+            <span class="where mono" ref=${statusRef}></span>
             <span class="fill"></span>
             <span>${vec?.glyphs ? `glyphs: TeX ${vec.glyphs.strip}, browser ${vec.glyphs.viewer}, matched ${vec.glyphs.matched}` : ''}</span>
             <span>ran ${new Date(r.at).toLocaleString()}</span>
