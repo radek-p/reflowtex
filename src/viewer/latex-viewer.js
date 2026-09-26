@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 5bc8e729bb2dcaea7a2a95bbe8b86c3aece176ca3fb16b896783fe5cba5833de
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 d25df64fa31c93ad8a2fbf0e59a62e2cde61795c395e5d4dfdcc3c958ac09a94
 'use strict';
 (() => {
   // src/engine/core.js
@@ -3657,8 +3657,130 @@
     }
   }
 
-  // src/index.js
+  // src/runtime/init.js
   var docSeq = 0;
+  function resolvePictures(doc) {
+    const pics = doc.pictures;
+    if (!pics || !pics.length) return;
+    const walk = (nodes) => {
+      for (const n of nodes) {
+        if (n.type === "picture" && n.picture) n.pic = pics[n.picture - 1];
+        for (const k of ["children", "replace", "pre", "post"]) {
+          if (n[k]) walk(n[k]);
+        }
+      }
+    };
+    for (const p of doc.paragraphs) walk(p.nodes);
+    for (const it of doc.content || []) if (it.box) walk(it.box.children || []);
+    for (const st of doc.streams || []) {
+      for (const it of st.content || []) if (it.box) walk(it.box.children || []);
+    }
+  }
+  async function initBlock(el) {
+    const nodelistB64 = el.dataset.nodelistB64;
+    if (!nodelistB64) throw new Error("Missing data-nodelist-b64 attribute");
+    const t0 = performance.now();
+    const doc = decodeBlock(nodelistB64);
+    resolvePictures(doc);
+    for (const label of doc.anchors || []) pageLabels.add(label);
+    const t1 = performance.now();
+    const fontsData = Object.fromEntries(doc.fonts.map((f) => [String(f.id), f]));
+    const fontInfo = await registerFonts(fontsData);
+    const t2 = performance.now();
+    const params = paramsFromEl(el);
+    const natural = el.dataset.latexWidth === "natural";
+    let widthPt = natural ? NATURAL_PROBE_PT : el.dataset.latexWidth ? parseInt(el.dataset.latexWidth) : el.clientWidth / ZOOM || DEFAULT_WIDTH_PT;
+    const cache = { bcs: null, dom: null, layout: null, stats: null };
+    const data = {
+      doc,
+      fontInfo,
+      lastWidth: widthPt,
+      lastAlign: params.align,
+      params,
+      cache,
+      painted: false,
+      seq: ++docSeq,
+      el
+    };
+    blockData.set(el, data);
+    docData.set(doc, data);
+    allData.push(data);
+    inspectable.add(el);
+    if (doc.slots && doc.slots.length) {
+      slotBlocks.add(el);
+      applySlots(fontInfo, doc);
+    }
+    el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
+    if (natural) {
+      widthPt = data.naturalPt = naturalWidthPt(el, fontInfo, cache, widthPt);
+      data.lastWidth = widthPt;
+      el.style.width = widthPt * ZOOM + "px";
+      el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
+    }
+    remeasureStreams(fontInfo, doc, widthPt, params, cache);
+    if (doc.outline && doc.outline.length) {
+      const entries = doc.outline.map((e) => ({
+        kind: e.kind || "",
+        env: e.env || "",
+        level: e.level || 0,
+        number: e.number || "",
+        title: e.title || "",
+        id: (doc.anchors || [])[(e.anchor || 0) - 1] || null
+      }));
+      el.reflowtexOutline = entries;
+      el.dispatchEvent(new CustomEvent("reflowtex:outline", { bubbles: true, detail: { block: el, entries } }));
+    }
+    const t3 = performance.now();
+    paintVisibleNow(fontInfo, cache);
+    data.painted = true;
+    announceLayout(el);
+    observedBlocks.add(el);
+    const t4 = performance.now();
+    ro.observe(el);
+    const segTotal = cache.dom.segs.length;
+    const segPainted = cache.dom.segs.reduce((n, s) => n + (s.painted ? 1 : 0), 0);
+    return {
+      decode: t1 - t0,
+      fonts: t2 - t1,
+      layout: t3 - t2,
+      paint: t4 - t3,
+      total: t4 - t0,
+      segTotal,
+      segPainted
+    };
+  }
+  async function init() {
+    const blocks = [...document.querySelectorAll("[data-nodelist-b64]")];
+    if (blocks.length === 0) return;
+    const tStart = performance.now();
+    installColorMaps();
+    installFootnotes();
+    installStreamStyles();
+    installLinks();
+    installWidgetStates();
+    loadSchema();
+    loadFontMap();
+    let idx = 0, segPainted = 0, segTotal = 0;
+    for (const el of blocks) {
+      try {
+        const t = await initBlock(el);
+        segPainted += t.segPainted;
+        segTotal += t.segTotal;
+        debugLog(`[latex-viewer] block ${++idx}/${blocks.length}: ${t.total.toFixed(1)} ms (decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) – ${t.segPainted}/${t.segTotal} segments painted`);
+      } catch (e) {
+        el.textContent = `Render error: ${e.message}`;
+        console.error(e);
+      }
+    }
+    const segDeferred = segTotal - segPainted;
+    debugLog(`[latex-viewer] ${blocks.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms · ${segPainted}/${segTotal} segments painted` + (segDeferred ? `, ${segDeferred} deferred (painted on scroll)` : ""));
+    if (fontsPending && document.fonts) {
+      if (document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", scheduleFontRepaint);
+      if (document.fonts.ready) document.fonts.ready.then(scheduleFontRepaint);
+    }
+  }
+
+  // src/index.js
   var LEAN_KEYWORDS = new Set("theorem lemma def example instance structure class inductive where by fun have show from at with match calc exact exacts intro intros induction cases rcases obtain simp simp_all rw rwa rfl apply refine use constructor omega norm_num linarith nlinarith ring ring_nf field_simp decide aesop sorry let in if then else do return namespace open section end variable noncomputable private protected theorem abbrev deriving universe mutual termination_by decreasing_by nat_cases positivity gcongr unfold subst specialize contradiction exfalso trivial assumption tauto push_neg by_contra by_cases".split(" "));
   function highlightLean(code) {
     const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -4023,126 +4145,6 @@
       }
     `;
     document.head.appendChild(st);
-  }
-  function resolvePictures(doc) {
-    const pics = doc.pictures;
-    if (!pics || !pics.length) return;
-    const walk = (nodes) => {
-      for (const n of nodes) {
-        if (n.type === "picture" && n.picture) n.pic = pics[n.picture - 1];
-        for (const k of ["children", "replace", "pre", "post"]) {
-          if (n[k]) walk(n[k]);
-        }
-      }
-    };
-    for (const p of doc.paragraphs) walk(p.nodes);
-    for (const it of doc.content || []) if (it.box) walk(it.box.children || []);
-    for (const st of doc.streams || []) {
-      for (const it of st.content || []) if (it.box) walk(it.box.children || []);
-    }
-  }
-  async function initBlock(el) {
-    const nodelistB64 = el.dataset.nodelistB64;
-    if (!nodelistB64) throw new Error("Missing data-nodelist-b64 attribute");
-    const t0 = performance.now();
-    const doc = decodeBlock(nodelistB64);
-    resolvePictures(doc);
-    for (const label of doc.anchors || []) pageLabels.add(label);
-    const t1 = performance.now();
-    const fontsData = Object.fromEntries(doc.fonts.map((f) => [String(f.id), f]));
-    const fontInfo = await registerFonts(fontsData);
-    const t2 = performance.now();
-    const params = paramsFromEl(el);
-    const natural = el.dataset.latexWidth === "natural";
-    let widthPt = natural ? NATURAL_PROBE_PT : el.dataset.latexWidth ? parseInt(el.dataset.latexWidth) : el.clientWidth / ZOOM || DEFAULT_WIDTH_PT;
-    const cache = { bcs: null, dom: null, layout: null, stats: null };
-    const data = {
-      doc,
-      fontInfo,
-      lastWidth: widthPt,
-      lastAlign: params.align,
-      params,
-      cache,
-      painted: false,
-      seq: ++docSeq,
-      el
-    };
-    blockData.set(el, data);
-    docData.set(doc, data);
-    allData.push(data);
-    inspectable.add(el);
-    if (doc.slots && doc.slots.length) {
-      slotBlocks.add(el);
-      applySlots(fontInfo, doc);
-    }
-    el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
-    if (natural) {
-      widthPt = data.naturalPt = naturalWidthPt(el, fontInfo, cache, widthPt);
-      data.lastWidth = widthPt;
-      el.style.width = widthPt * ZOOM + "px";
-      el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
-    }
-    remeasureStreams(fontInfo, doc, widthPt, params, cache);
-    if (doc.outline && doc.outline.length) {
-      const entries = doc.outline.map((e) => ({
-        kind: e.kind || "",
-        env: e.env || "",
-        level: e.level || 0,
-        number: e.number || "",
-        title: e.title || "",
-        id: (doc.anchors || [])[(e.anchor || 0) - 1] || null
-      }));
-      el.reflowtexOutline = entries;
-      el.dispatchEvent(new CustomEvent("reflowtex:outline", { bubbles: true, detail: { block: el, entries } }));
-    }
-    const t3 = performance.now();
-    paintVisibleNow(fontInfo, cache);
-    data.painted = true;
-    announceLayout(el);
-    observedBlocks.add(el);
-    const t4 = performance.now();
-    ro.observe(el);
-    const segTotal = cache.dom.segs.length;
-    const segPainted = cache.dom.segs.reduce((n, s) => n + (s.painted ? 1 : 0), 0);
-    return {
-      decode: t1 - t0,
-      fonts: t2 - t1,
-      layout: t3 - t2,
-      paint: t4 - t3,
-      total: t4 - t0,
-      segTotal,
-      segPainted
-    };
-  }
-  async function init() {
-    const blocks = [...document.querySelectorAll("[data-nodelist-b64]")];
-    if (blocks.length === 0) return;
-    const tStart = performance.now();
-    installColorMaps();
-    installFootnotes();
-    installStreamStyles();
-    installLinks();
-    installWidgetStates();
-    loadSchema();
-    loadFontMap();
-    let idx = 0, segPainted = 0, segTotal = 0;
-    for (const el of blocks) {
-      try {
-        const t = await initBlock(el);
-        segPainted += t.segPainted;
-        segTotal += t.segTotal;
-        debugLog(`[latex-viewer] block ${++idx}/${blocks.length}: ${t.total.toFixed(1)} ms (decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) – ${t.segPainted}/${t.segTotal} segments painted`);
-      } catch (e) {
-        el.textContent = `Render error: ${e.message}`;
-        console.error(e);
-      }
-    }
-    const segDeferred = segTotal - segPainted;
-    debugLog(`[latex-viewer] ${blocks.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms · ${segPainted}/${segTotal} segments painted` + (segDeferred ? `, ${segDeferred} deferred (painted on scroll)` : ""));
-    if (fontsPending && document.fonts) {
-      if (document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", scheduleFontRepaint);
-      if (document.fonts.ready) document.fonts.ready.then(scheduleFontRepaint);
-    }
   }
   document.addEventListener("DOMContentLoaded", init);
 })();
