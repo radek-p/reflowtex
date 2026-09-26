@@ -13,6 +13,16 @@ for (const name of names())
       expect(wide, `the page scrolls sideways by ${wide} px at ${width} px`).toBeLessThanOrEqual(1);
     });
 
+// No template placeholder is left in a page: the vanilla page names its
+// title twice (<title> and the heading), and a screen reader read the second
+// as "{{TITLE}}".
+test('every placeholder of the page is filled', async ({ openPage }) => {
+  const page = await openPage('notes');
+  const html = await page.content();
+  expect(html.match(/\{\{[A-Z_]+\}\}/g) ?? []).toEqual([]);
+  expect(await page.locator('h1').first().textContent()).toBe('notes');
+});
+
 // A block made narrower is broken into more lines, none wider than it.
 test('reflows when narrower', async ({ openPage }) => {
   const page = await openPage('notes');
