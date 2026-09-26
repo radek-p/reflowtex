@@ -24,24 +24,18 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          target: test
           load: true
-          tags: reflowtex:ci
+          tags: reflowtex:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      # Playwright's Chromium, kept between runs.
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ hashFiles('package-lock.json') }}
 
       - name: Run the render tests
         run: |
           docker run --rm -v "$PWD":/workspace -w /workspace \
-            -v "$HOME/.cache/ms-playwright":/root/.cache/ms-playwright \
-            reflowtex:ci bash -lc '
+            reflowtex:test bash -lc '
               set -e
-              npm ci --no-audit --no-fund && sh docker/playwright-deps.sh chromium && npx playwright install chromium
+              npm ci --no-audit --no-fund
               make test-capture test-render-all
             '
 

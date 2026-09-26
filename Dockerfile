@@ -14,7 +14,7 @@
 # top of it.
 # Pinned by digest so every build (CI included) uses the same TeX Live; bump
 # it deliberately and rebuild the website when you do.
-FROM texlive/texlive:latest-basic@sha256:d54587cc7093dee8cc41c3a6317a37eb33164baf89f7ef9ad7b2f798e8997c58
+FROM texlive/texlive:latest-basic@sha256:d54587cc7093dee8cc41c3a6317a37eb33164baf89f7ef9ad7b2f798e8997c58 AS base
 
 # ── LaTeX packages ───────────────────────────────────────────────────────────
 # src/extract/template.tex always loads mathtools, amssymb and fontspec, and
@@ -119,3 +119,23 @@ COPY docker/lualatex-autoinstall.sh /usr/local/bin/lualatex
 RUN chmod +x /usr/local/bin/lualatex
 
 WORKDIR /workspace
+
+# ── Browsers, for the tests (target: test) ──────────────────────────────────
+# The web and render tests run in Chromium and WebKit through Playwright. Their
+# system libraries (some 225 packages; docker/playwright-deps.sh says why not
+# `playwright install --with-deps`) and the browsers themselves are baked in
+# here, so a test run installs nothing; the layer is rebuilt only when
+# package-lock.json (Playwright's version) changes. The CI test workflows
+# build this stage; the site build and the Dev Container use the image below,
+# without it.
+FROM base AS test
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+COPY package.json package-lock.json docker/playwright-deps.sh /opt/playwright/
+RUN cd /opt/playwright && \
+    npm ci --no-audit --no-fund --ignore-scripts && \
+    sh playwright-deps.sh chromium webkit && \
+    npx playwright install chromium webkit && \
+    rm -rf /var/lib/apt/lists/* node_modules
+
+# The default image: no browsers.
+FROM base
