@@ -12,7 +12,7 @@ import { registerLinkGlyph, restoreLinkStates } from '../host/links.js';
 import { colorFill } from '../runtime/colour.js';
 import { renderPiece } from '../host/inline.ts';
 import { applyMark, liveInfo, liveOn, registerGlyph } from '../host/marks.ts';
-import { selectedGlyph } from '../host/selection.ts';
+import { registerSpace, selectedGlyph, selectionEdges } from '../host/selection.ts';
 // ── end of imports
 
 // ── SVG renderer ──────────────────────────────────────────────────────────────
@@ -88,6 +88,16 @@ export function reconcileSink(byNode, used, stats, cache) {
     // "gyR", and all its lines are even, grown only by a taller glyph on
     // the line (a superscript, a big operator).
     let lineTop = Infinity, lineBottom = -Infinity;
+    // Where the selection's ends fall between glyphs (host/selection.ts,
+    // Edge), as x on this line: afterX where its band may start, beforeX
+    // where it may end. An end after a space waits for the next glyph's x.
+    const edges = selectionEdges();
+    let afterX = null, beforeX = null, endAtNext = false;
+    const edgeX = (n, x, w) => {
+        const { start, end } = edges;
+        if (start && start.node === n) afterX = start.side === 'right' ? x + w : x;
+        if (end && end.node === n) { if (end.side === 'left') beforeX = x; else endAtNext = true; }
+    };
     const toLine = r => { r.top = Math.min(r.top, lineTop); r.bottom = Math.max(r.bottom, lineBottom); return r; };
     const extend = (runs, key, el, x, n, y) => {
         const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
@@ -111,6 +121,7 @@ export function reconcileSink(byNode, used, stats, cache) {
         beginLine(textEl, auxEl) {
             textParent = textEl; auxParent = auxEl; lastTspan = null; lastRect = null;
             lineTop = Infinity; lineBottom = -Infinity;
+            afterX = null; beforeX = null; endAtNext = false;
         },
         // Rotated glyphs cannot go in the line's shared <text>: a tspan takes
         // no transform of its own (SVG 1.1), and x/y on a tspan would fight
@@ -189,6 +200,10 @@ export function reconcileSink(byNode, used, stats, cache) {
             if (live && !stack.length) for (const id of live) extend(markRuns, id, el, x, n, y);
             // And of the selection, when it is drawn as bands (its height is
             // the line's, as a mark's: toLine).
+            if (!stack.length) {
+                if (endAtNext) { beforeX = x; endAtNext = false; }
+                edgeX(n, x, gW(n) * SP_TO_PX);
+            }
             if (!stack.length && selectedGlyph(n)) {
                 const x1 = x + gW(n) * SP_TO_PX;
                 if (!selRun) selRun = { x0: x, x1, top: y, bottom: y };
@@ -199,7 +214,20 @@ export function reconcileSink(byNode, used, stats, cache) {
         takeLinkRuns() { const runs = [...linkRuns.values()]; linkRuns.clear(); return runs; },
         // The marks' and the selection's, at least as tall as the line.
         takeMarkRuns() { const runs = [...markRuns.entries()].map(([k, r]) => [k, toLine(r)]); markRuns.clear(); return runs; },
-        takeSelectionRun() { const r = selRun && toLine(selRun); selRun = null; return r; },
+        // The selection's, reaching the edges its ends fall on: over the
+        // space after "word" when it starts at the end of the d; the space
+        // alone when no glyph between is selected.
+        takeSelectionRun() {
+            let r = selRun;
+            if (r) {
+                if (afterX !== null && afterX < r.x0) r.x0 = afterX;
+                if (beforeX !== null && beforeX > r.x1) r.x1 = beforeX;
+            } else if (afterX !== null && beforeX !== null && beforeX > afterX) {
+                r = { x0: afterX, x1: beforeX, top: Infinity, bottom: -Infinity };
+            }
+            selRun = null;
+            return r && toLine(r);
+        },
         // A glyph whose font could not be loaded: draw its TeX metric boxes – the
         // advance width by the height above the baseline, and by the depth below –
         // as two outlined rects, so the missing ink's place and size are visible.
@@ -241,12 +269,14 @@ export function reconcileSink(byNode, used, stats, cache) {
                 // Not a target: the pointer between two words of a reference
                 // must reach the reference's hit area below (paintLinkHits).
                 el.style.pointerEvents = 'none';
+                registerSpace(el, n);
                 byNode.set(n, el); stats.created++;
             } else {
                 el.setAttribute('x', x); el.setAttribute('y', y); stats.repositioned++;
             }
             place(textParent, lastTspan, el, isNew);
             used.add(el); lastTspan = el;
+            if (!stack.length) edgeX(n, x, 0);
         },
         rule(n, x, y, w, h) {
             let el = byNode.get(n), isNew = !el;

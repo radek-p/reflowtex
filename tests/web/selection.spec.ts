@@ -3,6 +3,7 @@
 // data-latex-selection="bands" on <html> or a block, and the reader's
 // switch in the companion's reading options. Off, the browser draws it.
 import { test, expect, type WebPage } from './fixtures.ts';
+import { READY } from './web.ts';
 
 /** Select glyphs a..b of the first block (all of mark `key` by default). */
 async function select(page: WebPage, glyphs?: [number, number], block = 0) {
@@ -101,6 +102,10 @@ test('the reader\'s switch, remembered', async ({ openPage }) => {
   await page.getByRole('radio', { name: 'Even' }).click();
   expect(await page.evaluate(() => document.documentElement.getAttribute('data-latex-selection'))).toBe('bands');
   await page.reload();
+  // As openPage waits: every block drawn, its fonts loaded (without it, a
+  // slow load under the whole suite had nothing drawn to select yet).
+  await page.waitForFunction(READY, undefined, { timeout: 20000 });
+  await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => document.documentElement.getAttribute('data-latex-selection') === 'bands');
   await expect(page.getByRole('radio', { name: 'Even' })).toHaveAttribute('aria-checked', 'true');
   await select(page);
@@ -108,4 +113,48 @@ test('the reader\'s switch, remembered', async ({ openPage }) => {
   await page.getByRole('radio', { name: 'Browser' }).click();
   await select(page);
   expect(await bands(page), 'back to the browser\'s').toEqual([]);
+});
+
+// A selection's ends may fall between glyphs: "word[ word]" starts at the
+// end of the d. Its band then starts at the d's right edge, over the space;
+// a selection of the space alone has a band too. (Spaces are glue, not
+// glyphs, so the band used to start at the next word, and a space alone
+// had none.)
+test('a selection over a space: its band reaches the glyphs\' edges', async ({ openPage }) => {
+  const page = await openPage('selection');
+  await page.evaluate(() => document.documentElement.setAttribute('data-latex-selection', 'bands'));
+  const r = await page.evaluate(async () => {
+    const els = reflowtex.host.mark('key').elements();
+    const text = els.map((e: Element) => e.textContent).join('');
+    const d = text.indexOf('Every') + 4, w = d + 1;             // "Every| number": y, then n
+    const x = (i: number) => +els[i].getAttribute('x')!;
+    const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const select = (a: Node, ao: number, b: Node, bo: number) => {
+      const range = document.createRange(); range.setStart(a, ao); range.setEnd(b, bo);
+      getSelection()!.removeAllRanges(); getSelection()!.addRange(range);
+    };
+    const band = () => { const b = document.querySelector('.latex-block rect.latex-selection');
+      return b ? [+b.getAttribute('x')!, +b.getAttribute('x')! + +b.getAttribute('width')!] : null; };
+    // From the end of "Every" to the end of "number".
+    select(els[d].firstChild!, 1, els[w + 5].firstChild!, 1); await frames();
+    const withWord = band();
+    // The space alone: from the end of "Every" to the start of "number".
+    select(els[d].firstChild!, 1, els[w].firstChild!, 0); await frames();
+    const space = band();
+    // As Chromium puts it: in the word space's own element, before its
+    // text (the start) and after it (the end).
+    const sp = [...els[d].parentElement!.children].find(e => e.textContent === ' ' && +e.getAttribute('x')! > x(d))!;
+    select(sp.firstChild!, 0, els[w + 5].firstChild!, 1); await frames();
+    const fromSpace = band();
+    select(els[d - 4].firstChild!, 0, sp.firstChild!, 1); await frames();
+    const toSpaceEnd = band();
+    return { withWord, space, fromSpace, toSpaceEnd, dx: x(d), wx: x(w) };
+  });
+  expect(r.withWord![0], 'starts after the y, before the n').toBeGreaterThan(r.dx);
+  expect(r.withWord![0]).toBeLessThan(r.wx - 1);
+  expect(r.space, 'a space alone has a band').not.toBeNull();
+  expect(r.space![0]).toBeCloseTo(r.withWord![0], 3);
+  expect(r.space![1], 'up to the n').toBeCloseTo(r.wx, 3);
+  expect(r.fromSpace, 'from the space\'s own element').toEqual(r.withWord);
+  expect(r.toSpaceEnd![1], 'to the end of the space: the n').toBeCloseTo(r.wx, 3);
 });

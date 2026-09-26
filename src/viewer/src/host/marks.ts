@@ -134,9 +134,11 @@ const blockByKey = (key: string): BlockData | undefined =>
 // A painted glyph element → its node (paint.js registers each as it makes it).
 const nodeOfEl = new WeakMap<Element, GNode>();
 export function registerGlyph(el: Element, n: GNode) { nodeOfEl.set(el, n); }
+/** The glyph node a painted element draws, if it is a glyph's. */
+export const glyphNodeOf = (el: Element | null): GNode | undefined => (el ? nodeOfEl.get(el) : undefined);
 
 /** The block (data) whose document holds glyph node n. */
-function dataOfNode(n: GNode): BlockData | undefined {
+export function dataOfNode(n: GNode): BlockData | undefined {
     for (const d of allData as BlockData[]) if (d.el.isConnected && glyphIndex(d.doc).at.has(n)) return d;
     return undefined;
 }

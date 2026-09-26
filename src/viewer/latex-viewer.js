@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 af654a60adf323ad6ad5796d4f6924b87e4c5f3dfb7a8d61dc6d2a60dd47fa03
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 ccf7648d34f649e2fef1c28a26ca3a3f873e65c25341b8e54e7313cc4301f466
 'use strict';
 "use strict";
 (() => {
@@ -1758,6 +1758,7 @@
   function registerGlyph(el, n) {
     nodeOfEl.set(el, n);
   }
+  var glyphNodeOf = (el) => el ? nodeOfEl.get(el) : void 0;
   function dataOfNode(n) {
     for (const d of allData) if (d.el.isConnected && glyphIndex(d.doc).at.has(n)) return d;
     return void 0;
@@ -1918,7 +1919,27 @@
   // src/host/selection.ts
   var selected = /* @__PURE__ */ new Set();
   var blocks = /* @__PURE__ */ new Set();
+  var edges = { start: null, end: null };
+  var sameEdge = (a, b) => a === b || !!a && !!b && a.node === b.node && a.side === b.side;
+  var spaceOfEl = /* @__PURE__ */ new WeakMap();
+  function registerSpace(el, n) {
+    spaceOfEl.set(el, n);
+  }
+  function edgeAt(container, offset, which) {
+    if (container.nodeType !== Node.TEXT_NODE) return null;
+    const el = container.parentElement;
+    if (!el || !bandsIn(el)) return null;
+    const len = (container.textContent || "").length;
+    const glyph = glyphNodeOf(el), space = spaceOfEl.get(el);
+    if (glyph && which === "start" && offset >= len) return { node: glyph, side: "right" };
+    if (glyph && which === "end" && offset === 0) return { node: glyph, side: "left" };
+    if (space && which === "start" && offset === 0) return { node: space, side: "left" };
+    if (space && which === "end") return { node: space, side: offset === 0 ? "left" : "right" };
+    return null;
+  }
+  var dataOfEl = (el) => el && allData.find((d) => d.el.contains(el));
   var selectedGlyph = (n) => selected.has(n);
+  var selectionEdges = () => edges;
   function bandsIn(el) {
     const at = el.closest("[data-latex-selection]");
     return !!at && at.getAttribute("data-latex-selection") === "bands";
@@ -1927,7 +1948,15 @@
     frame = 0;
     const next = /* @__PURE__ */ new Set(), nextBlocks = /* @__PURE__ */ new Set();
     const sel = getSelection();
+    const nextEdges = { start: null, end: null };
     if (sel && !sel.isCollapsed && sel.rangeCount) {
+      const first = sel.getRangeAt(0), last = sel.getRangeAt(sel.rangeCount - 1);
+      nextEdges.start = edgeAt(first.startContainer, first.startOffset, "start");
+      nextEdges.end = edgeAt(last.endContainer, last.endOffset, "end");
+      for (const c of [first.startContainer, last.endContainer]) {
+        const d = dataOfEl(c.parentElement);
+        if (d && bandsIn(d.el)) nextBlocks.add(d);
+      }
       for (let i = 0; i < sel.rangeCount; i++) {
         for (const r of rangesOf(sel.getRangeAt(i))) {
           const at = nodesOf(r);
@@ -1937,9 +1966,10 @@
         }
       }
     }
-    if (next.size === selected.size && [...next].every((n) => selected.has(n))) return;
+    if (next.size === selected.size && [...next].every((n) => selected.has(n)) && sameEdge(nextEdges.start, edges.start) && sameEdge(nextEdges.end, edges.end)) return;
     const touched = /* @__PURE__ */ new Set([...blocks, ...nextBlocks]);
     selected = next;
+    edges = nextEdges;
     blocks = nextBlocks;
     repaint(touched);
   }
@@ -2000,6 +2030,16 @@
     const markRuns = /* @__PURE__ */ new Map();
     let selRun = null;
     let lineTop = Infinity, lineBottom = -Infinity;
+    const edges2 = selectionEdges();
+    let afterX = null, beforeX = null, endAtNext = false;
+    const edgeX = (n, x, w) => {
+      const { start, end } = edges2;
+      if (start && start.node === n) afterX = start.side === "right" ? x + w : x;
+      if (end && end.node === n) {
+        if (end.side === "left") beforeX = x;
+        else endAtNext = true;
+      }
+    };
     const toLine = (r) => {
       r.top = Math.min(r.top, lineTop);
       r.bottom = Math.max(r.bottom, lineBottom);
@@ -2031,6 +2071,9 @@
         lastRect = null;
         lineTop = Infinity;
         lineBottom = -Infinity;
+        afterX = null;
+        beforeX = null;
+        endAtNext = false;
       },
       // Rotated glyphs cannot go in the line's shared <text>: a tspan takes
       // no transform of its own (SVG 1.1), and x/y on a tspan would fight
@@ -2105,6 +2148,13 @@
         }
         if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
         if (live3 && !stack.length) for (const id of live3) extend(markRuns, id, el, x, n, y);
+        if (!stack.length) {
+          if (endAtNext) {
+            beforeX = x;
+            endAtNext = false;
+          }
+          edgeX(n, x, gW(n) * SP_TO_PX);
+        }
         if (!stack.length && selectedGlyph(n)) {
           const x1 = x + gW(n) * SP_TO_PX;
           if (!selRun) selRun = { x0: x, x1, top: y, bottom: y };
@@ -2126,10 +2176,19 @@
         markRuns.clear();
         return runs;
       },
+      // The selection's, reaching the edges its ends fall on: over the
+      // space after "word" when it starts at the end of the d; the space
+      // alone when no glyph between is selected.
       takeSelectionRun() {
-        const r = selRun && toLine(selRun);
+        let r = selRun;
+        if (r) {
+          if (afterX !== null && afterX < r.x0) r.x0 = afterX;
+          if (beforeX !== null && beforeX > r.x1) r.x1 = beforeX;
+        } else if (afterX !== null && beforeX !== null && beforeX > afterX) {
+          r = { x0: afterX, x1: beforeX, top: Infinity, bottom: -Infinity };
+        }
         selRun = null;
-        return r;
+        return r && toLine(r);
       },
       // A glyph whose font could not be loaded: draw its TeX metric boxes – the
       // advance width by the height above the baseline, and by the depth below –
@@ -2174,6 +2233,7 @@
           el = svgEl("tspan", { x, y });
           el.textContent = " ";
           el.style.pointerEvents = "none";
+          registerSpace(el, n);
           byNode.set(n, el);
           stats.created++;
         } else {
@@ -2184,6 +2244,7 @@
         place(textParent, lastTspan, el, isNew);
         used.add(el);
         lastTspan = el;
+        if (!stack.length) edgeX(n, x, 0);
       },
       rule(n, x, y, w, h) {
         let el = byNode.get(n), isNew = !el;
