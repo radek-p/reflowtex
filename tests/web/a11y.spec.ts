@@ -86,3 +86,45 @@ test('the layer follows a reflow', async ({ openPage }) => {
   await page.waitForTimeout(600);                                 // the resize settles
   expectPlaced(await layerBoxes(page));
 });
+
+// Inside each piece, the text a screen reader reads is laid out to fill the
+// piece as the drawn paragraph fills its lines: VoiceOver frames the words it
+// reads, so text wrapped at another size puts its frame beside the
+// paragraph, and text that runs past the piece's edge is clipped – and a
+// screen reader skips what is clipped (a formula there went unread).
+test('the text in each piece fills it, and nothing is cut off', async ({ openPage }) => {
+  const page = await openPage('mathml', { height: 600 });
+  const fits = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y > *')].map(p => {
+    const box = p.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(p);
+    const ink = range.getBoundingClientRect();
+    return { text: (p.textContent ?? '').slice(0, 30), para: !!(p as HTMLElement).dataset.para, overflow: p.scrollHeight - p.clientHeight,
+             top: ink.top - box.top, bottom: box.bottom - ink.bottom, filled: ink.height / box.height };
+  }));
+  for (const f of fits) {
+    expect(f.overflow, `"${f.text}" is not cut off`).toBeLessThanOrEqual(1);
+    // (inline maths may overshoot its line by a pixel or two in ink, a
+    // display's big operators by more: for a display, the layout fitting is
+    // what counts)
+    if (f.para) {
+      expect(f.top, `"${f.text}" starts at the top of its piece`).toBeGreaterThanOrEqual(-3);
+      expect(f.bottom, `"${f.text}" ends inside its piece`).toBeGreaterThanOrEqual(-3);
+    }
+    expect(f.filled, `"${f.text}" fills its piece`).toBeGreaterThan(0.6);
+  }
+});
+
+// The browser's own accessibility tree, not Playwright's reading of the DOM:
+// a style that spares the browser work (content-visibility, say) can take a
+// piece out of what a screen reader is given while the DOM still has it.
+// Chromium only: WebKit's tree is not reachable from here (VoiceOver is its test).
+test('the browser gives a screen reader every formula of the layer', async ({ openPage, browserName }) => {
+  test.skip(browserName !== 'chromium', 'the accessibility tree is read through Chromium\'s DevTools protocol');
+  const page = await openPage('mathml-long', { height: 400 });   // most of the page far from the window
+  expect(await page.locator('.latex-a11y math').count()).toBe(60);
+  const cdp = await page.context().newCDPSession(page);
+  const { nodes } = await cdp.send('Accessibility.getFullAXTree') as { nodes: { role?: { value: string }; ignored?: boolean }[] };
+  const exposed = nodes.filter(n => n.role?.value === 'MathMLMath' && !n.ignored).length;
+  expect(exposed).toBe(await page.locator('.latex-a11y math').count());
+});

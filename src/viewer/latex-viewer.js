@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 4a268712fc06b5f400cd07217316d547b7354f7d56f63e3c1914d685b13a239a
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 bb11c12abe85d4ce539b1a84b4abe6c73ea7ea498da80a9c7c1f0d9a36fdd8a2
 'use strict';
 "use strict";
 (() => {
@@ -2840,7 +2840,12 @@
 
   // src/runtime/a11y.js
   var ANCHOR = "position:relative;height:0;margin:0;padding:0;border:0;overflow:visible";
-  var PIECE = "position:absolute;margin:0;padding:0;overflow:hidden;opacity:0;pointer-events:none;user-select:none;-webkit-user-select:none";
+  var PIECE = "position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;white-space:normal;pointer-events:none;user-select:none;-webkit-user-select:none";
+  var LINE_HEIGHT = 1.15;
+  var MIN_PX = 1;
+  var FITTED = ";overflow:hidden";
+  var UNFITTED = ";overflow-x:clip;overflow-y:visible";
+  var NEAR = 2;
   var maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
   function placeAccessibleLayer(data) {
     const el = data && data.el;
@@ -2868,7 +2873,7 @@
       const s = i === void 0 ? null : cache.dom.segs[i];
       if (!s || !s.box) return null;
       const r = s.box.getBoundingClientRect();
-      let y0 = 0, y1 = r.height;
+      let y0 = 0, y1 = r.height, lines = 1;
       const L = laid[i];
       if (j >= 0 && L.itemStarts && L.lines && L.lines.length) {
         const a = L.itemStarts[j];
@@ -2876,14 +2881,49 @@
         if (a <= b) {
           y0 = L.baselineYs[a] - maxOf(L.profiles[a], "h");
           y1 = L.baselineYs[b] + maxOf(L.profiles[b], "d");
+          lines = b - a + 1;
         }
       }
-      return { top: r.top - origin.top + y0, left: r.left - origin.left, width: r.width, height: Math.max(1, y1 - y0) };
+      return { top: r.top - origin.top + y0, left: r.left - origin.left, width: r.width, height: Math.max(1, y1 - y0), lines };
     });
-    [...layer.children].forEach((piece, k) => {
-      const p = places[k] || { top: 0, left: 0, width: 1, height: 1 };
-      piece.style.cssText = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px`;
+    const pieces = [...layer.children];
+    const refit = [];
+    const h = window.innerHeight;
+    pieces.forEach((piece, k) => {
+      const p = places[k] || { top: 0, left: 0, width: 1, height: 1, lines: 1 };
+      const size = `${Math.round(p.width)}x${Math.round(p.height)}`;
+      const fitted = piece.dataset.size === size;
+      const top = origin.top + p.top;
+      const near = top + p.height > -NEAR * h && top < (NEAR + 1) * h;
+      const guess = Math.max(MIN_PX, p.height / p.lines / LINE_HEIGHT);
+      const font = fitted ? piece.style.fontSize : `${guess}px`;
+      piece.style.cssText = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px;font-size:${font}` + (fitted || near ? FITTED : UNFITTED);
+      if (!fitted) {
+        if (near) {
+          piece.dataset.size = size;
+          refit.push({ piece, px: guess });
+        } else delete piece.dataset.size;
+      }
     });
+    fitText(refit);
+  }
+  function fitText(fits) {
+    const overflows = (p) => p.scrollHeight > p.clientHeight + 1 || p.scrollWidth > p.clientWidth + 1;
+    for (const f of fits) f.piece.style.fontSize = `${f.px}px`;
+    for (let round = 0; round < 8 && fits.length; round++) {
+      const scale = fits.map((f) => {
+        const p = f.piece;
+        if (!overflows(p)) return 1;
+        const r = Math.min(p.clientHeight / p.scrollHeight, p.clientWidth / p.scrollWidth);
+        return round === 0 ? Math.sqrt(r) * 0.95 : Math.min(r, 0.9);
+      });
+      fits = fits.filter((f, k) => {
+        if (scale[k] === 1) return false;
+        f.px = Math.max(MIN_PX, f.px * scale[k]);
+        f.piece.style.fontSize = `${f.px}px`;
+        return true;
+      });
+    }
   }
 
   // src/runtime/block-data.js
