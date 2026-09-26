@@ -20,9 +20,8 @@ There are infinitely many primes.
 \end{theorem}
 \begin{webaccordion}
 \begin{webpane}[collapsed]
-\noindent\textit{Proof idea.} Suppose there were only finitely many
-primes. Multiply them all and add one: the result is divisible by none of
-them, yet it has a prime factor -- a contradiction.
+\noindent\textit{Proof idea.} If there were finitely many, their product
+plus one would have a prime factor that is none of them.
 \webnextpane[See the proof]
 \end{webpane}
 \begin{webpane}[expanded]
