@@ -94,9 +94,11 @@ test('a font failure is shown and dismissed', async ({ openPage }) => {
 });
 
 // Fonts resolve against the viewer script's own URL, so a page works from
-// disk and under any path (8de3e92, d001f88).
+// disk and under any path (8de3e92, d001f88). (A page of the companion
+// package's kinds does not: browsers load no ES module from file://, so
+// those need a server.)
 test('works from a file', async ({ openPage }) => {
-  const page = await openPage(pathToFileURL(join(BUILD, 'notes', 'index.html')).href);
+  const page = await openPage(pathToFileURL(join(BUILD, 'pictures', 'index.html')).href);
   expect(await page.evaluate(() => [...document.fonts].filter(f => f.status === 'error').map(f => f.family))).toEqual([]);
 });
 
@@ -184,7 +186,7 @@ const firstBaseline = (page: WebPage, selector: string) => page.evaluate(s => {
 // The expanded pane's first line sat 5.8 px below the collapsed one's (b7d65b3).
 test('accordion panes share a baseline', async ({ openPage }) => {
   const page = await openPage('accordion');
-  const pane = '.latex-stream[data-kind="pane"].latex-pane-active';
+  const pane = '.rtx-pane[data-state="open"]';
   const before = await firstBaseline(page, pane);
   await page.locator('rect.latex-link-hit[data-link-action^="pane:next"]').first().click({ force: true });
   await page.waitForTimeout(300);
@@ -192,11 +194,9 @@ test('accordion panes share a baseline', async ({ openPage }) => {
 });
 
 // In print a hint is not blurred and has no label, and action links are
-// hidden (b7d65b3, 77a7f87).
+// hidden (b7d65b3, 77a7f87). The label's print rule lost to a more specific
+// one until the hint moved to the companion.
 test('print shows hints and hides actions', async ({ openPage }) => {
-  test.fail(true, "in print the hint's label still shows: the print rule " +
-    '(.latex-stream[data-kind=hint]::after { content: none }) is less specific than the one showing it ' +
-    '(…:not(.latex-revealed)::after); fix: the same :not() in the print rule. Left to the viewer refactor');
   let page = await openPage('notes');
   await page.emulateMedia({ media: 'print' });
   await page.waitForTimeout(300);                         // the blur eases out
@@ -206,8 +206,11 @@ test('print shows hints and hides actions', async ({ openPage }) => {
   expect(s.label, JSON.stringify(s)).not.toContain('reveal');
   page = await openPage('accordion');
   await page.emulateMedia({ media: 'print' });
-  expect(await page.evaluate(() => [...document.querySelectorAll('[data-link-action]')]
-    .filter(e => getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden').length)).toBe(0);
+  // Hidden on paper: not displayed, not visible, or (the viewer's print rule
+  // for controls) drawn in a transparent fill.
+  expect(await page.evaluate(() => [...document.querySelectorAll('[data-link-action]')].filter(e => {
+    const cs = getComputedStyle(e);
+    return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.fill !== 'rgba(0, 0, 0, 0)'; }).length)).toBe(0);
 });
 
 // A split widget showed pieces of two different splits, and hovering one

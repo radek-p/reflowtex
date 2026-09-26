@@ -8,12 +8,12 @@ test('button fits its label on the baseline', async ({ openPage }) => {
   await page.waitForSelector('.rtx-button svg text tspan', { state: 'attached' });
   await page.waitForTimeout(100);
   const r = await page.evaluate(() => {
-    const b = document.querySelector('.rtx-button')!, lab = reflowtex.asides({ kind: 'popover-label' })[0];
+    const b = document.querySelector('.rtx-button')!, lab = reflowtex.host.instances('popover')[0].part('popover-label');
     const base = (t: any) => { const p = t.ownerSVGElement.createSVGPoint(); p.y = parseFloat(t.getAttribute('y'));
                                return p.matrixTransform(t.getScreenCTM()).y as number; };
     const own = base(b.querySelector('svg text tspan'));
     const text = [...b.closest('.latex-block')!.querySelectorAll('svg text tspan')].filter(t => !b.contains(t)).map(base);
-    return { width: b.getBoundingClientRect().width, label: lab.width() as number, off: Math.min(...text.map(y => Math.abs(y - own))) };
+    return { width: b.getBoundingClientRect().width, label: lab.naturalWidth() as number, off: Math.min(...text.map(y => Math.abs(y - own))) };
   });
   expect(r.label < r.width && r.width < r.label + 40).toBe(true);
   expect(r.off, `the label is ${r.off.toFixed(2)} px off the line's baseline`).toBeLessThan(0.5);

@@ -67,7 +67,11 @@ function partDocument(data: SerializerOutput, content: ContentItem[]): Serialize
   while (todo.length) {
     for (const it of todo.pop()!) {
       const refs: number[] = it.kind === 'stream' && it.stream ? [it.stream] : [];
-      walk(itemNodes(d, it), n => { if (n.stream) refs.push(n.stream as number); });
+      // …and the marks asides leave where they stood (Node.aside).
+      walk(itemNodes(d, it), n => {
+        if (n.stream) refs.push(n.stream as number);
+        if (n.aside) refs.push(n.aside as number);
+      });
       for (const sid of refs) {
         if (!keep.has(sid) && sid >= 1 && sid <= streams.length) {
           keep.add(sid);
@@ -83,7 +87,10 @@ function partDocument(data: SerializerOutput, content: ContentItem[]): Serialize
     for (const it of items) {
       if (it.kind === 'stream' && it.stream !== undefined && remap.has(it.stream)) it.stream = remap.get(it.stream);
       walk(itemNodes(d, it), n => {
-        if (remap.has(n.stream as number) && !touched.has(n)) { n.stream = remap.get(n.stream as number); touched.add(n); }
+        if (touched.has(n)) return;
+        touched.add(n);
+        if (remap.has(n.stream as number)) n.stream = remap.get(n.stream as number);
+        if (remap.has(n.aside as number)) n.aside = remap.get(n.aside as number);
       });
     }
   }

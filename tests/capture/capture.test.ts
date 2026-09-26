@@ -201,3 +201,60 @@ test('links to pages and to nowhere are left as text', async () => {
   ].join('\n'), HYPER, 2);
   assert.deepEqual(linkedRuns(d).map(([, l]) => l), [{ label: 'here' }]);
 });
+
+// ── The companion package (reflowtex.sty) ────────────────────────────────────
+
+type Attrs = { key: string; value: string }[];
+type Stream = { kind: string; attrs: Attrs; text?: string };
+const attrsOf = (a: Attrs) => Object.fromEntries(a.map(x => [x.key, x.value]));
+const pkg = '\\usepackage{reflowtex}';
+
+test('a widget records its parameters; the first form none', async () => {
+  const out: any = await capture('A \\webwidget[tone=warm, default=x]{badge} and \\webwidget{lean:foo} here.', pkg);
+  assert.deepEqual(out.slots.map((s: any) => [s.kind, s.name, attrsOf(s.attrs ?? [])]),
+    [['widget', 'badge', { tone: 'warm' }], ['widget', 'lean:foo', {}]]);
+});
+
+test('an empty parameter list is a list', async () => {
+  // Lua writes an unmarked empty table as it guesses; the attrs are a list.
+  const out: any = await capture('\\begin{webstream}{plain}Text.\\end{webstream}', pkg);
+  assert.ok(Array.isArray(out.streams[0].attrs), JSON.stringify(out.streams[0].attrs));
+});
+
+test('a part names its owner', async () => {
+  const out: any = await capture('Some \\webwidget{popover}\\webpart{label}{more} text.\n\n'
+    + '\\begin{webstream}{box}\\webpart{summary}{In short.}\n\nLong.\\end{webstream}', pkg);
+  const parts = (out.streams as Stream[]).filter(s => attrsOf(s.attrs)['rtx-part'])
+    .map(s => [s.kind, attrsOf(s.attrs)['rtx-part'], attrsOf(s.attrs)['rtx-owner']]);
+  const box = (out.streams as Stream[]).findIndex(s => s.kind === 'box') + 1;
+  assert.deepEqual(parts, [['label', 'label', 'w1'], ['summary', 'summary', `s${box}`]]);
+});
+
+test('marks: ids and classes, nested', async () => {
+  const out: any = await capture('\\webid{first}{Ab} \\webclass{hot}{c\\webid{inner}{d}}.', pkg);
+  // (the classes joined by one space, with none before the first)
+  assert.deepEqual(out.marks, [{ id: 'first', classes: '' }, { id: '', classes: 'hot' }, { id: 'inner', classes: 'hot' }]);
+  const glyphs = [...walk(out.paragraphs[0].nodes)].filter((n: any) => n.type === 'glyph')
+    .map((n: any) => [String.fromCodePoint(n.char), n.mark ?? 0]);
+  assert.deepEqual(glyphs.slice(0, 4), [['A', 1], ['b', 1], ['c', 2], ['d', 3]]);
+});
+
+test('NewWebEnvironment passes its parameters as written', async () => {
+  const out: any = await capture('\\begin{warn}[variant=card, --rtx-accent=#c2410c]Careful.\\end{warn}',
+    pkg + '\n\\NewWebEnvironment{warn}{warning}{}{}');
+  const s = (out.streams as Stream[]).find(s => s.kind === 'warning')!;
+  assert.deepEqual(attrsOf(s.attrs), { variant: 'card', '--rtx-accent': '#c2410c' });
+});
+
+test('Lean: the parts are marked, decl and url on the widget', async () => {
+  const out: any = await capture('\\begin{leanproof}[decl=foo, url=https://example.org/a#b]\n'
+    + '\\begin{proof}Trivial.\\end{proof}\n\\begin{leancode}\nexample : 1 = 1 := rfl\n\\end{leancode}\n\\end{leanproof}',
+    '\\usepackage{amsthm}\n' + pkg);
+  const streams = out.streams as Stream[];
+  const lp = streams.find(s => s.kind === 'leanproof')!;
+  assert.equal(attrsOf(lp.attrs).decl, 'foo');
+  assert.equal(attrsOf(lp.attrs).url, 'https://example.org/a#b');
+  const roles = streams.filter(s => attrsOf(s.attrs)['rtx-part']).map(s => attrsOf(s.attrs)['rtx-part']);
+  assert.deepEqual(roles.sort(), ['code', 'tex']);
+  assert.match(streams.find(s => attrsOf(s.attrs)['rtx-part'] === 'code')!.text!, /example : 1 = 1 := rfl/);
+});

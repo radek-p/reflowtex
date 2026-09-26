@@ -110,6 +110,7 @@ export function documentObject(data: SerializerOutput): Record<string, unknown> 
     links: data.links ?? [],
     anchors: data.anchors ?? [],
     slots: data.slots ?? [],
+    marks: data.marks ?? [],
     glyph_metrics: table,
   };
   return prune(messageType('Document'), doc, index, 'document');

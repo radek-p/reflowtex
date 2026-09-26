@@ -39,15 +39,15 @@ export const escapeHtml = (s: string): string =>
 // ── The viewer bundle ───────────────────────────────────────────────────────
 
 /** The SHA-256 src/viewer/build.sh records in the bundle's second line: every
- *  module under src/viewer/src/, as its path (relative to src/viewer) and a
- *  newline, then its contents, in byte order of the paths. */
+ *  module under src/viewer/src/ (.js and .ts), as its path (relative to
+ *  src/viewer) and a newline, then its contents, in byte order of the paths. */
 export function viewerSourcesSha256(): string {
   const files: string[] = [];
   const walk = (d: string) => {
     for (const f of readdirSync(d)) {
       const p = join(d, f);
       if (statSync(p).isDirectory()) walk(p);
-      else if (f.endsWith('.js')) files.push(relative(VIEWER_DIR, p).split(sep).join('/'));
+      else if (f.endsWith('.js') || f.endsWith('.ts')) files.push(relative(VIEWER_DIR, p).split(sep).join('/'));
     }
   };
   walk(join(VIEWER_DIR, 'src'));

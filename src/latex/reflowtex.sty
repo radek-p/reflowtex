@@ -298,7 +298,8 @@
 \ifreflowtex
   \NewDocumentCommand\webid{m +m}{\reflowtex@mark{\detokenize{#1}}{\reflowtex@mark@classes}{#2}}
   \NewDocumentCommand\webclass{m +m}{%
-    \reflowtex@mark{\reflowtex@mark@id}{\reflowtex@mark@classes\space\detokenize{#1}}{#2}}
+    \reflowtex@mark{\reflowtex@mark@id}%
+      {\ifx\reflowtex@mark@classes\@empty\else\reflowtex@mark@classes\space\fi\detokenize{#1}}{#2}}
   \long\def\reflowtex@mark#1#2#3{%
     \begingroup
       \edef\reflowtex@mark@id{#1}\edef\reflowtex@mark@classes{#2}%

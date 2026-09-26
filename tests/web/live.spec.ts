@@ -8,12 +8,23 @@ const words = async (page: WebPage) => (await page.locator(SLOT).allTextContents
 test('setText, and back', async ({ openPage }) => {
   const page = await openPage('live');
   expect(await words(page)).toBe('noapplesatall');
-  await page.evaluate(() => reflowtex.setText('apples', 'a great many apples indeed'));
+  await page.evaluate(() => reflowtex.host.setText('apples', 'a great many apples indeed'));
   await page.waitForTimeout(300);
   expect(await words(page)).toBe('agreatmanyapplesindeed');
-  await page.evaluate(() => reflowtex.setText('apples', null));
+  await page.evaluate(() => reflowtex.host.setText('apples', null));
   await page.waitForTimeout(300);
   expect(await words(page)).toBe('noapplesatall');
+});
+
+test("an instance's text wins over its name's", async ({ openPage }) => {
+  const page = await openPage('live');
+  await page.evaluate(() => reflowtex.host.setText('apples', 'many'));
+  await page.evaluate(() => reflowtex.host.instances({ kind: 'text', name: 'apples' })[0].setText('seven apples'));
+  await page.waitForTimeout(300);
+  expect(await words(page)).toBe('sevenapples');
+  await page.evaluate(() => reflowtex.host.instances({ kind: 'text', name: 'apples' })[0].setText(null));
+  await page.waitForTimeout(300);
+  expect(await words(page)).toBe('many');
 });
 
 test('widget drawn and split', async ({ openPage }) => {
@@ -25,16 +36,14 @@ test('widget drawn and split', async ({ openPage }) => {
   expect(await page.locator('.badge.cut-left').count()).toBeGreaterThanOrEqual(1);
 });
 
-test('invalidate measures again', async ({ openPage }) => {
+test('invalidate measures again, and the old pieces are ended', async ({ openPage }) => {
+  // Pieces replaced by a new measurement were never told: their drawing leaked.
   const page = await openPage('live');
-  const before = await page.evaluate(() => reflowtex.widgets.badge && document.querySelector('.badge')!.textContent);
-  await page.evaluate(() => {
-    const w = reflowtex.widgets.badge;
-    const orig = w.measure; w.measure = (ctx: any) => { ctx.state.label = 'short'; window.__ctx = ctx; return orig(ctx); };
-    if (reflowtex.refreshWidgets) reflowtex.refreshWidgets();
-  });
-  await page.waitForTimeout(300);
-  await page.evaluate(() => window.__ctx && window.__ctx.invalidate());
+  const before = await page.evaluate(() => [window.__measured, window.__pieces]);
+  await page.evaluate(() => window.__badge.set('short'));
   await page.waitForTimeout(400);
-  expect((await page.locator('.badge').allTextContents()).join('')).not.toBe(before);
+  expect((await page.locator('.badge').allTextContents()).join('')).toBe('short');
+  const [measured, pieces] = await page.evaluate(() => [window.__measured, window.__pieces]);
+  expect(measured).toBeGreaterThan(before[0]);
+  expect(pieces, 'the replaced pieces were not ended').toBe(1);
 });
