@@ -223,7 +223,9 @@ breaks again. Its bands carry `rtx-highlight rtx-highlight-NAME` in
 (`--rtx-highlight-pad`), with darker colours in a dark theme
 ([companion.css](companion.css)). The colours are yellow (the example's),
 green, pink and blue. Highlights across two blocks are
-one highlight; one over another merges with it. They are remembered per
+one highlight. A highlight over one of the same colour merges with it; over
+one of another colour, it takes only the text selected, and the rest keeps
+its colour. They are remembered per
 page in `localStorage` (`reflowtex-highlights:` and the path, or
 `data-store="key"`), by glyph positions and text, and come back on the next
 visit. From a script: `highlight(host, ranges, colour)` and

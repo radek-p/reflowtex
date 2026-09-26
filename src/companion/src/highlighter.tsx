@@ -31,11 +31,14 @@ const colourOf = (m: LiveMark) => (m.classes.match(new RegExp(`\\b${CLASS}-(\\S+
 const isHighlight = (m: LiveMark) => m.classes.split(/\s+/).includes(CLASS);
 const overlap = (a: TextRange, b: TextRange) => a.block === b.block && a.from <= b.to && b.from <= a.to;
 
-/** Highlight `ranges` in `colour`. Highlights they overlap are merged into
- *  the new one, which takes their places too. */
+/** Highlight `ranges` in `colour`. A highlight of the same colour they
+ *  overlap is merged into the new one; one of another colour gives up only
+ *  the text selected, and keeps the rest in its own colour. */
 export function highlight(host: Host, ranges: readonly TextRange[], colour: string): LiveMark | null {
-    let all = ranges.map(r => ({ ...r }));
-    for (const m of host.liveMarks(ranges).filter(isHighlight)) {
+    const touched = host.liveMarks(ranges).filter(isHighlight);
+    erase(host, ranges, m => colourOf(m) !== colour);
+    const all = ranges.map(r => ({ ...r }));
+    for (const m of touched.filter(m => m.live)) {
         for (const r of m.ranges) {
             const into = all.find(q => overlap(q, r) || (q.block === r.block && (q.to + 1 === r.from || r.to + 1 === q.from)));
             if (into) { into.from = Math.min(into.from, r.from); into.to = Math.max(into.to, r.to); into.text = ''; }
@@ -43,14 +46,13 @@ export function highlight(host: Host, ranges: readonly TextRange[], colour: stri
         }
         m.remove();
     }
-    all = all.map(r => ({ ...r, text: r.text || '' }));
     return host.addMark(all, { classes: classesOf(colour) });
 }
 
-/** Take `ranges` out of every highlight they touch: what is left of each
- *  stays, in its colour. */
-export function erase(host: Host, ranges: readonly TextRange[]): void {
-    for (const m of host.liveMarks(ranges).filter(isHighlight)) {
+/** Take `ranges` out of every highlight they touch (of those `which`
+ *  picks): what is left of each stays, in its colour. */
+export function erase(host: Host, ranges: readonly TextRange[], which: (m: LiveMark) => boolean = () => true): void {
+    for (const m of host.liveMarks(ranges).filter(isHighlight).filter(which)) {
         const left: TextRange[] = [];
         for (const r of m.ranges) {
             let pieces: TextRange[] = [r];
