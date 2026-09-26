@@ -143,7 +143,7 @@ h2 .seg button { padding: 0 7px; }
 }
 
 /* ── The pointer's ghost and the selected area, on both sides ─────────────── */
-.stage { cursor: var(--rr-cursor, crosshair); }
+.scroll { cursor: var(--rr-cursor, crosshair); }
 .stage > .marks { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
 .stage > .capture { position: absolute; inset: 0; }
 .marks .ghost, .marks .area { display: none; }

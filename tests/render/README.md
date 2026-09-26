@@ -101,8 +101,9 @@ themes, or **TeX inverted**, TeX's colours through `filter: invert(1)` on both
 sides. **Auto**, the default, is TeX, or TeX inverted while the report is
 dark.
 
-Where the pointer is on one side, the same crosshair it is drawn with shows
-the same place on the other. A drag draws an area on both – on the live
+Where the pointer is on one side – anywhere in its pane, the margins and
+past the end too – the same crosshair it is drawn with shows the same place
+on the other. A drag draws an area on both – on the live
 page with **Select area** on (M), since a drag there selects text – and the
 bottom bar gives its size and place in pt, and the pointer's; a click or
 Esc clears it.

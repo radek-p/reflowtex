@@ -172,24 +172,31 @@ function useImageSize(src) {
     return size;
 }
 
-// The pointer over either side, and its ghost on the other: one crosshair,
-// centred on 0 0 in px, a white halo under a magenta line so that it reads on
-// the page and on the pattern alike. The pointer is it as a CSS cursor (in
-// the report, and in the live page: pinPage), the ghost as SVG (makeMarks).
-const CROSSHAIR_SHAPE = '<circle r="5"/><path d="M-13 0H-7M7 0H13M0-13V-7M0 7V13"/>';
-const CROSSHAIR = `<g fill="none" stroke-linecap="round"><g stroke="#fff" stroke-width="3.5">${CROSSHAIR_SHAPE}</g>` +
-    `<g stroke="#d81b60" stroke-width="1.5">${CROSSHAIR_SHAPE}</g></g>`;
-const CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="-14 -14 28 28">${CROSSHAIR}</svg>`)}") 14 14, crosshair`;
+// The pointer over either side, and its ghost on the other: one precise
+// crosshair, centred on 0 0 in px – hairline arms clear of the point, and the
+// point itself one pixel, nothing else over it – a white halo under the arms,
+// so that they read on the page, on the pattern and inverted alike. The
+// pointer is it as a CSS cursor (over both panes, and in the live page:
+// pinPage), pixel-aligned at 1× and 2×; the ghost is it as SVG (makeMarks).
+const CROSSHAIR_SHAPE = '<path d="M-12 0H-3M3 0H12M0-12V-3M0 3V12"/>';
+const CROSSHAIR = '<g fill="none" shape-rendering="crispEdges">' +
+    `<g stroke="#fff" stroke-opacity=".8" stroke-width="3">${CROSSHAIR_SHAPE}</g>` +
+    `<g stroke="#c2185b" stroke-width="1">${CROSSHAIR_SHAPE}</g><rect x="-.5" y="-.5" width="1" height="1" fill="#c2185b"/></g>`;
+// 25 px, the point on the middle pixel (12): its arms run along pixel centres
+const cursorImage = px => `url("data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="-12.5 -12.5 25 25">${CROSSHAIR}</svg>`)}")`;
+const CURSOR = `image-set(${cursorImage(25)} 1x, ${cursorImage(50)} 2x) 12 12, crosshair`;
 document.documentElement.style.setProperty('--rr-cursor', CURSOR);
 
 /** A side's pane. Over its content, the marks both sides share (makeMarks):
- *  the ghost of the pointer on the other side, and the selected area. With
- *  `capture`, a layer over the content takes the pointer (the live page would). */
-const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, capture, children }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}>
-    <div class="stage" style=${{ width: `${stage[0]}px`, height: `${stage[1]}px` }}
+ *  the ghost of the pointer on the other side, and the selected area. The
+ *  pointer counts anywhere in the pane, the page's margins and past its end
+ *  too (in the stage's pt). With `capture`, a layer over the content takes the
+ *  pointer (the live page would). */
+const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, capture, children }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}
         onPointerMove=${e => marks.move(side, e)} onPointerLeave=${() => marks.leave(side)}
         onPointerDown=${e => marks.down(side, e)} onPointerUp=${e => marks.up(side, e)}>
+    <div class="stage" style=${{ width: `${stage[0]}px`, height: `${stage[1]}px` }}>
         ${children}
         ${capture ? html`<div class="capture"></div>` : null}
         <svg class="marks" ref=${el => marks.attach(side, el)} viewBox=${`0 0 ${stagePt[0]} ${stagePt[1]}`} width=${stage[0]} height=${stage[1]}>
@@ -226,9 +233,14 @@ function makeMarks({ scale, status }) {
             area && `area ${f2(Math.abs(area.x1 - area.x0))} × ${f2(Math.abs(area.y1 - area.y0))} pt at (${f2(Math.min(area.x0, area.x1))}, ${f2(Math.min(area.y0, area.y1))})`,
         ].filter(Boolean).join('   ·   ');
     }
+    // (e.currentTarget: the pane; the point in its stage's pt)
     const at = e => {
-        const r = e.currentTarget.getBoundingClientRect(), s = scale();
+        const r = e.currentTarget.querySelector('.stage').getBoundingClientRect(), s = scale();
         return [(e.clientX - r.left) / s, (e.clientY - r.top) / s];
+    };
+    const onScrollbar = e => {
+        const p = e.currentTarget, r = p.getBoundingClientRect();
+        return e.clientX - r.left >= p.clientLeft + p.clientWidth || e.clientY - r.top >= p.clientTop + p.clientHeight;
     };
     const point = (side, x, y) => {
         pointer = { side, x, y };
@@ -242,7 +254,7 @@ function makeMarks({ scale, status }) {
         leave(side) { if (pointer?.side === side && !drag) { pointer = null; draw(); } },
         // a drag draws an area; a click with no drag clears it
         down(side, e) {
-            if (e.button !== 0) return;
+            if (e.button !== 0 || onScrollbar(e)) return;
             e.preventDefault();
             e.currentTarget.setPointerCapture(e.pointerId);
             const [x, y] = at(e);
