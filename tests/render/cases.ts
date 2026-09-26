@@ -52,7 +52,9 @@ export const cases: Record<string, CaseSettings> = {
     slow: true,
     // All 41 566 glyphs found; 165 rules.
     tolerance: 0.092,
-    rule_tolerance: 0.005,
+    // 0.005 on macOS; Linux Chromium (the CI image) draws three rules 8 600
+    // and 12 900 pt down the page 0.006 off at their corners.
+    rule_tolerance: 0.007,
     // TeX's rules the browser may leave out: the class is `draft`, and TeX
     // marks two overfull lines (verbatim, beside the column) with
     // \overfullrule's black box; the viewer draws no such marks.

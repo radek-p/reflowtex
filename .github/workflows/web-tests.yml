@@ -39,7 +39,7 @@ jobs:
             -v "$HOME/.cache/ms-playwright":/root/.cache/ms-playwright \
             reflowtex:ci bash -lc '
               set -e
-              npm ci --no-audit --no-fund && npx playwright install --with-deps chromium webkit
+              npm ci --no-audit --no-fund && sh docker/playwright-deps.sh chromium webkit && npx playwright install chromium webkit
               make test-web
             '
 

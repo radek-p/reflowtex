@@ -271,7 +271,9 @@ test('a resize keeps the reader in place', async ({ openPage }) => {
   const top0: number = await page.evaluate(() => window.__first.getBoundingClientRect().top);
   for (let w = 1100; w > 700; w -= 40) {
     await page.setViewportSize({ width: w, height: 800 });
-    await page.waitForTimeout(30);
+    // The viewer lays a resized block out in the next animation frame (its
+    // ResizeObserver's); a fixed 30 ms was too short in a slow container.
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `sideways scroll at ${w} px`).toBeLessThanOrEqual(1);
   }
   await page.waitForTimeout(400);
