@@ -190,6 +190,27 @@ local TEXT_COLOR_STACK = 0
 local color_stacks  = {}    -- stack number → { saved = {…}, current = colour or nil }
 local current_color = nil   -- stack 0's colour: what glyphs and rules are painted with
 
+-- A paragraph set inside a box (a minipage, a margin note, a footnote's
+-- insertion) is captured on its own, but its colour changes cannot outlast the
+-- box: the pop that ends a \color inside the box lands in the box's vertical
+-- list, after the paragraph, where no capture sees it. Left in the running
+-- state, one such push coloured the rest of a corpus paper red. So the state
+-- is saved before such a paragraph and restored after it; the box itself is
+-- replayed in order with the paragraph around it, if it is in one.
+local function save_colors()
+    local copy = {}
+    for k, st in pairs(color_stacks) do
+        local saved = {}
+        for i, v in ipairs(st.saved) do saved[i] = v end
+        copy[k] = { saved = saved, current = st.current }
+    end
+    return { stacks = copy, current = current_color }
+end
+
+local function restore_colors(s)
+    color_stacks, current_color = s.stacks, s.current
+end
+
 local function handle_colorstack(n)
     local st = color_stacks[n.stack]
     if not st then
@@ -502,54 +523,101 @@ local WH_SETMATRIX = assert(WH.pdf_setmatrix, "no pdf_setmatrix whatsit subtype"
 local WH_SAVE      = assert(WH.pdf_save,      "no pdf_save whatsit subtype")
 local WH_RESTORE   = assert(WH.pdf_restore,   "no pdf_restore whatsit subtype")
 local WH_COLORSTACK = assert(WH.pdf_colorstack, "no pdf_colorstack whatsit subtype")
+local WHATSIT_ID    = node.id("whatsit")
+
 
 -- ── Colour set between paragraphs ─────────────────────────────────────────
 -- A colour change written in vertical mode (\color{blue} between two
--- paragraphs, or at the top of a minipage) is a whatsit on a vertical list,
--- which the paragraph capture never walks; left alone, the text after it
--- came out in the previous colour. Such whatsits are applied in document
--- order as they come past: on the main vertical list by capture_flow (TeX
--- runs the page builder as each paragraph starts, so that is before the
--- paragraph is captured), and inside a box by capture_paragraph, from the
--- vertical lists still being built around it. Every colour whatsit is applied
--- once, wherever it is met, and then marked.
-local COLOR_SEEN_ATTR = 916
-
-local function apply_color_whatsit(n)
-    if node.get_attribute(n, COLOR_SEEN_ATTR) then return end
-    node.set_attribute(n, COLOR_SEEN_ATTR, 1)
-    handle_colorstack(n)
-end
-
-local VERTICAL_MODE = 1
-for value, name in pairs(tex.getmodevalues and tex.getmodevalues() or {}) do
-    if name == "vertical" then VERTICAL_MODE = value end
-end
-
-local function apply_vertical_colors(head)
-    for n in node.traverse(head) do
-        if n.id == node.id("whatsit") and n.subtype == WH_COLORSTACK then
-            apply_color_whatsit(n)
-        end
-    end
-end
-
--- The vertical lists open around the paragraph being captured, outermost
--- first (internal vertical mode is the negative of the mode value).
-local function apply_enclosing_colors()
-    for i = 0, tex.nest.ptr do
-        local nest = tex.nest[i]
-        if nest and math.abs(nest.mode or 0) == VERTICAL_MODE then
-            apply_vertical_colors(nest.head)
-        end
-    end
-end
+-- paragraphs, or at the top of a center environment) is a whatsit on the
+-- main vertical list, which the paragraph capture never walks; left alone,
+-- the text after it came out in the previous colour. capture_flow applies
+-- such whatsits as they are contributed, which is before the paragraph after
+-- them is captured (TeX runs the page builder as each paragraph starts). A
+-- colour change inside a box's own vertical list (a minipage) needs nothing:
+-- the box is serialized with the paragraph around it, which replays its whole
+-- contents in order. (Whatsits met while serializing are applied every time
+-- they are met – a box can be used twice, and its colours go with it.)
 
 local function parse_matrix(data)
     if not data then return nil end
     local a, b, c, d = data:match("^%s*(%-?[%d%.]+)%s+(%-?[%d%.]+)%s+(%-?[%d%.]+)%s+(%-?[%d%.]+)")
     if not a then return nil end
     return { a = tonumber(a), b = tonumber(b), c = tonumber(c), d = tonumber(d) }
+end
+
+-- ── Links and destinations from hyperref ─────────────────────────────────
+-- template.tex wraps \ref and its relatives, \label, \url and \href, and
+-- stamps LINK_ATTR/ANCHOR_ATTR on what they print. Everything else hyperref
+-- links – \cite, \hyperref[label]{text}, \hyperlink/\hypertarget, and what
+-- packages build on them – is caught here, from the nodes hyperref's driver
+-- leaves: a pdf_start_link … pdf_end_link pair around the linked text (a
+-- `goto` action naming a destination, or a URI), and a pdf_dest whatsit
+-- where each destination is.
+--
+-- A glyph inside a link that no wrapper claimed gets the link, as the
+-- wrappers' glyphs do: per glyph, so a line break keeps the link whole.
+-- Footnote marks are left alone (hyperref links them to the footnote; the
+-- viewer has its own popover for that). Destinations are recorded where they
+-- stand – inline as the same empty box \label leaves, between paragraphs as
+-- an anchor point – and at the end only those some link needs are kept.
+-- A destination is named by the author's label when the .aux has one for it
+-- (\newlabel's fourth field is hyperref's destination), so a link to a
+-- \label'd section meets the anchor the wrapper already made; otherwise by
+-- hyperref's own name (cite.knuth, a \hypertarget's name).
+--
+-- Both get provisional negative ids while the document is read; the final
+-- ones follow the template's (resolve_hyperref).
+local WH_START_LINK = WH.pdf_start_link
+local WH_END_LINK   = WH.pdf_end_link
+local WH_DEST       = WH.pdf_dest
+local ACTION_GOTO, ACTION_USER = 1, 3
+
+local hy_links = {}        -- k → { dest = name } or { url = address }; .used once a glyph has it
+local hy_open  = {}        -- the links open where the serializer is: k, or false (not followed)
+local hy_dests = {}        -- k → { name = destination, list = where it was put, item = what }
+
+-- The address of a URI action, from hyperref's user action text
+-- ("/Subtype/Link/A<</S/URI/URI(https://…)>>"), with PDF string escapes undone.
+local function uri_of(data)
+    local s = tostring(data or ""):match("/URI%s*(%b())")
+    if not s then return nil end
+    s = s:sub(2, -2)
+    return (s:gsub("\\(.)", "%1"))
+end
+
+local function open_link(n)
+    local a = n.action
+    local entry
+    if a and a.action_type == ACTION_GOTO and a.named_id == 1 and (a.file or "") == "" then
+        entry = { dest = tostring(a.action_id) }
+    elseif a and a.action_type == ACTION_USER then
+        local url = uri_of(a.data)
+        if url then entry = { url = url } end
+    end
+    if entry then
+        hy_links[#hy_links + 1] = entry
+        hy_open[#hy_open + 1] = #hy_links
+    else
+        hy_open[#hy_open + 1] = false
+    end
+end
+
+local function close_link()
+    if #hy_open > 0 then hy_open[#hy_open] = nil end
+end
+
+-- The provisional id for a glyph at this point, or nil.
+local function open_link_id()
+    local k = hy_open[#hy_open]
+    if not k then return nil end
+    hy_links[k].used = true
+    return -k
+end
+
+local function note_dest(n, list, item)
+    if n.named_id ~= 1 then return nil end
+    hy_dests[#hy_dests + 1] = { name = tostring(n.dest_id), list = list, item = item }
+    return -#hy_dests
 end
 
 -- ── Node serializer ───────────────────────────────────────────────────────
@@ -595,17 +663,30 @@ local function serialize_nodelist(head)
                 end
             end
 
+        elseif t == "whatsit" and n.subtype == WH_START_LINK then
+            open_link(n)
+
+        elseif t == "whatsit" and n.subtype == WH_END_LINK then
+            close_link()
+
+        elseif t == "whatsit" and n.subtype == WH_DEST and n.named_id == 1 then
+            -- the empty box a \label leaves, standing for the destination
+            local box = { type = "hlist", subtype = 2, width = 0, height = 0, depth = 0, shift = 0,
+                          glue_set = 0, glue_sign = 0, glue_order = 0, children = {} }
+            box.anchor = note_dest(n, cur, box)
+            cur[#cur + 1] = box
+
         elseif t == "whatsit" and n.subtype == WH_COLORSTACK then
             -- pdf_colorstack whatsit: update colour state; nothing to emit
             -- (the resolved colour is baked into glyph/rule nodes).
-            apply_color_whatsit(n)
+            handle_colorstack(n)
 
         elseif t == "glyph" then
             note_font(n.font)
             note_char(n.font, n.char)
             local fdata = font.getfont(n.font)
             local cinfo = fdata and fdata.characters and fdata.characters[n.char]
-            cur[#cur + 1] = {
+            local g = {
                 type   = "glyph",
                 char   = n.char,
                 gindex = cinfo and cinfo.index or nil,
@@ -618,6 +699,8 @@ local function serialize_nodelist(head)
                 link       = node.get_attribute(n, LINK_ATTR),
                 slot       = node.get_attribute(n, SLOT_ATTR),
             }
+            if not g.link and not g.footnote then g.link = open_link_id() end
+            cur[#cur + 1] = g
 
         elseif t == "glue" then
             local g = {
@@ -877,7 +960,10 @@ local function skip_width(name)
 end
 
 local function capture_paragraph(head, groupcode)
-    apply_enclosing_colors()
+    hy_open = {}                  -- a link never runs from one paragraph into the next
+    -- nest 0 is the main vertical list, 1 this paragraph: deeper, it is in a box
+    local in_box = tex.nest.ptr > 1
+    local colors = in_box and save_colors() or nil
     local idx = #all_paragraphs + 1
     local indent, width = para_band()
     local ls, rs = skip_width("leftskip"), skip_width("rightskip")
@@ -902,6 +988,7 @@ local function capture_paragraph(head, groupcode)
         align  = para_align(),
         nodes  = serialize_nodelist(head),
     }
+    if colors then restore_colors(colors) end
     stamp(head, idx)
     -- The captured copy above already holds every \label marker at its exact
     -- position, so the markers have done their job and are now taken back out
@@ -964,12 +1051,12 @@ local function capture_flow()
     local trailing_sp = 0
     local in_tail = false
     for n in node.traverse(head) do
-        if n.id == node.id("whatsit") and n.subtype == WH_COLORSTACK then
-            apply_color_whatsit(n)     -- see "Colour set between paragraphs"
-        end
         -- Held-over material can be offered again after an explicit page break.
         -- Stamp the original so the pageless copy contains every node once.
         if not node.get_attribute(n, FLOW_ATTR) then
+            if n.id == WHATSIT_ID and n.subtype == WH_COLORSTACK then
+                handle_colorstack(n)       -- see "Colour set between paragraphs"
+            end
             append_flow(node.copy(n))
             node.set_attribute(n, FLOW_ATTR, 1)
         end
@@ -1293,7 +1380,22 @@ local function serialize_one(n)
     return out
 end
 
+-- A box that holds lines of a paragraph the stream already has is that text
+-- again, packaged: multicols passes its column lines through the main list
+-- (the walk emits them as paragraphs) and then its output routine puts the
+-- balanced columns back as one \hbox. Kept, the text would show twice.
+local function holds_emitted_lines(n)
+    for x in node.traverse(n.head) do
+        local p = node.get_attribute(x, PARA_ATTR)
+        if p and seen_para[p] then return true end
+        local t = node.type(x.id)
+        if (t == "hlist" or t == "vlist") and x.head and holds_emitted_lines(x) then return true end
+    end
+    return false
+end
+
 local function fixed_box(n, t)
+    if t ~= "rule" and holds_emitted_lines(n) then return nil end
     if t == "rule" then
         -- On a vertical list a rule's running width is the enclosing box's:
         -- the text width.
@@ -1412,6 +1514,13 @@ local function walk_flow(head, pending, ctx)
                 },
             }
             last_display = out[#out]; last_box = "display"; pending.above_skip = nil; pending.interline = nil
+        elseif t == "whatsit" and n.subtype == WH_DEST and n.named_id == 1 then
+            -- a destination between paragraphs (a section's, a \bibitem's): an
+            -- anchor point, like a \label's (see "Links and destinations")
+            local out = stream_out(ctx, stream_attr(n))
+            local item = { kind = "anchorpoint" }
+            item.anchor = note_dest(n, out, item)
+            out[#out + 1] = item
         elseif t == "vlist" and node.get_attribute(n, TIKZ_PIC_ATTR) then
             -- a captured TikZ picture set in vertical mode: not a vlist of lines
             local box = fixed_box(n, t)
@@ -1474,20 +1583,129 @@ local function walk_flow(head, pending, ctx)
     end
 end
 
+-- Every serialized node of a list, depth first: the one walk over everything a
+-- node can hold, so that a pass over the output cannot forget a child list.
+local function each_node(nodes, fn)
+    for _, n in ipairs(nodes or {}) do
+        fn(n)
+        each_node(n.children, fn)
+        each_node(n.pre, fn); each_node(n.post, fn); each_node(n.replace, fn)
+        if n.leader then each_node({ n.leader }, fn) end
+    end
+end
+
 -- The footnote marker's glyphs were serialized with the template's footnote id
 -- (attribute 906); the wire format points them at the footnote's *stream*
 -- instead, the same reference a glyph would carry for any other stream kind.
+-- A hyperref link's provisional id (negative) becomes its final one.
 -- Walked after the flow, when every footnote has its stream index.
+local hy_link_ids = {}
+local function remap_refs(n)
+    if n.footnote then
+        local idx = footnote_index[n.footnote]
+        n.footnote = nil
+        if idx then n.stream = idx end
+    end
+    if n.link and n.link < 0 then n.link = hy_link_ids[n.link] end
+end
 local function remap_footnote_refs(nodes)
-    for _, n in ipairs(nodes or {}) do
-        if n.footnote then
-            local idx = footnote_index[n.footnote]
-            n.footnote = nil
-            if idx then n.stream = idx end
+    each_node(nodes, remap_refs)
+end
+
+-- ── Resolving hyperref's links (see "Links and destinations") ──────────────
+-- hyperref's destination → the author's label, from \newlabel lines in the
+-- .aux (and the .aux files it \@input s): {number}{page}{title}{destination}{…}.
+local function aux_dest_labels()
+    local map, seen = {}, {}
+    local function read(name)
+        if seen[name] then return end
+        seen[name] = true
+        local f = io.open(name, "r")
+        if not f then return end
+        local text = f:read("*a")
+        f:close()
+        for label, value in text:gmatch("\\newlabel(%b{})(%b{})") do
+            local parts = {}
+            for g in value:sub(2, -2):gmatch("%b{}") do parts[#parts + 1] = g:sub(2, -2) end
+            local dest = parts[4]
+            if dest and dest ~= "" and not map[dest] then map[dest] = label:sub(2, -2) end
         end
-        remap_footnote_refs(n.children)
-        remap_footnote_refs(n.pre); remap_footnote_refs(n.post); remap_footnote_refs(n.replace)
-        if n.leader then remap_footnote_refs({ n.leader }) end
+        for sub in text:gmatch("\\@input(%b{})") do read(sub:sub(2, -2)) end
+    end
+    read(tex.jobname .. ".aux")
+    return map
+end
+
+local function max_id(t)
+    local n = 0
+    for k in pairs(t) do
+        if type(k) == "number" and k > n then n = k end
+    end
+    return n
+end
+
+-- Give the links glyphs carry their final ids, after the template's; keep
+-- the destinations some link needs – one anchor per label, and none where a
+-- \label's anchor already stands – and take the others out again.
+--
+-- A link that cannot lead anywhere is dropped (its glyphs stay text): one to
+-- a page (hyperref's page.N – a pageless document has no pages; LIPIcs links
+-- its page range that way), and one to a destination hyperref named that is
+-- not in this document and that no label stands for. A link to an author's
+-- label is kept even when the label is not here: another block on the site
+-- may define it.
+local function resolve_hyperref()
+    local dest_label = (#hy_links > 0) and aux_dest_labels() or {}
+    local function label_of(name) return clean_label(dest_label[name] or name) end
+    local have, here = {}, {}
+    for _, l in pairs(anchor_labels) do have[l] = true end
+    for _, d in ipairs(hy_dests) do here[d.name] = true end
+    local wanted = {}
+    local next_link, dropped = max_id(link_labels), 0
+    for k, l in ipairs(hy_links) do
+        if l.used and l.dest and (l.dest:match("^page%.%d+$")
+                                  or not (dest_label[l.dest] or here[l.dest])) then
+            dropped = dropped + 1
+        elseif l.used then
+            next_link = next_link + 1
+            hy_link_ids[-k] = next_link
+            if l.dest then
+                local label = label_of(l.dest)
+                link_labels[next_link] = { label = label }
+                if not have[label] then wanted[label] = true end
+            else
+                link_labels[next_link] = { url = l.url }
+            end
+        end
+    end
+    local next_anchor = max_id(anchor_labels)
+    local kept = 0
+    for _, d in ipairs(hy_dests) do
+        local label = label_of(d.name)
+        if wanted[label] then
+            wanted[label] = nil
+            next_anchor = next_anchor + 1
+            anchor_labels[next_anchor] = label
+            d.item.anchor = next_anchor
+            kept = kept + 1
+        else
+            for i = #d.list, 1, -1 do
+                if d.list[i] == d.item then table.remove(d.list, i); break end
+            end
+        end
+    end
+    local n_links = 0
+    for _ in pairs(hy_link_ids) do n_links = n_links + 1 end
+    if n_links > 0 or kept > 0 then
+        texio.write_nl(string.format("serializer: %d link(s) and %d destination(s) from hyperref", n_links, kept))
+    end
+    local missing = 0
+    for _ in pairs(wanted) do missing = missing + 1 end
+    if missing > 0 then
+        texio.write_nl(string.format("serializer: %d link target(s) not in this document", missing))
+    end
+    if dropped > 0 then
+        texio.write_nl(string.format("serializer: %d link(s) to a page or to nowhere left as text", dropped))
     end
 end
 
@@ -1528,7 +1746,9 @@ local function dense(name, t, blank)
 end
 
 local function write_output()
+    hy_open = {}
     walk_flow(flow_head, { sp = 0, explicit = 0 })
+    resolve_hyperref()
     for _, p in ipairs(all_paragraphs) do remap_footnote_refs(p.nodes) end
     -- Streams are written in index order (the ids reflowtex.sty assigned, then
     -- the footnotes in the order their insertions were met); a stream that
