@@ -60,6 +60,18 @@ TEX_MAX_DIMEN_SP = 1073741823
 VIEWER_DIR = Path(__file__).resolve().parent.parent / 'viewer'
 
 
+def viewer_sources_sha256() -> str:
+    """The SHA-256 src/viewer/build.sh records in the bundle's second line:
+    every module under src/viewer/src/, as its path (relative to src/viewer)
+    and a newline followed by its contents, in byte order of the paths."""
+    import hashlib
+    h = hashlib.sha256()
+    for f in sorted(VIEWER_DIR.glob('src/**/*.js'), key=lambda p: p.relative_to(VIEWER_DIR).as_posix().encode()):
+        h.update(f.relative_to(VIEWER_DIR).as_posix().encode() + b'\n')
+        h.update(f.read_bytes())
+    return h.hexdigest()
+
+
 def viewer_script() -> Path:
     """The latex-viewer.js file an integration should ship: the committed
     minified copy when it was generated from the current source, otherwise the
@@ -71,6 +83,12 @@ def viewer_script() -> Path:
     the ?v= cache-buster all key off that name."""
     src = VIEWER_DIR / 'latex-viewer.js'
     minified = VIEWER_DIR / 'latex-viewer.min.js'
+    with src.open('r', encoding='utf-8') as f:
+        f.readline()
+        bundled = f.readline()
+    if f'sources sha256 {viewer_sources_sha256()}' not in bundled:
+        print('  viewer: latex-viewer.js is stale (a module in src/viewer/src/ changed '
+              'since it was bundled) – shipping it anyway; run `make build-viewer`')
     if minified.exists():
         import hashlib
         with minified.open('r', encoding='utf-8') as f:

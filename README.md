@@ -177,7 +177,8 @@ The build pipeline shells out to a real TeX toolchain:
   -r src/encode/requirements.txt`
 
 The **browser** side needs no build step of its own and no external dependency beyond the
-vendored `protobuf.min.js`.
+vendored `protobuf.min.js`: the committed `latex-viewer.js` is ready to serve (maintainers
+who edit its modules rebuild it with `make build-viewer`; see [`src/viewer/`](src/viewer/README.md)).
 
 `make check` verifies all of the above. The [container](#try-it-in-one-command)
 described above has all of this baked in, if you'd rather not install it.

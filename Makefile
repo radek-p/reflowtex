@@ -20,7 +20,7 @@ ESBUILD_VERSION    = 0.28.2
 VENV := .venv
 PYTHON := $(CURDIR)/$(VENV)/bin/python3
 
-.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all clean vendor-protobuf vendor-inspector venv minify-viewer
+.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all clean vendor-protobuf vendor-inspector venv build-viewer minify-viewer
 
 help:
 	@echo "Reflow TeX targets:"
@@ -35,7 +35,8 @@ help:
 	@echo "  make website-clean    force a full clean rebuild of website/public (incl. testmath.tex)"
 	@echo "  make clean            remove build artefacts"
 	@echo "  make vendor-protobuf  refresh src/viewer/protobuf.min.js from protobufjs@$(PROTOBUFJS_VERSION)"
-	@echo "  make minify-viewer    regenerate src/viewer/latex-viewer.min.js (maintainers; after editing the viewer)"
+	@echo "  make build-viewer     bundle src/viewer/src/ into src/viewer/latex-viewer.js, then minify (maintainers; after editing the viewer)"
+	@echo "  make minify-viewer    regenerate src/viewer/latex-viewer.min.js only"
 	@echo "  make test-render      the render tests: every glyph in the browser against TeX (tests/render)"
 	@echo "  make test-render-all  the same, with the whole-document cases (testmath)"
 	@echo "  make vendor-inspector refresh src/inspector/vendor/preact.js (preact@$(PREACT_VERSION), htm, signals)"
@@ -150,6 +151,13 @@ vendor-inspector:
 	{ echo "/* preact@$(PREACT_VERSION), htm@$(HTM_VERSION), @preact/signals@$(SIGNALS_VERSION) – MIT licensed; bundled by esbuild@$(ESBUILD_VERSION) (make vendor-inspector) */"; cat out.js; } > $$out && \
 	cd / && rm -rf $$tmp && \
 	echo "vendored src/inspector/vendor/preact.js ($$(wc -c < $$out | tr -d ' ') bytes)"
+
+# Maintainer-only: bundle the viewer's modules (src/viewer/src/) into the
+# committed classic script src/viewer/latex-viewer.js (src/viewer/build.sh),
+# then minify it. Needs npx (Node); site builders do not.
+build-viewer:
+	@ESBUILD_VERSION=$(ESBUILD_VERSION) sh src/viewer/build.sh
+	@$(MAKE) --no-print-directory minify-viewer
 
 # Maintainer-only: regenerate the committed minified viewer after editing
 # latex-viewer.js. Integrations ship the minified copy under the name
