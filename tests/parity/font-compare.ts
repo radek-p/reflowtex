@@ -3,23 +3,12 @@
 // opentype.js decodes it) and the advance (from hmtx) – for the parity tests.
 import assert from 'node:assert/strict';
 import opentype from 'opentype.js';
-import { readSfnt, parseName, nameString } from '../../src/pipeline/fonts/sfnt.ts';
-
-/** Advance widths from hmtx – what a browser uses. (opentype.js reports a
- *  CFF font's advances from its charstrings, where fontTools writes 0.) */
-function advances(bytes: Uint8Array): number[] {
-  const t = readSfnt(bytes).tables;
-  const hhea = t.get('hhea')!, hmtx = t.get('hmtx')!;
-  const n = (hhea[34] << 8) | hhea[35], glyphs = (t.get('maxp')![4] << 8) | t.get('maxp')![5];
-  const out: number[] = [];
-  for (let i = 0; i < glyphs; i++) { const k = Math.min(i, n - 1) * 4; out.push((hmtx[k] << 8) | hmtx[k + 1]); }
-  return out;
-}
+import { advanceWidths, readSfnt, parseName, nameString } from '../../src/pipeline/fonts/sfnt.ts';
 
 /** code point → [advance, outline commands] of every mapped glyph. */
 export function drawing(bytes: Uint8Array): Map<number, string> {
   const f = opentype.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) as ArrayBuffer);
-  const adv = advances(bytes);
+  const adv = advanceWidths(readSfnt(bytes));
   const out = new Map<number, string>();
   for (let i = 0; i < f.glyphs.length; i++) {
     const g = f.glyphs.get(i);

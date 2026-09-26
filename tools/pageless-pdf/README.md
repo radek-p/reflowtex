@@ -11,9 +11,12 @@ it into `static/pageless/`).
 
 ## Making a pageless PDF
 
+The tools are TypeScript, run by Node (22.18 or later) straight from the
+sources; `npm ci` at the repository root installs what they use (pdf-lib,
+MuPDF's WebAssembly build, sharp, Playwright).
+
 ```sh
-.venv/bin/pip install -r tools/pageless-pdf/requirements.txt
-.venv/bin/python3 tools/pageless-pdf/pageless.py paper.tex -o out/ [--passes 3] \
+node tools/pageless-pdf/pageless.ts paper.tex -o out/ [--passes 3] \
     [--template T] [--margin 36pt] [--width-extra 0pt]
 # → out/pageless.pdf, pageless.json, output.json (+ the run's input.tex/.log/.pdf)
 ```
@@ -21,7 +24,7 @@ it into `static/pageless/`).
 The serializer's `capture_flow` already keeps the galley: before the page
 builder sees a contribution it deep-copies the node with its real
 dimensions (`Serializer.flow_head()`). That copy is the pageless document.
-`pageless.py` compiles the document as the pipeline does – inside the
+`pageless.ts` compiles the document as the pipeline does – inside the
 extraction template (the pipeline's by default; `examples/testmath` has its
 own), shell escape off unless `REFLOWTEX_SHELL_ESCAPE=1` – with two lines
 added: `pageless_pdf.lua` loaded after the serializer, and a hook at the
@@ -44,17 +47,17 @@ those are stripped, with inserts and marks; drawing whatsits (colour,
 literals, matrices) stay. Captured TikZ pictures are empty placeholders in
 the galley; their positions are recorded in `pageless.json`.
 
-`stack.py` (pikepdf) folds the pages into one: each becomes a Form XObject
+`stack.ts` (pdf-lib) folds the pages into one: each becomes a Form XObject
 placed at the sum of the preceding pages' heights, and the TikZ pictures'
 private pages are drawn back at their places. The page exceeds Acrobat's
 14400-unit limit by design; browsers, Poppler and MuPDF show it, and
-`raster.py` (pdftoppm) rasterises any band of it without drawing the rest.
+`raster.ts` (MuPDF) rasterises any band of it without drawing the rest.
 
 Recompiling LuaTeX with wider dimensions is not an option: `scaled` is
 32-bit throughout TeX (glue setting, badness, packaging, the backend's
 coordinates). A cut inside glue is exact and needs nothing.
 
-`check_against_paged.py` checks the strip against the same document
+`check-against-paged.ts` checks the strip against the same document
 paginated normally: word positions (`pdftotext -bbox`) page by page,
 relative to each page's first word. For testmath every word agrees to
 0.001bp in y and 0.0102bp in x (the 1/1000 em of PDF text operators) – on
@@ -63,29 +66,27 @@ a few tenths; that is the paged PDF's doing, not the strip's).
 
 ## Comparing the browser with it
 
-Needs, besides `requirements.txt`: Node with Playwright (`npm install
-playwright && npx playwright install chromium` here, or `PLAYWRIGHT_DIR`
-naming a directory with it) and MuPDF (`mutool`) or Poppler.
+Needs Playwright's Chromium (`npx playwright install chromium`).
 
 ```sh
-T=tools/pageless-pdf; PY=.venv/bin/python3
-$PY $T/site_from_run.py out/ out/site/                  # serve out/site/, e.g. on :8000
-$PY $T/vector_compare.py out/ http://localhost:8000/index.html
-$PY $T/compare.py out/ http://localhost:8000/index.html --ppp 4
-$PY $T/compare.py out/ http://localhost:8000/index.html --ppp 4 --supersample 4 --out out/compare-ss4
-$PY $T/tiles.py tiles/ --strip 345 out/compare out/vector/vector.json --fine 345 out/compare-ss4
+T=tools/pageless-pdf
+node $T/site-from-run.ts out/ out/site/                  # serve out/site/, e.g. on :8000
+node $T/vector-compare.ts out/ http://localhost:8000/index.html
+node $T/compare.ts out/ http://localhost:8000/index.html --ppp 4
+node $T/compare.ts out/ http://localhost:8000/index.html --ppp 4 --supersample 4 --out out/compare-ss4
+node $T/tiles.ts tiles/ --strip 345 out/compare out/vector/vector.json --fine 345 out/compare-ss4
 ```
 
 **A page from the same run.** The pipeline compiles a document with
 displays at several widths, so its bundle is not the strip's compilation.
-`site_from_run.py` builds the page from the output.json `pageless.py` left
+`site-from-run.ts` builds the page from the output.json `pageless.ts` left
 beside the PDF: the pipeline's encode stages, the display model sampled
 from that same run (sample 0 is the strip's own run), and index.html as
-`examples/testmath/build.py` writes it. `--extra-script FILE` adds a script
+`examples/testmath/build.ts` writes it. `--extra-script FILE` adds a script
 after the viewer.
 
-**Geometry first: `vector_compare.py`.** No pixels. `mutool trace` gives
-every glyph and rule in the strip with its origin; `dom_dump.js` gives
+**Geometry first: `vector-compare.ts`.** No pixels. MuPDF's device trace
+gives every glyph and rule in the strip with its origin; `dom-dump.ts` gives
 every glyph and rule the viewer drew in the same frame, through any
 transform (`\rotatebox`). Each viewer glyph is matched to the nearest strip
 glyph within `--window` (0.7pt). Reported: the vertical residual along the
@@ -96,9 +97,9 @@ angle, matched to the strip rule whose corners are nearest, with TeX's
 rules the viewer did not draw. Whatever
 it reports is geometry, not rasterisation, so run it first.
 
-**Pixels: `compare.py`.** Both sides are drawn at `--ppp` pixels per TeX
+**Pixels: `compare.ts`.** Both sides are drawn at `--ppp` pixels per TeX
 point in one frame – the column of `\hsize` with `--margin` of white either
-side: the strip by MuPDF (or pdftoppm), the browser by `browser_capture.js`,
+side: the strip by MuPDF, the browser by `capture.ts`,
 which strips the page to its `.latex-block`, forces the light theme with
 TeX's black for text (a theme's text colour, often a dark grey, would tint
 every glyph) and without macOS's stem-thickening font smoothing, pins
@@ -141,32 +142,34 @@ CSS pixel Chromium draws glyphs a little differently again (a spread of
 screenshot at 16384 px, so keep ppp × K ≤ 16 (and `--band` × ppp × K / 2
 under the cap); the strip at 16 px/pt takes about 6 GB.
 
-**Tiles: `tiles.py`.** Cuts the strip into tiles of `--tile-pt` points and,
+**Tiles: `tiles.ts`.** Cuts the strip into tiles of `--tile-pt` points and,
 for each, writes the heat map and the two sides of `diff.png` for the rows
 that pair with it (WebP, full resolution), plus the heat map of a
 supersampled run (`--fine`) of the same rows; `manifest.json` has the counts
 of both checks, the share of pixels differing by more than half, and per
 tile how many rows differ – what the website's comparison page loads.
 
-**Publishing: `publish_compare.py`.** The tiles are too big for git (25 MB,
+**Publishing: `publish-compare.ts`.** The tiles are too big for git (25 MB,
 and new at every run), so the website takes them from a GitHub release.
-`publish_compare.py <tiles out dir> --upload` copies them into the site,
+`publish-compare.ts <tiles out dir> --upload` copies them into the site,
 packs them into `pixel-compare-<hash>.tar` (the same pictures give the same
 file), creates the release with `gh`, and writes `website/pixel-compare.lock`,
 the file's URL and SHA-256. Commit the lock; `website/build.sh` fetches the
-file it names (`website/tools/fetch_pixel_compare.py`) and unpacks it into
+file it names (`website/tools/fetch-pixel-compare.ts`) and unpacks it into
 `static/pixel-compare/` and `data/pixel_compare.json`, which git ignores.
 Without `--upload` it prints how to make the release by hand.
 
 ## Files
 
-    pageless.py            document → pageless.pdf, in one command
+    pageless.ts            document → pageless.pdf, in one command
     pageless_pdf.lua       the shipper (loaded after serializer.lua)
-    stack.py               chunk pages → one page (pikepdf)
-    raster.py              one band of the strip → PNG (pdftoppm)
-    check_against_paged.py the strip against the paginated PDF, word by word
-    site_from_run.py       a viewer page from the strip's own run
-    vector_compare.py      glyph positions, strip vs browser (+ dom_dump.js)
-    compare.py             pixels, strip vs browser (+ browser_capture.js)
-    tiles.py               compare.py's pictures as web tiles + manifest
-    publish_compare.py     the tiles as a release file the website fetches
+    stack.ts               chunk pages → one page (pdf-lib)
+    raster.ts              one band of the strip → PNG (MuPDF)
+    check-against-paged.ts the strip against the paginated PDF, word by word
+                           (poppler's pdftotext)
+    site-from-run.ts       a viewer page from the strip's own run
+    vector-compare.ts      glyph positions, strip vs browser (+ dom-dump.ts)
+    compare.ts             pixels, strip vs browser (+ capture.ts, images.ts)
+    tiles.ts               compare.ts's pictures as web tiles + manifest
+    publish-compare.ts     the tiles as a release file the website fetches
+    ../lib/tar.ts          reproducible tar files, for publishing and fetching

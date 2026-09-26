@@ -55,7 +55,13 @@ export function pyRepr(v: unknown): string {
   if (typeof v === 'string') {
     const q = v.includes("'") && !v.includes('"') ? '"' : "'";
     const body = v.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
-      .replace(new RegExp(q, 'g'), `\\${q}`);
+      .replace(new RegExp(q, 'g'), `\\${q}`)
+      // what Python counts as not printable (other and separator characters
+      // but the space), escaped as it writes them
+      .replace(/(?! )[\p{C}\p{Z}]/gu, c => {
+        const n = c.codePointAt(0)!, h = n.toString(16);
+        return n <= 0xff ? `\\x${h.padStart(2, '0')}` : n <= 0xffff ? `\\u${h.padStart(4, '0')}` : `\\U${h.padStart(8, '0')}`;
+      });
     return q + body + q;
   }
   if (Array.isArray(v)) return `[${v.map(pyRepr).join(', ')}]`;

@@ -264,6 +264,15 @@ export function setHeadTimes(f: Sfnt, seconds: number): void {
 
 /** Every code point → glyph id the font maps (all cmap subtables, the first
  *  one to map a code point winning). */
+/** Every glyph's advance width from hmtx – what a browser uses. (opentype.js
+ *  reports a CFF font's advances from its charstrings, which need not agree.) */
+export function advanceWidths(f: Sfnt): number[] {
+  const hhea = f.tables.get('hhea')!, hmtx = f.tables.get('hmtx')!;
+  const n = u16(hhea, 34), out: number[] = [];
+  for (let i = 0; i < numGlyphs(f); i++) out.push(u16(hmtx, Math.min(i, n - 1) * 4));
+  return out;
+}
+
 export function codepointsToGlyphs(f: Sfnt): Map<number, number> {
   const out = new Map<number, number>();
   const cmap = f.tables.get('cmap');

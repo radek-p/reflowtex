@@ -26,29 +26,7 @@ if [ ! -d "$REPO/node_modules" ] || [ "$REPO/package-lock.json" -nt "$REPO/node_
   (cd "$REPO" && npm ci --no-audit --no-fund)
 fi
 
-# The pageless PDF and the pixel comparison (steps 3 and 4) are still Python
-# tools, with their deps in the repo-root virtualenv; build it here too so this
-# script works standalone. Needs Python 3.9+ (macOS's bundled python3
-# qualifies), so rebuild the venv if it's missing or too old.
-VENV="$REPO/.venv"
-if [ -x "$VENV/bin/python3" ] && "$VENV/bin/python3" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
-  :
-else
-  BASE_PYTHON="$("$REPO/scripts/find_python.sh")"
-  echo "Creating $VENV with $BASE_PYTHON ($("$BASE_PYTHON" --version))"
-  # Empty it rather than remove it: in the container .venv is a mount point
-  # (a named volume, see docker-compose.yml), which cannot be unlinked.
-  if [ -d "$VENV" ]; then find "$VENV" -mindepth 1 -delete; else rm -rf "$VENV"; fi
-  "$BASE_PYTHON" -m venv "$VENV"
-fi
-PYTHON="$VENV/bin/python3"
 PAGELESS="$REPO/tools/pageless-pdf"               # the pageless PDF (Tools › Pageless PDF)
-if [ ! -f "$VENV/.deps-installed" ] || [ "$REPO/src/encode/requirements.txt" -nt "$VENV/.deps-installed" ] \
-   || [ "$PAGELESS/requirements.txt" -nt "$VENV/.deps-installed" ]; then
-  "$VENV/bin/pip" install --upgrade pip
-  "$VENV/bin/pip" install -r "$REPO/src/encode/requirements.txt" -r "$PAGELESS/requirements.txt"
-  touch "$VENV/.deps-installed"
-fi
 
 # 1. Vendor the shortcode + viewer partial from the Hugo integration (the docs'
 #    "copy these two files into layouts/" step, done automatically).
@@ -99,17 +77,17 @@ PL_OUT="$SITE/.reflowtex-build/pageless-testmath"
 PL_PDF="$SITE/static/pageless/testmath.pdf"
 if [ ! -f "$PL_PDF" ] || [ -n "$(find "$TESTMATH/testmath.tex" "$TESTMATH/template.tex" "$PAGELESS" \
       "$REPO/src/extract/serializer.lua" -newer "$PL_PDF" -type f 2>/dev/null | head -1)" ]; then
-  "$PYTHON" "$PAGELESS/pageless.py" "$TESTMATH/testmath.tex" --template "$TESTMATH/template.tex" \
+  node "$PAGELESS/pageless.ts" "$TESTMATH/testmath.tex" --template "$TESTMATH/template.tex" \
       --passes 3 -o "$PL_OUT"
   mkdir -p "$(dirname "$PL_PDF")"
   cp "$PL_OUT/pageless.pdf" "$PL_PDF"
 fi
 
 # 4. The accuracy page's pixel comparison: too big for git, so a release file
-#    that pixel-compare.lock names (tools/pageless-pdf/publish_compare.py makes
+#    that pixel-compare.lock names (tools/pageless-pdf/publish-compare.ts makes
 #    one). Fetched once, and again only when the lock changes; offline, the page
 #    shows no comparison and the build goes on.
-"$PYTHON" "$SITE/tools/fetch_pixel_compare.py" "$SITE"
+node "$SITE/tools/fetch-pixel-compare.ts" "$SITE"
 
 # 5. Build (or serve) the static site.
 if [ "${1:-}" = "server" ]; then

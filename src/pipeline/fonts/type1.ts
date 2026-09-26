@@ -268,6 +268,17 @@ function outline(name: string, font: Type1, pen: Pen, depth = 0): { width: numbe
   return { width };
 }
 
+/** One glyph's outline as drawing commands in font units (y up), and its
+ *  advance – for tools that show a glyph (website/tools/glyph-outline.ts). */
+export function glyphOutline(pfb: string, name: string): { commands: [string, Point[]][]; width: number } {
+  const commands: [string, Point[]][] = [];
+  const { width } = outline(name, parseType1(pfb), {
+    moveTo: p => commands.push(['moveTo', [p]]), lineTo: p => commands.push(['lineTo', [p]]),
+    curveTo: (a, b, c) => commands.push(['curveTo', [a, b, c]]), closePath: () => commands.push(['closePath', []]), endPath: () => {},
+  });
+  return { commands, width };
+}
+
 // fontTools.cffLib.specializer's topology-changing clean-up, which
 // T2CharStringPen applies: successive movetos combine; a curve whose first and
 // last control deltas are zero becomes a line; a zero-length line goes;

@@ -28,6 +28,7 @@ declare module 'opentype.js' {
     unitsPerEm: number;
     glyphs: { length: number; get(i: number): Glyph };
     charToGlyph(c: string): Glyph;
+    tables: { hhea: { ascender: number; descender: number } };
   }
   export function parse(buffer: ArrayBuffer): Font;
   // Node loads the package's CommonJS build ("main"; it has no "exports"),
