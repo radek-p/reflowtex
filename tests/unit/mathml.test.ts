@@ -51,6 +51,18 @@ test('cleanup: an operator wrapping a whole formula (\\Bigl) gives way to it', (
   assert.deepEqual(t, el('mrow', [el('mo', ['('], { fence: 'true' }), el('mi', ['x'])]));
 });
 
+test('cleanup: a token element holding one element gives way to it; an empty one goes', () => {
+  // luamml wraps a box it could not read in <mi>; once the box is read, the
+  // <mi> holds a table – or nothing, when the box was empty
+  assert.deepEqual(cleanup(el('mrow', [el('mi', [el('mtable')]), el('mi'), el('mo', ['+'])])),
+    el('mrow', [el('mtable'), el('mo', ['+'])]));
+});
+
+test('cleanup: text is trimmed at its ends and its spaces are plain, rows inside rows are one row', () => {
+  assert.deepEqual(cleanup(el('mrow', [el('mrow', [el('mtext', ['the\u00A0set\u00A0']), el('mi', ['𝑆'])]), el('mo', ['='])])),
+    el('mrow', [el('mtext', ['the set']), el('mi', ['𝑆']), el('mo', ['='])]));
+});
+
 test('cleanup: spacing hints are dropped, fixed-arity children kept', () => {
   const t = cleanup(el('msup', [el('mi', ['x']), el('mrow')]));
   assert.deepEqual(t, el('msup', [el('mi', ['x']), el('mrow')]));
@@ -97,9 +109,9 @@ test('a box luamml could not read: an alignment becomes a table, from its cells'
   });
   attachMathML(d);
   assert.equal(bare(d.paragraphs[0].nodes[0].mathml),
-    '<math><mrow><mo>{</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mi>𝑥</mi></mtd></mtr>' +
-    '<mtr><mtd><mn>0</mn></mtd><mtd><mtext>ok</mtext></mtd></mtr></mtable></mrow></math>');
-  assert.equal(vbox.children![0].children![0].children![0].mathml, undefined);
+    '<math><mo>{</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mi>𝑥</mi></mtd></mtr>' +
+    '<mtr><mtd><mn>0</mn></mtd><mtd><mtext>ok</mtext></mtd></mtr></mtable></math>');
+  assert.equal(d.paragraphs[0].nodes[1].children![0].children![0].children![0].mathml, undefined, 'cells carry no MathML of their own');
 });
 
 test('an empty box (the strut in \\big) disappears', () => {
@@ -139,6 +151,16 @@ test('an alignment: its rows are display items of one number, read as one table'
   assert.equal(d.content[2].mathml, undefined, 'the second row is read with the first');
   assert.equal(bare(d.content[3].mathml), '<math display="block"><mi>𝑦</mi></math>');
   assert.equal((d.content[0].box!.children![0].children![0]).mathml, undefined, 'cells carry no MathML of their own');
+});
+
+test('a formula made of text only is text (\\textsuperscript, a footnote mark)', () => {
+  const d = doc({
+    paragraphs: [{ nodes: [glyph('a'), begin(1), glyph('1'), end()] }],
+    content: [{ kind: 'paragraph', para: 1 }],
+    mathml: [{ tree: el('msup', [el('mrow'), el('mtext', ['1'])]) }],
+  });
+  assert.equal(attachMathML(d), 0);
+  assert.equal(d.paragraphs[0].nodes[1].mathml, undefined);
 });
 
 test('streams (footnotes) get theirs too', () => {

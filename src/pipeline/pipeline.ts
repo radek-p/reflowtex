@@ -20,6 +20,7 @@ import { encodeDocument } from './encode.ts';
 import { runLuaLatex } from './lualatex.ts';
 import * as DM from './display-model.ts';
 import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from './transforms.ts';
+import { attachMathML } from './mathml.ts';
 import { convertPictures } from './pictures.ts';
 import { Fonts, glyphRequirements, drawnCodepoints } from './fonts/fonts.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
@@ -29,6 +30,9 @@ import { BuildError } from './errors.ts';
 const SRC = fileURLToPath(new URL('..', import.meta.url));             // src/
 export const DEFAULT_TEMPLATE = join(SRC, 'extract/template.tex');
 export const DEFAULT_SERIALIZER = join(SRC, 'extract/serializer.lua');
+/** MathML capture (src/extract/mathml.lua): the serializer loads it when it
+ *  lies next to it. */
+export const MATHML_LUA = join(SRC, 'extract/mathml.lua');
 const LATEX_DIR = join(SRC, 'latex');                                  // the companion package
 
 export const PREAMBLE_MARK = '%%PREAMBLE%%';
@@ -95,6 +99,8 @@ export interface PipelineOptions {
   searchDirs?: string[];
   template?: string;
   serializer?: string;
+  /** record MathML for every formula (default on; needs TeX Live's luamml) */
+  mathml?: boolean;
   log?: (line: string) => void;
 }
 
@@ -112,6 +118,7 @@ export class Pipeline {
   private readonly searchDirs: string[];
   private readonly template: string;
   private readonly serializer: string;
+  private readonly mathml: boolean;
   private readonly localFonts: string[];
   private readonly log: (line: string) => void;
   /** every block compiled or declared current (useCached), by key: what the
@@ -123,6 +130,7 @@ export class Pipeline {
     this.searchDirs = (o.searchDirs ?? []).map(d => resolve(d));
     this.template = o.template ?? DEFAULT_TEMPLATE;
     this.serializer = o.serializer ?? DEFAULT_SERIALIZER;
+    this.mathml = o.mathml ?? true;
     this.log = o.log ?? (s => console.log(s));
     const local = o.localFontsDir ? resolve(o.localFontsDir) : null;
     this.fonts = new Fonts(resolve(o.fontsDir), local);
@@ -253,6 +261,8 @@ export class Pipeline {
 
     // Always refreshed: a stale serializer would silently lack newer features.
     copyFileSync(this.serializer, join(dir, 'serializer.lua'));
+    if (this.mathml) copyFileSync(MATHML_LUA, join(dir, 'mathml.lua'));
+    else rmSync(join(dir, 'mathml.lua'), { force: true });
     for (const otf of this.localFonts) {
       const dst = join(dir, basename(otf));
       if (!existsSync(dst) || statSync(dst).mtimeMs < statSync(otf).mtimeMs) copyFileSync(otf, dst);
@@ -294,12 +304,14 @@ export class Pipeline {
     return { data, dir, key, label };
   }
 
-  /** The passes between the serializer and the encoder, in their order: forget
-   *  unreferenced paragraphs, pictures to SVG (from `dir`'s PDF), strip what the
+  /** The passes between the serializer and the encoder, in their order: MathML
+   *  strings from what the capture recorded (first: it reads formula numbers
+   *  and boxes the later passes may drop), forget unreferenced paragraphs, pictures to SVG (from `dir`'s PDF), strip what the
    *  wire format does not model, convert classic fonts (first: it gives
    *  'unknown' fonts real files, which the glyph addressing and provisioning
    *  that follow then see), address glyphs. Changes `data`. */
   async transform(data: SerializerOutput, dir: string, o: { block?: string; docTag?: string } = {}): Promise<void> {
+    const nMathml = attachMathML(data);
     const nDropped = dropUnreferencedParagraphs(data);
     const nPictures = await convertPictures(data, dir, o.block, o.docTag);
     const nStripped = stripUnsupportedNodes(data);
@@ -308,7 +320,7 @@ export class Pipeline {
     const bits = [
       nDropped && `dropped ${nDropped} unreferenced paragraph(s)`, nStripped && `stripped ${nStripped} node(s)`,
       nRewritten && `rewrote ${nRewritten} glyph(s) to PUA`, nLegacy && `converted legacy fonts, ${nLegacy} glyph(s) to PUA`,
-      nPictures && `converted ${nPictures} picture(s)`,
+      nPictures && `converted ${nPictures} picture(s)`, nMathml && `MathML for ${nMathml} formula(s)`,
     ].filter(Boolean);
     if (bits.length) this.log(`  ${o.block ?? basename(dir)}: ${bits.join(', ')}`);
   }

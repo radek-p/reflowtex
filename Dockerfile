@@ -26,6 +26,8 @@ FROM texlive/texlive:latest-basic@sha256:d54587cc7093dee8cc41c3a6317a37eb33164ba
 # with scheme-basic already. dvisvgm (converts externalised TikZ pictures to
 # SVG) is a separate tlmgr package, not part of any scheme-basic install.
 # microtype is loaded by every website preamble (website/latex-preambles/).
+# luamml is not a LaTeX package here: src/extract/mathml.lua uses its Lua
+# converter for the MathML of every formula (without it, no MathML).
 #
 # tlmgr exits 0 when some packages fail to download (mirror.ctan.org hands
 # each request to a random mirror, and some are broken or behind), so the
@@ -42,11 +44,12 @@ RUN tlmgr update --self && \
         tikz-cd \
         xcolor \
         microtype \
+        luamml \
         dvisvgm; \
       missing=; \
       for f in mathtools.sty fontspec.sty unicode-math.sty lualatex-math.sty \
                filehook.sty latinmodern-math.otf pgf.sty tikz-cd.sty xcolor.sty \
-               microtype.sty; do \
+               microtype.sty luamml-convert.lua; do \
         kpsewhich "$f" >/dev/null || missing="$missing $f"; \
       done; \
       [ -x "$(kpsewhich -var-value SELFAUTOLOC)/dvisvgm" ] || missing="$missing dvisvgm"; \
