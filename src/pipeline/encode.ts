@@ -7,13 +7,14 @@
 import protobuf from 'protobufjs';
 import { messageType } from './schema.ts';
 import { walkNodes, contentItems, type SerializerOutput, type TexNode } from './nodes.ts';
+import { SchemaMismatch } from './errors.ts';
+
+export { SchemaMismatch };
 
 /** Omitted when 0: the renderer treats absent and 0 alike for these. */
 const OMIT_IF_ZERO = new Set(['stretch_order', 'shrink_order', 'subtype', 'shift', 'glue_sign', 'glue_order']);
 /** Carried by the pipeline, not by the wire format. */
 const NOT_ENCODED = new Set(['file', 'gindex']);
-
-export class SchemaMismatch extends Error {}
 
 // ── Glyph metrics ───────────────────────────────────────────────────────────
 // A glyph's width/height/depth are interned into Document.glyph_metrics (the

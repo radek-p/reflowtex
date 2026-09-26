@@ -16,3 +16,22 @@ examples with the Python integrations.
 
 `REFLOWTEX_PYTHON` names the Python to compare against (default: this
 checkout's `.venv`), so a worktree can use the main checkout's venv.
+
+## Captured calls
+
+The display model and the transforms are checked on their own inputs rather
+than through whole builds: `capture.py` runs an existing build script with the
+Python pipeline's functions wrapped. It records every call's arguments,
+result and changed arguments, and every LuaTeX run's serializer output, under
+`build/capture/<run>/<block>/`. The tests replay each call through the
+TypeScript function and compare.
+
+    PY=.venv/bin/python3
+    $PY tests/parity/capture.py build/capture/site integrations/hugo/prebuild.py website \
+        --demos-dir examples/demo --demos-dir examples/testmath --demos-dir examples/book \
+        --demos-dir examples/symbol --force -j 8
+    $PY tests/parity/capture.py build/capture/testmath examples/testmath/build.py -o build/parity-testmath-site
+    $PY tests/parity/capture.py build/capture/dmn integrations/vanilla/build.py examples/display-model-narrow -o build/parity-dmn-site
+
+(The Hugo run needs the shortcode and partial copied into `website/layouts/`,
+as `website/build.sh` does.) `REFLOWTEX_CAPTURE` points the tests elsewhere.

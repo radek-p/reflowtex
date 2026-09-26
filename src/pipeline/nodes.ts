@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The serializer's output (output.json) as the pipeline holds it, and the one
-// walk over it. Every pass that visits nodes – encoding, glyph addressing,
-// pictures, fonts, batch splitting – goes through here, so a node's child
-// lists are named in exactly one place (see the notes on `leader` and
-// `display_wide` below, each of which a pass once forgot).
+// The serializer's output (output.json) as the pipeline holds it, and the
+// document-level walks over it. Walking a node tree is src/shared/tree.ts's
+// job (the one walk the whole project uses); this module adds what is
+// particular to a document: which lists hold nodes – paragraphs, and the
+// boxes of content items, a display's wide form included – and the reading
+// and writing of output.json.
+import { walk, filterTree, type TreeNode } from '../shared/tree.ts';
 
 /** A node of TeX's finished node list, as serializer.lua writes it. */
-export interface TexNode {
+export interface TexNode extends TreeNode {
   type: string;
   children?: TexNode[];
   pre?: TexNode[];
@@ -62,9 +64,6 @@ export interface SerializerOutput {
   [field: string]: unknown;
 }
 
-/** A node's child lists, in the order every walk takes them. */
-export const CHILD_LISTS = ['children', 'pre', 'post', 'replace', 'nobreak'] as const;
-
 // ── Reading and writing output.json ─────────────────────────────────────────
 // JSON.parse puts integer-like keys first, in numeric order, whatever order the
 // text has; the font map's order matters, so its keys are read as strings. And
@@ -100,32 +99,11 @@ export function writeSerializerOutput(data: SerializerOutput): string {
 
 // ── Walking ─────────────────────────────────────────────────────────────────
 
-/** Every node of `nodes` and below, depth first: a node, then its child lists
- *  in CHILD_LISTS order, then its leader. */
-export function walkNodes(nodes: TexNode[] | undefined, visit: (n: TexNode) => void): void {
-  for (const n of nodes ?? []) {
-    if (!n || typeof n !== 'object') continue;
-    visit(n);
-    for (const key of CHILD_LISTS) if (n[key]) walkNodes(n[key], visit);
-    if (n.leader) walkNodes([n.leader], visit);
-  }
-}
+/** Every node of `nodes` and below (tree.ts's walk, for a document's nodes). */
+export const walkNodes = (nodes: TexNode[] | undefined, visit: (n: TexNode) => void | boolean): void => walk(nodes, visit);
 
-/** `nodes` without the nodes `keep` rejects, at every depth; a leader that is
- *  rejected is removed from its glue. Lists are rebuilt in place. */
-export function filterNodes(nodes: TexNode[], keep: (n: TexNode) => boolean): TexNode[] {
-  const out: TexNode[] = [];
-  for (const n of nodes) {
-    if (!keep(n)) continue;
-    for (const key of CHILD_LISTS) if (n[key]) n[key] = filterNodes(n[key], keep);
-    if (n.leader) {
-      const [leader] = filterNodes([n.leader], keep);
-      if (leader) n.leader = leader; else delete n.leader;
-    }
-    out.push(n);
-  }
-  return out;
-}
+/** `nodes` without what `keep` rejects, at every depth (tree.ts's filterTree). */
+export const filterNodes = (nodes: TexNode[], keep: (n: TexNode) => boolean): TexNode[] => filterTree(nodes, keep);
 
 /** Every content item: the main flow's, then each stream's (streams nest by
  *  reference, so one pass over the table reaches every item once), each

@@ -11,7 +11,7 @@ test('walkNodes: node, then its child lists in order, then its leader', () => {
     children: [glyph(1), { type: 'disc', pre: [glyph(2)], post: [glyph(3)], replace: [glyph(4)] }],
   }, { type: 'glue', leader: { type: 'hlist', children: [glyph(5)] } }];
   const seen: string[] = [];
-  walkNodes(tree, n => seen.push(n.type === 'glyph' ? String(n.char) : n.type));
+  walkNodes(tree, n => { seen.push(n.type === 'glyph' ? String(n.char) : n.type); });
   assert.deepEqual(seen, ['hlist', '1', 'disc', '2', '3', '4', 'glue', 'hlist', '5']);
 });
 
