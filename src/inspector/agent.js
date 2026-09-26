@@ -12,7 +12,7 @@
 // The file's value, when evaluated as a script, is the result of installing: 'ok', or 'no-api' when the page has no inspectable viewer yet.
 // window.__rtxInspectorInstall() tries again.
 window.__rtxInspectorInstall = () => {
-const AGENT = 4;
+const AGENT = 5;
 const prev = window.__rtxInspector;
 if (prev && prev.agent === AGENT) return 'ok';
 const I = window.reflowtex && window.reflowtex.inspect;
@@ -42,11 +42,12 @@ function register(obj, key, make) {
 const blockId = el => register(el, null, () => ({ kind: 'block', el }));
 // A segment: `cachePath` is [] for the block's own cache, [k, …] for the
 // nested cache of stream segment k (and so on down). `root` is null for the
-// block's flow, or a footnote's number for the body its popover laid out.
+// block's flow, or the key of a surface: a part of one of its instances laid
+// out elsewhere (the viewer's inspect.surfaces: a popover's footnote, a
+// margin note, a pane or a Lean part a component drew).
 const segId = (bid, cachePath, i, root = null) => register(null, `s${bid}/${root ?? ''}/${cachePath.join('.')}/${i}`,
     () => ({ kind: 'seg', block: bid, cachePath, i, root }));
-// A footnote's body, shown in the viewer's popover and never in the flow: a
-// row of its own under its block, holding the popover's segments once it has
+// A surface: a row of its own under its block, holding its segments once it has
 // been opened (and so laid out).
 const sideId = (bid, root) => register(null, `f${bid}/${root}`, () => ({ kind: 'side', block: bid, root }));
 const lineId = (sid, j) => register(null, `l${sid}/${j}`, () => ({ kind: 'line', seg: sid, j }));
@@ -62,12 +63,23 @@ function nodeId(n, sid, parent) {
 }
 
 // ── Resolving ──────────────────────────────────────────────────────────────────
-// The layout cache a flow starts from: the block's, or a footnote popover's.
+// The layout cache a flow starts from: the block's, or a surface's.
 function rootCache(bid, root) {
     const st = I.state(entries.get(bid).el);
     if (!st) return null;
-    return root == null ? st.cache : st.footnoteCaches && st.footnoteCaches.get(String(root));
+    if (root == null) return st.cache;
+    const sf = surfaceOf(bid, root);
+    return sf ? sf.cache : null;
 }
+// The surfaces of a block (older viewers have none to list).
+const surfacesOf = el => (I.surfaces ? I.surfaces(el) : []);
+const surfaceOf = (bid, key) => surfacesOf(entries.get(bid).el).find(sf => sf.key === key);
+const WHERE = { popover: 'in the popover', margin: 'in the margin', page: 'drawn by the page' };
+// The surface stream k's popover laid out, if it is open or was: its key.
+const popoverRoot = (bid, k) => {
+    const sf = surfacesOf(entries.get(bid).el).find(x => x.where === 'popover' && x.instance.endsWith(`/s${k}`));
+    return sf ? sf.key : null;
+};
 function cacheOf(seg) {
     let cache = rootCache(seg.block, seg.root);
     for (const k of seg.cachePath) cache = cache && cache.dom && cache.dom.segs[k] && cache.dom.segs[k].sub;
@@ -273,12 +285,12 @@ function summary(id) {
     if (e.kind === 'vgap' || e.kind === 'vpar') { gapSummary(id, out); return out; }
     if (e.kind === 'vpart') { partSummary(id, out); return out; }
     if (e.kind === 'side') {
-        const c = rootCache(e.block, e.root);
+        const c = rootCache(e.block, e.root), sf = surfaceOf(e.block, e.root);
         out.type = 'stream';
-        out.label = `footnote ${footnotesOf(entries.get(e.block).el).indexOf(e.root) + 1} (popover)`;
-        if (!c || !c.layout) out.note = 'not laid out yet – open its popover';
+        out.label = sf ? `${sf.kind} · ${sf.role} (${WHERE[sf.where] || sf.where})` : 'surface (gone)';
+        if (!c || !c.layout) out.note = 'not laid out';
         else {
-            out.note = `${c.layout.laid.length} segment(s) · ${shown(c.dom && c.dom.root) ? 'open' : 'closed – as it was last shown'}`;
+            out.note = `${c.layout.laid.length} segment(s) · ${shown(c.dom && c.dom.root) ? 'shown' : 'hidden – as it was last laid out'}`;
             out.hasChildren = c.layout.laid.length > 0;
         }
         return out;
@@ -408,11 +420,10 @@ function details(id) {
                   ['paragraphs', String(d.paragraphs.length)], ['fonts', String(d.fonts.length)],
                   ['pictures', String((d.pictures || []).length)], ['streams', String((d.streams || []).length)]);
     } else if (e.kind === 'side') {
-        const c = rootCache(e.block, e.root), st = I.state(entries.get(e.block).el);
-        const stream = st && st.doc.streams[e.root - 1];
-        rows.push(['stream', `${e.root} of the block's ${st.doc.streams.length} (Document.streams)`],
-                  ['kind', stream ? stream.kind : '?'],
-                  ['shown', 'in the viewer\'s popover, from its marker; laid out when it opens, at the popover\'s width'],
+        const c = rootCache(e.block, e.root), sf = surfaceOf(e.block, e.root);
+        rows.push(['instance', sf ? `${sf.instance} (${sf.kind})` : '?'],
+                  ['part', sf ? sf.role : '?'],
+                  ['shown', sf ? WHERE[sf.where] || sf.where : '?'],
                   ['laid out', c && c.layout ? `${c.layout.laid.length} segment(s)` : 'not yet']);
     }
     const r = screenRectOf(id);
@@ -430,7 +441,7 @@ function children(id) {
     const e = entries.get(id);
     if (!e) return [];
     if (e.kind === 'block') return [...segmentRows(id, [], I.state(e.el).cache),
-                                    ...footnotesOf(e.el).map(k => summary(sideId(id, k)))];
+                                    ...rootsOf(e.el).map(k => summary(sideId(id, k)))];
     if (e.kind === 'side') return segmentRows(e.block, [], rootCache(e.block, e.root), e.root);
     if (e.kind === 'vgap' || e.kind === 'vpar') {
         const g = gapInfo(id);
@@ -496,14 +507,10 @@ function* segmentsOf(bid) {
         }
     }
     yield* walk(I.state(el).cache, [], null);
-    for (const k of footnotesOf(el)) yield* walk(rootCache(bid, k), [], k);
+    for (const k of rootsOf(el)) yield* walk(rootCache(bid, k), [], k);
 }
-// The streams of a block's document that are footnotes: their numbers
-// (1-based, into Document.streams).
-function footnotesOf(el) {
-    const st = I.state(el);
-    return ((st && st.doc.streams) || []).flatMap((s, k) => (s.kind === 'footnote' ? [k + 1] : []));
-}
+// A block's surfaces, by key.
+const rootsOf = el => surfacesOf(el).map(sf => sf.key);
 
 
 // ── Vertical space ─────────────────────────────────────────────────────────────
@@ -787,10 +794,10 @@ function xmlOf(id, ind = '', out = []) {
         const g = gapInfo(e.gap), p = g && g.parts[e.k];
         if (p) xmlNode(p.n, null, ind, out);
     } else {
-        const tag = e.kind === 'block' ? 'block' : e.kind === 'side' ? 'footnote' : e.kind === 'seg' ? s.type : 'vspace';
+        const tag = e.kind === 'block' ? 'block' : e.kind === 'side' ? 'surface' : e.kind === 'seg' ? s.type : 'vspace';
         const a = e.kind === 'block' ? [['width', num(I.state(e.el).lastWidth * 65536)]]
                 : e.kind === 'seg' ? [['kind', s.type === 'stream' ? s.label.replace(/^stream \((.*)\)$/, '$1') : null]]
-                : e.kind === 'side' ? [['stream', e.root]]
+                : e.kind === 'side' ? (sf => [['instance', sf && sf.instance], ['part', sf && sf.role]])(surfaceOf(e.block, e.root))
                 : [['total', gapInfo(id) ? num(gapInfo(id).totalSp) : null]];
         out.push(`${ind}<${tag}${attrs(a)}>`);
         for (const c of children(id)) xmlOf(c.id, ind + '  ', out);
@@ -1068,12 +1075,14 @@ function nodeAt(x, y) {
     for (const el of I.blocks()) {
         const br = el.getBoundingClientRect();
         const inBlock = !(x < br.left || x > br.right || y < br.top || y > br.bottom);
-        if (!inBlock && !pop) continue;
         const bid = blockId(el);
         for (const sid of segmentsOf(bid)) {
-            if (pop !== (entries.get(sid).root != null)) continue;
             const { s } = segParts(sid);
             if (!shown(s.svg)) continue;
+            // The block's own text where the block is; a surface's wherever it
+            // is drawn; over an open popover, only what is in it.
+            const inPop = !!s.svg.closest('#latex-footnote-pop');
+            if (pop ? !inPop : (entries.get(sid).root == null ? !inBlock : inPop)) continue;
             const sr = s.svg.getBoundingClientRect();
             if (x < sr.left - 2 || x > sr.right + 2 || y < sr.top || y > sr.bottom) continue;
             const g = geometry(sid);
@@ -1139,7 +1148,7 @@ function* gapsOf(bid) {
         }
     }
     yield* walk(I.state(el).cache, [], [bid], null);
-    for (const k of footnotesOf(el)) yield* walk(rootCache(bid, k), [], [bid, sideId(bid, k)], k);
+    for (const k of rootsOf(el)) yield* walk(rootCache(bid, k), [], [bid, sideId(bid, k)], k);
 }
 function pathOfLine(sid, j) {
     return [...segPath(sid), lineId(sid, j)];
@@ -1308,8 +1317,35 @@ function citeEntries() {
     catch { return {}; }
 }
 
+// ── The host API's things (the viewer's reflowtex.host) ─────────────────────
+// Instances – what the companion package makes, and footnotes and margin
+// notes – with their parts; the kinds the page defines; the marks
+// (\webid, \webclass). Keys: inst:BLOCK:s3 (stream 3), w1 (widget of slot 1),
+// t2 (text slot 2); kind:NAME; mark:BLOCK:N.
+const host = () => window.reflowtex && window.reflowtex.host;
+const instancesOf = el => { const h = host(), b = h && h.block && h.block(el); return b ? b.instances() : []; };
+const instLocal = inst => inst.id.slice(inst.id.lastIndexOf('/') + 1);
+const instKey = (bid, inst) => `inst:${bid}:${instLocal(inst)}`;
+const definedKind = kind => (I.kinds ? I.kinds() : []).some(k => k.kind === kind);
+function instNote(inst) {
+    const attrs = Object.entries(inst.attrs).map(([k, v]) => `${k}=${v}`).join(', ');
+    const parts = [...inst.parts.keys()].filter(r => r !== 'body');
+    return [attrs && clip(attrs, 40), parts.length ? `parts ${parts.join(', ')}` : '',
+            definedKind(inst.kind) ? 'drawn by the page' : 'drawn by default'].filter(Boolean).join(' · ');
+}
+// How many glyphs of a document carry each mark.
+function markCounts(doc) {
+    const n = new Map();
+    const walkN = ns => { for (const x of ns || []) { if (x.mark) n.set(x.mark, (n.get(x.mark) || 0) + 1);
+                                                     walkN(x.children); walkN(x.replace); } };
+    for (const para of doc.paragraphs || []) walkN(para.nodes);
+    return n;
+}
+const markLabel = m => [m.id ? `#${m.id}` : '', ...(m.classes || '').split(/\s+/).filter(Boolean).map(c => `.${c}`)].join(' ') || '(empty)';
+
 function resources() {
     const fonts = new Map(), pictures = [], streams = [], links = [], cites = new Map(), anchors = [], slots = [];
+    const instances = [], marks = [], kindUse = new Map();
     const bib = citeEntries();
     I.blocks().forEach((el, bi) => {
         const st = I.state(el);
@@ -1357,6 +1393,17 @@ function resources() {
             slots.push({ key: `slot:${bid}:${i + 1}`, cat: 'slot', label: s.name || `slot ${i + 1}`,
                 note: `${where} · ${s.kind || 'text'}` + (u ? ` · ${u.count} node${u.count === 1 ? '' : 's'}` : '') });
         });
+        for (const inst of instancesOf(el)) {
+            instances.push({ key: instKey(bid, inst), cat: 'inst', label: `${inst.kind || 'plain'} (${inst.placement})`,
+                             note: `${where} · ${instNote(inst)}` });
+            kindUse.set(inst.kind, (kindUse.get(inst.kind) || 0) + 1);
+        }
+        const mc = markCounts(doc);
+        (doc.marks || []).forEach((m, i) => {
+            const k = mc.get(i + 1) || 0;
+            marks.push({ key: `mark:${bid}:${i + 1}`, cat: 'mark', label: markLabel(m),
+                         note: `${where} · ${k} glyph${k === 1 ? '' : 's'}` });
+        });
     });
     const range = set => { const b = [...set].sort((x, y) => x - y); return b.length === 1 ? blockLabel(b[0]) : b.length === I.blocks().length && b.length > 2 ? 'every block' : `blocks ${b.join(', ')}`; };
     const fontName = r => (r.file ? r.file.replace(/\.otf$/i, '') : [...r.names][0]) || '';
@@ -1379,7 +1426,10 @@ function resources() {
             return { key: r.key, cat: 'cite', label: `[${r.num}]`,
                      note: `${e && e.title ? clip(e.title, 50) + ' · ' : ''}${r.uses} glyph${r.uses === 1 ? '' : 's'}${r.targets ? ' · entry' : ''} · ${range(r.blocks)}` };
         }),
-        anchors, slots,
+        anchors, slots, instances, marks,
+        kinds: (I.kinds ? I.kinds() : []).map(k => ({ key: `kind:${k.kind}`, cat: 'kind', label: k.kind,
+            note: `${k.inline ? 'inline: measured and drawn in pieces' : 'blocks, margin notes, popovers'} · `
+                  + `${kindUse.get(k.kind) || 0} instance${kindUse.get(k.kind) === 1 ? '' : 's'} on the page` })),
     };
 }
 // How the pipeline served a font (see src/pipeline/fonts/fonts.ts): 'converted', a
@@ -1404,7 +1454,8 @@ function parseKey(key) {
     if (cat === 'font') return { cat, font: rest };
     if (cat === 'glyph') { const j = rest.indexOf(':'); return { cat, cp: +rest.slice(0, j), font: rest.slice(j + 1) }; }
     if (cat === 'cite') return { cat, num: +rest };
-    const [b, k] = rest.split(':').map(Number), e = entries.get(b);
+    if (cat === 'kind') return { cat, name: rest };
+    const [bs, ks] = rest.split(':'), b = Number(bs), k = cat === 'inst' ? ks : Number(ks), e = entries.get(b);
     return e && e.kind === 'block' ? { cat, bid: b, el: e.el, k, doc: I.state(e.el) && I.state(e.el).doc } : null;
 }
 // The node test for a key.
@@ -1421,6 +1472,7 @@ function matcher(key) {
         case 'link': return (n, bid) => bid === p.bid && n.link === p.k;
         case 'anchor': return (n, bid) => bid === p.bid && n.anchor === p.k;
         case 'slot': return (n, bid) => bid === p.bid && n.slot === p.k;
+        case 'mark': return (n, bid) => bid === p.bid && n.mark === p.k;
     }
     return null;
 }
@@ -1461,13 +1513,23 @@ function streamSegs(bid, k) {
         });
     };
     walk(rootCache(bid, null), [], null);
-    for (const f of footnotesOf(entries.get(bid).el)) walk(rootCache(bid, f), [], f);
+    for (const f of rootsOf(entries.get(bid).el)) walk(rootCache(bid, f), [], f);
     return out;
 }
 // The ids of a resource's things on the current layout, in reading order: a
 // font's glyphs, a picture's boxes, a stream's segment or marker, a link's or
 // citation's glyphs.
 function uses(key, limit = Infinity) {
+    // An instance's uses are those of its stream (its segments, its marker)
+    // or its slot; a kind's, those of its instances.
+    const [cat, b, local] = key.split(':');
+    if (cat === 'inst') return uses(local[0] === 's' ? `stream:${b}:${local.slice(1)}` : `slot:${b}:${local.slice(1)}`, limit);
+    if (cat === 'kind') {
+        const out = [];
+        for (const el of I.blocks()) for (const inst of instancesOf(el))
+            if (inst.kind === b && out.length < limit) out.push(...uses(instKey(blockId(el), inst), limit - out.length));
+        return out;
+    }
     const m = matcher(key);
     if (!m) return [];
     const p = parseKey(key), out = p.cat === 'stream' ? streamSegs(p.bid, p.k) : [];
@@ -1492,6 +1554,48 @@ function resource(key) {
     const rows = [], out = { key, cat: p.cat, rows };
     const where = p.el ? blockLabel(I.blocks().indexOf(p.el) + 1) : null;
     const onPage = uses(key).length;
+    if (p.cat === 'inst') {
+        const h = host(), b = h && h.block(p.el), inst = b && b.find(`${b.key}/${p.k}`);
+        if (!inst) return null;
+        out.title = `${inst.kind || 'plain'} · ${where}`;
+        rows.push(['id', inst.id], ['kind', inst.kind || '(none)'], ['placement', inst.placement]);
+        for (const [k, v] of Object.entries(inst.attrs)) rows.push([`${k}=`, v]);
+        if (inst.presentation.classes.length) rows.push(['classes', inst.presentation.classes.join(' ')]);
+        for (const [k, v] of Object.entries(inst.presentation.properties)) rows.push([k, v]);
+        for (const [role, part] of inst.parts) rows.push([`part ${role}`, part.type === 'data' ? `data, ${part.data.length} characters`
+            : `typeset${part.spaceBefore ? `, ${part.spaceBefore.toFixed(1)} px of TeX's space before it` : ''}`]);
+        rows.push(['parent', inst.parent ? `${inst.parent.kind} (${inst.parent.id})` : 'none: the block\'s own text'],
+                  ['children', inst.children.map(c => c.kind).join(', ') || 'none'],
+                  ['drawn by', definedKind(inst.kind) ? 'the page (host.define)' : 'the viewer, by default']);
+        if (inst.spaceBefore) rows.push(['space before', `${inst.spaceBefore.toFixed(1)} px`]);
+        const shownAt = surfacesOf(p.el).filter(sf => sf.instance === inst.id).map(sf => `${sf.role} ${WHERE[sf.where] || sf.where}`);
+        if (shownAt.length) rows.push(['surfaces', shownAt.join('; ')]);
+        const a = inst.anchor();
+        rows.push(['anchor', a ? `(${a.x.toFixed(0)}, ${a.y.toFixed(0)}) on screen` : 'none drawn']);
+        const data = [...inst.parts.values()].find(pt => pt.type === 'data');
+        if (data) { out.text = data.data; out.textIsCode = true; }
+        rows.push(['on the page', `${onPage} use${onPage === 1 ? '' : 's'}`]);
+        return out;
+    }
+    if (p.cat === 'kind') {
+        const def = (I.kinds ? I.kinds() : []).find(k => k.kind === p.name);
+        out.title = `kind ${p.name}`;
+        rows.push(['defined', def ? 'by the page (host.define)' : 'no'], ['measures', def && def.inline ? 'yes: an inline kind' : 'no']);
+        const by = {};
+        for (const el of I.blocks()) for (const inst of instancesOf(el)) if (inst.kind === p.name) by[inst.placement] = (by[inst.placement] || 0) + 1;
+        for (const [pl, n] of Object.entries(by)) rows.push([`${pl} instances`, String(n)]);
+        return out;
+    }
+    if (p.cat === 'mark') {
+        const m = (p.doc.marks || [])[p.k - 1];
+        if (!m) return null;
+        const count = markCounts(p.doc).get(p.k) || 0, h = host(), handle = m.id && h && h.mark ? h.mark(m.id) : null;
+        out.title = `${markLabel(m)} · ${where}`;
+        rows.push(['mark', `${p.k} of the block's ${p.doc.marks.length} (Document.marks)`], ['id', m.id || '(none)'],
+                  ['classes', m.classes || '(none)'], ['glyphs', String(count)]);
+        if (handle) rows.push(['drawn now', `${handle.elements().length} glyph element(s) on ${handle.rects().length} line(s)`]);
+        return out;
+    }
     if (p.cat === 'pic') {
         const pic = (p.doc.pictures || [])[p.k - 1], u = census(p.doc).pictures.get(p.k);
         if (!pic) return null;
@@ -1518,9 +1622,9 @@ function resource(key) {
         for (const it of s.content || []) kinds[it.kind] = (kinds[it.kind] || 0) + 1;
         rows.push(['content', Object.entries(kinds).map(([k, v]) => `${v} ${k}${v === 1 ? '' : 's'}`).join(', ') || 'empty']);
         if (out.footnote) {
-            const fc = rootCache(p.bid, p.k);
-            rows.push(['popover', fc && fc.layout ? (shown(fc.dom && fc.dom.root) ? 'open' : 'closed; laid out when last shown') : 'never opened']);
-            out.side = sideId(p.bid, p.k);
+            const root = popoverRoot(p.bid, p.k), fc = root && rootCache(p.bid, root);
+            rows.push(['popover', fc && fc.layout ? (shown(fc.dom && fc.dom.root) ? 'open' : 'laid out, not shown') : 'not open']);
+            if (root) out.side = sideId(p.bid, root);
         }
         out.text = s.text ? s.text : streamText(p.doc, s);
         out.textIsCode = !!s.text;
@@ -1748,12 +1852,104 @@ async function fontGlyphs(fontKey) {
     return out;
 }
 
+// A computed colour (rgb(), rgba(), color(srgb …)) as #rrggbb, or as it is.
+function toHex(c) {
+    const n = (c.match(/[\d.]+/g) || []).map(Number);
+    if (n.length < 3) return c;
+    const srgb = /^color\(srgb/.test(c), k = srgb ? 255 : 1;
+    const hx = v => Math.round(Math.max(0, Math.min(255, v * k))).toString(16).padStart(2, '0');
+    const alpha = srgb ? n[3] : n[3];
+    return '#' + hx(n[0]) + hx(n[1]) + hx(n[2]) + (alpha !== undefined && alpha < 1 ? hx(alpha * (srgb ? 1 : 255)) : '');
+}
+
+// The page's colour maps (#latex-color-maps): each map's colours per theme,
+// its tints, the blocks that use it, and each colour as it is shown now – read
+// from a probe in such a block, so the page's current theme is what counts.
+// The maps in force come from the viewer (host.colorMaps), which the edits
+// below change live (host.setColorMaps); the page's own, from its island,
+// are kept for Reset.
+function islandMaps() {
+    const island = document.getElementById('latex-color-maps');
+    try { return island ? JSON.parse(island.textContent) : {}; } catch { return {}; }
+}
+let originalMaps = null;
+function currentMaps() {
+    const h = host();
+    if (originalMaps === null) originalMaps = islandMaps();
+    return h && h.colorMaps ? h.colorMaps() : islandMaps();
+}
+function applyMaps(maps) {
+    const h = host();
+    if (!h || !h.setColorMaps) return 'this viewer cannot change its colour maps';
+    h.setColorMaps(maps);
+    return 'ok';
+}
+const HEX = /^#[0-9a-f]{6}$/i;
+// One theme's colour for a TeX colour: value a CSS colour, or null to drop it.
+function setMapColour(name, theme, src, value) {
+    if (!HEX.test(src)) return 'a TeX colour is #rrggbb';
+    const maps = currentMaps(), m = maps[name] = maps[name] || {};
+    const cols = m.colors = m.colors || {}, t = cols[theme] = cols[theme] || {};
+    if (value === null || value === '') delete t[src.toLowerCase()];
+    else t[src.toLowerCase()] = String(value);
+    return applyMaps(maps);
+}
+// A tint: baked hex → [base, percent]; null to drop it.
+function setMapTint(name, hex, base, pct) {
+    if (!HEX.test(hex)) return 'a tint is #rrggbb';
+    const maps = currentMaps(), m = maps[name] = maps[name] || {};
+    const tints = m.tints = m.tints || {};
+    if (base === null) delete tints[hex.toLowerCase()];
+    else { if (!HEX.test(base)) return 'a base is #rrggbb'; tints[hex.toLowerCase()] = [base.toLowerCase(), Math.max(0, Math.min(100, +pct || 0))]; }
+    return applyMaps(maps);
+}
+// Every map at once, from JSON as the island has it.
+function importColourMaps(json) {
+    let maps;
+    try { maps = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return `not JSON: ${e.message}`; }
+    if (!maps || typeof maps !== 'object' || Array.isArray(maps)) return 'expected { "name": { "colors": …, "tints": … } }';
+    for (const [n, m] of Object.entries(maps)) if (!m || typeof m !== 'object') return `map ${n} is not an object`;
+    return applyMaps(maps);
+}
+const exportColourMaps = () => JSON.stringify(currentMaps(), null, 2);
+const resetColourMaps = () => applyMaps(originalMaps === null ? islandMaps() : originalMaps);
+
+function colourMaps() {
+    const maps = currentMaps();
+    const blocks = I.blocks();
+    const theme = document.documentElement.getAttribute('data-theme')
+        || ['dark', 'sepia', 'contrast'].find(t => document.documentElement.classList.contains(t)) || 'light';
+    const out = Object.entries(maps).map(([name, map]) => {
+        const users = blocks.filter(el => el.dataset.colorMap === name);
+        const probeIn = users[0] || null;
+        const now = hex => {
+            if (!probeIn) return null;
+            const p = document.createElement('span');
+            p.style.color = `var(--latex-color-${hex.slice(1)}, ${hex})`;
+            probeIn.appendChild(p);
+            const c = getComputedStyle(p).color;
+            p.remove();
+            return toHex(c);
+        };
+        // Light first (a colour the map leaves alone is shown as TeX set it),
+        // then the map's themes, and the page's own, to edit it there too.
+        const themes = [...new Set(['light', ...Object.keys(map.colors || {}), theme])];
+        const srcs = [...new Set(themes.flatMap(t => Object.keys((map.colors || {})[t] || {})))].sort();
+        return {
+            name, themes, used: users.map(el => blockLabel(blocks.indexOf(el) + 1)),
+            colors: srcs.map(src => ({ src, by: Object.fromEntries(themes.map(t => [t, ((map.colors || {})[t] || {})[src] ?? null])), now: now(src) })),
+            tints: Object.entries(map.tints || {}).map(([hex, [base, pct]]) => ({ hex, base, pct, now: now(hex) })),
+        };
+    });
+    return { theme, maps: out, edited: JSON.stringify(maps) !== JSON.stringify(originalMaps ?? maps) };
+}
+
 // Open a footnote's popover, as its marker does when clicked: 'ok', or
 // 'wait' while the marker is off screen (scrolled to, it is painted soon).
 function openPopover(key) {
     const p = parseKey(key);
     if (!p || p.cat !== 'stream') return 'none';
-    const fc = rootCache(p.bid, p.k);
+    const root = popoverRoot(p.bid, p.k), fc = root && rootCache(p.bid, root);
     if (fc && fc.dom && shown(fc.dom.root)) return 'ok';
     const id = uses(key).find(i => entries.get(i).kind === 'node');
     if (id == null) return 'none';
@@ -1793,7 +1989,7 @@ window.__rtxInspector = {
     // footnote's popover.
     resources, resource, uses, fontGlyphs, pathTo,
     mark(ids) { marked = ids || []; redraw(); },
-    openPopover,
+    openPopover, colourMaps, setMapColour, setMapTint, importColourMaps, exportColourMaps, resetColourMaps,
 };
 // Where the page stops being visible: the window's bottom, or the top of an
 // inspector docked there (which publishes its height as --rtx-dock-bottom).

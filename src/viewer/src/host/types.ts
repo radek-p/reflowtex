@@ -72,6 +72,14 @@ export interface Instance {
     setText(text: string | null): void;
 }
 
+/** A colour map: per theme, the colours TeX produced (#rrggbb) → what that
+ *  theme shows (any CSS colour); and tints, colours TeX baked by mixing a
+ *  base into white → [base, percent], mixed again against the page. */
+export interface ColorMap {
+    colors?: Record<string, Record<string, string>>;
+    tints?: Record<string, [string, number]>;
+}
+
 export interface MarkHandle {
     readonly id: string;
     /** Its glyphs' elements, in drawing order. */
@@ -295,6 +303,14 @@ export interface Host {
      *  drawing them again, those already drawn. Returns what undefines it
      *  (the kind is then drawn by default again). */
     define(kind: string, def: KindDef): () => void;
+    /** The kinds the page defines now, by name. */
+    kinds(): string[];
+    /** The colour maps in force (the page's #latex-color-maps island, or
+     *  what setColorMaps last gave): name → map, as the island's JSON. */
+    colorMaps(): Record<string, ColorMap>;
+    /** Replace them: every block with data-color-map follows at once (the
+     *  colours are CSS custom properties; nothing is laid out again). */
+    setColorMaps(maps: Record<string, ColorMap>): void;
     /** Show `text` in every \webtext{name}{…}, in every block (null: the
      *  defaults again). */
     setText(name: string, text: string | null): void;

@@ -176,6 +176,8 @@ export class SurfaceImpl implements Surface {
     }
 
     edges(): Edges { return edgesOf(this.cache); }
+    /** For the inspector (inspect.surfaces): the layout this surface keeps. */
+    get layoutCache() { return this.cache; }
     /** Every segment, on screen or not (print). */
     paintAll() { if (!this.disposed) paintDocument(this.part.data.fontInfo, this.cache); }
     get isDisposed() { return this.disposed; }

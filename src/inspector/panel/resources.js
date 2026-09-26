@@ -13,6 +13,7 @@ import { FontDetails } from './font.js';
 import { setView } from './app.js';
 
 const CATS = [['fonts', 'Fonts · originals'], ['modifiedFonts', 'Fonts · modified by Reflow TeX'], ['pictures', 'Pictures'],
+              ['instances', 'Instances'], ['kinds', 'Kinds the page defines'], ['marks', 'Marks'],
               ['streams', 'Streams'], ['links', 'Links'], ['citations', 'Citations'], ['anchors', 'Anchors'], ['slots', 'Slots']];
 
 export const resData = signal(null);           // the agent's list, by kind
@@ -203,7 +204,10 @@ function Resource({ rkey, d }) {
     const svgFile = d.svg && `<svg xmlns="http://www.w3.org/2000/svg" width="${d.svg.vb_w}pt" height="${d.svg.vb_h}pt" viewBox="0 0 ${d.svg.vb_w} ${d.svg.vb_h}">${d.svg.markup}</svg>`;
     const itsBoxes = async () => {
         await openPopover(rkey);
-        const path = await call('pathTo', d.side);
+        // the popover's surface exists once it is open: its row, read again
+        const fresh = await call('resource', rkey), side = got(fresh) && fresh.side;
+        if (!side) return;
+        const path = await call('pathTo', side);
         if (got(path)) { setView('tree'); await refresh(); await reveal(path, { openLast: true }); }
     };
     return html`

@@ -10,9 +10,10 @@ import { SP_TO_PX } from '../engine/core.js';
 import { normalise, walk, matches, type AnchorSource, type Doc, type DocStream, type InstanceImpl } from './instances.ts';
 import { TypesetPartImpl, type BlockData } from './surface.ts';
 import './block-hosts.ts';
-import { defineKind } from './kinds.ts';
+import { defineKind, definedKinds } from './kinds.ts';
 import { setSlotText } from './slots.js';
 import { markHandle } from './marks.ts';
+import { getColorMaps, setColorMaps } from '../runtime/colour.js';
 import { destroyBlock, mountBlock } from '../runtime/init.js';
 import { blockData } from '../runtime/blocks.js';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
@@ -97,8 +98,11 @@ const blockListeners = new Set<(b: Block) => void>();
 export const host: Host = {
     version: 1,
     define: defineKind,
+    kinds: () => definedKinds().map(k => k.kind),
     setText: (name, text) => setSlotText(name, text),
     mark: id => markHandle(id),
+    colorMaps: () => getColorMaps(),
+    setColorMaps: maps => setColorMaps(maps),
     blocks: () => blocks.slice(),
     block: el => blocks.includes(byEl.get(el) as BlockImpl) ? byEl.get(el) : undefined,
     instances: query => blocks.flatMap(b => b.instances(query)),

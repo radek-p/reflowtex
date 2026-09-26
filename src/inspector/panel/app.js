@@ -11,9 +11,11 @@ import { IconButton, IconPick, IconClose, IconCheck, IconDock, Caret, MenuBox, t
 import { SIDES, SIDE_TITLES, side, embedded, panelStyle, setDock, applyDock, chosenDock, setPageDock, startMove, startSize, resized } from './dock.js';
 import { Tree, Details, RowMenu, selected, refresh, reveal, forgetSelection } from './tree.js';
 import { ResourceList, ResourceDetails, loadResources, markUses, resSel, forgetResources } from './resources.js';
+import { ColourView, loadColours } from './colours.js';
 
 const TABS = [['tree', 'Boxes', 'Blocks, lines, boxes and glue'],
-              ['res', 'Resources', 'Fonts and their glyphs, pictures, streams (footnotes, popovers), links, citations, anchors, slots']];
+              ['res', 'Resources', 'Fonts and their glyphs, pictures, instances, kinds, marks, streams (footnotes, popovers), links, citations, anchors, slots'],
+              ['col', 'Colours', "The page's colour maps: each TeX colour as each theme shows it, and as shown now"]];
 // The page overlays, in the Overlays menu: [key, label, what it draws].
 const OVERLAYS = [
     ['baselines', 'Baselines', 'The baseline of every line'],
@@ -33,6 +35,7 @@ export function setView(v) {
     keep('view', v, plain);
     const focus = el => requestAnimationFrame(() => el && el.focus({ preventScroll: true }));
     if (v === 'res') { call('select', null); focus(refs.rbody); return loadResources(); }
+    if (v === 'col') { call('select', null); return loadColours(); }
     call('mark', null);
     if (selected.value != null) call('select', selected.value, { scroll: false });
     focus(refs.tree);
@@ -145,7 +148,7 @@ function Panel() {
             data-view=${view.value} data-edge=${emb || s === 'float' ? undefined : s} style=${panelStyle}
             onPointerMove=${() => setShowSel(false)} onPointerDownCapture=${onPointerDownCapture} onKeyDownCapture=${onKeyDownCapture}>
         <${Toolbar}/>
-        <div class="main"><${Tree}/><${Details}/><${ResourceList}/><${ResourceDetails}/></div>
+        <div class="main"><${Tree}/><${Details}/><${ResourceList}/><${ResourceDetails}/><${ColourView}/></div>
         <${Foot}/>
         <div class="grip" aria-hidden="true" onPointerDown=${startSize}></div>
         <${Menus}/>

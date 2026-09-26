@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 ade52082e93ab66caa7c25e657b5785313c767fd88bfd4e000c11d61d97da04d
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 1810fbc2c908844dff2bf6b8c66fa1b32487cf18e7eeff68b4ebf8567b888890
 'use strict';
 "use strict";
 (() => {
@@ -974,6 +974,7 @@
   var kinds = /* @__PURE__ */ new Map();
   var listeners = /* @__PURE__ */ new Set();
   var kindDef = (kind) => kinds.get(kind);
+  var definedKinds = () => [...kinds].map(([kind, def]) => ({ kind, inline: typeof def.measure === "function" }));
   function onKindChange(fn) {
     listeners.add(fn);
   }
@@ -1322,6 +1323,19 @@
     return `var(--latex-color-${c.slice(1)}, ${c})`;
   }
   var colorMapsInstalled = false;
+  var currentMaps = {};
+  var mapStyle = null;
+  function getColorMaps() {
+    return JSON.parse(JSON.stringify(currentMaps));
+  }
+  function setColorMaps(maps) {
+    currentMaps = JSON.parse(JSON.stringify(maps || {}));
+    if (!mapStyle) {
+      mapStyle = document.createElement("style");
+      document.head.appendChild(mapStyle);
+    }
+    mapStyle.textContent = colorMapCss(currentMaps);
+  }
   function installColorMaps() {
     if (colorMapsInstalled) return;
     colorMapsInstalled = true;
@@ -1334,6 +1348,10 @@
         console.error("[latex-viewer] malformed #latex-color-maps JSON", e);
       }
     }
+    setColorMaps(maps);
+    document.documentElement.setAttribute("data-latex-viewer", BUILD);
+  }
+  function colorMapCss(maps) {
     let css = ":root { --latex-color-ffffff: var(--latex-page-bg, Canvas); }\n";
     for (const [name, map] of Object.entries(maps)) {
       const sel = `.latex-block[data-color-map=${JSON.stringify(name)}]`;
@@ -1358,10 +1376,7 @@
       if (tintDecls.length) css += sel + " {\n" + tintDecls.join("\n") + "\n}\n";
     }
     css += "html .latex-block svg text, html .latex-block svg tspan { fill: var(--latex-color-000000, currentColor); }\n";
-    const s = document.createElement("style");
-    s.textContent = css;
-    document.head.appendChild(s);
-    document.documentElement.setAttribute("data-latex-viewer", BUILD);
+    return css;
   }
 
   // src/runtime/visibility.js
@@ -3904,6 +3919,10 @@
     edges() {
       return edgesOf(this.cache);
     }
+    /** For the inspector (inspect.surfaces): the layout this surface keeps. */
+    get layoutCache() {
+      return this.cache;
+    }
     /** Every segment, on screen or not (print). */
     paintAll() {
       if (!this.disposed) paintDocument(this.part.data.fontInfo, this.cache);
@@ -4042,8 +4061,11 @@
   var host = {
     version: 1,
     define: defineKind,
+    kinds: () => definedKinds().map((k) => k.kind),
     setText: (name, text) => setSlotText(name, text),
     mark: (id) => markHandle(id),
+    colorMaps: () => getColorMaps(),
+    setColorMaps: (maps) => setColorMaps(maps),
     blocks: () => blocks.slice(),
     block: (el) => blocks.includes(byEl.get(el)) ? byEl.get(el) : void 0,
     instances: (query) => blocks.flatMap((b) => b.instances(query)),
@@ -4323,6 +4345,8 @@
 
   // src/host/inspect.js
   var inspectable = /* @__PURE__ */ new Set();
+  var surfaceKeys = /* @__PURE__ */ new WeakMap();
+  var surfaceSeq = 0;
   api.inspect = {
     version: 1,
     spToPx: SP_TO_PX,
@@ -4332,6 +4356,16 @@
     get paints() {
       return paintCount;
     },
+    surfaces(el) {
+      return [...surfacesOf(el)].filter((s) => !s.isDisposed).map((s) => {
+        let key = surfaceKeys.get(s);
+        if (!key) surfaceKeys.set(s, key = `u${++surfaceSeq}`);
+        const where = s.el.closest("#latex-footnote-pop") ? "popover" : s.el.closest(".latex-margin") ? "margin" : "page";
+        const i = s.part.instance;
+        return { key, cache: s.layoutCache, instance: i.id, kind: i.kind, role: s.part.role, el: s.el, where };
+      });
+    },
+    kinds: () => definedKinds(),
     replay(el, i, sink, cache) {
       const data = blockData.get(el);
       cache = cache || data && data.cache;

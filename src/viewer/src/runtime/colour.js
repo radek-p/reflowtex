@@ -57,6 +57,22 @@ export function colorFill(c) {
 }
 
 export let colorMapsInstalled = false;
+// The maps in force (the page's island, or what setColorMaps last gave) and
+// the stylesheet made of them, rebuilt in place when they change.
+let currentMaps = {};
+let mapStyle = null;
+
+/** The colour maps in force, as the island's JSON has them (a copy). */
+export function getColorMaps() { return JSON.parse(JSON.stringify(currentMaps)); }
+
+/** Replace the colour maps in force (host.setColorMaps): the page's colours
+ *  follow at once, with no layout – they are CSS custom properties. */
+export function setColorMaps(maps) {
+    currentMaps = JSON.parse(JSON.stringify(maps || {}));
+    if (!mapStyle) { mapStyle = document.createElement('style'); document.head.appendChild(mapStyle); }
+    mapStyle.textContent = colorMapCss(currentMaps);
+}
+
 export function installColorMaps() {
     if (colorMapsInstalled) return;
     colorMapsInstalled = true;
@@ -66,6 +82,11 @@ export function installColorMaps() {
         try { maps = JSON.parse(island.textContent); }
         catch (e) { console.error('[latex-viewer] malformed #latex-color-maps JSON', e); }
     }
+    setColorMaps(maps);
+    document.documentElement.setAttribute('data-latex-viewer', BUILD);
+}
+
+function colorMapCss(maps) {
 
     // TeX has no notion of the page's colour, so a flat white fill in a
     // TikZ/PDF picture (the paper, not a deliberate colour choice) needs to
@@ -119,8 +140,5 @@ export function installColorMaps() {
     // coloured shape in the drawing as text.
     css += 'html .latex-block svg text, html .latex-block svg tspan '
          + '{ fill: var(--latex-color-000000, currentColor); }\n';
-    const s = document.createElement('style');
-    s.textContent = css;
-    document.head.appendChild(s);
-    document.documentElement.setAttribute('data-latex-viewer', BUILD);
+    return css;
 }

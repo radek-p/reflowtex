@@ -17,9 +17,11 @@ The project's website includes it on every page. Press **Alt+Shift+I**
 - **Tree.** Expand a block to its segments (text, display, stream – a
   stream's own segments sit below it), a segment to its lines, a line to its
   nodes, a box to its children, and a discretionary to its replace list.
-  A block's footnotes follow its segments, as *footnote n (popover)*: once
-  its popover has been opened, the body the viewer laid out there, segment by
-  segment, like the rest.
+  A block's *surfaces* follow its segments: the parts of its instances laid
+  out elsewhere – a footnote's body in its popover, a margin note, a pane or
+  a Lean part a companion component drew – each as *kind · part (where)*,
+  segment by segment, like the rest. Pick finds their nodes wherever they
+  are drawn.
   Each row sums up its node:
   - a box: `w × h + d`, its shift and its glue setting;
   - a glue: its specification, its TeX name and the width it was set to on
@@ -125,10 +127,35 @@ collapsed. While the filter has text, every kind with a match is expanded.
   as its marker does, pinned. **Its boxes** shows the popover's boxes and
   glue in the Boxes view. Clicks in the panel do not reach the page, so a
   pinned popover stays open while you inspect it.
+- **Instances**: everything the host API knows of (`reflowtex.host`): each
+  instance's kind, placement, parameters, parts, parent and children,
+  whether a kind the page defines draws it, the surfaces it is shown in, and
+  its data part (a Lean block's code). Hovering outlines its text.
+- **Kinds the page defines** (`host.define`): each with whether it measures
+  (an inline kind) and its instances on the page.
+- **Marks**: each `\webid` and `\webclass`, with its glyphs; hovering
+  outlines them.
 - **Links, citations, anchors, slots.** Each `\ref` (with whether its label
   is on this page), URL and `\webaction`; each `\lrcite` number, with its
   entry from the page's `#lr-citations`; each `\label`; each `\webtext`
   and `\webwidget` slot.
+
+## Colours
+
+The **Colours** tab shows the page's colour maps (`#latex-color-maps`) at
+once: for each map, a row per colour TeX produced and a column per theme,
+with what that theme shows instead (the page's theme marked), what it is
+shown as now, and the tints (colours TeX mixed into white, mixed again
+against the page).
+
+It edits them live. Each cell has a colour picker and a field for any CSS
+colour (empty or × drops the mapping); a TeX colour or a tint can be added;
+tints take their base and percentage. Every change applies at once, through
+the viewer's `host.setColorMaps` – the colours are CSS custom properties, so
+nothing is laid out again. **Export** copies the maps as the island's JSON
+and downloads them (`color-maps.json`), **Import file** and **Paste JSON**
+replace them, and **Reset** brings back the page's own. Nothing is saved to
+the site's files: paste the export into the site's colour map to keep it.
 
 The panel floats over the page, or docks to the left, right or bottom edge
 of the window: the four dock icons in the toolbar's corner choose (folded

@@ -5,6 +5,8 @@ import { SP_TO_PX, useGlyphMetrics } from '../engine/core.js';
 import { paintCount, renderNodes } from '../engine/paint.js';
 import { blockData } from '../runtime/blocks.js';
 import { api } from '../runtime/page.js';
+import { surfacesOf } from './surface.ts';
+import { definedKinds } from './kinds.ts';
 // ── end of imports
 
 // ── Inspection ───────────────────────────────────────────────────────────────
@@ -18,6 +20,14 @@ import { api } from '../runtime/page.js';
 //   spToPx                  scaled points → the svg user units below
 //   paints                  a counter, bumped by every segment paint: a tool
 //                           polls it to notice a reflow
+//   surfaces(el)            the parts of el's instances laid out elsewhere
+//                           (host API surfaces: a popover's footnote, a margin
+//                           note, a pane a component drew): { key, cache,
+//                           instance, kind, role, el, where } – key stable for
+//                           the surface's life, where 'popover' | 'margin' |
+//                           'page'. Their caches replay like the block's.
+//   kinds()                 the kinds the page defines (host.define), with
+//                           whether each measures (inline) – for listing.
 //   replay(el, i, sink[, cache])
 //                           re-runs the drawing of segment i of `cache` (the
 //                           block's own by default; a stream's nested one,
@@ -30,12 +40,24 @@ import { api } from '../runtime/page.js';
 //                           no lines yet (a stream, or a layout deferred until
 //                           it scrolls near).
 export const inspectable = new Set();
+const surfaceKeys = new WeakMap();
+let surfaceSeq = 0;
 api.inspect = {
     version: 1,
     spToPx: SP_TO_PX,          // scaled points → svg user units
     blocks: () => [...inspectable].filter(el => el.isConnected),
     state: el => blockData.get(el),
     get paints() { return paintCount; },
+    surfaces(el) {
+        return [...surfacesOf(el)].filter(s => !s.isDisposed).map(s => {
+            let key = surfaceKeys.get(s);
+            if (!key) surfaceKeys.set(s, key = `u${++surfaceSeq}`);
+            const where = s.el.closest('#latex-footnote-pop') ? 'popover' : s.el.closest('.latex-margin') ? 'margin' : 'page';
+            const i = s.part.instance;
+            return { key, cache: s.layoutCache, instance: i.id, kind: i.kind, role: s.part.role, el: s.el, where };
+        });
+    },
+    kinds: () => definedKinds(),
     replay(el, i, sink, cache) {
         const data = blockData.get(el);
         cache = cache || (data && data.cache);

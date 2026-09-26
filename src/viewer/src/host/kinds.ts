@@ -10,6 +10,9 @@ const listeners = new Set<(kind: string) => void>();
 
 export const kindDef = (kind: string): KindDef | undefined => kinds.get(kind);
 
+/** The kinds defined, with whether each measures (an inline kind). */
+export const definedKinds = () => [...kinds].map(([kind, def]) => ({ kind, inline: typeof def.measure === 'function' }));
+
 export function onKindChange(fn: (kind: string) => void): void { listeners.add(fn); }
 
 function changed(kind: string) {
