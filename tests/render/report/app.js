@@ -536,25 +536,43 @@ function App() {
     // The inspector: one panel, in this page, docked or floating as the
     // inspector does anywhere; it inspects the live page, whichever test is
     // shown.
+    // Whether it is open is remembered in this browser (render-report.inspector),
+    // and it opens again with the report; where it is, and its size, the
+    // inspector remembers itself.
+    const modeRef = useRef(mode);
+    modeRef.current = mode;
+    const openInspector = async (win, block) => {
+        const api = inspector();
+        if (!api) return;
+        await api.inspect(win);
+        await api.open(block, { dock: 'auto', scroll: false });
+        inspectorUsed.current = true;
+        setInspecting(true);
+        store('inspector', 'open');
+    };
     const onPage = (win, block) => {
         page.current = [win, block];
         marks.frame(win);
-        if (inspectorUsed.current) inspector()?.inspect(win);
+        if (stored('inspector', 'closed') === 'open') openInspector(win, block);
+        else if (inspectorUsed.current) inspector()?.inspect(win);
     };
     const toggleInspector = async () => {
         const api = inspector();
         if (!api) return;
-        if (await api.isOpen()) { api.close(); setInspecting(false); return; }
-        if (mode !== 'live') { setMode('live'); return; }     // opened by onPage when it is there
+        if (await api.isOpen()) { api.close(); setInspecting(false); store('inspector', 'closed'); return; }
+        if (mode !== 'live') { store('inspector', 'open'); setMode('live'); return; }     // opened by onPage when it is there
         const [win, block] = page.current ?? [];
-        if (!win) return;
-        inspectorUsed.current = true;
-        await api.inspect(win);
-        await api.open(block, { dock: 'auto', scroll: false });
-        setInspecting(true);
+        if (win) openInspector(win, block);
     };
     useEffect(() => {                                     // (it has its own close button)
-        const t = setInterval(async () => { const api = inspector(); if (api && inspectorUsed.current) setInspecting(await api.isOpen()); }, 500);
+        const t = setInterval(async () => {
+            const api = inspector();
+            if (!api || !inspectorUsed.current) return;
+            const open = await api.isOpen();
+            setInspecting(open);
+            // (the snapshot closes it for the time being: back on the live page, it opens again)
+            if (modeRef.current === 'live') store('inspector', open ? 'open' : 'closed');
+        }, 500);
         return () => clearInterval(t);
     }, []);
     const setSide = m => { setMode(m); if (m !== 'live' && inspecting) { inspector()?.close(); setInspecting(false); } };

@@ -114,10 +114,11 @@ area's size and place in pt, and the pointer's; a click or Esc clears it.
 The PDF side is MuPDF's drawing of `pageless.pdf` as SVG – vectors, sharp
 at any zoom – made by the same library that reads TeX's glyph positions for
 the comparison. The browser's side (its heading switches it) is the **live
-page**, the site the test
-built, laid out as `dom-dump.ts` laid it out, and **Inspect** opens the
-inspector on it (Alt+Shift+I). There is one inspector: it docks left, right
-or bottom, or floats, as on any page, and follows from test to test.
+page**, the site the test built, laid out as `dom-dump.ts` laid it out, and
+**Inspect** opens the inspector on it (Alt+Shift+I). There is one
+inspector: it docks left, right or bottom, or floats, as on any page, and
+follows from test to test. If it was open, it opens again with the report,
+where it was (this browser remembers).
 **Snapshot** shows instead the screenshot the test took.
 
 What it reads is written by every run: `result.json` in each width's
