@@ -178,20 +178,35 @@ end
 -- Stack state is file-level: it persists across paragraphs, which are
 -- captured in document order, so colours opened in one paragraph carry into
 -- the next exactly as they do in the PDF.
-local color_stack   = {}
-local current_color = nil
+--
+-- There is more than one stack. The first, 0, is the page's colour stack,
+-- which color/xcolor use; packages create others for graphics state that must
+-- nest the same way – `transparent` pushes "/TRP.5 gs" on stack 1, TikZ's
+-- opacity likewise. Each stack is kept apart, and only stack 0 gives the
+-- text colour: taken as one stack, a transparency push read as "no colour"
+-- and reset red text to the default until its pop. (Opacity itself is not
+-- carried: the schema has no field for it yet.)
+local TEXT_COLOR_STACK = 0
+local color_stacks  = {}    -- stack number → { saved = {…}, current = colour or nil }
+local current_color = nil   -- stack 0's colour: what glyphs and rules are painted with
 
 local function handle_colorstack(n)
-    if n.command == 1 then          -- push
-        color_stack[#color_stack + 1] = current_color or false
-        current_color = parse_pdf_color(n.data)
-    elseif n.command == 2 then      -- pop
-        local top = color_stack[#color_stack]
-        if #color_stack > 0 then color_stack[#color_stack] = nil end
-        current_color = top or nil
-    elseif n.command == 0 then      -- set
-        current_color = parse_pdf_color(n.data)
+    local st = color_stacks[n.stack]
+    if not st then
+        st = { saved = {}, current = nil }
+        color_stacks[n.stack] = st
     end
+    if n.command == 1 then          -- push
+        st.saved[#st.saved + 1] = st.current or false
+        st.current = parse_pdf_color(n.data)
+    elseif n.command == 2 then      -- pop
+        local top = st.saved[#st.saved]
+        if #st.saved > 0 then st.saved[#st.saved] = nil end
+        st.current = top or nil
+    elseif n.command == 0 then      -- set
+        st.current = parse_pdf_color(n.data)
+    end
+    if n.stack == TEXT_COLOR_STACK then current_color = st.current end
 end
 
 -- ── Pictures ──────────────────────────────────────────────────────────────
@@ -486,6 +501,49 @@ for subtype, name in pairs(node.whatsits()) do WH[name] = subtype end
 local WH_SETMATRIX = assert(WH.pdf_setmatrix, "no pdf_setmatrix whatsit subtype")
 local WH_SAVE      = assert(WH.pdf_save,      "no pdf_save whatsit subtype")
 local WH_RESTORE   = assert(WH.pdf_restore,   "no pdf_restore whatsit subtype")
+local WH_COLORSTACK = assert(WH.pdf_colorstack, "no pdf_colorstack whatsit subtype")
+
+-- ── Colour set between paragraphs ─────────────────────────────────────────
+-- A colour change written in vertical mode (\color{blue} between two
+-- paragraphs, or at the top of a minipage) is a whatsit on a vertical list,
+-- which the paragraph capture never walks; left alone, the text after it
+-- came out in the previous colour. Such whatsits are applied in document
+-- order as they come past: on the main vertical list by capture_flow (TeX
+-- runs the page builder as each paragraph starts, so that is before the
+-- paragraph is captured), and inside a box by capture_paragraph, from the
+-- vertical lists still being built around it. Every colour whatsit is applied
+-- once, wherever it is met, and then marked.
+local COLOR_SEEN_ATTR = 916
+
+local function apply_color_whatsit(n)
+    if node.get_attribute(n, COLOR_SEEN_ATTR) then return end
+    node.set_attribute(n, COLOR_SEEN_ATTR, 1)
+    handle_colorstack(n)
+end
+
+local VERTICAL_MODE = 1
+for value, name in pairs(tex.getmodevalues and tex.getmodevalues() or {}) do
+    if name == "vertical" then VERTICAL_MODE = value end
+end
+
+local function apply_vertical_colors(head)
+    for n in node.traverse(head) do
+        if n.id == node.id("whatsit") and n.subtype == WH_COLORSTACK then
+            apply_color_whatsit(n)
+        end
+    end
+end
+
+-- The vertical lists open around the paragraph being captured, outermost
+-- first (internal vertical mode is the negative of the mode value).
+local function apply_enclosing_colors()
+    for i = 0, tex.nest.ptr do
+        local nest = tex.nest[i]
+        if nest and math.abs(nest.mode or 0) == VERTICAL_MODE then
+            apply_vertical_colors(nest.head)
+        end
+    end
+end
 
 local function parse_matrix(data)
     if not data then return nil end
@@ -537,10 +595,10 @@ local function serialize_nodelist(head)
                 end
             end
 
-        elseif t == "whatsit" and n.stack ~= nil and n.command ~= nil then
+        elseif t == "whatsit" and n.subtype == WH_COLORSTACK then
             -- pdf_colorstack whatsit: update colour state; nothing to emit
             -- (the resolved colour is baked into glyph/rule nodes).
-            handle_colorstack(n)
+            apply_color_whatsit(n)
 
         elseif t == "glyph" then
             note_font(n.font)
@@ -819,6 +877,7 @@ local function skip_width(name)
 end
 
 local function capture_paragraph(head, groupcode)
+    apply_enclosing_colors()
     local idx = #all_paragraphs + 1
     local indent, width = para_band()
     local ls, rs = skip_width("leftskip"), skip_width("rightskip")
@@ -905,6 +964,9 @@ local function capture_flow()
     local trailing_sp = 0
     local in_tail = false
     for n in node.traverse(head) do
+        if n.id == node.id("whatsit") and n.subtype == WH_COLORSTACK then
+            apply_color_whatsit(n)     -- see "Colour set between paragraphs"
+        end
         -- Held-over material can be offered again after an explicit page break.
         -- Stamp the original so the pageless copy contains every node once.
         if not node.get_attribute(n, FLOW_ATTR) then
