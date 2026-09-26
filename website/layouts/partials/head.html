@@ -647,6 +647,54 @@
   .home-menu button:hover, .home-menu button:focus-visible {
     background: color-mix(in srgb, var(--lt-primary) 12%, transparent); outline: none; }
   .home-menu .tick { width: 1em; color: var(--lt-primary); }
+  /* ── Home as a document (content/home-draft.md) ─────────────────────────
+     One LaTeX document, block after block: no cards or tints, and the
+     space between blocks is TeX's own, so the blocks read as one text.
+     The measure of any prose in the column (46rem): with the sidebar where
+     it is on every page, that column is centred in a wide window. */
+  .docs-layout #lt-content > .home-doc { max-width: 46rem; }
+  .home-doc #lt-content .latex-block, #lt-content .home-doc .latex-block { margin: .6rem 0; }
+  /* A batch is cut into blocks without the space between them, so a block
+     that opens with \section loses the space above the heading. Put back
+     article's 3.5ex (15pt; the viewer sets a TeX point at 0.125em). */
+  #lt-content .home-doc .latex-block.opens-section { margin-top: 1.88em; }
+  .home-doc-cta { display: flex; gap: .7rem; flex-wrap: wrap; justify-content: center; margin: 1.25rem 0 1.5rem; }
+  .home-doc-cta a {
+    padding: .45rem 1rem; border-radius: 999px; text-decoration: none; color: inherit;
+    font: 500 14px/1.2 ui-sans-serif, system-ui, sans-serif;
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  }
+  .home-doc-cta a:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  .home-doc-cta a.primary { background: var(--lt-primary); color: #fff; border-color: transparent; }
+  html.dark .home-doc-cta a.primary { color: #0c0a09; }
+  .home-doc-cta a.primary:hover { background: var(--lt-primary-strong); }
+  /* The paragraph to drag: no field, only its right edge, a hairline
+     that is always faintly there. */
+  .resizer.home-doc-resizer { padding: 0; margin: .6rem 0 1rem; background: none; }
+  #lt-content .home-doc-resizer .latex-block { margin: 0; }
+  .home-doc-resizer .resizer-handle::after { opacity: .22; }
+  .home-doc-live { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .home-doc-live .latex-block { flex: 1 1 14rem; }
+  .home-doc-live .home-stepper { margin-top: 0; }
+  .home-doc-live [data-slot="apples"] { fill: var(--lt-primary) !important; }
+  .home-doc-options { display: flex; justify-content: center; }
+  /* The paragraph that breathes on request (shortcodes/breathing.html). */
+  .breathing { margin: 1rem 0 1.5rem; }
+  .breathing-stage { box-sizing: border-box; max-width: 100%; transition: height .6s ease; }
+  .breathing-stage.settling { transition: width .6s cubic-bezier(.33, 0, .2, 1), height .6s ease; }
+  #lt-content .breathing .latex-block { margin: 0; }
+  .breathing.is-running .breathing-stage { border-right: 1px solid color-mix(in srgb, var(--lt-primary) 60%, transparent); }
+  .breathing-toggle {
+    display: inline-flex; align-items: center; gap: .45rem; margin-top: .9rem; padding: .4rem .9rem;
+    border-radius: 999px; cursor: pointer; color: var(--lt-primary);
+    font: 500 14px/1.2 ui-sans-serif, system-ui, sans-serif;
+    background: color-mix(in srgb, var(--lt-primary) 9%, transparent); border: 0;
+  }
+  .breathing-toggle:hover { background: color-mix(in srgb, var(--lt-primary) 18%, transparent); }
+  .breathing-toggle:focus-visible { outline: 2px solid var(--lt-primary); outline-offset: 2px; }
+  .breathing-toggle svg { width: 12px; height: 12px; fill: currentColor; }
+  .breathing-toggle .pause, .breathing.is-running .breathing-toggle .play { display: none; }
+  .breathing.is-running .breathing-toggle .pause { display: inline; }
   /* An example with side notes (class="with-margin" on its block): the text
      leaves room on its right, and the preview shows that margin as a grey
      band, where the viewer sets the notes (--latex-margin-*, in px). On a

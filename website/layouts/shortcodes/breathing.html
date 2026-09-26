@@ -1,0 +1,67 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  A paragraph whose column widens and narrows when the reader asks: still
+  at the column's full width until the button is pressed, and back there
+  when it is pressed again. Wraps a {{< latex >}} block:
+
+    {{< breathing >}}{{< latex … >}}…{{< /latex >}}{{< /breathing >}}
+
+  While it moves, the stage keeps the height of the tallest layout seen so
+  far, so the page below it does not jump with each line gained or lost.
+*/ -}}
+<div class="breathing">
+  <div class="breathing-stage">
+    <div class="breathing-flow">
+{{ .Inner }}
+    </div>
+  </div>
+  <button type="button" class="breathing-toggle" aria-pressed="false">
+    <svg viewBox="0 0 12 12" aria-hidden="true"><path class="play" d="M3.5 2v8l6-4z"/><path class="pause" d="M3 2h2v8H3zM7 2h2v8H7z"/></svg>
+    <span>Change the width</span>
+  </button>
+</div>
+<script>
+  (function () {
+    var root = document.currentScript.previousElementSibling;
+    var stage = root.querySelector('.breathing-stage'), flow = root.querySelector('.breathing-flow');
+    var btn = root.querySelector('.breathing-toggle'), label = btn.querySelector('span');
+    var PERIOD = 12000;                        // one breath, ms
+    var running = false, start = 0, reserved = 0;
+    // Between the column's width and 45% of it (at least 16rem).
+    function band() {
+      var maxW = root.clientWidth, rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      return { minW: Math.min(maxW, Math.max(16 * rem, maxW * 0.45)), maxW: maxW };
+    }
+    function fit() {
+      var h = flow.offsetHeight;
+      if (h > reserved) { reserved = h; stage.style.height = h + 'px'; }
+    }
+    function frame(now) {
+      if (!running) return;
+      if (!start) start = now;
+      var b = band(), mid = (b.maxW + b.minW) / 2, amp = (b.maxW - b.minW) / 2;
+      // + cos: it starts at full width, where it stood still.
+      stage.style.width = (mid + amp * Math.cos((2 * Math.PI * (now - start)) / PERIOD)).toFixed(1) + 'px';
+      fit();
+      requestAnimationFrame(frame);
+    }
+    function set(on) {
+      running = on;
+      btn.setAttribute('aria-pressed', String(on));
+      label.textContent = on ? 'Stop' : 'Change the width';
+      root.classList.toggle('is-running', on);
+      if (on) { start = 0; reserved = 0; stage.classList.remove('settling'); requestAnimationFrame(frame); }
+      else {
+        // Back to the full width with an ease, then free the height.
+        stage.classList.add('settling');
+        stage.style.width = root.clientWidth + 'px';
+        setTimeout(function () {
+          if (running) return;
+          stage.classList.remove('settling');
+          stage.style.width = ''; stage.style.height = ''; reserved = 0;
+        }, 700);
+      }
+    }
+    btn.addEventListener('click', function () { set(!running); });
+  })();
+</script>
