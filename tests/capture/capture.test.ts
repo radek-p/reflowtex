@@ -11,9 +11,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
 
-type Node = { type: string; char?: number; color?: string; link?: number; stream?: number;
+type Node = { type: string; char?: number; color?: string; link?: number; stream?: number; mathml?: unknown;
               width?: number; children?: Node[]; replace?: Node[]; pre?: Node[]; post?: Node[] };
-type Item = { kind: string; para?: number; box?: Node };
+type Item = { kind: string; para?: number; box?: Node; mathml?: unknown };
 type Output = { fonts: Record<string, unknown>; paragraphs: { nodes: Node[] }[]; content: Item[];
                 links: { label?: string; url?: string }[]; anchors: string[]; slots: unknown[];
                 source_width: number };
@@ -257,4 +257,94 @@ test('Lean: the parts are marked, decl and url on the widget', async () => {
   const roles = streams.filter(s => attrsOf(s.attrs)['rtx-part']).map(s => attrsOf(s.attrs)['rtx-part']);
   assert.deepEqual(roles.sort(), ['code', 'tex']);
   assert.match(streams.find(s => attrsOf(s.attrs)['rtx-part'] === 'code')!.text!, /example : 1 = 1 := rfl/);
+
+// ── MathML ──────────────────────────────────────────────────────────────────
+// Every formula a reader meets carries MathML (src/extract/mathml.lua records
+// luamml's conversion of TeX's own math lists; src/pipeline/mathml.ts makes
+// the strings): the begin-math node of each inline formula, each display
+// item – an alignment's first row for all its rows. Typesetting is untouched.
+
+const noMathml = new Pipeline({ buildRoot: join(root, 'build-nomathml'), fontsDir: join(root, 'fonts'), log: () => {}, mathml: false });
+
+/** The same document compiled with the MathML capture switched off. */
+async function captureWithoutMathml(body: string, preamble = '', passes = 1): Promise<Output> {
+  const key = contentKey(body, preamble);
+  const dir = join(noMathml.buildRoot, key);
+  if (!existsSync(join(dir, 'output.json'))) await noMathml.compile(body, preamble, { key, passes, name: key });
+  return JSON.parse(readFileSync(join(dir, 'output.json'), 'utf8'));
+}
+
+const NS = ' xmlns="http://www.w3.org/1998/Math/MathML"';
+/** The MathML of each top-level inline formula, paragraph by paragraph. */
+const inlineMathml = (d: Output) => d.paragraphs.map(p =>
+  [...walk(p.nodes)].filter(n => n.type === 'math' && n.mathml !== undefined).map(n => String(n.mathml).replaceAll(NS, '')));
+const displayMathml = (d: Output) => d.content.filter(i => i.kind === 'display').map(i => i.mathml === undefined ? undefined : String(i.mathml).replaceAll(NS, ''));
+
+const FORMULAS = [
+  'Inline $x^2+y^2=z^2$, $\\alpha_i \\le \\sum_{k=1}^n k$, $f\\colon \\mathbb{R}\\to\\mathbb{R}$,',
+  '$\\Phi_0(z)$ and $x \\in \\text{the set $S$}$ and $\\binom{n}{k}$.',
+  '\\[ \\int_0^\\infty e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2} \\]',
+  '\\begin{equation}\\label{eq:a} a = \\left( \\frac{1}{2} \\right)^{n} \\end{equation}',
+  'See \\eqref{eq:a}.',
+  '\\begin{align}',
+  '  f(x) &= \\begin{cases} 1 & x > 0 \\\\ 0 & \\text{otherwise} \\end{cases} \\\\',
+  '  g(x) &= \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix} \\nonumber',
+  '\\end{align}',
+  '\\begin{gather*} \\lim_{n\\to\\infty} \\Bigl(1+\\frac1n\\Bigr)^n = e \\end{gather*}',
+].join('\n');
+
+/** Drops what MathML adds, for comparing with a build without it. */
+function withoutMathml(d: Output): unknown {
+  return JSON.parse(JSON.stringify(d, (k, v) => (k === 'mathml' || k === 'mathml_box' || k === 'display_no') ? undefined : v));
+}
+
+test('MathML: typesetting is untouched', async () => {
+  const [a, b] = await Promise.all([capture(FORMULAS, '', 2), captureWithoutMathml(FORMULAS, '', 2)]);
+  assert.deepEqual(withoutMathml(a), withoutMathml(b));
+});
+
+test('MathML: every inline formula, and nothing nested twice', async () => {
+  const d = await capture(FORMULAS, '', 2);
+  const [first, , see] = inlineMathml(d);
+  assert.equal(first.length, 6);
+  assert.equal(first[0], '<math><msup><mi>𝑥</mi><mn>2</mn></msup><mo>+</mo><msup><mi>𝑦</mi><mn>2</mn></msup><mo>=</mo><msup><mi>𝑧</mi><mn>2</mn></msup></math>');
+  assert.match(first[2], /<mi mathvariant="normal">ℝ<\/mi>|<mi>ℝ<\/mi>/, '\\mathbb in the classic fonts');
+  assert.match(first[3], /<mi mathvariant="normal">Φ<\/mi>/, 'upright Greek from OT1');
+  assert.doesNotMatch(first[4], /<math>.*<math>/, 'the formula inside \\text is part of the outer one');
+  assert.match(first[4], /<mtext>the set<\/mtext>.*<mi>𝑆<\/mi>/);
+  assert.match(first[5], /<mfrac linethickness="0"><mi>𝑛<\/mi><mi>𝑘<\/mi><\/mfrac>/);
+  assert.deepEqual(see, [], '\\eqref is text');
+  for (const m of d.paragraphs.flatMap(p => inlineMathml({ ...d, paragraphs: [p] }).flat()))
+    assert.doesNotMatch(m, /mglyph|�|[-]/, m);
+});
+
+test('MathML: displays, and an alignment read as one table', async () => {
+  const d = await capture(FORMULAS, '', 2);
+  const [integral, equation, align1, align2, gather] = displayMathml(d);
+  assert.match(integral!, /^<math display="block"><msubsup><mo>∫<\/mo><mn>0<\/mn><mi>∞<\/mi><\/msubsup>.*<mfrac><msqrt><mi>𝜋<\/mi><\/msqrt><mn>2<\/mn><\/mfrac><\/math>$/);
+  assert.match(equation!, /^<math display="block">.*<mfrac><mn>1<\/mn><mn>2<\/mn><\/mfrac>/);
+  assert.match(align1!, /^<math display="block"><mtable><mtr>.*<mtable>.*otherwise.*<\/mtr><mtr>.*<mi>𝑔<\/mi>.*<mtable>.*<\/mtr><\/mtable><\/math>$/,
+    'rows of align, with cases and pmatrix as tables inside');
+  assert.match(align1!, /<mtext>\(1\)<\/mtext>/, 'the equation number');
+  assert.equal(align2, undefined, 'the second row is read with the first');
+  assert.match(gather!, /<munder><mi>lim<\/mi>/);
+  for (const m of [integral, equation, align1, gather]) assert.doesNotMatch(m!, /mglyph|�|<math[^>]*>.*<math/);
+});
+
+test('MathML: formulas in footnotes', async () => {
+  const d = await capture('Text.\\footnote{With $a+b$ inside.}');
+  const all = d.paragraphs.flatMap(p => inlineMathml({ ...d, paragraphs: [p] }).flat());
+  assert.deepEqual(all, ['<math><mi>𝑎</mi><mo>+</mo><mi>𝑏</mi></math>']);
+});
+
+test('MathML: unicode-math', async () => {
+  const pre = '\\usepackage{unicode-math}';
+  const d = await capture('Roots $\\sqrt[3]{x}$ and $\\mathbb{R}$ and $\\underbrace{a+b}_{2}$.', pre);
+  const [ms] = inlineMathml(d);
+  assert.equal(ms[0], '<math><mroot><mi>𝑥</mi><mn>3</mn></mroot></math>');
+  assert.match(ms[1], /ℝ/);
+  assert.match(ms[2], /<munder>.*⏟.*<mn>2<\/mn><\/munder>/);
+  const [a, b] = await Promise.all([capture('Roots $\\sqrt[3]{x}$ and $\\mathbb{R}$ and $\\underbrace{a+b}_{2}$.', pre),
+    captureWithoutMathml('Roots $\\sqrt[3]{x}$ and $\\mathbb{R}$ and $\\underbrace{a+b}_{2}$.', pre)]);
+  assert.deepEqual(withoutMathml(a), withoutMathml(b));
 });
