@@ -160,7 +160,7 @@ the site's files: paste the export into the site's colour map to keep it.
 The panel floats over the page, or docks to the left, right or bottom edge
 of the window: the four dock icons in the toolbar's corner choose (folded
 into one button, with a menu, when the panel is narrow). Floating, drag the
-toolbar to move it and its corner to resize it; docked, the page keeps the
+toolbar to move it, and any edge or corner to resize it (as a macOS window: from 3 px outside the panel to 3 px inside); docked, the page keeps the
 rest of the window and scrolls on its own, and the edge facing the page is
 dragged to resize. The browser remembers the place and the sizes.
 

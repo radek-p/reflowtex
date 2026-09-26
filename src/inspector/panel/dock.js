@@ -70,7 +70,47 @@ export function startMove(e) {
     bar.addEventListener('pointerup', end);
     bar.addEventListener('pointercancel', end);
 }
-// The native resize grip (CSS resize): the size it leaves, remembered.
+// Resized from every edge and corner, as a macOS window is: an invisible
+// frame around the panel, reaching FRAME px outside it and FRAME px inside,
+// holds a handle per edge and corner. The edges taken move; the panel keeps
+// its least size (as the stylesheet's min-width and min-height) and a grip on
+// screen.
+export const FRAME = 3;
+const LEAST = { w: 280, h: 180 };
+export const EDGES = ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw'];
+export const frameStyle = computed(() => {
+    const g = geom.value;
+    if (!isOpen.value || embedded.value || side.value !== 'float' || !g) return null;
+    return `left:${g.x - FRAME}px;top:${g.y - FRAME}px;width:${g.w + 2 * FRAME}px;height:${g.h + 2 * FRAME}px`;
+});
+export function startEdge(e) {
+    if (e.button !== 0 || side.value !== 'float' || embedded.value) return;
+    const handle = e.currentTarget, edge = handle.dataset.edge;
+    const g0 = { ...geom.value }, px = e.clientX, py = e.clientY;
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    const move = ev => {
+        const dx = ev.clientX - px, dy = ev.clientY - py;
+        let { x, y, w, h } = g0;
+        if (edge.includes('e')) w = Math.max(LEAST.w, g0.w + dx);
+        if (edge.includes('s')) h = Math.max(LEAST.h, g0.h + dy);
+        if (edge.includes('w')) { w = Math.max(LEAST.w, g0.w - dx); x = g0.x + g0.w - w; }
+        if (edge.includes('n')) { h = Math.max(LEAST.h, g0.h - dy); y = g0.y + g0.h - h; }
+        geom.value = floating({ x, y, w, h });
+    };
+    const end = () => {
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', end);
+        handle.removeEventListener('pointercancel', end);
+        saveGeom();
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+}
+
+// The native resize grip (CSS resize, where a panel still has it): the size
+// it leaves, remembered.
 let saveTimer = 0;
 export function resized(el) {
     const g = geom.value;

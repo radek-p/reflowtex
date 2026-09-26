@@ -15,7 +15,7 @@
   font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   border: 1px solid var(--line); border-radius: 10px;
   box-shadow: 0 12px 40px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08);
-  overflow: hidden; resize: both;
+  overflow: hidden;
   container-type: inline-size;
 }
 .rtx[hidden] { display: none; }
@@ -324,3 +324,17 @@ input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(
 .details .a11y .spoken { background: rgba(46,125,50,.12); border-radius: 3px; padding: 0 3px; }
 .details .a11y .mml { background: rgba(46,125,50,.08); border-radius: 3px; padding: 0 2px; }
 .details .a11y .mml math { font-size: 1.05em; }
+
+/* Floating: the frame that resizes the panel from every edge and corner
+   (dock.js startEdge) – FRAME = 3px outside the panel and 3px inside, as a
+   macOS window's. Invisible; only its cursors show. */
+.frame { position: fixed; z-index: 2147483647; pointer-events: none; }
+.frame [data-edge] { position: absolute; pointer-events: auto; touch-action: none; }
+.frame [data-edge="n"] { top: 0; left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
+.frame [data-edge="s"] { bottom: 0; left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
+.frame [data-edge="e"] { right: 0; top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
+.frame [data-edge="w"] { left: 0; top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
+.frame [data-edge="ne"] { top: 0; right: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.frame [data-edge="sw"] { bottom: 0; left: 0; width: 10px; height: 10px; cursor: nesw-resize; }
+.frame [data-edge="se"] { bottom: 0; right: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+.frame [data-edge="nw"] { top: 0; left: 0; width: 10px; height: 10px; cursor: nwse-resize; }

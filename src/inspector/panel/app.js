@@ -4,11 +4,11 @@
 // button in the corner), the two views, and a bottom bar with the outlines'
 // legend and the status. Loaded by inspector.js the first time it opens;
 // mount() makes it and hands back what the page's API calls.
-import { html, render, useLayoutEffect, useRef } from '../vendor/preact.js';
+import { html, render, useLayoutEffect, useRef, Fragment } from '../vendor/preact.js';
 import { call, got, useAsset, assetUrl, pageWindow, setPageWindow } from './bridge.js';
 import { isOpen, view, dark, guides, picking, blocks, noViewer, flash, menu, refs, keep, plain, say, SHORTCUT } from './store.js';
 import { IconButton, IconPick, IconClose, IconCheck, IconDock, Caret, MenuBox, toggleMenu, closeMenu, menuOpen } from './ui.js';
-import { SIDES, SIDE_TITLES, side, embedded, panelStyle, setDock, applyDock, chosenDock, setPageDock, startMove, startSize, resized } from './dock.js';
+import { SIDES, SIDE_TITLES, side, embedded, panelStyle, setDock, applyDock, chosenDock, setPageDock, startMove, startSize, resized, EDGES, frameStyle, startEdge } from './dock.js';
 import { Tree, Details, RowMenu, selected, refresh, reveal, forgetSelection } from './tree.js';
 import { ResourceList, ResourceDetails, loadResources, markUses, resSel, forgetResources } from './resources.js';
 import { ColourView, loadColours } from './colours.js';
@@ -143,8 +143,10 @@ function Panel() {
         if (NAV_KEYS.test(e.key) && e.composedPath().some(x => x === refs.tree || x === refs.rbody)) setShowSel(true);
     };
     // The style is bound to its signal: dragging the panel restyles it
-    // without rendering anything else again.
-    return html`<div ref=${el} role="dialog" aria-label="Reflow TeX inspector" hidden=${!isOpen.value}
+    // without rendering anything else again. Floating, the frame around it
+    // resizes it from every edge (dock.js).
+    const frame = frameStyle.value;
+    return html`<${Fragment}><div ref=${el} role="dialog" aria-label="Reflow TeX inspector" hidden=${!isOpen.value}
             class=${'rtx' + (dark.value ? ' dark' : '') + (emb ? ' docked' : '')}
             data-view=${view.value} data-edge=${emb || s === 'float' ? undefined : s} style=${panelStyle}
             onPointerMove=${() => setShowSel(false)} onPointerDownCapture=${onPointerDownCapture} onKeyDownCapture=${onKeyDownCapture}>
@@ -153,7 +155,9 @@ function Panel() {
         <${Foot}/>
         <div class="grip" aria-hidden="true" onPointerDown=${startSize}></div>
         <${Menus}/>
-    </div>`;
+    </div>
+    ${frame && html`<div class="frame" aria-hidden="true" style=${frame}>
+        ${EDGES.map(d => html`<div key=${d} data-edge=${d} onPointerDown=${startEdge}></div>`)}</div>`}<//>`;
 }
 
 // ── Following the page ─────────────────────────────────────────────────────────

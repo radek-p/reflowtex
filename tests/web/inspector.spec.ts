@@ -270,3 +270,42 @@ test('the details have an Accessibility tab: a box’s accessible text, with Mat
   await expect(pane).toBeHidden();
   await expect(details.locator('table')).toBeVisible();
 });
+
+// ── Resizing the floating panel ─────────────────────────────────────────────
+// Like a macOS window: every edge and corner resizes it, taken anywhere from
+// 3 px outside the panel to 3 px inside.
+test('the floating panel resizes from every edge and corner', async ({ openPage }) => {
+  const page = await openPage('mathml', { width: 1400, height: 900 });
+  await page.evaluate(() => { localStorage.clear(); reflowtex.inspector.open(undefined, { dock: 'float', scroll: false }); });
+  const panel = page.locator('[data-rtx-ui] .rtx');
+  await expect(panel).toBeVisible();
+  const box = async () => (await panel.boundingBox())!;
+  const drag = async (x: number, y: number, dx: number, dy: number) => {
+    await page.mouse.move(x, y); await page.mouse.down();
+    await page.mouse.move(x + dx / 2, y + dy / 2); await page.mouse.move(x + dx, y + dy); await page.mouse.up();
+  };
+  // the left edge, taken 2 px outside: wider, to the left
+  let a = await box();
+  await drag(a.x - 2, a.y + a.height / 2, -60, 0);
+  let b = await box();
+  expect(Math.round(b.x - a.x)).toBe(-60);
+  expect(Math.round(b.width - a.width)).toBe(60);
+  // the top edge, taken 2 px inside: taller, upwards
+  a = b;
+  await drag(a.x + a.width / 2, a.y + 2, 0, -40);
+  b = await box();
+  expect(Math.round(b.y - a.y)).toBe(-40);
+  expect(Math.round(b.height - a.height)).toBe(40);
+  // the bottom right corner: both
+  a = b;
+  await drag(a.x + a.width + 1, a.y + a.height + 1, -30, -20);
+  b = await box();
+  expect(Math.round(b.width - a.width)).toBe(-30);
+  expect(Math.round(b.height - a.height)).toBe(-20);
+  // the cursor says which way
+  const cursor = await page.evaluate(() => {
+    const root = document.querySelector('[data-rtx-ui]')!.shadowRoot!;
+    return [...root.querySelectorAll('.frame [data-edge]')].map(h => [(h as HTMLElement).dataset.edge, getComputedStyle(h).cursor]);
+  });
+  expect(Object.fromEntries(cursor)).toMatchObject({ n: 'ns-resize', e: 'ew-resize', se: 'nwse-resize', ne: 'nesw-resize' });
+});
