@@ -19,6 +19,8 @@ import { define } from './define.tsx';
 import { Accordion } from './kinds/accordion.tsx';
 import { LeanProof, LeanTheorem } from './kinds/lean.tsx';
 import { Hint } from './kinds/hint.tsx';
+import { ReadingButton, ReadingOptions } from './reading.tsx';
+import { registerElement } from './mount.ts';
 
 export { h, render, Fragment, Component, createContext } from 'preact';
 export { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useContext } from 'preact/hooks';
@@ -36,6 +38,8 @@ export { Accordion, findPane } from './kinds/accordion.tsx';
 export { LeanProof, LeanTheorem, LeanCode, highlightLean } from './kinds/lean.tsx';
 export { Hint } from './kinds/hint.tsx';
 export { InlineButton, PILL, Popover } from './controls.tsx';
+export { reading, ReadingOptions, ReadingButton, THEMES, WIDTHS, type Theme, type ReadingOptionsProps } from './reading.tsx';
+export { registerElement, mountAll } from './mount.ts';
 
 // The package's own kinds. A page may draw one differently: define
 // again, with its own component.
@@ -43,3 +47,7 @@ define('accordion', Accordion);
 define('leanproof', LeanProof);
 define('leantheorem', LeanTheorem);
 define('hint', Hint);
+
+// Its elements declared in HTML (mount.ts): <div data-rtx="reading-button">.
+registerElement('reading-button', ReadingButton);
+registerElement('reading-options', ReadingOptions);

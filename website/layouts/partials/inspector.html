@@ -5,7 +5,7 @@
   behind every block on the page, floating or docked to an edge of the
   window. It loads its panel and agent only when opened – with
   Alt+Shift+I (⌥⇧I), the "Inspect" button on each example's result, or the
-  reading panel's entry.
+  reading options' entry (the companion's, which calls reflowtex.inspector).
 */ -}}
 <script src="{{ printf "%s/inspector.js" site.Data.inspector.dir | relURL }}"></script>
 <script>
@@ -47,15 +47,5 @@
   function init() { addButtons(); wireInline(); openDemo(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
-  // The reading options' entry, in the corner panel or set into the page.
-  document.querySelectorAll('[data-inspect]').forEach(function (b) {
-    var k = b.querySelector('.lt-inspect-key');
-    if (k) k.textContent = ins.shortcut;
-    b.addEventListener('click', function () {
-      var panel = document.getElementById('lt-reader-panel');
-      if (panel && !panel.hidden) document.getElementById('lt-reader-button').click();   // close it
-      ins.open();
-    });
-  });
 })();
 </script>

@@ -171,6 +171,39 @@ below an element.
 The same through the viewer alone, without Preact: `reflowtex.host.define(kind,
 { measure, render })` ([src/viewer/src/host/types.ts](../viewer/src/host/types.ts)).
 
+## Reading options
+
+The reader's text size, colour theme and column width, as a round "Aa"
+button in the corner of the window that opens them in a panel, or as a
+card set into the page. Declare them in HTML, and the companion draws them:
+
+```html
+<div data-rtx="reading-button" data-width="true"></div>   <!-- the corner button -->
+<div data-rtx="reading-options"></div>                     <!-- the card -->
+```
+
+Or use the components: `<ReadingButton width inspect themes />` and
+`<ReadingOptions … />`. The state is `reading`, a set of signals with
+setters: `reading.theme`, `.zoom` and `.width`, and `reading.setTheme(t)`,
+`.zoomBy(±1 | 0)` and `.setWidth(w)`. The page follows it through `<html>`:
+- the theme is a class (none for light) plus `data-theme`;
+- the text size is `--rtx-zoom` (1 for 100%);
+- the width is `data-width`.
+
+Every change also sends a window resize, so the viewer lays the text out
+again. Choices are remembered in `localStorage` (`reflowtex-theme`,
+`reflowtex-zoom`, `reflowtex-width`). To avoid a flash before the module
+loads, a page sets the saved state itself first, as the website's
+`head.html` does. The inspector's entry shows when the page has the
+inspector (`inspect={false}` hides it). The look uses `--rtx-glass`,
+`--rtx-accent`, `--rtx-surface-solid` and the swatches'
+`[data-t=…] .rtx-swatch`.
+
+`data-rtx` works for components of your own too:
+`registerElement('name', Component)` draws every
+`<div data-rtx="name" data-key="value">`, with each `data-*` as a prop
+(`"true"` and `"false"` become booleans, and numbers become numbers).
+
 ## Building
 
 The sources are TypeScript in [src/](src/). `make build-companion` bundles

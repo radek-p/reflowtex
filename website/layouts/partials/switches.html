@@ -1,52 +1,10 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
 {{- /*
-  Reading options: one round "Aa" button, bottom right, opening a small
-  panel – text size, colour theme, and on pages with widthControl: true (a
-  full paper) the column width. The width a reader picked is saved like the
-  rest, but only pages that offer the control apply it (<html
-  data-width-control>, see baseof.html). The buttons call the window.__zoom /
-  __setTheme / __setWidth hooks defined in partials/head.html. The rows are
-  partials/reading-options.html, which the home page also sets into a card
-  (shortcodes/reading-options.html); the script here serves every copy.
+  Reading options: the companion package's <ReadingButton> (src/companion/
+  src/reading.tsx), a round "Aa" button in the corner opening a panel –
+  text size, colour theme, the inspector's entry, and on pages with
+  widthControl: true (a full paper) the column width. The width a reader
+  picked is saved like the rest, but only pages that offer the control
+  apply it (<html data-width-control>, see baseof.html).
 */ -}}
-<div id="lt-reader">
-  <div id="lt-reader-panel" class="lt-panel" role="dialog" aria-label="Reading options" hidden>
-{{ partial "reading-options.html" (dict "width" .Params.widthControl) }}
-  </div>
-  <button type="button" id="lt-reader-button" aria-haspopup="dialog" aria-expanded="false"
-          aria-controls="lt-reader-panel" title="Reading options">
-    <span class="lt-aa" aria-hidden="true"><span>A</span><span>a</span></span>
-    <span class="sr-only">Reading options</span>
-  </button>
-</div>
-<script>
-(function () {
-  var root = document.getElementById('lt-reader');
-  var btn = document.getElementById('lt-reader-button'), panel = document.getElementById('lt-reader-panel');
-  var html = document.documentElement;
-  function sync() {
-    document.querySelectorAll('.lt-panel [data-t]').forEach(function (b) {
-      b.setAttribute('aria-checked', String(html.getAttribute('data-theme') === b.dataset.t)); });
-    document.querySelectorAll('.lt-panel [data-w]').forEach(function (b) {
-      b.setAttribute('aria-checked', String((html.getAttribute('data-width') || 'auto') === b.dataset.w)); });
-  }
-  function open(on) {
-    panel.hidden = !on;
-    btn.setAttribute('aria-expanded', String(on));
-    if (on) { sync(); (panel.querySelector('[aria-checked="true"]') || panel.querySelector('button')).focus(); }
-  }
-  btn.addEventListener('click', function () { open(panel.hidden); });
-  document.addEventListener('pointerdown', function (e) { if (!panel.hidden && !root.contains(e.target)) open(false); });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !panel.hidden) { open(false); btn.focus(); } });
-  document.addEventListener('click', function (e) {
-    var b = e.target.closest('.lt-panel button');
-    if (!b) return;
-    if (b.dataset.t) window.__setTheme(b.dataset.t);
-    if (b.dataset.w) window.__setWidth(b.dataset.w);
-    if (b.dataset.z) window.__zoom(b.dataset.z === 'out' ? -1 : b.dataset.z === 'in' ? 1 : 0);
-    sync();
-  });
-  sync();
-})();
-</script>
+<div data-rtx="reading-button"{{ if .Params.widthControl }} data-width="true"{{ end }}></div>

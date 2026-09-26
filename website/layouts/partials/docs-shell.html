@@ -48,7 +48,7 @@
   var WANT = { auto: 46, narrow: 34, normal: 46, wide: 64 };
   function fit() {
     var rem = parseFloat(getComputedStyle(html).fontSize) || 16;
-    var zoom = parseFloat(html.style.getPropertyValue('--lt-zoom')) || 1;
+    var zoom = parseFloat(html.style.getPropertyValue('--rtx-zoom')) || 1;
     var want = (WANT[html.getAttribute('data-width')] || 46) * rem * zoom;
     var cs = getComputedStyle(lay);
     var room = lay.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);

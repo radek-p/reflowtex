@@ -261,8 +261,99 @@
   .rtx-lean .rtx-lean-pair { padding-top: .6rem; grid-template-columns: minmax(0, 1fr) !important; }
 }
 
-/* ── The first version's parts (legacy.ts) ─────────────────────────────── */
-.rtx-aside .latex-block { margin: 0; }
+/* ── Reading options (reading.tsx) ─────────────────────────────────────── */
+/* The reader's text size, colour theme and column width: <ReadingOptions>
+   (rows), <ReadingButton> (a round "Aa" button in the corner, opening them
+   in a panel). Colours: --rtx-glass (the panel's and button's fill, frosted),
+   --rtx-accent (the choice), --rtx-surface-solid (a segmented control's
+   chosen segment). The corner keeps clear of a docked inspector
+   (--rtx-dock-right, -bottom, -left). Swatches: .rtx-swatch per [data-t]. */
+.rtx-reading, .rtx-reading-corner {
+  --rtx-hair: color-mix(in srgb, currentColor 16%, transparent);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; }
+.rtx-reading-corner {
+  position: fixed; z-index: 1000;
+  right: calc(max(1rem, env(safe-area-inset-right)) + var(--rtx-dock-right, 0px));
+  bottom: calc(max(1rem, env(safe-area-inset-bottom)) + var(--rtx-dock-bottom, 0px)); }
+.rtx-reading-button, .rtx-panel {
+  background: var(--rtx-glass, var(--latex-popover-background, Canvas));
+  -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+  border: .5px solid var(--rtx-hair, color-mix(in srgb, currentColor 16%, transparent)); color: inherit; }
+.rtx-reading-button {
+  width: 44px; height: 44px; border-radius: 50%; padding: 0; cursor: pointer;
+  display: grid; place-items: center;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .08);
+  transition: transform .15s ease, box-shadow .15s ease; }
+.rtx-reading-button:hover { box-shadow: 0 8px 26px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .1); }
+.rtx-reading-button:active, .rtx-reading-button[aria-expanded="true"] { transform: scale(.94); }
+/* One size for both letters: a smaller capital would come out no taller
+   than the lowercase a. */
+.rtx-aa { font: 18px/1 ui-serif, "New York", Georgia, serif; letter-spacing: .01em; }
+.rtx-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rtx-panel { padding: 6px; border-radius: 20px; box-sizing: border-box; }
+.rtx-reading-panel {
+  position: absolute; right: 0; bottom: 56px; width: 272px;
+  box-shadow: 0 18px 50px rgb(0 0 0 / .18), 0 2px 6px rgb(0 0 0 / .08);
+  transform-origin: bottom right; animation: rtx-pop .22s cubic-bezier(.2, .9, .25, 1.05); }
+@keyframes rtx-pop { from { opacity: 0; transform: translateY(6px) scale(.92); } }
+@media (prefers-reduced-motion: reduce) { .rtx-reading-panel { animation: none; } .rtx-reading-button { transition: none; } }
+.rtx-reading-row { padding: 10px 8px; }
+.rtx-reading-row + .rtx-reading-row { border-top: .5px solid var(--rtx-hair); }
+.rtx-reading-row button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.rtx-reading-row button:focus-visible, .rtx-reading-button:focus-visible { outline: 2px solid var(--rtx-accent); outline-offset: 2px; }
+.rtx-reading-caption { font-size: 11px; opacity: .6; margin: 0 0 8px; }
+/* The inspector entry: a plain row, its shortcut on the right. */
+.rtx-reading-inspect {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 13px !important; padding: 6px 6px !important; border-radius: 10px; text-align: left; }
+.rtx-reading-inspect:hover { background: color-mix(in srgb, currentColor 8%, transparent) !important; }
+.rtx-reading-inspect kbd { font: 11px ui-monospace, Menlo, monospace; opacity: .6; }
+/* Text size: small A · percentage · large A. */
+.rtx-reading-size { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; }
+.rtx-reading-size button { height: 36px; border-radius: 10px; }
+.rtx-reading-size button:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+.rtx-reading-size [data-z="out"] { font: 500 14px ui-serif, "New York", Georgia, serif; }
+.rtx-reading-size [data-z="in"]  { font: 500 21px ui-serif, "New York", Georgia, serif; }
+.rtx-reading-size [data-z="reset"] { font-size: 13px; font-variant-numeric: tabular-nums; opacity: .75; }
+/* Theme: swatches with names. */
+.rtx-reading-themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.rtx-reading-themes button { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; padding: 2px 0; }
+.rtx-reading-themes button span { opacity: .7; }
+.rtx-reading-themes button[aria-checked="true"] span { opacity: 1; font-weight: 600; }
+.rtx-swatch {
+  width: 34px; height: 34px; border-radius: 50%; box-shadow: inset 0 0 0 .5px rgb(0 0 0 / .22);
+  font-family: ui-serif, "New York", Georgia, serif; font-size: 14px;
+  display: grid; place-items: center; opacity: 1 !important; font-weight: 400 !important; }
+[data-t="light"]    .rtx-swatch { background: #fafaf9; color: #333; }
+[data-t="dark"]     .rtx-swatch { background: #1c1917; color: #e7e5e4; }
+[data-t="sepia"]    .rtx-swatch { background: #f4ecd8; color: #453a26; }
+[data-t="contrast"] .rtx-swatch { background: #fff; color: #000; box-shadow: inset 0 0 0 1.5px #000; }
+.rtx-reading-themes button[aria-checked="true"] .rtx-swatch { outline: 2.5px solid var(--rtx-accent); outline-offset: 2.5px; }
+/* Width: a segmented control. */
+.rtx-seg {
+  display: grid; grid-template-columns: repeat(4, 1fr); padding: 2px; gap: 2px;
+  border-radius: 9px; background: color-mix(in srgb, currentColor 9%, transparent); }
+.rtx-seg button { font-size: 12px; padding: 6px 0; border-radius: 7px; opacity: .8; }
+.rtx-seg button[aria-checked="true"] {
+  opacity: 1; font-weight: 600; background: var(--rtx-surface-solid, Canvas);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .14), 0 0 0 .5px rgb(0 0 0 / .04); }
+@media (max-width: 30rem) {
+  .rtx-reading-panel { position: fixed; width: auto;
+    left: calc(12px + var(--rtx-dock-left, 0px)); right: calc(12px + var(--rtx-dock-right, 0px));
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 56px + var(--rtx-dock-bottom, 0px)); } }
+/* <ReadingOptions> set into a page by itself (data-rtx="reading-options"):
+   the panel's look, open for good. It keeps its size when the reader zooms,
+   so the buttons stay under the pointer. */
+[data-rtx="reading-options"] > .rtx-reading {
+  padding: 6px; border-radius: 20px; box-sizing: border-box;
+  background: var(--rtx-glass, var(--latex-popover-background, Canvas));
+  border: .5px solid var(--rtx-hair);
+  width: 100%; max-width: 272px; zoom: calc(1 / var(--rtx-zoom, 1)); line-height: normal;
+  box-shadow: 0 10px 30px rgb(0 0 0 / .08), 0 1px 3px rgb(0 0 0 / .06); }
+@media print { .rtx-reading-corner, [data-rtx="reading-options"] { display: none; } }
+
+/* ── Controls (controls.tsx) ───────────────────────────────────────────── */
 
 /* A pill in a line of text (InlineButton). Restyle it with these, on the
    button or anything around it, or with a class of your own. */

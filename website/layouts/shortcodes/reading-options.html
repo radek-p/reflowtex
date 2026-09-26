@@ -1,9 +1,7 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
 {{- /*
-  The reading options set into the page: the corner panel's controls, in a
-  panel of the same look that stays open. Its buttons work like the corner
-  panel's (see partials/switches.html). Usage: {{< reading-options >}}
+  The reading options set into the page: the companion's <ReadingOptions>
+  (src/companion/src/reading.tsx), in a panel that stays open. Usage:
+  {{< reading-options >}}
 */ -}}
-<div class="lt-panel lt-panel-inline" role="group" aria-label="Reading options">
-{{ partial "reading-options.html" (dict "width" false) }}
-</div>
+<div data-rtx="reading-options" style="margin-top: 1rem"></div>
