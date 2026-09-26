@@ -24,12 +24,14 @@ export interface PageOptions {
 
 export function renderPage(o: PageOptions): string {
   const viewerTag = '<script src="latex-viewer.js"></script>';
+  // every use of a placeholder (the title is the <title> and the heading); the
+  // blocks last, so that nothing in them is taken for one
   let page = readFileSync(TEMPLATE, 'utf8')
-    .replace('{{TITLE}}', () => escapeHtml(o.title))
-    .replace('{{SCHEMA_B64}}', () => schemaBase64())
-    .replace('{{FONT_MAP_JSON}}', () => JSON.stringify(o.fontMap))
-    .replace('{{SOURCE_URL}}', () => escapeHtml(o.sourceUrl))
-    .replace('{{FONTS_BASE}}', () => escapeHtml(o.fontsBase))
+    .replaceAll('{{TITLE}}', () => escapeHtml(o.title))
+    .replaceAll('{{SCHEMA_B64}}', () => schemaBase64())
+    .replaceAll('{{FONT_MAP_JSON}}', () => JSON.stringify(o.fontMap))
+    .replaceAll('{{SOURCE_URL}}', () => escapeHtml(o.sourceUrl))
+    .replaceAll('{{FONTS_BASE}}', () => escapeHtml(o.fontsBase))
     .replace('{{BLOCKS}}', () => o.blocks.join('\n'));
   if (o.extraScripts?.length) {
     if (!page.includes(viewerTag)) throw new Error(`page.template.html has no ${viewerTag} to load extra scripts after`);

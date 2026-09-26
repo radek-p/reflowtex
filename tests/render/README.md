@@ -75,31 +75,38 @@ make render-report      # after a run; http://localhost:8010/
 ```
 
 A page for your own machine (it is not published): for each test, TeX's
-pageless PDF on the left and the page the browser reflowed on the right,
-each glyph or rule that does not match boxed in red on both sides. A glyph
-is boxed when it is further off than the **Glyph** threshold, and a rule
-when it is further off than **Rule**. Both start at the case's ceilings;
-set them to 0 to see every offset. Also boxed: glyphs and rules on one side
-only. TeX's rules the browser did not draw are dashed amber while they are
-within the case's `rules_missing`. The list on the right has every
-mismatch, top to bottom; click one, or press n and p, to bring it to the
-middle of both sides. ← and → (or the menu) go through the tests, and the
-bar says each one's status: pass, fail, known failure, passes with a known
-mark, or error, with the test's own message.
+pageless PDF beside the page the browser reflowed, each glyph or rule that
+does not match boxed in red on both sides. A glyph is boxed when it is
+further off than the **Glyph** threshold, and a rule when it is further off
+than **Rule**. Both start at the case's ceilings; set them to 0 to see every
+offset. Also boxed: glyphs and rules on one side only. TeX's rules the
+browser did not draw are dashed amber while they are within the case's
+`rules_missing`. The list on the right has every mismatch, top to bottom;
+click one, or press n and p, to bring it to the middle of both sides. ←
+and → (or the menu) go through the tests, and the bar says each one's
+status: pass, fail, known failure, passes with a known mark, or error, with
+the test's own message.
 
-The right side is the **live page** – the site the test built, laid out
-as `dom-dump.ts` laid it out – and **Inspect** opens the inspector on it,
-docked beside the list: its tree, hover outlines and pick work on the
-reflowed page, glyph by glyph. **Snapshot** shows instead the screenshot
-the test took of it. The two sides scroll together, at any zoom.
+Both sides have the same size: the page's width, and the longer side's
+height. Past the end of a side there is a checkerboard, so a side that ends
+early shows. The lock (on by default) scrolls them together, at the same x
+and y. **View** chooses the theme, and whether the two sides are side by
+side or stacked (**Auto**: side by side when there is more width than
+height).
+
+The PDF side is MuPDF's drawing of `pageless.pdf` as SVG – vectors, sharp
+at any zoom – made by the same library that reads TeX's glyph positions for
+the comparison. The browser's side is the **live page**, the site the test
+built, laid out as `dom-dump.ts` laid it out, and **Inspect** opens the
+inspector on it (Alt+Shift+I). There is one inspector: it docks left, right
+or bottom, or floats, as on any page, and follows from test to test.
+**Snapshot** shows instead the screenshot the test took.
 
 What it reads is written by every run: `result.json` in each width's
-folder, and `vector/strip.png` and `vector/viewer.png` beside
-`vector.json` – the strip and the page at 2 px per pt, in the frame
-`vector-compare.ts` measures in (so the PDF side is soft at 4×).
+folder, and `vector/strip.svg` and `vector/viewer.png` beside
+`vector.json`, in the frame `vector-compare.ts` measures in.
 `build/report.json` lists them; the server writes it again as it starts,
 so results from single-case runs show too.
-
 ## Adding a case
 
 Put a short, complete document in `cases/<name>.tex`: a comment on its

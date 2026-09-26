@@ -6,9 +6,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Render report</title>
 <link rel="stylesheet" href="report.css">
+<script>
+// the theme before the first paint (app.js follows it from here)
+try {
+  const t = localStorage.getItem("render-report.theme") || "auto";
+  document.documentElement.dataset.theme = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+} catch { document.documentElement.dataset.theme = "light"; }
+</script>
 </head>
 <body>
 <div id="app"></div>
+<!-- one inspector, in this page; it inspects the live page (app.js) -->
+<script src="/inspector/inspector.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

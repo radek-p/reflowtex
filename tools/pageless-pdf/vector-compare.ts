@@ -76,6 +76,21 @@ export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
   return { glyphs, rules };
 }
 
+/** The strip as SVG: MuPDF's drawing of it, vectors throughout (text as its
+ *  glyphs' outlines), so it is sharp at any zoom. Its viewBox is in bp; its size
+ *  is given as 2 px per TeX pt, as viewer.png's is. */
+export function stripSvg(pdf: string): string {
+  const page = mupdf.Document.openDocument(readFileSync(pdf), 'application/pdf').loadPage(0);
+  const [x0, y0, x1, y1] = page.getBounds();
+  const buf = new mupdf.Buffer();
+  const writer = new mupdf.DocumentWriter(buf, 'svg', 'text=path');
+  page.run(writer.beginPage([x0, y0, x1, y1]), mupdf.Matrix.identity);
+  writer.endPage();
+  writer.close();
+  const px = (bp: number) => (bp * PT_PER_BP * 2).toFixed(3);
+  return buf.asString().replace(/(<svg\b[^>]*?) width="[^"]*" height="[^"]*"/, `$1 width="${px(x1 - x0)}" height="${px(y1 - y0)}"`);
+}
+
 // ── numpy's few operations ──────────────────────────────────────────────────
 const mean = (a: number[]) => a.reduce((s, x) => s + x, 0) / a.length;
 const std = (a: number[]) => { const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))); };
@@ -86,8 +101,9 @@ const searchsorted = (s: number[], v: number) => { let lo = 0, hi = s.length; wh
 const slopeOf = (x: number[], y: number[]) => { const mx = mean(x), my = mean(y); let n = 0, d = 0; x.forEach((xi, i) => { n += (xi - mx) * (y[i] - my); d += (xi - mx) ** 2; }); return n / d; };
 const round = (x: number, k: number) => Math.round(x * 10 ** k) / 10 ** k;
 
-/** `images`: also strip.png (the PDF) and viewer.png (the page), both 2 px per pt in the
- *  one frame, for tests/render/report. */
+/** `images`: also strip.svg (the PDF, drawn by MuPDF as vectors, text as outlines) and
+ *  viewer.png (the page), in the one frame and both sized 2 px per pt, for
+ *  tests/render/report. */
 export interface CompareOptions { out?: string; margin?: number; window?: number; lineTol?: number; waitLog?: string; images?: boolean; log?: (s: string) => void }
 
 export async function vectorCompare(build: string, url: string, o: CompareOptions = {}): Promise<Record<string, unknown>> {
@@ -102,10 +118,7 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
 
   const { glyphs: P, rules } = traceStrip(pdf);
   const dom: Dom = await dumpDom(url, { hsize, margin, waitLog: o.waitLog, screenshot: o.images ? join(out, 'viewer.png') : undefined });
-  if (o.images) {
-    const [, y0, , y1] = mupdf.Document.openDocument(readFileSync(pdf), 'application/pdf').loadPage(0).getBounds();
-    writeFileSync(join(out, 'strip.png'), rasterBand(pdf, 0, (y1 - y0) * PT_PER_BP).png);
-  }
+  if (o.images) writeFileSync(join(out, 'strip.svg'), stripSvg(pdf));
   writeFileSync(join(out, 'dom.json'), JSON.stringify(dom));
   const G = dom.glyphs;
   log(`strip: ${P.length} glyphs, ${rules.length} rules; viewer: ${G.length} glyphs, ${dom.rects.length} rects`);

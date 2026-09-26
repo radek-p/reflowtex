@@ -164,3 +164,41 @@ test("the panel's buttons in the dark", async ({ openPage }) => {
     expect(b.fg, b.text!).toBeGreaterThan(150);
   }
 });
+
+// The render report keeps one panel in its own page and inspects the page an
+// iframe shows, from test to test (inspect(win)).
+test('one panel inspects another window, and follows it to the next page', async ({ openPage }) => {
+  const page = await openPage('parts');
+  const frame = () => (document.getElementById('other') as HTMLIFrameElement).contentWindow as any;
+  // the iframe showing `path`, drawn, with the panel's agent in it: its first block's summary
+  const shown = async (path: string) => {
+    await page.waitForFunction(p => {
+      const w = ((document.getElementById('other') as HTMLIFrameElement | null)?.contentWindow) as any;
+      return w?.location.pathname.includes(p) && w.__rtxInspector && w.document.querySelector('.latex-block svg tspan');
+    }, path, { timeout: 20000 });
+    return page.evaluate(`(${frame})().__rtxInspector.blocks()[0].note`) as Promise<string>;
+  };
+  const treeText = () => page.evaluate(() => document.querySelector('[data-rtx-ui]')!.shadowRoot!.querySelector('.tree')!.textContent);
+  await page.evaluate(u => {
+    const f = Object.assign(document.createElement('iframe'), { id: 'other', src: u });
+    f.style.cssText = 'width:800px;height:600px';
+    f.onload = async () => { await reflowtex.inspector.inspect(f.contentWindow!); await reflowtex.inspector.open(undefined, { scroll: false }); };
+    document.body.appendChild(f);
+  }, new URL('../boxes/index.html', page.url()).href);
+  const boxes = await shown('/boxes/');
+  expect(await page.evaluate(() => !!window.__rtxInspector), 'the agent is in the inspected window, not here').toBe(false);
+  await expect.poll(treeText).toContain(boxes);
+
+  // the iframe goes on to another page: the same panel shows it
+  await page.evaluate(u => {
+    const f = document.getElementById('other') as HTMLIFrameElement;
+    f.onload = () => reflowtex.inspector.inspect(f.contentWindow!);
+    f.src = u;
+  }, new URL('../colours/index.html', page.url()).href);
+  const colours = await shown('/colours/');
+  expect(colours).not.toBe(boxes);
+  await expect.poll(treeText).toContain(colours);
+  expect(await treeText()).not.toContain(boxes);
+  expect(await page.evaluate(() => document.querySelectorAll('[data-rtx-ui]').length), 'one panel').toBe(1);
+  expect(await page.evaluate(() => reflowtex.inspector.isOpen())).toBe(true);
+});

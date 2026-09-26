@@ -187,6 +187,8 @@ it by a hash of the files). A page's controls open it through
 | `open(blockEl?, { dock }?)` | Open the panel. Given a block element, it expands and selects that block. `dock` is where this page would have the panel – `'left'`, `'right'`, `'bottom'`, `'float'`, or `'auto'` (right, or bottom in a portrait window) – until the reader chooses a place; floating if not given. `scroll: false` leaves the page where it is rather than scrolling to the block. |
 | `setDock(mode)` | Dock the panel to an edge (`'left'`, `'right'`, `'bottom'`) or let it float (`'float'`), and remember that. |
 | `close()`, `toggle()` | Close or toggle the panel. |
+| `inspect(win)` | Inspect the blocks of another window – a same-origin iframe – while the panel stays in this page, docked or floating as usual. Call it again when the iframe has loaded another page: the panel keeps its place and shows the new page. The render report (`tests/render/report/`) uses it. |
+| `isOpen()` | Whether the panel is open (a promise). |
 | `shortcut` | The shortcut's label, for a tooltip. |
 
 The website's [`layouts/partials/inspector.html`](../../website/layouts/partials/inspector.html)

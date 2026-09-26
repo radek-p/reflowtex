@@ -4,16 +4,16 @@
   --bg: #fff; --fg: #1f1f1f; --muted: #6b6b6b; --line: #e3e3e3; --hover: #eef3fd;
   --sel: #d3e3fd; --bar: #f3f3f3; --accent: #0b57d0; --icon: #474747; --canvas: #e8e8e8;
   --pass: #1e8e3e; --fail: #d93025; --known: #b06000; --error: #a142f4;
+  --check-a: #f4f4f4; --check-b: #e6e6e6;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
+:root[data-theme="dark"] {
     --bg: #1f2023; --fg: #e3e3e3; --muted: #9aa0a6; --line: #3a3b3f; --hover: #2a313c;
     --sel: #33476a; --bar: #26272b; --accent: #7cacf8; --icon: #c4c7c5; --canvas: #131416;
     --pass: #81c995; --fail: #f28b82; --known: #fdd663; --error: #d7aefb;
+    --check-a: #202124; --check-b: #17181a;
     color-scheme: dark;
-  }
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -67,18 +67,28 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); 
 
 /* ── The two sides, and the list ────────────────────────────────────────── */
 .main { flex: 1; min-height: 0; display: flex; }
-.side { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
-.side h2 { flex: none; margin: 0; padding: 4px 10px; font-size: 11px; font-weight: 600; color: var(--muted);
-  text-transform: uppercase; letter-spacing: .04em; background: var(--bar); border-bottom: 1px solid var(--line);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* side by side, or stacked (data-dir: row, column) */
+.compare { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; }
+.compare[data-dir="column"] { flex-direction: column; }
+.side { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.compare[data-dir="column"] .side + .side { border-top: 1px solid var(--line); }
+/* every pane's heading one height */
+.side h2, .list h2 { display: flex; align-items: center; gap: 4px; flex: none; height: 30px; margin: 0; padding: 0 4px 0 10px;
+  font-size: 11px; font-weight: 600; color: var(--muted); background: var(--bar); border-bottom: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; }
+.side h2 { text-transform: uppercase; letter-spacing: .04em; text-overflow: ellipsis; display: block; line-height: 30px; }
 .side h2 .mono { text-transform: none; letter-spacing: 0; font-weight: 400; }
-.scroll { flex: 1; min-height: 0; overflow: auto; background: var(--canvas); }
-.sheet { position: relative; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
-.sheet img { display: block; width: 100%; height: auto; image-rendering: auto; }
-.sheet svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
-/* the live page: an iframe at the page's own size, scaled to the pane */
-.live { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--canvas); }
-.live iframe { position: absolute; left: 0; top: 0; border: 0; background: #fff; transform-origin: 0 0; }
+/* A pane: a checkerboard, as an image editor shows no content – what shows
+   past the end of a side. It scrolls with the stage (local). */
+.scroll { flex: 1; min-height: 0; overflow: auto; padding: 0 9px;
+  background-color: var(--check-a); background-attachment: local;
+  background-image: conic-gradient(var(--check-b) 25%, transparent 0 50%, var(--check-b) 0 75%, transparent 0);
+  background-size: 16px 16px; }
+.stage { position: relative; margin: 0 auto; }
+.stage > .sheet { position: absolute; left: 0; top: 0; display: block; background: #fff; }
+.stage > .boxes { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+/* the live page: as tall as the stage, scaled to it, transparent past its end */
+.stage > .page { position: absolute; left: 0; top: 0; border: 0; background: transparent; transform-origin: 0 0; color-scheme: light; }
 .empty { padding: 24px; color: var(--muted); }
 
 .list { flex: 0 0 280px; min-width: 200px; display: flex; flex-direction: column; }
@@ -91,9 +101,16 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); 
 .list .row .k { color: var(--fail); text-align: center; }
 .list .row.allowed .k { color: var(--known); }
 .list .more { padding: 6px 10px; color: var(--muted); }
-/* the inspector, docked here when it is on */
-.insp { flex: 0 0 420px; min-width: 280px; display: flex; border-left: 1px solid var(--line); }
-.insp > div { flex: 1; min-width: 0; }
+
+/* ── The View menu ───────────────────────────────────────────────────────── */
+.menuwrap { position: relative; }
+.menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 10; min-width: 190px; padding: 4px 0;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.menu .mhead { padding: 6px 12px 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.menu button { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 12px 4px 8px; border: 0; background: none;
+  text-align: left; cursor: pointer; }
+.menu button:hover { background: var(--hover); }
+.menu .check { width: 14px; color: var(--accent); text-align: center; }
 
 /* ── Bottom bar ──────────────────────────────────────────────────────────── */
 .foot { display: flex; align-items: center; gap: 14px; flex: none; padding: 3px 10px; min-height: 22px;

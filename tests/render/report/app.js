@@ -4,9 +4,9 @@
 // boxed in red on both (see README.md).
 //
 // Both sides are in the frame vector-compare.ts measures in: pt from the left
-// edge of the margin and from the top of the block. strip.png and viewer.png
-// are 2 px per pt in it; the live page is pinned as dom-dump.ts pins it, where
-// the viewer also draws 2 px per pt.
+// edge of the margin and from the top of the block. strip.svg (MuPDF's drawing
+// of the PDF, vectors) and viewer.png are sized 2 px per pt in it; the live page
+// is pinned as dom-dump.ts pins it, where the viewer also draws 2 px per pt.
 import { html, render, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from '/inspector/vendor/preact.js';
 
 const BUILD = '/build/';
@@ -94,56 +94,120 @@ function Threshold({ label, value, fallback, onChange }) {
         <input value=${text} inputmode="decimal" onInput=${e => { setText(e.target.value); const n = Number(e.target.value); if (e.target.value !== '' && n >= 0) onChange(n); }}/>pt
         ${value !== fallback ? html`<button type="button" class="reset" title="The case's ceiling" onClick=${() => onChange(fallback)}>↺</button>` : null}</label>`;
 }
+const IconLock = ({ on }) => html`<${Svg}><rect x="4.5" y="9" width="11" height="8" rx="1.5" ...${stroke}/>
+    <path d=${on ? 'M7 9V6.5a3 3 0 0 1 6 0V9' : 'M7 9V6.5a3 3 0 0 1 5.8-1.1'} ...${stroke}/><//>`;
+const IconView = () => html`<${Svg}><rect x="2.5" y="4" width="15" height="12" rx="1.5" ...${stroke}/><path d="M10 4v12" ...${stroke}/><//>`;
+const Caret = () => html`<svg viewBox="0 0 8 8" width="8" height="8" aria-hidden="true"><path d="M1 2.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`;
 
-// ── The two sides ──────────────────────────────────────────────────────────────
-/** An image of one side with its boxes; its scroll is the side's. */
-function Sheet({ src, items, side, sel, scale, widthPt, scrollRef, onScroll, missing }) {
-    const [size, setSize] = useState(null);          // the image's size in pt
-    const img = useRef(null);
-    const measure = () => { const i = img.current; if (i?.complete && i.naturalWidth) setSize([i.naturalWidth / PX_PER_PT, i.naturalHeight / PX_PER_PT]); };
-    // a cached image may have loaded before onLoad was listening
-    useLayoutEffect(() => { setSize(null); measure(); }, [src]);
-    const svg = useMemo(() => boxesSvg(items, side, sel), [items, side, sel]);
-    return html`<div class="scroll" ref=${scrollRef} onScroll=${onScroll}>
-        ${missing ? html`<p class="empty">${missing}</p>` : html`
-        <div class="sheet" style=${{ width: `${widthPt * scale}px` }}>
-            <img ref=${img} src=${src} alt="" onLoad=${measure}
-                onError=${() => setSize(false)}/>
-            ${size ? html`<svg viewBox=${`0 0 ${size[0]} ${size[1]}`} width=${size[0] * scale} height=${size[1] * scale}
-                dangerouslySetInnerHTML=${{ __html: svg }}/>` : null}
-            ${size === false ? html`<p class="empty">No image: run the test again (make test-render) to make one.</p>` : null}
-        </div>`}
-    </div>`;
+// ── Settings, kept in this browser ─────────────────────────────────────────────
+const stored = (key, fallback) => { try { return localStorage.getItem(`render-report.${key}`) ?? fallback; } catch { return fallback; } };
+const store = (key, v) => { try { localStorage.setItem(`render-report.${key}`, v); } catch { /* not kept */ } };
+function useSetting(key, fallback) {
+    const [v, set] = useState(() => stored(key, fallback));
+    return [v, x => { store(key, x); set(x); }];
+}
+// The theme: index.html sets data-theme before the first paint; this follows
+// the choice, and the system's while it is 'auto'.
+function applyTheme(choice) {
+    const dark = choice === 'dark' || (choice === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 }
 
-// What dom-dump.ts does to the page, so that it is laid out as it was measured.
+/** The View menu: theme, split, scroll lock. */
+function ViewMenu({ theme, setTheme, split, setSplit, lock, setLock }) {
+    const [open, setOpen] = useState(false);
+    const box = useRef(null);
+    useEffect(() => {
+        if (!open) return;
+        const away = e => { if (!box.current.contains(e.target)) setOpen(false); };
+        const esc = e => { if (e.key === 'Escape') setOpen(false); };
+        addEventListener('pointerdown', away, true); addEventListener('keydown', esc);
+        return () => { removeEventListener('pointerdown', away, true); removeEventListener('keydown', esc); };
+    }, [open]);
+    const Radio = ({ value, set, v, label, hint }) => html`<button type="button" role="menuitemradio" aria-checked=${String(value === v)}
+        onClick=${() => set(v)} title=${hint ?? ''}><span class="check">${value === v ? '✓' : ''}</span>${label}</button>`;
+    return html`<span class="menuwrap" ref=${box}>
+        <button class="ib text" aria-haspopup="menu" aria-expanded=${String(open)} title="Theme, split and scrolling" onClick=${() => setOpen(!open)}>
+            <${IconView}/> View <${Caret}/></button>
+        ${open ? html`<div class="menu" role="menu">
+            <div class="mhead">Theme</div>
+            <${Radio} value=${theme} set=${setTheme} v="auto" label="Auto" hint="As the system's"/>
+            <${Radio} value=${theme} set=${setTheme} v="light" label="Light"/>
+            <${Radio} value=${theme} set=${setTheme} v="dark" label="Dark"/>
+            <div class="mhead">Split</div>
+            <${Radio} value=${split} set=${setSplit} v="auto" label="Auto" hint="Side by side when there is more width than height, else stacked"/>
+            <${Radio} value=${split} set=${setSplit} v="row" label="Side by side"/>
+            <${Radio} value=${split} set=${setSplit} v="column" label="Stacked"/>
+            <div class="mhead">Scrolling</div>
+            <button type="button" role="menuitemcheckbox" aria-checked=${String(lock)} onClick=${() => setLock(!lock)}
+                title="Both sides at the same x and y"><span class="check">${lock ? '✓' : ''}</span>Scroll together</button>
+        </div>` : null}
+    </span>`;
+}
+
+// ── The two sides ──────────────────────────────────────────────────────────────
+// Each side is a scroll pane holding a stage of the same size – the page's
+// width, and the longer side's height with a little more – so that with the
+// scroll locked both are at the same x and y, and past the end of the shorter
+// side its pane's pattern shows.
+const TAIL_PT = 36;
+
+/** An image's size in pt (2 px per pt): null while it loads, false if missing. */
+function useImageSize(src) {
+    const [size, setSize] = useState(null);
+    useEffect(() => {
+        setSize(null);
+        if (!src) return;
+        const i = new Image();
+        i.onload = () => setSize([i.naturalWidth / PX_PER_PT, i.naturalHeight / PX_PER_PT]);
+        i.onerror = () => setSize(false);
+        i.src = src;
+        return () => { i.onload = i.onerror = null; };
+    }, [src]);
+    return size;
+}
+
+const Pane = ({ paneRef, onScroll, stage, children }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}>
+    <div class="stage" style=${{ width: `${stage[0]}px`, height: `${stage[1]}px` }}>${children}</div></div>`;
+
+/** An image of one side, with its boxes. */
+function Sheet({ src, size, items, side, sel, scale }) {
+    const svg = useMemo(() => boxesSvg(items, side, sel), [items, side, sel]);
+    if (size === false) return html`<p class="empty">No image: run the test again (make test-render) to make one.</p>`;
+    if (!size) return null;
+    return html`<img class="sheet" src=${src} alt="" style=${{ width: `${size[0] * scale}px`, height: `${size[1] * scale}px` }}/>
+        <svg class="boxes" viewBox=${`0 0 ${size[0]} ${size[1]}`} width=${size[0] * scale} height=${size[1] * scale}
+            dangerouslySetInnerHTML=${{ __html: svg }}/>`;
+}
+
+// What dom-dump.ts does to the page, so that it is laid out as it was
+// measured; and transparent past its end, so the pane's pattern shows there.
 function pinPage(win, colPx, marginPx) {
     const doc = win.document;
     if (win.__setTheme) win.__setTheme('light');
     if (win.__zoom) win.__zoom(0);
+    const bg = [doc.body, doc.documentElement].map(e => getComputedStyle(e).backgroundColor)
+        .find(c => c && !/^(transparent|rgba\(0, 0, 0, 0\))$/.test(c)) ?? '#fff';
     const css = doc.createElement('style');
-    css.textContent = `html, body { margin:0 !important; padding:0 !important }
+    css.textContent = `:root { color-scheme: light !important }
+        html, body { margin:0 !important; padding:0 !important; background: transparent !important }
         body > :not(#lt-content):not(#rr-overlay) { display:none !important }
         #lt-content > :not(.latex-block) { display:none !important }
-        #lt-content { max-width:none !important; width:${colPx}px !important; margin:0 !important; padding:0 ${marginPx}px !important }
+        #lt-content { max-width:none !important; width:${colPx}px !important; margin:0 !important; padding:0 ${marginPx}px !important; background: ${bg} !important }
         .latex-block { margin:0 !important; width:${colPx}px !important }
         #rr-overlay { position:absolute; pointer-events:none; overflow:visible; z-index:2147483646 }`;
     doc.head.appendChild(css);
     win.dispatchEvent(new Event('resize'));
 }
 
-/** The page itself, as the test measured it: live, so the inspector can open
- *  on it. Scaled to the pane; its own scroll is the side's. */
-function Live({ src, items, sel, scale, widthPt, marginPt, hsizePt, inspect, inspectorHost, frameRef, onScroll }) {
-    const box = useRef(null);
-    const [pane, setPane] = useState([0, 0]);
+/** The page itself, as the test measured it: live, for the inspector. As tall
+ *  as the stage and scaled to it, so it never scrolls on its own – the pane
+ *  does. `onPage(win, block)` when it is ready; `onHeight(pt)` as it settles. */
+function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, frameRef, onPage, onHeight }) {
+    // hidden until pinned: the page as it loads (its header and title, its own
+    // layout) is not the page the test measured
+    const [ready, setReady] = useState(false);
     const colPx = Math.round(hsizePt * PX_PER_PT), marginPx = Math.round(marginPt * PX_PER_PT);
-    useLayoutEffect(() => {
-        const ro = new ResizeObserver(([e]) => setPane([e.contentRect.width, e.contentRect.height]));
-        ro.observe(box.current);
-        return () => ro.disconnect();
-    }, []);
-    const k = scale / PX_PER_PT;
     const place = useCallback(() => {
         const win = frameRef.current?.contentWindow, doc = win?.document;
         const block = doc?.querySelector('.latex-block');
@@ -156,52 +220,32 @@ function Live({ src, items, sel, scale, widthPt, marginPt, hsizePt, inspect, ins
         svg.setAttribute('width', wPt * PX_PER_PT); svg.setAttribute('height', hPt * PX_PER_PT);
         svg.setAttribute('viewBox', `0 0 ${wPt} ${hPt}`);
         svg.innerHTML = boxesSvg(items, 'viewer', sel);
+        onHeight(hPt);
     }, [items, sel, colPx, marginPx]);
     useEffect(place, [place]);
     const onLoad = () => {
         const win = frameRef.current.contentWindow;
         pinPage(win, colPx, marginPx);
-        win.addEventListener('scroll', onScroll, { passive: true });
+        requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
+        requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
         // the block settles as its fonts arrive
         const block = win.document.querySelector('.latex-block');
         if (block) new win.ResizeObserver(() => place()).observe(block);
         setTimeout(place, 300);
-        if (inspect) openInspector(win, block, inspectorHost.current);
+        onPage(win, block);
     };
-    // re-bind the scroll handler when it changes (it closes over the scale)
-    useEffect(() => {
-        const win = frameRef.current?.contentWindow;
-        if (!win) return;
-        win.addEventListener('scroll', onScroll, { passive: true });
-        return () => win.removeEventListener('scroll', onScroll);
-    }, [onScroll]);
-    const [pw, ph] = pane;
-    // as wide as the page, or the pane when zoomed in past it: the page scrolls across
-    // inside, its column pinned all the same
-    return html`<div class="live" ref=${box}>
-        ${pw ? html`<iframe ref=${frameRef} src=${src} title="The reflowed page" onLoad=${onLoad}
-            style=${{ width: `${Math.min(colPx + 2 * marginPx, pw / k)}px`, height: `${ph / k}px`, transform: `scale(${k})`,
-                      left: `${Math.max(0, (pw - widthPt * scale) / 2)}px` }}/>` : null}
-    </div>`;
-}
-
-/** The inspector, loaded into the page and docked beside the list: it reads
- *  the page's blocks and highlights on the page, and draws its panel here. */
-function openInspector(win, block, host) {
-    const go = () => {
-        try { win.reflowtex.inspector.dock(host, block); }
-        catch { win.reflowtex.inspector.open(block, { dock: 'float' }); }
-    };
-    if (win.reflowtex?.inspector) { go(); return; }
-    const s = win.document.createElement('script');
-    s.src = '/inspector/inspector.js';
-    s.onload = go;
-    win.document.head.appendChild(s);
+    const k = scale / PX_PER_PT;
+    return html`<iframe class="page" ref=${frameRef} src=${src} title="The reflowed page" onLoad=${onLoad} scrolling="no"
+        style=${{ width: `${colPx + 2 * marginPx}px`, height: `${stagePt[1] * PX_PER_PT}px`, transform: `scale(${k})`,
+                 visibility: ready ? 'visible' : 'hidden' }}/>`;
 }
 
 // ── The page ───────────────────────────────────────────────────────────────────
 const idFromHash = () => decodeURIComponent(location.hash.slice(1));
 const inField = e => /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
+const inspector = () => window.reflowtex?.inspector;
+const STATUS = { pass: 'Pass', fail: 'Fail', known: 'Known failure', fixed: 'Passes – take the known mark off', error: 'Error' };
+const MARK = { pass: '✓', fail: '✗', known: '○', fixed: '!', error: '⚠' };
 
 function App() {
     const [report, setReport] = useState(null), [error, setError] = useState(null);
@@ -210,10 +254,26 @@ function App() {
     const [thr, setThr] = useState({});                   // per test: [glyph, rule]
     const [zoom, setZoom] = useState('fit');
     const [mode, setMode] = useState('live');
-    const [inspect, setInspect] = useState(false);
+    const [theme, setThemeKept] = useSetting('theme', 'auto');
+    const [split, setSplit] = useSetting('split', 'auto');
+    const [lockKept, setLockKept] = useSetting('lock', 'on');
+    const lock = lockKept === 'on', setLock = on => setLockKept(on ? 'on' : 'off');
+    const [inspecting, setInspecting] = useState(false);
     const [sel, setSel] = useState(-1);
     const [fitScale, setFitScale] = useState(1);
-    const left = useRef(null), right = useRef(null), frame = useRef(null), main = useRef(null), insp = useRef(null);
+    const [liveH, setLiveH] = useState(0);
+    const [autoDir, setAutoDir] = useState('row');
+    const left = useRef(null), right = useRef(null), frame = useRef(null), compare = useRef(null);
+    const page = useRef(null);                            // the live page: [win, block]
+    const inspectorUsed = useRef(false);
+
+    const setTheme = t => { setThemeKept(t); applyTheme(t); };
+    useEffect(() => {
+        const mq = matchMedia('(prefers-color-scheme: dark)');
+        const follow = () => applyTheme(stored('theme', 'auto'));
+        mq.addEventListener('change', follow);
+        return () => mq.removeEventListener('change', follow);
+    }, []);
 
     const load = () => getJson(`${BUILD}report.json`).then(setReport, e => setError(String(e)));
     useEffect(() => { load(); }, []);
@@ -225,7 +285,7 @@ function App() {
     const go = i => { const t = results[(i + results.length) % results.length]; if (t) location.hash = encodeURIComponent(t.id); };
 
     useEffect(() => {
-        setVec(null); setSel(-1);
+        setVec(null); setSel(-1); setLiveH(0);
         if (!r || r.status === 'error') return;
         getJson(`${BUILD}${r.dir}/vector/vector.json`).then(setVec, e => setVec({ error: String(e) }));
     }, [r?.id, r?.at]);
@@ -236,52 +296,85 @@ function App() {
     const setRuleThr = n => setThr({ ...thr, [r.id]: [glyphThr, n] });
     const items = useMemo(() => (vec && !vec.error ? mismatches(vec, glyphThr, ruleThr, r?.rules_missing ?? 0) : []), [vec, glyphThr, ruleThr]);
 
-    // the page's width in pt: the column and a margin either side
+    const stamp = r ? `?t=${encodeURIComponent(r.at)}` : '';
+    const vdir = r ? `${BUILD}${r.dir}/vector/` : '';
+    const noVec = !r ? null : r.status === 'error' ? 'The test stopped before a comparison: see above.' : vec?.error ? `No comparison: ${vec.error}` : null;
+    const stripSrc = r && !noVec ? `${vdir}strip.svg${stamp}` : null, viewerSrc = r && !noVec ? `${vdir}viewer.png${stamp}` : null;
+    const stripSize = useImageSize(stripSrc), viewerSize = useImageSize(viewerSrc);
+
+    // the page's width in pt: the column and a margin either side; the stage's
+    // height: the longer side's, and a tail
     const marginPt = vec?.margin_pt ?? 36, hsizePt = vec?.hsize_pt ?? r?.hsize_pt ?? 345;
     const widthPt = hsizePt + 2 * marginPt;
-    useLayoutEffect(() => {
-        if (!main.current) return;
-        const ro = new ResizeObserver(() => {
-            const w = Math.min(...[...main.current.querySelectorAll('.side')].map(s => s.clientWidth)) - 18;
-            setFitScale(Math.max(.2, w / widthPt));
-        });
-        ro.observe(main.current);
-        return () => ro.disconnect();
-    }, [widthPt, !!report, inspect]);
-    const scale = zoom === 'fit' ? fitScale : zoom;
+    const stagePt = [widthPt, Math.max(stripSize?.[1] ?? 0, viewerSize?.[1] ?? 0, liveH) + TAIL_PT];
 
-    // one scroll for both sides, in pt
-    const syncing = useRef(null);
-    const rightWin = () => (mode === 'live' ? frame.current?.contentWindow : null);
-    const setScroll = (who, xPt, yPt) => {
-        if (who !== 'left' && left.current) { left.current.scrollTop = yPt * scale; left.current.scrollLeft = xPt * scale; }
-        if (who !== 'right') {
-            const w = rightWin();
-            if (w) w.scrollTo(xPt * PX_PER_PT, yPt * PX_PER_PT);
-            else if (right.current) { right.current.scrollTop = yPt * scale; right.current.scrollLeft = xPt * scale; }
-        }
+    // side by side or stacked: 'auto' by the shape of the room for the two
+    const dir = split === 'auto' ? autoDir : split;
+    useLayoutEffect(() => {
+        if (!compare.current) return;
+        const ro = new ResizeObserver(() => {
+            const c = compare.current;
+            if (!c) return;
+            setAutoDir(c.clientWidth >= c.clientHeight ? 'row' : 'column');
+            const pane = c.querySelector('.scroll');
+            if (pane) setFitScale(Math.max(.2, (pane.clientWidth - 18) / widthPt));
+        });
+        ro.observe(compare.current);
+        for (const p of compare.current.querySelectorAll('.scroll')) ro.observe(p);
+        return () => ro.disconnect();
+    }, [widthPt, !!report, dir, !!noVec]);
+    const scale = zoom === 'fit' ? fitScale : zoom;
+    const stage = [stagePt[0] * scale, stagePt[1] * scale];
+
+    // Scrolling together: the same x and y on both, the stages being alike.
+    const follow = (from, to) => () => {
+        if (!lock || !from.current || !to.current) return;
+        const a = from.current, b = to.current;
+        if (b.scrollTop !== a.scrollTop) b.scrollTop = a.scrollTop;
+        if (b.scrollLeft !== a.scrollLeft) b.scrollLeft = a.scrollLeft;
     };
-    const scrolled = who => () => {
-        if (syncing.current && syncing.current !== who) return;
-        syncing.current = who;
-        requestAnimationFrame(() => requestAnimationFrame(() => { if (syncing.current === who) syncing.current = null; }));
-        if (who === 'left') setScroll('left', left.current.scrollLeft / scale, left.current.scrollTop / scale);
-        else if (rightWin()) setScroll('right', rightWin().scrollX / PX_PER_PT, rightWin().scrollY / PX_PER_PT);
-        else setScroll('right', right.current.scrollLeft / scale, right.current.scrollTop / scale);
-    };
-    const onLeft = useCallback(scrolled('left'), [scale, mode]);
-    const onRight = useCallback(scrolled('right'), [scale, mode]);
+    const onLeft = follow(left, right), onRight = follow(right, left);
+    useEffect(() => { if (lock) onLeft(); }, [lock]);
+    // at another zoom, the same point stays at the top
+    const lastScale = useRef(scale);
+    useLayoutEffect(() => {
+        const f = scale / lastScale.current;
+        lastScale.current = scale;
+        if (f !== 1) for (const p of [left.current, right.current]) if (p) { p.scrollTop *= f; p.scrollLeft *= f; }
+    }, [scale]);
     // show a mismatch: in the middle of both sides
     const reveal = i => {
         setSel(i);
         const it = items[i];
-        if (!it || !left.current) return;
-        const view = left.current.clientHeight / scale;
-        syncing.current = 'reveal';
-        setScroll('reveal', 0, Math.max(0, it.y - view / 2));
-        requestAnimationFrame(() => { syncing.current = null; });
+        if (!it) return;
+        for (const p of [left.current, right.current]) if (p) p.scrollTop = Math.max(0, it.y * scale - p.clientHeight / 2);
         document.querySelector(`.list .row[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
     };
+
+    // The inspector: one panel, in this page, docked or floating as the
+    // inspector does anywhere; it inspects the live page, whichever test is
+    // shown.
+    const onPage = (win, block) => {
+        page.current = [win, block];
+        if (inspectorUsed.current) inspector()?.inspect(win);
+    };
+    const toggleInspector = async () => {
+        const api = inspector();
+        if (!api) return;
+        if (await api.isOpen()) { api.close(); setInspecting(false); return; }
+        if (mode !== 'live') { setMode('live'); return; }     // opened by onPage when it is there
+        const [win, block] = page.current ?? [];
+        if (!win) return;
+        inspectorUsed.current = true;
+        await api.inspect(win);
+        await api.open(block, { dock: 'auto', scroll: false });
+        setInspecting(true);
+    };
+    useEffect(() => {                                     // (it has its own close button)
+        const t = setInterval(async () => { const api = inspector(); if (api && inspectorUsed.current) setInspecting(await api.isOpen()); }, 500);
+        return () => clearInterval(t);
+    }, []);
+    const setSide = m => { setMode(m); if (m !== 'live' && inspecting) { inspector()?.close(); setInspecting(false); } };
 
     useEffect(() => {
         const key = e => {
@@ -300,54 +393,58 @@ function App() {
     if (!results.length) return html`<p class="empty">No results yet: run <kbd>make test-render</kbd> (or one case), then reload.</p>`;
 
     const counts = results.reduce((a, x) => ({ ...a, [x.status]: (a[x.status] ?? 0) + 1 }), {});
-    const stamp = `?t=${encodeURIComponent(r.at)}`;
-    const vdir = `${BUILD}${r.dir}/vector/`;
-    const noVec = r.status === 'error' ? 'The test stopped before a comparison: see above.' : vec?.error ? `No comparison: ${vec.error}` : null;
     const liveSrc = r.page ? `${BUILD}${r.page}/index.html` : null;
     const shown = items.slice(0, 2000);
+    const empty = noVec ? html`<p class="empty">${noVec}</p>` : null;
 
     return html`<div class="rep">
         <div class="bar">
             <button class="ib" title="Previous test (←)" aria-label="Previous test" onClick=${() => go(idx - 1)}><${IconPrev}/></button>
             <span class="pick"><select aria-label="Test" value=${r.id} onChange=${e => { location.hash = encodeURIComponent(e.target.value); }}>
-                ${results.map(x => html`<option value=${x.id}>${({ pass: '✓', fail: '✗', known: '○', fixed: '!', error: '⚠' })[x.status] ?? '·'} ${x.id}</option>`)}
+                ${results.map(x => html`<option value=${x.id}>${MARK[x.status] ?? '·'} ${x.id}</option>`)}
             </select></span>
             <button class="ib" title="Next test (→)" aria-label="Next test" onClick=${() => go(idx + 1)}><${IconNext}/></button>
-            <span class=${`st ${r.status}`} title=${r.known ? `known: ${r.known}` : ''}>${({ pass: 'Pass', fail: 'Fail', known: 'Known failure', fixed: 'Passes – take the known mark off', error: 'Error' })[r.status]}</span>
+            <span class=${`st ${r.status}`} title=${r.known ? `known: ${r.known}` : ''}>${STATUS[r.status]}</span>
             <span class="muted mono">${idx + 1} / ${results.length}</span>
             <span class="sep"></span>
             <${Threshold} label="Glyph" value=${glyphThr} fallback=${r.tolerance} onChange=${setGlyphThr}/>
             <${Threshold} label="Rule" value=${ruleThr} fallback=${r.rule_tolerance ?? r.tolerance} onChange=${setRuleThr}/>
             <span class="sep"></span>
             <${Seg} title="Zoom" value=${zoom} onChange=${setZoom} options=${[['fit', 'Fit'], [1, '1×'], [2, '2×'], [4, '4×']]}/>
+            <button class=${`ib ${lock ? 'on' : ''}`} aria-pressed=${String(lock)} title=${lock ? 'Scrolling together: both sides at the same x and y' : 'Scrolling apart'}
+                aria-label="Scroll together" onClick=${() => setLock(!lock)}><${IconLock} on=${lock}/></button>
             <span class="sep"></span>
             <${Seg} title="The browser's side: the page itself, or the screenshot the test compared" value=${mode}
-                onChange=${m => { setMode(m); if (m !== 'live') setInspect(false); }} options=${[['live', 'Live page'], ['snapshot', 'Snapshot']]}/>
-            <button class=${`ib text ${inspect ? 'on' : ''}`} aria-pressed=${String(inspect)} disabled=${!liveSrc}
-                title="Open the inspector on the reflowed page (boxes, glue, every glyph)"
-                onClick=${() => { setMode('live'); setInspect(!inspect); }}><${IconInspect}/> Inspect</button>
+                onChange=${setSide} options=${[['live', 'Live page'], ['snapshot', 'Snapshot']]}/>
+            <button class=${`ib text ${inspecting ? 'on' : ''}`} aria-pressed=${String(inspecting)} disabled=${!liveSrc}
+                title=${`The inspector on the reflowed page: boxes, glue, every glyph (${inspector()?.shortcut ?? 'Alt+Shift+I'})`}
+                onClick=${toggleInspector}><${IconInspect}/> Inspect</button>
+            <span class="sep"></span>
+            <${ViewMenu} theme=${theme} setTheme=${setTheme} split=${split} setSplit=${setSplit} lock=${lock} setLock=${setLock}/>
             <span class="fill"></span>
             <span class="muted">${Object.entries(counts).map(([k, n]) => html`<span class=${`st ${k}`} style="font-weight:400">${n}</span>`)}</span>
             <button class="ib" title="Read the report again (after a test run)" aria-label="Reload" onClick=${load}><${IconReload}/></button>
         </div>
         ${r.problems?.length ? html`<ul class=${`problems ${r.status}`}>${r.problems.map(p => html`<li>${p}</li>`)}</ul>` : null}
-        <div class="main" ref=${main}>
-            <section class="side">
-                <h2>TeX · pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></h2>
-                <${Sheet} src=${`${vdir}strip.png${stamp}`} items=${items} side="strip" sel=${sel} scale=${scale} widthPt=${widthPt}
-                    scrollRef=${left} onScroll=${onLeft} missing=${noVec}/>
-            </section>
-            <section class="side">
-                <h2>Browser · reflowed <span class="mono">${mode === 'live' ? 'live page' : 'as the test saw it'}</span></h2>
-                ${mode === 'live' && liveSrc && !noVec
-                    ? html`<${Live} key=${`${r.id}|${r.at}|${inspect}`} src=${liveSrc} items=${items} sel=${sel} scale=${scale} widthPt=${widthPt}
-                        marginPt=${marginPt} hsizePt=${hsizePt} inspect=${inspect} inspectorHost=${insp} frameRef=${frame} onScroll=${onRight}/>`
-                    : html`<${Sheet} src=${`${vdir}viewer.png${stamp}`} items=${items} side="viewer" sel=${sel} scale=${scale} widthPt=${widthPt}
-                        scrollRef=${right} onScroll=${onRight} missing=${noVec}/>`}
-            </section>
+        <div class="main">
+            <div class="compare" ref=${compare} data-dir=${dir}>
+                <section class="side">
+                    <h2>TeX · pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></h2>
+                    ${empty ?? html`<${Pane} paneRef=${left} onScroll=${onLeft} stage=${stage}>
+                        <${Sheet} src=${stripSrc} size=${stripSize} items=${items} side="strip" sel=${sel} scale=${scale}/><//>`}
+                </section>
+                <section class="side">
+                    <h2>Browser · reflowed <span class="mono">${mode === 'live' ? 'live page' : 'as the test saw it'}</span></h2>
+                    ${empty ?? html`<${Pane} paneRef=${right} onScroll=${onRight} stage=${stage}>
+                        ${mode === 'live' && liveSrc
+                            ? html`<${Live} key=${`${r.id}|${r.at}`} src=${liveSrc} items=${items} sel=${sel} scale=${scale} stagePt=${stagePt}
+                                marginPt=${marginPt} hsizePt=${hsizePt} frameRef=${frame} onPage=${onPage} onHeight=${setLiveH}/>`
+                            : html`<${Sheet} src=${viewerSrc} size=${viewerSize} items=${items} side="viewer" sel=${sel} scale=${scale}/>`}<//>`}
+                </section>
+            </div>
             <section class="list">
                 <h2>
-                    <span class="fill">${items.length ? `${items.length} not matching` : vec ? 'Everything matches' : ''}</span>
+                    <span class="fill">${items.length ? `${items.length} not matching` : vec && !vec.error ? 'Everything matches' : ''}</span>
                     <button class="ib" title="Previous (p)" aria-label="Previous mismatch" disabled=${!items.length} onClick=${() => reveal(Math.max(0, sel - 1))}><${IconUp}/></button>
                     <button class="ib" title="Next (n)" aria-label="Next mismatch" disabled=${!items.length} onClick=${() => reveal(Math.min(items.length - 1, sel + 1))}><${IconDown}/></button>
                 </h2>
@@ -359,7 +456,6 @@ function App() {
                     ${items.length > shown.length ? html`<div class="more">and ${items.length - shown.length} more</div>` : null}
                 </div>
             </section>
-            ${inspect ? html`<section class="insp"><div ref=${insp}></div></section>` : null}
         </div>
         <div class="foot">
             <span class="key"><span class="sw"></span>off, or on one side only</span>
@@ -375,4 +471,5 @@ function App() {
     </div>`;
 }
 
+applyTheme(stored('theme', 'auto'));
 render(html`<${App}/>`, document.getElementById('app'));

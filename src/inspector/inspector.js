@@ -21,6 +21,11 @@
 //   reflowtex.inspector.toggle()
 //   reflowtex.inspector.dock(el, block?) put the panel inside el, open for
 //                                        good
+//   reflowtex.inspector.inspect(win)     inspect the blocks of another window (a
+//                                        same-origin iframe), the panel staying
+//                                        here; call again when it has loaded
+//                                        another page
+//   reflowtex.inspector.isOpen()         whether the panel is open (a promise)
 //   reflowtex.inspector.shortcut         the shortcut's label, for a tooltip
 (() => {
 const api = window.reflowtex = window.reflowtex || {};
@@ -42,6 +47,8 @@ api.inspector = {
     open: loaded('open'),
     toggle: loaded('toggle'),
     dock: loaded('dock'),
+    inspect: loaded('inspect'),
+    isOpen: async () => (panel ? (await panel).isOpen() : false),
     // (nothing to close, or to place, before it is loaded: the place is only remembered)
     close: async () => { if (panel) (await panel).close(); },
     setDock: async mode => {

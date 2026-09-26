@@ -5,7 +5,7 @@
 // legend and the status. Loaded by inspector.js the first time it opens;
 // mount() makes it and hands back what the page's API calls.
 import { html, render, useLayoutEffect, useRef } from '../vendor/preact.js';
-import { call, got, useAsset, assetUrl } from './bridge.js';
+import { call, got, useAsset, assetUrl, pageWindow, setPageWindow } from './bridge.js';
 import { isOpen, view, dark, guides, picking, blocks, noViewer, flash, menu, refs, keep, plain, say, SHORTCUT } from './store.js';
 import { IconButton, IconPick, IconClose, IconCheck, IconDock, Caret, MenuBox, toggleMenu, closeMenu, menuOpen } from './ui.js';
 import { SIDES, SIDE_TITLES, side, embedded, panelStyle, setDock, applyDock, chosenDock, setPageDock, startMove, startSize, resized } from './dock.js';
@@ -162,6 +162,51 @@ function syncTheme() {
     const m = bg(getComputedStyle(document.body).backgroundColor) || bg(getComputedStyle(document.documentElement).backgroundColor);
     dark.value = m ? (0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3]) < 110 : matchMedia('(prefers-color-scheme: dark)').matches;
 }
+// A page in another window draws with its own fonts; the Resources view
+// draws their glyphs here, so this document declares them too (@font-face,
+// its URLs made absolute). Read again as the page adds fonts.
+let mirrored = -1;
+function mirrorFonts() {
+    const w = pageWindow();
+    if (w === window) return;
+    let css = '', n = 0;
+    try {
+        for (const sheet of w.document.styleSheets) {
+            let rules;
+            try { rules = sheet.cssRules; } catch { continue; }      // (another origin's)
+            const base = sheet.href || w.document.baseURI;
+            for (const r of rules) {
+                if (r.type !== CSSRule.FONT_FACE_RULE) continue;
+                n++;
+                css += r.cssText.replace(/url\((['"]?)([^'")]+)\1\)/g, (_, q, u) => `url("${new URL(u, base).href}")`) + '\n';
+            }
+        }
+    } catch { return; }                                                 // (the page is going)
+    if (n === mirrored) return;
+    mirrored = n;
+    let style = document.getElementById('rtx-page-fonts');
+    if (!style) { style = document.createElement('style'); style.id = 'rtx-page-fonts'; document.head.appendChild(style); }
+    style.textContent = css;
+}
+// Inspect the blocks of another window – a same-origin iframe – from here;
+// again when it has loaded another page. The panel stays where it is, open or
+// not; what it showed of the last page goes.
+async function inspect(w) {
+    if (isOpen.value) { call('cancelPick'); call('clear'); }
+    setPageWindow(w);
+    mirrored = -1;
+    forgetSelection();
+    forgetResources();
+    blocks.value = null;
+    lastPaints = null;
+    if (!isOpen.value) return;
+    mirrorFonts();
+    try { await refresh(); } catch (e) { say(String(e.message || e), 10000); return; }
+    if (view.value === 'res') loadResources();
+    if (view.value === 'col') loadColours();
+    applyGuides();
+    poll();
+}
 async function togglePick() {
     const st = await call('status');
     if (!got(st)) return;
@@ -174,6 +219,7 @@ let pollTimer = 0, lastPickSeq = 0;
 async function poll() {
     if (!isOpen.value) return;
     syncTheme();
+    mirrorFonts();
     const st = await call('status');
     noViewer.value = !got(st);
     if (!got(st)) { picking.value = false; return; }
@@ -192,7 +238,7 @@ async function poll() {
 let lastPaints = null, refreshing = false, again = false;
 function watchPaints() {
     if (!isOpen.value) return;
-    const p = window.reflowtex && window.reflowtex.inspect && window.reflowtex.inspect.paints;
+    const w = pageWindow(), p = w.reflowtex && w.reflowtex.inspect && w.reflowtex.inspect.paints;
     if (p !== undefined && p !== lastPaints) {
         const first = lastPaints === null;
         lastPaints = p;
@@ -285,5 +331,5 @@ export function mount({ asset }) {
             && !(e.composedPath()[0] instanceof HTMLInputElement)) close();
     }, true);
     render(html`<${Panel}/>`, into);
-    return { open, close, toggle, setDock, dock: embed };
+    return { open, close, toggle, setDock, dock: embed, inspect, isOpen: () => isOpen.value };
 }
