@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 bb11c12abe85d4ce539b1a84b4abe6c73ea7ea498da80a9c7c1f0d9a36fdd8a2
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 98c55e21a6bef5881096efb4c7652a413f869c2a38e97c2f3616a4ca095376e0
 'use strict';
 "use strict";
 (() => {
@@ -2845,6 +2845,8 @@
   var MIN_PX = 1;
   var FITTED = ";overflow:hidden";
   var UNFITTED = ";overflow-x:clip;overflow-y:visible";
+  var LINED = ";overflow:visible";
+  var RUN = "position:absolute;margin:0;padding:0;white-space:pre;transform-origin:0 0;display:block";
   var NEAR = 2;
   var maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
   function placeAccessibleLayer(data) {
@@ -2873,31 +2875,68 @@
       const s = i === void 0 ? null : cache.dom.segs[i];
       if (!s || !s.box) return null;
       const r = s.box.getBoundingClientRect();
-      let y0 = 0, y1 = r.height, lines = 1;
+      let y0 = 0, y1 = r.height, lines = 1, a = -1, b = -1;
       const L = laid[i];
       if (j >= 0 && L.itemStarts && L.lines && L.lines.length) {
-        const a = L.itemStarts[j];
-        const b = (j + 1 < L.itemStarts.length ? L.itemStarts[j + 1] : L.lines.length) - 1;
+        a = L.itemStarts[j];
+        b = (j + 1 < L.itemStarts.length ? L.itemStarts[j + 1] : L.lines.length) - 1;
         if (a <= b) {
           y0 = L.baselineYs[a] - maxOf(L.profiles[a], "h");
           y1 = L.baselineYs[b] + maxOf(L.profiles[b], "d");
           lines = b - a + 1;
         }
       }
-      return { top: r.top - origin.top + y0, left: r.left - origin.left, width: r.width, height: Math.max(1, y1 - y0), lines };
+      const ctm = s.svg && s.svg.getScreenCTM && s.svg.getScreenCTM();
+      return {
+        top: r.top - origin.top + y0,
+        left: r.left - origin.left,
+        width: r.width,
+        height: Math.max(1, y1 - y0),
+        lines,
+        seg: i,
+        a,
+        b,
+        ctm,
+        display: !!piece.dataset.item
+      };
     });
     const pieces = [...layer.children];
-    const refit = [];
+    const refit = [], lined = [], scaled = [];
     const h = window.innerHeight;
     pieces.forEach((piece, k) => {
       const p = places[k] || { top: 0, left: 0, width: 1, height: 1, lines: 1 };
-      const size = `${Math.round(p.width)}x${Math.round(p.height)}`;
-      const fitted = piece.dataset.size === size;
       const top = origin.top + p.top;
       const near = top + p.height > -NEAR * h && top < (NEAR + 1) * h;
+      const box = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px`;
+      if (near && p.a >= 0 && p.ctm) {
+        const key = `${Math.round(p.width)}x${Math.round(p.height)}@${p.a}-${p.b}`;
+        piece.style.cssText = box + LINED;
+        if (piece.dataset.lines !== key) {
+          const runs = runsOf(data, p.seg, p.a, p.b);
+          if (runs) {
+            piece.dataset.lines = key;
+            lined.push({ piece, p, runs, origin });
+            return;
+          }
+        } else return;
+      }
+      if (near && p.display && p.ctm) {
+        const math = piece.querySelector("math");
+        const ink = math && inkOf(data, p.seg);
+        if (ink) {
+          const m = p.ctm, left = m.a * ink.x0 + m.e - origin.left, top2 = m.d * ink.y0 + m.f - origin.top;
+          const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
+          piece.style.cssText = `${PIECE};top:${top2}px;left:${left}px;width:${w}px;height:${hh}px` + LINED;
+          math.dataset.run = "display";
+          scaled.push({ el: math, w, h: hh });
+          return;
+        }
+      }
+      const size = `${Math.round(p.width)}x${Math.round(p.height)}`;
+      const fitted = piece.dataset.size === size && !piece.dataset.lines;
       const guess = Math.max(MIN_PX, p.height / p.lines / LINE_HEIGHT);
       const font = fitted ? piece.style.fontSize : `${guess}px`;
-      piece.style.cssText = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px;font-size:${font}` + (fitted || near ? FITTED : UNFITTED);
+      piece.style.cssText = `${box};font-size:${font}` + (fitted || near ? FITTED : UNFITTED);
       if (!fitted) {
         if (near) {
           piece.dataset.size = size;
@@ -2905,7 +2944,171 @@
         } else delete piece.dataset.size;
       }
     });
+    for (const l of lined) scaled.push(...layOutRuns(l));
     fitText(refit);
+    scaleOnto(scaled);
+  }
+  function glyphText(cp) {
+    if (cp >= 57344 && cp <= 63743 || cp >= 983040) return "";
+    const ch = String.fromCodePoint(cp);
+    return cp >= 64256 && cp <= 64262 ? ch.normalize("NFKC") : ch;
+  }
+  function textOf3(nodes) {
+    let s = "";
+    for (const n of nodes || []) {
+      if (n.type === "glyph" && n.char !== void 0) s += glyphText(n.char);
+      else if (n.type === "glue" && (n.width || 0) > 0) s += " ";
+      else if (n.type === "disc") s += textOf3(n.replace);
+      else if (n.children) s += textOf3(n.children);
+    }
+    return s;
+  }
+  function runsOf(data, i, a, b) {
+    const L = data.cache.layout.laid[i];
+    if (!L || L.deferred || !L.lines || !L.lrp) return null;
+    useGlyphMetrics(data.cache.metrics);
+    const noop = () => {
+    };
+    const runs = [];
+    let inFormula = 0;
+    for (let j = a; j <= b; j++) {
+      const pos = /* @__PURE__ */ new Map(), ink = [];
+      const metrics = data.cache.metrics || [];
+      const sink = {
+        glyph: noop,
+        missing: noop,
+        space: noop,
+        rule: noop,
+        picture: noop,
+        beginTransform: noop,
+        endTransform: noop,
+        node: (n, x, y, w) => {
+          pos.set(n, { x, w });
+          if (n.type === "glyph") {
+            const g = n.metrics ? metrics[n.metrics - 1] || {} : n;
+            ink.push({ x, x1: x + w, top: y - (g.height || 0) * SP_TO_PX, bottom: y + (g.depth || 0) * SP_TO_PX });
+          }
+        }
+      };
+      const { ratio, er, x0, fillRatio, fillOrder } = L.lrp[j];
+      const nodes = L.lines[j].nodes;
+      renderNodes(data.fontInfo, sink, nodes, x0, L.baselineYs[j], fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+      const y0 = L.baselineYs[j] - maxOf(L.profiles[j], "h"), y1 = L.baselineYs[j] + maxOf(L.profiles[j], "d");
+      let text = null;
+      const flush = () => {
+        if (text && text.text.trim()) runs.push(text);
+        text = null;
+      };
+      const addText = (s, n) => {
+        const p = pos.get(n);
+        if (!s) return;
+        if (!text) {
+          if (!s.trim()) return;
+          text = { text: "", x0: Infinity, x1: -Infinity, y0, y1 };
+        }
+        text.text += s;
+        if (p && s.trim()) {
+          text.x0 = Math.min(text.x0, p.x);
+          text.x1 = Math.max(text.x1, p.x + p.w);
+        }
+      };
+      for (let k = 0; k < nodes.length; k++) {
+        const n = nodes[k];
+        if (inFormula) {
+          if (n.type === "math") inFormula += (n.subtype || 0) === 0 ? 1 : -1;
+          continue;
+        }
+        if (n.type === "math" && (n.subtype || 0) === 0 && n.mathml) {
+          flush();
+          let depth = 1, e = k + 1;
+          for (; e < nodes.length; e++) {
+            if (nodes[e].type === "math") depth += (nodes[e].subtype || 0) === 0 ? 1 : -1;
+            if (depth === 0) break;
+          }
+          const start = pos.get(n), end = e < nodes.length ? pos.get(nodes[e]) : null;
+          const last = pos.get(nodes[nodes.length - 1]);
+          const x1 = end ? end.x : last ? last.x + last.w : start.x;
+          const mine = ink.filter((g) => g.x >= start.x - 0.5 && g.x1 <= x1 + 0.5);
+          const my0 = mine.length ? Math.min(...mine.map((g) => g.top)) : y0;
+          const my1 = mine.length ? Math.max(...mine.map((g) => g.bottom)) : y1;
+          runs.push({ mathml: n.mathml, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1 });
+          if (e >= nodes.length) inFormula = depth;
+          k = e;
+          continue;
+        }
+        if (n.type === "glyph" && n.char !== void 0) addText(glyphText(n.char), n);
+        else if (n.type === "glue") {
+          if ((n.width || 0) > 0 || (n.stretch || 0) > 0) addText(" ", n);
+        } else if (n.type === "disc") {
+          if (k < nodes.length - 1) addText(textOf3(n.replace), n);
+          else if (text) text.hyphen = true;
+        } else if (n.type === "hlist" || n.type === "vlist") addText(textOf3(n.children), n);
+      }
+      if (text && !text.hyphen) text.text = text.text.replace(/\s*$/, " ");
+      if (text) text.text = text.text.replace(/^\s+/, "");
+      flush();
+    }
+    return runs;
+  }
+  function inkOf(data, i) {
+    const L = data.cache.layout.laid[i];
+    if (!L || L.deferred || !L.lines || !L.lrp) return null;
+    useGlyphMetrics(data.cache.metrics);
+    const noop = () => {
+    };
+    let x0 = Infinity, x1 = -Infinity;
+    const sink = {
+      glyph: noop,
+      missing: noop,
+      space: noop,
+      rule: noop,
+      picture: noop,
+      beginTransform: noop,
+      endTransform: noop,
+      node: (n, x, y, w) => {
+        if (n.type === "glyph" || n.type === "rule") {
+          x0 = Math.min(x0, x);
+          x1 = Math.max(x1, x + w);
+        }
+      }
+    };
+    for (let j = 0; j < L.lines.length; j++) {
+      const { ratio, er, x0: lx, fillRatio, fillOrder } = L.lrp[j];
+      renderNodes(data.fontInfo, sink, L.lines[j].nodes, lx, L.baselineYs[j], fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+    }
+    if (!(x1 > x0)) return null;
+    const last = L.lines.length - 1;
+    return { x0, x1, y0: L.baselineYs[0] - maxOf(L.profiles[0], "h"), y1: L.baselineYs[last] + maxOf(L.profiles[last], "d") };
+  }
+  function layOutRuns({ piece, p, runs, origin }) {
+    const m = p.ctm, pieceLeft = origin.left + p.left, pieceTop = origin.top + p.top;
+    const frag = document.createDocumentFragment(), scale = [];
+    for (const r of runs) {
+      const left = m.a * r.x0 + m.e - pieceLeft, top = m.d * r.y0 + m.f - pieceTop;
+      const w = Math.max(1, m.a * (r.x1 - r.x0)), h = Math.max(1, m.d * (r.y1 - r.y0));
+      const span = document.createElement("span");
+      span.dataset.run = r.mathml ? "math" : "text";
+      span.style.cssText = `${RUN};left:${left}px;top:${top}px;font-size:${h / LINE_HEIGHT}px;line-height:${h}px`;
+      if (r.mathml) span.innerHTML = r.mathml;
+      else span.textContent = r.text;
+      frag.appendChild(span);
+      scale.push({ el: span, w, h });
+    }
+    piece.replaceChildren(frag);
+    return scale;
+  }
+  function scaleOnto(items) {
+    const sizes = items.map(({ el }) => {
+      const r = el.getBoundingClientRect();
+      return [r.width, r.height];
+    });
+    items.forEach(({ el, w, h }, k) => {
+      const [nw, nh] = sizes[k];
+      if (!(nw > 0 && nh > 0)) return;
+      el.style.transformOrigin = "0 0";
+      el.style.transform = `scale(${w / nw}, ${h / nh})`;
+      if (el.localName === "math") el.style.display = "inline-block";
+    });
   }
   function fitText(fits) {
     const overflows = (p) => p.scrollHeight > p.clientHeight + 1 || p.scrollWidth > p.clientWidth + 1;

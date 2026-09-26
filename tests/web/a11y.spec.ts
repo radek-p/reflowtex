@@ -94,7 +94,8 @@ test('the layer follows a reflow', async ({ openPage }) => {
 // screen reader skips what is clipped (a formula there went unread).
 test('the text in each piece fills it, and nothing is cut off', async ({ openPage }) => {
   const page = await openPage('mathml', { height: 600 });
-  const fits = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y > *')].map(p => {
+  // (a piece laid out line by line is checked run by run, below)
+  const fits = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y > *')].filter(p => !p.querySelector('[data-run]')).map(p => {
     const box = p.getBoundingClientRect();
     const range = document.createRange();
     range.selectNodeContents(p);
@@ -127,4 +128,46 @@ test('the browser gives a screen reader every formula of the layer', async ({ op
   const { nodes } = await cdp.send('Accessibility.getFullAXTree') as { nodes: { role?: { value: string }; ignored?: boolean }[] };
   const exposed = nodes.filter(n => n.role?.value === 'MathMLMath' && !n.ignored).length;
   expect(exposed).toBe(await page.locator('.latex-a11y math').count());
+});
+
+// Line by line: VoiceOver outlines each run of text it reads (and each
+// formula), so each must cover exactly the drawn glyphs it stands for – a
+// run of a line's text, stretched to that stretch of the line; a formula's
+// MathML, scaled to the formula's drawn box; a display's, onto its ink.
+// Checked against the union of the drawn glyphs whose middle lies inside the
+// run: across, the two overlap almost wholly (a run spans the line's height,
+// the ink less, so up and down the glyphs need only sit in its middle).
+test('each run of the layer covers exactly the glyphs it stands for', async ({ openPage }) => {
+  const page = await openPage('mathml', { height: 900 });
+  const runs = await page.evaluate(() => {
+    const out: { text: string; across: number; off: number; glyphs: number }[] = [];
+    for (const block of document.querySelectorAll('.latex-block[data-nodelist-b64]')) {
+      // a glyph's box: its text's (WebKit gives a <tspan> an empty rectangle)
+      const glyphs = [...block.querySelectorAll('svg text, svg tspan')].filter(g => !g.querySelector('tspan')).map(g => {
+        const range = document.createRange(); range.selectNodeContents(g); return range.getBoundingClientRect();
+      }).filter(r => r.width > 0 && r.height > 0);
+      for (const run of block.nextElementSibling!.querySelectorAll('[data-run]')) {
+        const r = run.getBoundingClientRect();
+        const inside = glyphs.filter(g => {
+          const cx = g.left + g.width / 2, cy = g.top + g.height / 2;
+          return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+        });
+        if (!inside.length) { out.push({ text: (run.textContent ?? '').slice(0, 30), across: 0, off: 1, glyphs: 0 }); continue; }
+        const u = { left: Math.min(...inside.map(g => g.left)), right: Math.max(...inside.map(g => g.right)),
+                    top: Math.min(...inside.map(g => g.top)), bottom: Math.max(...inside.map(g => g.bottom)) };
+        const ix = Math.max(0, Math.min(r.right, u.right) - Math.max(r.left, u.left));
+        const across = ix / (Math.max(r.right, u.right) - Math.min(r.left, u.left));
+        // (the median glyph: a big operator's box is its font's, far taller than its ink)
+        const mids = inside.map(g => (g.top + g.bottom) / 2).sort((a, b) => a - b);
+        const off = Math.abs((r.top + r.bottom) / 2 - mids[mids.length >> 1]) / r.height;
+        out.push({ text: (run.textContent ?? '').slice(0, 30), across, off, glyphs: inside.length });
+      }
+    }
+    return out;
+  });
+  expect(runs.length, 'the layer is laid out line by line').toBeGreaterThan(10);
+  for (const r of runs) {
+    expect(r.across, `"${r.text}" (${r.glyphs} glyphs) spans its glyphs`).toBeGreaterThan(0.8);
+    expect(r.off, `"${r.text}" has its glyphs in its middle`).toBeLessThan(0.3);
+  }
 });
