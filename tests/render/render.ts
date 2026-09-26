@@ -60,7 +60,10 @@ const sites = new Map<string, Promise<string>>();
 function site(c: Case): Promise<string> {
   if (!sites.has(c.name)) sites.set(c.name, (async () => {
     const base = buildDir(c, 0);
-    if (!existsSync(join(base, 'pageless.pdf'))) await pagelessRun(c, 0);
+    // Always compiled afresh (once per session, by the map above): a run kept
+    // from an earlier session was made by whatever template and serializer
+    // were current then, and the page would test those.
+    await pagelessRun(c, 0);
     const out = join(base, 'site');
     rmSync(out, { recursive: true, force: true });
     await siteFromRun(base, out, { log: logTo(join(base, 'site.log')) });
