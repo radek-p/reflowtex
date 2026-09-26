@@ -99,7 +99,8 @@ There are infinitely many primes.
 \end{theorem}
 \begin{webaccordion}
 \begin{webpane}[collapsed]
-\noindent\textit{Idea:} multiply them all, add one. \webnextpane[Proof]
+\noindent\textit{Idea:} were there finitely many, their product plus one
+would have a prime factor that is none of them. \webnextpane[Proof]
 \end{webpane}
 \begin{webpane}[expanded]
 \begin{proof}[\proofname\webpanelink{prev}{ (hide)}]

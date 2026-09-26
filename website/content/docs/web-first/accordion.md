@@ -14,12 +14,15 @@ by \TeX, re-breaks with the column, and starts where the others do.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" show-source="true" >}}
+Euclid's proof that the primes never run out is over two thousand years old.
 \begin{theorem}
 There are infinitely many primes.
 \end{theorem}
 \begin{webaccordion}
 \begin{webpane}[collapsed]
-\noindent\textit{Proof idea.} Multiply them all and add one.
+\noindent\textit{Proof idea.} Suppose there were only finitely many
+primes. Multiply them all and add one: the result is divisible by none of
+them, yet it has a prime factor -- a contradiction.
 \webnextpane[See the proof]
 \end{webpane}
 \begin{webpane}[expanded]
@@ -31,6 +34,8 @@ prime factor, and it is none of the $p_i$ -- a contradiction.
 \end{proof}
 \end{webpane}
 \end{webaccordion}
+The same idea shows that there are infinitely many primes of the form
+$4k + 3$, though not, without more work, of the form $4k + 1$.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" >}}
