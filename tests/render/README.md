@@ -101,12 +101,13 @@ themes, or **TeX inverted**, TeX's colours through `filter: invert(1)` on both
 sides. **Auto**, the default, is TeX, or TeX inverted while the report is
 dark.
 
-Where the pointer is on one side – anywhere in its pane, the margins and
-past the end too – the same crosshair it is drawn with shows the same place
-on the other. A drag draws an area on both – on the live
-page with **Select area** on (M), since a drag there selects text – and the
-bottom bar gives its size and place in pt, and the pointer's; a click or
-Esc clears it.
+The pointer over either pane is a hairline crosshair – four arms around a
+one-pixel point, on device pixels – that inverts what is under it, and the
+same crosshair marks the same place on the other side, anywhere in the
+pane, the margins and past the end too. A drag draws an area on both – on
+the live page with **Select area** on (M), since a drag there selects text
+– and the bottom bar gives its size and place in pt, and the pointer's; a
+click or Esc clears it.
 
 The PDF side is MuPDF's drawing of `pageless.pdf` as SVG – vectors, sharp
 at any zoom – made by the same library that reads TeX's glyph positions for

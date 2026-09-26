@@ -143,11 +143,15 @@ h2 .seg button { padding: 0 7px; }
 }
 
 /* ── The pointer's ghost and the selected area, on both sides ─────────────── */
-.scroll { cursor: var(--rr-cursor, crosshair); }
-.stage > .marks { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+/* the system's pointer gives way to the drawn one (makeMarks) */
+.scroll { cursor: none; }
+.stage > .overlay { position: absolute; inset: 0; pointer-events: none; }
+.overlay > svg { position: absolute; left: 0; top: 0; overflow: visible; }
+/* the crosshair inverts what is under it */
+.overlay > .cursor { mix-blend-mode: difference; }
 .stage > .capture { position: absolute; inset: 0; }
-.marks .ghost, .marks .area { display: none; }
-.marks .ghost[data-on], .marks .area[data-on] { display: inline; }
+.overlay .ghost, .overlay .area { display: none; }
+.overlay .ghost[data-on], .overlay .area[data-on] { display: inline; }
 .marks .area { fill: rgba(11,87,208,.08); stroke: #0b57d0; stroke-width: 1.5px; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
 .foot .where { white-space: pre; color: var(--fg); }
 /* TeX inverted: both sides' content through one filter; the marks, the

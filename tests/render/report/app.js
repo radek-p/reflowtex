@@ -172,24 +172,25 @@ function useImageSize(src) {
     return size;
 }
 
-// The pointer over either side, and its ghost on the other: one precise
-// crosshair, centred on 0 0 in px – hairline arms clear of the point, and the
-// point itself one pixel, nothing else over it – a white halo under the arms,
-// so that they read on the page, on the pattern and inverted alike. The
-// pointer is it as a CSS cursor (over both panes, and in the live page:
-// pinPage), pixel-aligned at 1× and 2×; the ghost is it as SVG (makeMarks).
-const CROSSHAIR_SHAPE = '<path d="M-12 0H-3M3 0H12M0-12V-3M0 3V12"/>';
-const CROSSHAIR = '<g fill="none" shape-rendering="crispEdges">' +
-    `<g stroke="#fff" stroke-opacity=".8" stroke-width="3">${CROSSHAIR_SHAPE}</g>` +
-    `<g stroke="#c2185b" stroke-width="1">${CROSSHAIR_SHAPE}</g><rect x="-.5" y="-.5" width="1" height="1" fill="#c2185b"/></g>`;
-// 25 px, the point on the middle pixel (12): its arms run along pixel centres
-const cursorImage = px => `url("data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="-12.5 -12.5 25 25">${CROSSHAIR}</svg>`)}")`;
-const CURSOR = `image-set(${cursorImage(25)} 1x, ${cursorImage(50)} 2x) 12 12, crosshair`;
-document.documentElement.style.setProperty('--rr-cursor', CURSOR);
+// The pointer, drawn: four hairline arms clear of the point, and the point
+// one pixel. It is drawn on both sides – where the pointer is (the system's is
+// hidden over the panes, and in the live page: pinPage) and, as its ghost, at
+// the same place on the other – in white with mix-blend-mode: difference, so
+// it inverts whatever is under it: black on the paper, white on ink, and it
+// shows on the pattern and inverted pages alike. One device pixel wide, on
+// device pixels (crosshair()), so it is sharp on any screen.
+const ARM_FROM = 3, ARM_TO = 10;               // CSS px from the point
+function crosshair() {
+    // (the point is a pixel's middle: the arms end on pixel edges, half a pixel on)
+    const w = 1 / devicePixelRatio, a = ARM_FROM + w / 2, b = ARM_TO + w / 2;
+    return `<path d="M${-b} 0H${-a}M${a} 0H${b}M0 ${-b}V${-a}M0 ${a}V${b}" fill="none" stroke="#fff" stroke-width="${w}"/>` +
+        `<rect x="${-w / 2}" y="${-w / 2}" width="${w}" height="${w}" fill="#fff"/>`;
+}
+/** A point in CSS px, moved to the middle of the device pixel it is in. */
+const onDevicePixel = v => (Math.floor(v * devicePixelRatio) + .5) / devicePixelRatio;
 
 /** A side's pane. Over its content, the marks both sides share (makeMarks):
- *  the ghost of the pointer on the other side, and the selected area. The
+ *  the selected area (in pt), and the pointer and its ghost (in CSS px). The
  *  pointer counts anywhere in the pane, the page's margins and past its end
  *  too (in the stage's pt). With `capture`, a layer over the content takes the
  *  pointer (the live page would). */
@@ -199,18 +200,18 @@ const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, capture, childre
     <div class="stage" style=${{ width: `${stage[0]}px`, height: `${stage[1]}px` }}>
         ${children}
         ${capture ? html`<div class="capture"></div>` : null}
-        <svg class="marks" ref=${el => marks.attach(side, el)} viewBox=${`0 0 ${stagePt[0]} ${stagePt[1]}`} width=${stage[0]} height=${stage[1]}>
-            <rect class="area"/>
-            <g class="ghost" dangerouslySetInnerHTML=${{ __html: CROSSHAIR }}/>
-        </svg>
+        <div class="overlay" ref=${el => marks.attach(side, el)}>
+            <svg class="marks" viewBox=${`0 0 ${stagePt[0]} ${stagePt[1]}`} width=${stage[0]} height=${stage[1]}><rect class="area"/></svg>
+            <svg class="cursor" width=${stage[0]} height=${stage[1]}><g class="ghost"></g></svg>
+        </div>
     </div></div>`;
 
-/** The pointer and the selected area, in pt, drawn on both sides: where the
- *  pointer is on one side, its ghost on the other; an area dragged out on
- *  either, on both. Drawn straight into each side's SVG (in the stage's pt),
+/** The pointer and the selected area, kept in pt, drawn on both sides: the
+ *  pointer where it is and its ghost at the same place on the other; an area
+ *  dragged out on either, on both. Drawn straight into each side's overlay,
  *  not through a render: the pointer moves every frame. */
 function makeMarks({ scale, status }) {
-    let pointer = null, area = null, drag = null;
+    let pointer = null, area = null, drag = null, ratio = 0;
     const svgs = {};
     const f2 = x => x.toFixed(2);
     function draw() {
@@ -218,15 +219,22 @@ function makeMarks({ scale, status }) {
         for (const [side, svg] of Object.entries(svgs)) {
             if (!svg?.isConnected) continue;
             const g = svg.querySelector('.ghost'), r = svg.querySelector('.area');
-            const ghost = pointer && pointer.side !== side;
-            g.toggleAttribute('data-on', !!ghost);
-            if (ghost) g.setAttribute('transform', `translate(${pointer.x} ${pointer.y}) scale(${1 / s})`);
+            // (drawn again for another screen's pixel density)
+            if (ratio !== devicePixelRatio || !g.firstChild) g.innerHTML = crosshair();
+            g.toggleAttribute('data-on', !!pointer);
+            if (pointer) {
+                // on the device pixel the point is in, on either side alike
+                const box = svg.getBoundingClientRect();
+                const x = onDevicePixel(box.left + pointer.x * s) - box.left, y = onDevicePixel(box.top + pointer.y * s) - box.top;
+                g.setAttribute('transform', `translate(${x} ${y})`);
+            }
             r.toggleAttribute('data-on', !!area);
             if (area) {
                 r.setAttribute('x', Math.min(area.x0, area.x1)); r.setAttribute('y', Math.min(area.y0, area.y1));
                 r.setAttribute('width', Math.abs(area.x1 - area.x0)); r.setAttribute('height', Math.abs(area.y1 - area.y0));
             }
         }
+        ratio = devicePixelRatio;
         const el = status();
         if (el) el.textContent = [
             pointer && `x ${f2(pointer.x)}  y ${f2(pointer.y)} pt`,
@@ -304,7 +312,7 @@ function pinPage(win, colPx, marginPx) {
         #lt-content { max-width:none !important; width:${colPx}px !important; margin:0 !important; padding:0 ${marginPx}px !important; background: var(--latex-page-bg, #fff) !important }
         .latex-block { margin:0 !important; width:${colPx}px !important }
         #rr-overlay { position:absolute; pointer-events:none; overflow:visible; z-index:2147483646 }
-        html, html * { cursor: ${CURSOR} !important }`;
+        html, html * { cursor: none !important }`;
     doc.head.appendChild(css);
     win.dispatchEvent(new Event('resize'));
 }
