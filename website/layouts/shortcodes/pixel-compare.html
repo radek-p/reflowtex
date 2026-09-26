@@ -6,7 +6,8 @@
   table and the tile list; the pictures are static/pixel-compare/<strip>/
   {heat,pdf,browser}-<k>.webp, each --tile-pt points of the document at full
   resolution, loaded only when shown. ▲ and ▼ step through the document; the
-  bar under the controls has one cell per tile, darker where more rows differ.
+  bar under the controls has one cell per tile: grey where the two agree,
+  bluer the more rows differ in place, red where rows are out of place.
 */ -}}
 {{- $d := hugo.Data.pixel_compare -}}
 {{- $base := "pixel-compare/" | relURL -}}
@@ -36,7 +37,9 @@
   .pxc-map button { position: relative; flex: 1; min-width: 0; border: 0; padding: 0; cursor: pointer;
     border-radius: 2px; background: var(--pxc-idle); }
   .pxc-map button::after { content: ""; position: absolute; inset: 0; border-radius: inherit;
-    background: #e5484d; opacity: var(--w, 0); }
+    background: var(--c, #3b82f6); opacity: var(--w, 0); }
+  .pxc-legend { display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin: -.2rem 0 .7rem; font-size: .8rem; opacity: .75; }
+  .pxc-legend i { display: inline-block; width: .8em; height: .8em; border-radius: 2px; margin-right: .35em; vertical-align: -.05em; }
   .pxc-map button[aria-current="true"] { outline: 2px solid var(--lt-accent, currentColor); outline-offset: 1px; }
   .pxc-step { display: block; width: 100%; font: inherit; font-size: .9rem; color: inherit; cursor: pointer;
     background: none; border: 1px solid var(--pxc-line); border-radius: 8px; padding: .4rem; margin: .4rem 0; }
@@ -82,7 +85,8 @@
     <button type="button" data-mode="heat">Differences</button>{{ with (index $d.strips 0).pixels_fine }}<button type="button" data-mode="fine">Drawn finer</button>{{ end }}<button type="button" data-mode="pdf">PDF</button><button type="button" data-mode="browser">Browser</button>
   </span>
 </div>
-<div class="pxc-map" aria-label="Where rows are out of place"></div>
+<div class="pxc-map" aria-label="How much each part differs"></div>
+<p class="pxc-legend"><span><i style="background: var(--pxc-idle)"></i>the same</span><span><i style="background: #3b82f6"></i>rows differ in place (drawing)</span><span><i style="background: #e5484d"></i>rows out of place</span></p>
 <button type="button" class="pxc-step" data-dir="-1">▲ Previous {{ $d.tile_pt }} pt</button>
 <div class="pxc-frame"><a target="_blank" rel="noopener"><img alt=""></a></div>
 <p class="pxc-caption" aria-live="polite"></p>
@@ -104,18 +108,27 @@
   const url = (si, ki, m) => `${base}${data.strips[si].id}/${m}-${ki}.webp`;
   function drawMap() {
     const st = data.strips[s];
-    // coloured by rows out of place – ink moved, or a line with no
-    // counterpart. Rows that differ in place (rasterisation) are in every
-    // tile, and so are blank rows paired a row apart (the two renderers
-    // round a line to different pixel rows).
+    // Each part scored by shares of its own rows (the last part is shorter).
+    // Rows that differ in place – the two renderers drawing a glyph on
+    // different pixel rows – are expected: they take a cell from grey to blue,
+    // full blue at BLUE_AT. Rows out of place – ink moved, or a line with no
+    // counterpart – are what matters: they take it on from blue to red, fully
+    // red when RED_AT of the rows are. (Blank rows paired a row apart, the
+    // renderers rounding a line differently, count for neither.)
+    const BLUE_AT = 0.15, RED_AT = 0.005;
+    const BLUE = [59, 130, 246], RED = [229, 72, 77];
     const moved = t => counts(t).shifted + counts(t).unmatched;
-    const worst = Math.max(1, ...st.tiles.map(moved));
     map.textContent = '';
     st.tiles.forEach((t, i) => {
+      const c = counts(t), rows = Math.max(1, c.rows);
+      const blue = Math.min(1, c.differing / rows / BLUE_AT), red = Math.min(1, moved(t) / rows / RED_AT);
+      const rgb = BLUE.map((v, j) => Math.round(v + (RED[j] - v) * red));
       const b = document.createElement('button');
       b.type = 'button';
-      b.style.setProperty('--w', (moved(t) ? 0.25 + 0.75 * Math.sqrt(moved(t) / worst) : 0).toFixed(3));
-      b.title = t.y0_pt != null ? `${Math.round(t.y0_pt)}–${Math.round(t.y1_pt)} pt: ${moved(t)} rows out of place` : '';
+      b.style.setProperty('--c', `rgb(${rgb.join(', ')})`);
+      b.style.setProperty('--w', (red ? 1 : blue).toFixed(3));
+      b.title = (t.y0_pt != null ? `${Math.round(t.y0_pt)}–${Math.round(t.y1_pt)} pt: ` : '') +
+        `${(100 * c.differing / rows).toFixed(1)} % of rows differ in place, ${moved(t)} out of place`;
       b.addEventListener('click', () => { k = i; show(); });
       map.appendChild(b);
     });
