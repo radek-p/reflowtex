@@ -647,16 +647,19 @@ function App() {
             </section>
         </div>
         <div class="foot">
-            <span class="key" title="A glyph or rule further off than the error threshold, or on one side only"><span class="sw"></span>error</span>
-            <span class="key" title="A rule of TeX's the browser did not draw, within the case's rules_missing"><span class="sw dash"></span>allowed</span>
-            <span class="key"><span class="sw sel"></span>selected</span>
-            <span class="where mono" ref=${statusRef}></span>
-            <span class="fill"></span>
-            <span>${vec?.glyphs ? `glyphs: TeX ${vec.glyphs.strip}, browser ${vec.glyphs.viewer}, matched ${vec.glyphs.matched}` : ''}</span>
-            <span>ran ${new Date(r.at).toLocaleString()}</span>
-            <a href=${`${BUILD}${r.dir}/pageless.pdf`} target="_blank">pageless.pdf</a>
-            <a href=${`${vdir}vector.json`} target="_blank">vector.json</a>
-            ${liveSrc ? html`<a href=${liveSrc} target="_blank">page</a>` : null}
+            <span class="group start">
+                <span class="key" title="A glyph or rule further off than the error threshold, or on one side only"><span class="sw"></span>error</span>
+                <span class="key" title="A rule of TeX's the browser did not draw, within the case's rules_missing"><span class="sw dash"></span>allowed</span>
+                <span class="key"><span class="sw sel"></span>selected</span>
+            </span>
+            <span class="group middle where mono" ref=${statusRef}></span>
+            <span class="group end">
+                <span title="Glyphs: TeX's, the browser's, and matched">${vec?.glyphs ? `glyphs ${vec.glyphs.strip} · ${vec.glyphs.viewer} · ${vec.glyphs.matched}` : ''}</span>
+                <span title=${`ran ${new Date(r.at).toLocaleString()}`}>ran ${new Date(r.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <a href=${`${BUILD}${r.dir}/pageless.pdf`} target="_blank">pageless.pdf</a>
+                <a href=${`${vdir}vector.json`} target="_blank">vector.json</a>
+                ${liveSrc ? html`<a href=${liveSrc} target="_blank">page</a>` : null}
+            </span>
         </div>
     </div>`;
 }
