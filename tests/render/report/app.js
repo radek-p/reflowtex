@@ -195,7 +195,8 @@ const onDevicePixel = v => (Math.floor(v * devicePixelRatio) + .5) / devicePixel
  *  (makeMarks.frame). */
 const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, children }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}
         onPointerMove=${e => marks.move(side, e)} onPointerLeave=${() => marks.leave(side)}
-        onPointerDown=${e => marks.down(side, e)} onPointerUp=${e => marks.up(side, e)}>
+        onPointerDown=${e => marks.down(side, e)} onPointerUp=${e => marks.up(side, e)}
+        onDragStart=${e => e.preventDefault()} onSelectStart=${e => e.preventDefault()}>
     <div class="stage" style=${{ width: `${stage[0]}px`, height: `${stage[1]}px` }}>
         ${children}
         <div class="overlay" ref=${el => marks.attach(side, el)}>
@@ -286,6 +287,9 @@ function makeMarks({ scale, status }) {
             d.addEventListener('pointermove', e => point('right', ...pt(e)), { passive: true });
             d.documentElement.addEventListener('mouseleave', () => { if (pointer?.side === 'right' && !drag) { pointer = null; draw(); } });
             let dragged = false;
+            // a drag here draws, and is neither a text selection nor a drag of the
+            // page's content (user-select and user-drag are off too: pinPage)
+            for (const t of ['selectstart', 'dragstart']) d.addEventListener(t, e => e.preventDefault(), true);
             d.addEventListener('pointerdown', e => {
                 if (e.button !== 0 || win.__rtxInspector?.status?.().picking) return;
                 e.preventDefault();                                     // (not a text selection)
@@ -333,7 +337,8 @@ function pinPage(win, colPx, marginPx) {
         #lt-content { max-width:none !important; width:${colPx}px !important; margin:0 !important; padding:0 ${marginPx}px !important; background: var(--latex-page-bg, #fff) !important }
         .latex-block { margin:0 !important; width:${colPx}px !important }
         #rr-overlay { position:absolute; pointer-events:none; overflow:visible; z-index:2147483646 }
-        html, html * { cursor: none !important }`;
+        html, html * { cursor: none !important }
+        html, html * { user-select: none !important; -webkit-user-select: none !important; -webkit-user-drag: none !important }`;
     doc.head.appendChild(css);
     win.dispatchEvent(new Event('resize'));
 }
@@ -492,16 +497,20 @@ function App() {
     const contentPt = [widthPt, stagePt[1] - TAIL_PT || widthPt];
     useLayoutEffect(() => {
         if (!compare.current) return;
-        const ro = new ResizeObserver(() => {
+        // (in the next frame: a change of layout inside the observer's own
+        // callback is a loop to the browser)
+        let frame = 0;
+        const ro = new ResizeObserver(() => { frame ||= requestAnimationFrame(() => {
+            frame = 0;
             const c = compare.current;
             if (!c) return;
             setAutoDir(betterSplit(c.clientWidth, c.clientHeight, contentPt));
             const pane = c.querySelector('.scroll');
             if (pane) setFitScale(Math.max(.2, (pane.clientWidth - 18) / widthPt));
-        });
+        }); });
         ro.observe(compare.current);
         for (const p of compare.current.querySelectorAll('.scroll')) ro.observe(p);
-        return () => ro.disconnect();
+        return () => { ro.disconnect(); cancelAnimationFrame(frame); };
     }, [widthPt, contentPt[1], !!report, dir, !!noVec]);
     const scale = zoom === 'fit' ? fitScale : zoom;
     scaleRef.current = scale;

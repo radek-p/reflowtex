@@ -161,3 +161,7 @@ h2 .seg button { padding: 0 7px; }
 /* TeX inverted: both sides' content through one filter; the marks, the
    boxes and the pattern keep their colours */
 .compare.inverted .stage > .sheet, .compare.inverted .stage > .page { filter: invert(1); }
+/* A drag in a pane draws an area: it selects nothing, and the PDF's image
+   (or the snapshot) is not dragged – the pointer goes to the pane. */
+.scroll { user-select: none; -webkit-user-select: none; }
+.stage > .sheet, .stage > .boxes { pointer-events: none; -webkit-user-drag: none; }
