@@ -194,3 +194,13 @@ test('alttext: each formula carries its spoken form, from the speaker given', ()
   assert.equal(bare(d.content[1].mathml), '<math alttext="one" display="block"><mn>1</mn></math>');
   assert.ok(heard.every(x => !x.includes('alttext')), 'spoken from the MathML itself');
 });
+
+test('cleanup: a negating slash (classic \\not) is one character with the operator after it', () => {
+  // \not= in the 8-bit fonts is a combining slash drawn over "=": luamml
+  // gives the two as neighbours; a reader should get "≠" ("not equals")
+  const t = cleanup(el('mrow', [el('mi', ['𝑗']), el('mo', ['̸']), el('mo', ['=']), el('mi', ['𝑖'])]));
+  assert.deepEqual(t, el('mrow', [el('mi', ['𝑗']), el('mo', ['≠']), el('mi', ['𝑖'])]));
+  // one with no precomposed form keeps the combining slash on it
+  const u = cleanup(el('mrow', [el('mo', ['\u0338']), el('mo', ['\u22B8'])]));   // ⊸
+  assert.deepEqual(u, el('mo', ['\u22B8\u0338']));
+});

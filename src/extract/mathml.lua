@@ -26,6 +26,12 @@ if not ok then
     return nil
 end
 local legacy = require'luamml-legacy-mappings'
+-- luamml 0.5 (TeX Live 2025) leaves out the scripts of an accented symbol
+-- (\\hat k_{ij} is read "k hat"); 0.9 (TeX Live 2026) keeps them. It is
+-- told apart by a module 0.9 added.
+if not kpse.find_file('luamml-mathflatten.lua') then
+    texio.write_nl('term and log', 'reflowtex: luamml is older than 0.9 (TeX Live 2025): scripts on accented symbols are left out of the MathML; use TeX Live 2026')
+end
 
 local MATHML_ATTR     = 930
 local MATHML_BOX_ATTR = 931

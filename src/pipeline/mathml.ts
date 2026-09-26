@@ -62,6 +62,21 @@ const isLetter = (s: string) => /^[A-Za-zΑ-ω]$/u.test(s);
 const hasAttrs = (e: MathElement) => !!e.attrs && Object.keys(e.attrs).length > 0;
 const TOKENS = new Set(['mi', 'mn', 'mo', 'mtext']);
 
+const NOT = '\u0338';
+const tokenText = (n: MathNode | undefined) => (n && typeof n !== 'string' && TOKENS.has(n.name) && n.children?.length === 1 && typeof n.children[0] === 'string') ? n.children[0] : null;
+function negate(kids: MathNode[]): MathNode[] {
+  const out: MathNode[] = [];
+  for (let i = 0; i < kids.length; i++) {
+    const next = kids[i + 1];
+    if (tokenText(kids[i]) === NOT && tokenText(next) !== null) {
+      const n = next as MathElement;
+      out.push({ ...n, children: [(tokenText(n)! + NOT).normalize('NFC')] });
+      i++;
+    } else out.push(kids[i]);
+  }
+  return out;
+}
+
 /** What a speech engine would read as noise, removed: zero-width spaces (the
  *  struts of \big), rows of one child or none and rows inside rows,
  *  mathvariant="normal" on what is not a letter ("normal infinity"), a token
@@ -102,8 +117,11 @@ export function cleanup(n: MathNode): MathNode | null {
     delete e.attrs.mathvariant;
   }
   if (e.attrs && !Object.keys(e.attrs).length) delete e.attrs;
+  // A lone negating slash (the classic fonts' \\not, drawn over what follows)
+  // is one character with the operator after it: "=" + U+0338 is "≠".
+  e.children = negate(e.children!);
   if (e.name === 'mrow' && !hasAttrs(e)) {
-    e.children = kids.flatMap(k => (typeof k !== 'string' && k.name === 'mrow' && !hasAttrs(k) ? k.children ?? [] : [k]));
+    e.children = e.children.flatMap(k => (typeof k !== 'string' && k.name === 'mrow' && !hasAttrs(k) ? k.children ?? [] : [k]));
   }
   if (e.name === 'mrow' && !hasAttrs(e)) {
     const kids = e.children!;

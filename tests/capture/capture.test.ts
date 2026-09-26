@@ -376,3 +376,17 @@ test('MathML: each formula carries its spoken form (alttext)', async () => {
   for (const m of [...inline, ...displays]) assert.match(m, /^<math alttext="[^"]+"/, m.slice(0, 80));
   assert.match(inline[0], /alttext="x squared plus y squared equals z squared"/);
 });
+
+// Scripts on an accented symbol (\hat k_{ij}): TeX puts them on the accent,
+// and luamml 0.5 (TeX Live 2025) left them out – a reader heard "k hat" for
+// k̂ᵢⱼ. luamml 0.9 (TeX Live 2026, the project's image) keeps them.
+import { execFileSync } from 'node:child_process';
+const luamml09 = (() => { try { execFileSync('kpsewhich', ['luamml-mathflatten.lua']); return true; } catch { return false; } })();
+test('MathML: scripts on an accented symbol, and a negated relation', { skip: !luamml09 && 'luamml older than 0.9 (TeX Live 2025) drops them' }, async () => {
+  const d = await capture('Let $\\hat k_{ij}=k_{ij}\\hat x_j$ and $j\\not=i$ and $j \\neq i$.');
+  const [ms] = inlineMathml(d);
+  assert.match(ms[0], /^<math><msub><mover><mi>𝑘<\/mi><mo[^>]*>\^<\/mo><\/mover><mrow><mi>𝑖<\/mi><mi>𝑗<\/mi><\/mrow><\/msub>/);
+  assert.match(ms[0], /<msub><mover><mi>𝑥<\/mi><mo[^>]*>\^<\/mo><\/mover><mi>𝑗<\/mi><\/msub><\/math>$/);
+  assert.equal(ms[1], '<math><mi>𝑗</mi><mo>≠</mo><mi>𝑖</mi></math>');
+  assert.equal(ms[2], '<math><mi>𝑗</mi><mo>≠</mo><mi>𝑖</mi></math>');
+});
