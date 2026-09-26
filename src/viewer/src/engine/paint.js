@@ -69,12 +69,24 @@ export function affineMul(m1, m2) {
             a1*e2 + c1*f2 + e1,  b1*e2 + d1*f2 + f1];
 }
 
+// A band's least height, in em of the glyphs' size: LaTeX's \strut, 0.7 and
+// 0.3 of a \baselineskip, at the usual 1.2 em (10/12 pt, 11/13.6, 12/14.5).
+// Lines set that far apart have bands that just meet.
+export const STRUT = { up: 0.7 * 1.2, down: 0.3 * 1.2 };
+
 export function reconcileSink(byNode, used, stats, cache) {
     let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
     const stack = [];
     const linkRuns = new Map();   // data-link key → { el, x0, x1, top, bottom }
     const markRuns = new Map();   // mark index, or live mark id → { el, x0, x1, top, bottom }
     let selRun = null;            // the selection on this line, drawn as a band (host/selection.ts)
+    // How far the line reaches above and below: each glyph's ink, and at
+    // least a strut at its size (STRUT). A band – a mark's, the selection's –
+    // is never less than the line: one over "one" is as tall as one over
+    // "gyR", and all its lines are even, grown only by a taller glyph on
+    // the line (a superscript, a big operator).
+    let lineTop = Infinity, lineBottom = -Infinity;
+    const toLine = r => { r.top = Math.min(r.top, lineTop); r.bottom = Math.max(r.bottom, lineBottom); return r; };
     const extend = (runs, key, el, x, n, y) => {
         const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
         const r = runs.get(key);
@@ -94,7 +106,10 @@ export function reconcileSink(byNode, used, stats, cache) {
     }
 
     return {
-        beginLine(textEl, auxEl) { textParent = textEl; auxParent = auxEl; lastTspan = null; lastRect = null; },
+        beginLine(textEl, auxEl) {
+            textParent = textEl; auxParent = auxEl; lastTspan = null; lastRect = null;
+            lineTop = Infinity; lineBottom = -Infinity;
+        },
         // Rotated glyphs cannot go in the line's shared <text>: a tspan takes
         // no transform of its own (SVG 1.1), and x/y on a tspan would fight
         // the group's matrix anyway. So a transform gets its own <g> holding
@@ -162,24 +177,27 @@ export function reconcileSink(byNode, used, stats, cache) {
             // (see paintLinkHits). Not inside a transform: that has its own
             // coordinates.
             if (el.dataset.link && !stack.length) extend(linkRuns, el.dataset.link, el, x, n, y);
+            if (!stack.length) {
+                const em = fi?.size_px ?? 12;
+                lineTop = Math.min(lineTop, y - Math.max(STRUT.up * em, gH(n) * SP_TO_PX));
+                lineBottom = Math.max(lineBottom, y + Math.max(STRUT.down * em, gD(n) * SP_TO_PX));
+            }
             // And of each mark, for its band (see paintMarkBands).
             if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
             if (live && !stack.length) for (const id of live) extend(markRuns, id, el, x, n, y);
-            // And of the selection, when it is drawn as bands: of one height
-            // for one size of type (0.8 em above the baseline, 0.3 below),
-            // so that its lines are even, grown only for a glyph taller.
+            // And of the selection, when it is drawn as bands (its height is
+            // the line's, as a mark's: toLine).
             if (!stack.length && selectedGlyph(n)) {
-                const em = fi?.size_px ?? 12, x1 = x + gW(n) * SP_TO_PX;
-                const top = Math.min(y - 0.8 * em, y - gH(n) * SP_TO_PX), bottom = Math.max(y + 0.3 * em, y + gD(n) * SP_TO_PX);
-                if (!selRun) selRun = { x0: x, x1, top, bottom };
-                else { selRun.x0 = Math.min(selRun.x0, x); selRun.x1 = Math.max(selRun.x1, x1);
-                       selRun.top = Math.min(selRun.top, top); selRun.bottom = Math.max(selRun.bottom, bottom); }
+                const x1 = x + gW(n) * SP_TO_PX;
+                if (!selRun) selRun = { x0: x, x1, top: y, bottom: y };
+                else { selRun.x0 = Math.min(selRun.x0, x); selRun.x1 = Math.max(selRun.x1, x1); }
             }
         },
         // The references' extents on the line just drawn; starts afresh.
         takeLinkRuns() { const runs = [...linkRuns.values()]; linkRuns.clear(); return runs; },
-        takeMarkRuns() { const runs = [...markRuns.entries()]; markRuns.clear(); return runs; },
-        takeSelectionRun() { const r = selRun; selRun = null; return r; },
+        // The marks' and the selection's, at least as tall as the line.
+        takeMarkRuns() { const runs = [...markRuns.entries()].map(([k, r]) => [k, toLine(r)]); markRuns.clear(); return runs; },
+        takeSelectionRun() { const r = selRun && toLine(selRun); selRun = null; return r; },
         // A glyph whose font could not be loaded: draw its TeX metric boxes – the
         // advance width by the height above the baseline, and by the depth below –
         // as two outlined rects, so the missing ink's place and size are visible.
@@ -617,7 +635,7 @@ export function paintLinkHits(s, runs) {
 }
 
 // A mark's band: one rect per line it is on, from its first glyph to its
-// last and as tall as its glyphs, under the text – the spaces between its
+// last and as tall as its line (at least a strut: STRUT), under the text – the spaces between its
 // words are glue, drawn as nothing, so a background on the glyphs alone
 // would break at every space. Class latex-mark, the mark's classes in
 // data-mark (not as classes: a page's rule for the glyphs, `.key { fill }`,

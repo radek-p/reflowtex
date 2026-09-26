@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 48621598b315ca47867ab173c0f3465b79aa992fdffde54d0d19a6b354b17542
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 cfa6ff087544e2bd3473325e2f5986fa4d0e8c98b87a8f09d059454165a93a4c
 'use strict';
 "use strict";
 (() => {
@@ -1992,12 +1992,19 @@
       b1 * e2 + d1 * f2 + f1
     ];
   }
+  var STRUT = { up: 0.7 * 1.2, down: 0.3 * 1.2 };
   function reconcileSink(byNode, used, stats, cache) {
     let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
     const stack = [];
     const linkRuns = /* @__PURE__ */ new Map();
     const markRuns = /* @__PURE__ */ new Map();
     let selRun = null;
+    let lineTop = Infinity, lineBottom = -Infinity;
+    const toLine = (r) => {
+      r.top = Math.min(r.top, lineTop);
+      r.bottom = Math.max(r.bottom, lineBottom);
+      return r;
+    };
     const extend = (runs, key, el, x, n, y) => {
       const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
       const r = runs.get(key);
@@ -2022,6 +2029,8 @@
         auxParent = auxEl;
         lastTspan = null;
         lastRect = null;
+        lineTop = Infinity;
+        lineBottom = -Infinity;
       },
       // Rotated glyphs cannot go in the line's shared <text>: a tspan takes
       // no transform of its own (SVG 1.1), and x/y on a tspan would fight
@@ -2089,17 +2098,19 @@
         used.add(el);
         lastTspan = el;
         if (el.dataset.link && !stack.length) extend(linkRuns, el.dataset.link, el, x, n, y);
+        if (!stack.length) {
+          const em = fi?.size_px ?? 12;
+          lineTop = Math.min(lineTop, y - Math.max(STRUT.up * em, gH(n) * SP_TO_PX));
+          lineBottom = Math.max(lineBottom, y + Math.max(STRUT.down * em, gD(n) * SP_TO_PX));
+        }
         if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
         if (live3 && !stack.length) for (const id of live3) extend(markRuns, id, el, x, n, y);
         if (!stack.length && selectedGlyph(n)) {
-          const em = fi?.size_px ?? 12, x1 = x + gW(n) * SP_TO_PX;
-          const top = Math.min(y - 0.8 * em, y - gH(n) * SP_TO_PX), bottom = Math.max(y + 0.3 * em, y + gD(n) * SP_TO_PX);
-          if (!selRun) selRun = { x0: x, x1, top, bottom };
+          const x1 = x + gW(n) * SP_TO_PX;
+          if (!selRun) selRun = { x0: x, x1, top: y, bottom: y };
           else {
             selRun.x0 = Math.min(selRun.x0, x);
             selRun.x1 = Math.max(selRun.x1, x1);
-            selRun.top = Math.min(selRun.top, top);
-            selRun.bottom = Math.max(selRun.bottom, bottom);
           }
         }
       },
@@ -2109,13 +2120,14 @@
         linkRuns.clear();
         return runs;
       },
+      // The marks' and the selection's, at least as tall as the line.
       takeMarkRuns() {
-        const runs = [...markRuns.entries()];
+        const runs = [...markRuns.entries()].map(([k, r]) => [k, toLine(r)]);
         markRuns.clear();
         return runs;
       },
       takeSelectionRun() {
-        const r = selRun;
+        const r = selRun && toLine(selRun);
         selRun = null;
         return r;
       },

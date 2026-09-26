@@ -177,3 +177,27 @@ test('a new colour over part of a highlight leaves the rest as it was', async ({
     .map((m: any) => [m.classes.split(' ')[1], m.ranges.map((x: any) => x.text).join('|')]));
   expect(three).toEqual([['rtx-highlight-green', 'beraboveoneis'], ['rtx-highlight-yellow', 'Everynum']]);
 });
+
+// A band is as tall as its line, and at least a strut (0.84 em up, 0.36 em
+// down): one over "one", with no ascender or descender, was a sliver next to
+// one over "Every". (Its height came from its own glyphs' ink.)
+test('a band is as tall as its line, whatever letters it holds', async ({ openPage }) => {
+  const page = await openPage('highlighter');
+  const r = await page.evaluate(() => {
+    const els = reflowtex.host.mark('key').elements();
+    const text = els.map((e: Element) => e.textContent).join('');
+    const range = (a: number, b: number) => {
+      const x = document.createRange();
+      x.setStart(els[a].firstChild!, 0); x.setEnd(els[b].firstChild!, 1);
+      return reflowtex.host.rangesOf(x);
+    };
+    const one = text.indexOf('one'), every = text.indexOf('Every');
+    reflowtex.host.addMark(range(one, one + 2), { id: 'small' });
+    reflowtex.host.addMark(range(every, every + 4), { id: 'tall' });
+    const band = (id: string) => document.querySelector<SVGRectElement>(`rect.latex-mark[data-rtx-id="${id}"]`)!;
+    const y = (id: string) => [+band(id).getAttribute('y')!, +band(id).getAttribute('height')!];
+    return { small: y('small'), tall: y('tall'), em: +els[one].getAttribute('font-size')! };
+  });
+  expect(r.small, 'the same band on the same line').toEqual(r.tall);
+  expect(r.small[1]).toBeGreaterThanOrEqual(1.2 * r.em - 0.01);
+});
