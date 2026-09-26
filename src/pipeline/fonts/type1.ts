@@ -172,13 +172,71 @@ export function parseType1(path: string): Type1 {
   const priv = decrypt(enc, 55665, 4);
   const fm = clear.match(/\/FontMatrix\s*\[\s*([^\]]+)\]/);
   if (!fm) throw new Error('no /FontMatrix');
-  let encoding: string[];
-  if (/\/Encoding\s+StandardEncoding/.test(clear)) encoding = STANDARD.slice();
-  else {
-    encoding = new Array(256).fill('.notdef');
-    for (const m of clear.matchAll(/dup\s+(\d+)\s*\/([^\s/[\]{}()<>%]+)\s+put/g)) encoding[Number(m[1])] = m[2];
-  }
-  return { fontMatrix: fm[1].trim().split(/\s+/).map(Number), encoding, ...parsePrivate(priv) };
+  return { fontMatrix: fm[1].trim().split(/\s+/).map(Number), encoding: readBuiltinEncoding(clear), ...parsePrivate(priv) };
+}
+
+/** The font's own encoding: what the PostScript after /Encoding leaves, run
+ *  as a PostScript interpreter runs it (as fontTools does). Most fonts only
+ *  `dup <code> /<name> put` into a fresh array, but some – cmcyr's, for one –
+ *  then move whole ranges with getinterval and putinterval, so the vector is
+ *  not what the dup lines alone say. Enough of the language for encodings:
+ *  numbers, names, procedures, and the array and stack operators they use. */
+function readBuiltinEncoding(clear: string): string[] {
+  const at = clear.search(/\/Encoding\b/);
+  if (at < 0) return STANDARD.slice();
+  const tokens = clear.slice(at + '/Encoding'.length).match(/\/?[^\s/[\]{}()<>%]+|[{}]|%[^\n]*/g) ?? [];
+  // an array, or a view of part of one (getinterval shares its storage)
+  type Arr = { a: string[]; off: number; len: number };
+  type Val = number | string | Arr | Val[] | { proc: string[] };
+  const stack: Val[] = [];
+  const arr = (v: Val): Arr => { if (typeof v === 'object' && 'a' in v) return v; throw new Error('Encoding: not an array'); };
+  const num = (v: Val): number => { if (typeof v === 'number') return v; throw new Error('Encoding: not a number'); };
+  const pop = (): Val => { if (!stack.length) throw new Error('Encoding: stack underflow'); return stack.pop()!; };
+  let done = false;
+  const run = (toks: string[]): void => {
+    for (let i = 0; i < toks.length && !done; i++) {
+      const t = toks[i];
+      if (t.startsWith('%')) continue;
+      if (t === '{') {                                   // a procedure: its tokens, run later
+        let depth = 1, j = i + 1;
+        for (; j < toks.length && depth; j++) depth += toks[j] === '{' ? 1 : toks[j] === '}' ? -1 : 0;
+        stack.push({ proc: toks.slice(i + 1, j - 1) }); i = j - 1; continue;
+      }
+      if (/^-?\d+$/.test(t)) { stack.push(Number(t)); continue; }
+      if (t.startsWith('/')) { stack.push(t.slice(1)); continue; }
+      switch (t) {
+        case 'StandardEncoding': { const a = STANDARD.slice(); stack.push({ a, off: 0, len: 256 }); break; }
+        case 'array': { const n = num(pop()); stack.push({ a: new Array(n).fill('.notdef'), off: 0, len: n }); break; }
+        case 'dup': { const v = pop(); stack.push(v, v); break; }
+        case 'exch': { const b = pop(), a = pop(); stack.push(b, a); break; }
+        case 'pop': pop(); break;
+        case 'index': { const n = num(pop()); stack.push(stack[stack.length - 1 - n]); break; }
+        case 'put': { const v = pop(), k = num(pop()), a = arr(pop()); a.a[a.off + k] = String(v); break; }
+        case 'get': { const k = num(pop()), a = arr(pop()); stack.push(a.a[a.off + k]); break; }
+        case 'getinterval': { const n = num(pop()), k = num(pop()), a = arr(pop()); stack.push({ a: a.a, off: a.off + k, len: n }); break; }
+        case 'putinterval': {
+          const src = arr(pop()), k = num(pop()), dst = arr(pop());
+          const vals = src.a.slice(src.off, src.off + src.len);
+          vals.forEach((v, j) => { dst.a[dst.off + k + j] = v; });
+          break;
+        }
+        case 'for': {
+          const p = pop(), lim = num(pop()), step = num(pop()), from = num(pop());
+          if (typeof p !== 'object' || !('proc' in p)) throw new Error('Encoding: for without a procedure');
+          for (let x = from; step > 0 ? x <= lim : x >= lim; x += step) { stack.push(x); run(p.proc); }
+          break;
+        }
+        case 'readonly': case 'noaccess': case 'executeonly': break;
+        case 'def': done = true; break;
+        default: throw new Error(`Encoding: unsupported operator ${t}`);
+      }
+    }
+  };
+  run(tokens);
+  const top = stack.length ? stack[stack.length - 1] : null;
+  const v = top && typeof top === 'object' && 'a' in top ? top : null;
+  if (!v) throw new Error('Encoding: no array');
+  return Array.from({ length: 256 }, (_, i) => v.a[v.off + i] ?? '.notdef');
 }
 
 // ── Charstrings → outlines (fontTools' T1OutlineExtractor) ──────────────────
@@ -281,8 +339,9 @@ export function glyphOutline(pfb: string, name: string): { commands: [string, Po
 
 // fontTools.cffLib.specializer's topology-changing clean-up, which
 // T2CharStringPen applies: successive movetos combine; a curve whose first and
-// last control deltas are zero becomes a line; a zero-length line goes;
-// adjacent horizontal (or vertical) lines merge. The shape is unchanged.
+// last control deltas are zero becomes a line; a line of no length goes;
+// adjacent horizontal (or vertical) lines merge (and a merged pair whose
+// lengths cancel stays, a line of no length). The shape is unchanged.
 type Cmd = ['m' | 'l' | 'c', number[]];
 function specialize(cmds: Cmd[]): Cmd[] {
   const out: Cmd[] = [];
@@ -291,17 +350,20 @@ function specialize(cmds: Cmd[]): Cmd[] {
     if (c[0] === 'm' && last && last[0] === 'm') last[1] = [last[1][0] + c[1][0], last[1][1] + c[1][1]];
     else out.push([c[0], c[1].slice()]);
   }
+  // Each command is classified once, as fontTools does ('0', 'h', 'v', 'r'
+  // for a line; a curve by its end deltas), and keeps that class: two lines
+  // merged into one that happens to have no length stay a line, as there.
   const kind = (dx: number, dy: number) => (dx === 0 && dy === 0 ? '0' : dy === 0 ? 'h' : dx === 0 ? 'v' : 'r');
+  const cls = out.map(([op, a]) => (op === 'l' ? kind(a[0], a[1]) : op === 'c' && a[0] === 0 && a[1] === 0 && a[4] === 0 && a[5] === 0 ? '00c' : op));
   for (let i = out.length - 1; i >= 0; i--) {
     let [op, a] = out[i];
-    if (op === 'c' && a[0] === 0 && a[1] === 0 && a[4] === 0 && a[5] === 0) { op = 'l'; a = [a[2], a[3]]; out[i] = [op, a]; }
+    if (cls[i] === '00c') { op = 'l'; a = [a[2], a[3]]; out[i] = [op, a]; cls[i] = kind(a[0], a[1]); }   // demoted to a line
     if (op !== 'l') continue;
-    const k = kind(a[0], a[1]);
-    if (k === '0') { out.splice(i, 1); continue; }
-    const prev = out[i - 1];
-    if (i && (k === 'h' || k === 'v') && prev[0] === 'l' && kind(prev[1][0], prev[1][1]) === k) {
+    if (cls[i] === '0') { out.splice(i, 1); cls.splice(i, 1); continue; }
+    if (i && (cls[i] === 'h' || cls[i] === 'v') && cls[i - 1] === cls[i]) {
+      const prev = out[i - 1];
       prev[1] = [prev[1][0] + a[0], prev[1][1] + a[1]];
-      out.splice(i, 1);
+      out.splice(i, 1); cls.splice(i, 1);
     }
   }
   return out;
