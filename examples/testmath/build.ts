@@ -32,6 +32,8 @@ const { values: o } = parseArgs({
     'fonts-base': { type: 'string', default: '/fonts/' },
     'source-url': { type: 'string', default: DEFAULT_SOURCE_URL },
     'extra-script': { type: 'string', multiple: true, default: [] },
+    // the accessible layer after the block (vanilla's --a11y)
+    a11y: { type: 'boolean', default: false },
   },
 });
 const out = resolve(o.out!);
@@ -56,7 +58,7 @@ console.log(`  OK (${bytes.length} bytes)`);
 installViewer(out);
 for (const extra of o['extra-script']!) copyFileSync(extra, join(out, basename(extra)));
 writeFileSync(join(out, 'index.html'), renderPage({
-  title: 'AMS testmath.tex — Reflow TeX', blocks: [blockHtml(bytes)], fontMap: pipe.fontMap(),
+  title: 'AMS testmath.tex — Reflow TeX', blocks: [blockHtml(bytes, {}, { a11y: o.a11y })], fontMap: pipe.fontMap(),
   sourceUrl: o['source-url']!, fontsBase: o['fonts-base']!, extraScripts: o['extra-script']!.map(e => basename(e)),
 }));
 console.log(`reflowtex: wrote ${join(out, 'index.html')}`);

@@ -129,6 +129,10 @@ message Node {
   // (reflowtex.sty) the glyph was typeset inside, the innermost; its classes
   // include the enclosing ones'.
   optional uint32 mark   = 56;
+  // math (begin, subtype 0): the formula as MathML, for assistive technology
+  // (src/pipeline/mathml.ts). Only on a formula a reader meets: not on one
+  // inside another, nor in a display's cells (the display item has those).
+  optional string mathml = 57;
 }
 
 // A named placeholder in running text (\webtext{name}{default} in
@@ -328,6 +332,9 @@ message ContentItem {
   optional uint32 anchor = 12;
   // stream: 1-based index into Document.streams.
   optional uint32 stream = 13;
+  // display: the display as MathML (display="block"). An amsmath alignment
+  // is several items, one per row: its first row carries the whole table.
+  optional string mathml = 33;
 }
 
 // A separately typeset run of content – its own paragraphs, displays and

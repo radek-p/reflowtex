@@ -32,19 +32,23 @@ const { values: o, positionals } = parseArgs({
     batch: { type: 'boolean', default: false },
     jobs: { type: 'string', short: 'j', default: '1' },
     'local-fonts': { type: 'string' },
+    a11y: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h' },
   },
 });
 if (o.help || positionals.length !== 1) {
   console.log(`usage: node integrations/vanilla/build.ts <snippets-dir> [-o site/] [--title T] [--source-url URL]
-       [--fonts-base fonts/] [--batch] [-j N] [--local-fonts DIR]
+       [--fonts-base fonts/] [--batch] [-j N] [--local-fonts DIR] [--a11y]
 
   --batch       compile all snippets as ONE document (a book's chapters, in
                 file name order), so numbering, macros and cross-references
                 carry across them; each is still its own block
   --fonts-base  URL prefix @font-face fetches fonts from (default fonts/,
                 relative to latex-viewer.js's URL; an absolute URL for a CDN)
-  --source-url  the published source (the AGPL-3.0 §13 offer in the footer)`);
+  --source-url  the published source (the AGPL-3.0 §13 offer in the footer)
+  --a11y        after each block, its text and formulas (MathML) for screen
+                readers, and the drawing hidden from them (links, footnote
+                marks and hints are not in that layer yet)`);
   process.exit(o.help ? 0 : 2);
 }
 
@@ -85,7 +89,7 @@ await pipe.finishFonts();
 
 installViewer(out, { inspector: true });
 writeFileSync(join(out, 'index.html'), renderPage({
-  title: o.title!, blocks: jobs.map(j => blockHtml(blobs.get(j.key)!)), fontMap: pipe.fontMap(),
+  title: o.title!, blocks: jobs.map(j => blockHtml(blobs.get(j.key)!, {}, { a11y: o.a11y })), fontMap: pipe.fontMap(),
   sourceUrl: o['source-url']!, fontsBase: o['fonts-base']!,
 }));
 console.log(`reflowtex: wrote ${join(out, 'index.html')} (${snippets.length} block(s)); open it, or serve ${out} with any static server`);

@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { join, relative, sep } from 'node:path';
 import { protoText } from './schema.ts';
+import { a11yLayerFromBytes } from './a11y.ts';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));
 const VIEWER_DIR = join(SRC, 'viewer');
@@ -27,10 +28,14 @@ export const passesFor = (content: string): number => (REF_RE.test(content) ? RE
 export const schemaBase64 = (): string => Buffer.from(protoText(), 'utf8').toString('base64');
 
 /** A block's element: the viewer finds it by data-nodelist-b64. `attrs`
- *  are more attributes for it (data-tex-final-pass="strict", say). */
-export const blockHtml = (bytes: Uint8Array, attrs: Record<string, string> = {}): string =>
-  `<div class="latex-block"${Object.entries(attrs).map(([k, v]) => ` ${k}="${escapeHtml(v)}"`).join('')} ` +
-  `data-nodelist-b64="${Buffer.from(bytes).toString('base64')}"></div>`;
+ *  are more attributes for it (data-tex-final-pass="strict", say).
+ *  `a11y`: the block's accessible layer follows it (src/pipeline/a11y.ts),
+ *  and the drawing is hidden from assistive technology. Opt-in while the
+ *  layer lacks links and the viewer's controls (footnote marks, hints),
+ *  which the drawing exposes today. */
+export const blockHtml = (bytes: Uint8Array, attrs: Record<string, string> = {}, { a11y = false } = {}): string =>
+  `<div class="latex-block"${a11y ? ' aria-hidden="true"' : ''}${Object.entries(attrs).map(([k, v]) => ` ${k}="${escapeHtml(v)}"`).join('')} ` +
+  `data-nodelist-b64="${Buffer.from(bytes).toString('base64')}"></div>` + (a11y ? a11yLayerFromBytes(bytes) : '');
 
 /** Python's html.escape(s, quote=True). */
 export const escapeHtml = (s: string): string =>

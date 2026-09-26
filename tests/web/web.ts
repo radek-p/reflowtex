@@ -8,7 +8,8 @@
 // added: pages/<name>/head.html before </head>, body.html before </body>;
 // and, if pages/<name>/companion exists, the companion package's browser side
 // (installed by the vanilla build: src/companion, Preact bundled in) with an import map naming it
-// 'reflowtex/companion'.
+// 'reflowtex/companion'. A pages/<name>/build-args file gives the build more
+// options (--a11y).
 /// <reference lib="dom" />
 import { execFile } from 'node:child_process';
 import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -41,7 +42,9 @@ export async function build(name: string): Promise<string> {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(BUILD, { recursive: true });
   writeFileSync(log, '');
-  await run('node', [join(REPO, 'integrations/vanilla/build.ts'), src, '-o', out, '--title', name], log);
+  // a page's build-args file: more options for the build (--a11y)
+  const extra = existsSync(join(src, 'build-args')) ? readFileSync(join(src, 'build-args'), 'utf8').split(/\s+/).filter(Boolean) : [];
+  await run('node', [join(REPO, 'integrations/vanilla/build.ts'), src, '-o', out, '--title', name, ...extra], log);
   const page = join(out, 'index.html');
   let html = readFileSync(page, 'utf8');
   let head = existsSync(join(src, 'head.html')) ? readFileSync(join(src, 'head.html'), 'utf8') : '';
