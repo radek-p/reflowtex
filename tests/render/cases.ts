@@ -23,6 +23,13 @@ export interface CaseSettings {
   /** the document, from the repository root (default cases/<name>.tex) */
   file?: string;
   template?: string;
+  /** TikZ pictures in the PDF drawn by TeX, not stacked back from the
+   *  capture's private pages (pageless.ts --tex-pictures): the browser's
+   *  pictures – their labels' glyphs – are then checked against TeX itself,
+   *  with the capture and dvisvgm under test; the page is built from a run of
+   *  its own. Their strokes are not rules to the browser: count them in
+   *  rules_missing */
+  tex_pictures?: boolean;
   /** a whole document: skipped by make test-render */
   slow?: boolean;
   /** a failure on record: the case runs as an expected failure, and when it
@@ -72,4 +79,10 @@ export const cases: Record<string, CaseSettings> = {
   // rule: kept as fixed displays (they used to be dropped, with 202 glyphs
   // after them out of place). Worst attained 2026-09-26.
   unusual: { tolerance: 0.009, rule_tolerance: 0.005 },
+  // Labels in TikZ pictures against TeX's own drawing of them (tex_pictures):
+  // the capture, dvisvgm and the viewer's placing of a picture all under test.
+  // TikZ strokes each straight line as a rule would be stroked, and the
+  // browser draws it as a path: those are the rules not drawn. Worst attained
+  // 2026-09-26.
+  'tikz-labels': { tex_pictures: true, tolerance: 0.009, rules_missing: 12 },
 };

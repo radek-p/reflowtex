@@ -3,7 +3,7 @@
 // A LaTeX document as a pageless PDF: one page as tall as the document.
 //
 //     node tools/pageless-pdf/pageless.ts <document.tex> [-o DIR] [--template T] [--passes N]
-//                                         [--margin 36pt] [--width-extra 0pt]
+//                                         [--margin 36pt] [--width-extra 0pt] [--tex-pictures]
 //
 // The document is compiled as the pipeline compiles it – inside the extraction
 // template, with the serializer capturing the galley – plus two lines:
@@ -27,6 +27,13 @@
 // pageless.json (chunk pages and pictures, sp), output.json, and the run's
 // input.tex, input.log and input.pdf. Shell escape is off unless
 // REFLOWTEX_SHELL_ESCAPE=1, as in the pipeline.
+//
+// --tex-pictures leaves TikZ pictures to TeX: the template's capture is undone
+// before \begin{document}, so each picture is drawn in the galley by PGF, not
+// shipped to a private page and stacked back. The strip is then a reference
+// the capture had no part in – what the browser's pictures, labels and all,
+// are to match. The run's output.json is not the pipeline's (it has no picture
+// nodes); build the page from an ordinary run.
 import { parseArgs } from 'node:util';
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -38,12 +45,15 @@ import { stack } from './stack.ts';
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const LATEX_DIR = resolve(HERE, '../../src/latex');
 
-/** The template with the shipper loaded and the end-of-document hook. */
-export function instrument(template: string, margin: string): string {
+/** The template with the shipper loaded and the end-of-document hook (and,
+ *  unless `capture`, TikZ's own \tikzpicture back). */
+export function instrument(template: string, margin: string, capture = true): string {
   const serializerLine = '\\directlua{dofile("serializer.lua")}';
   if (!template.includes(serializerLine)) throw new Error('template does not load serializer.lua');
   template = template.replace(serializerLine, () => `${serializerLine}\n\\directlua{dofile("pageless_pdf.lua")}`);
-  const hook = '\\AddToHook{enddocument/afterlastpage}{%\n'
+  if (!capture && !template.includes('\\let\\reflowtexOrigTikzpicture\\tikzpicture')) throw new Error('template does not capture TikZ pictures');
+  const restore = capture ? '' : '\\let\\tikzpicture\\reflowtexOrigTikzpicture\n\\let\\endtikzpicture\\reflowtexOrigEndtikzpicture\n';
+  const hook = restore + '\\AddToHook{enddocument/afterlastpage}{%\n'
     + `  \\pdfvariable horigin=${margin} \\pdfvariable vorigin=0pt\n`
     + `  \\directlua{Pageless.ship{margin = tex.sp("${margin}")}}}\n`;
   // the line that begins the document – not a mention in a comment above it
@@ -71,14 +81,19 @@ export function dimenSp(s: string): number {
   return Math.round(Number(m[1]) * per[m[2] ?? 'pt'] * 65536);
 }
 
-export interface PagelessOptions { out: string; template?: string; passes?: number; margin?: string; widthExtra?: string; log?: (s: string) => void }
+export interface PagelessOptions {
+  out: string; template?: string; passes?: number; margin?: string; widthExtra?: string;
+  /** TikZ pictures drawn by TeX in the galley, not captured (--tex-pictures) */
+  texPictures?: boolean;
+  log?: (s: string) => void;
+}
 
 /** Compile `document` to out/pageless.pdf. */
 export async function pageless(document: string, o: PagelessOptions): Promise<string> {
   const log = o.log ?? (s => console.log(s));
   const out = resolve(o.out);
   mkdirSync(join(out, 'pics'), { recursive: true });
-  const template = instrument(readFileSync(o.template ?? DEFAULT_TEMPLATE, 'utf8'), o.margin ?? '36pt');
+  const template = instrument(readFileSync(o.template ?? DEFAULT_TEMPLATE, 'utf8'), o.margin ?? '36pt', !o.texPictures);
   writeFileSync(join(out, 'input.tex'), fill(template, readFileSync(document, 'utf8'), dimenSp(o.widthExtra ?? '0pt')));
   copyFileSync(DEFAULT_SERIALIZER, join(out, 'serializer.lua'));
   copyFileSync(join(HERE, 'pageless_pdf.lua'), join(out, 'pageless_pdf.lua'));
@@ -106,16 +121,17 @@ if (import.meta.main) {
     options: {
       out: { type: 'string', short: 'o' }, template: { type: 'string' }, passes: { type: 'string', default: '2' },
       margin: { type: 'string', default: '36pt' }, 'width-extra': { type: 'string', default: '0pt' },
+      'tex-pictures': { type: 'boolean', default: false },
     },
   });
   if (positionals.length !== 1) {
-    console.error('usage: pageless.ts <document.tex> [-o DIR] [--template T] [--passes N] [--margin 36pt] [--width-extra 0pt]');
+    console.error('usage: pageless.ts <document.tex> [-o DIR] [--template T] [--passes N] [--margin 36pt] [--width-extra 0pt] [--tex-pictures]');
     process.exit(2);
   }
   const doc = positionals[0];
   try {
     const pdf = await pageless(doc, { out: v.out ?? join('pageless', basename(doc).replace(/\.[^.]*$/, '')), template: v.template,
-      passes: Number(v.passes), margin: v.margin, widthExtra: v['width-extra'] });
+      passes: Number(v.passes), margin: v.margin, widthExtra: v['width-extra'], texPictures: v['tex-pictures'] });
     console.log(`pageless: ${pdf}`);
   } catch (e) { console.error(`error: ${(e as Error).message}`); process.exit(1); }
 }

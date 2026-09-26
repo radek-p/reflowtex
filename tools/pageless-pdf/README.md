@@ -17,7 +17,7 @@ MuPDF's WebAssembly build, sharp, Playwright).
 
 ```sh
 node tools/pageless-pdf/pageless.ts paper.tex -o out/ [--passes 3] \
-    [--template T] [--margin 36pt] [--width-extra 0pt]
+    [--template T] [--margin 36pt] [--width-extra 0pt] [--tex-pictures]
 # → out/pageless.pdf, pageless.json, output.json (+ the run's input.tex/.log/.pdf)
 ```
 
@@ -88,7 +88,8 @@ after the viewer.
 **Geometry first: `vector-compare.ts`.** No pixels. MuPDF's device trace
 gives every glyph and rule in the strip with its origin; `dom-dump.ts` gives
 every glyph and rule the viewer drew in the same frame, through any
-transform (`\rotatebox`). Each viewer glyph is matched to the nearest strip
+transform (`\rotatebox`) – a picture's glyphs too (TikZ labels, drawn by
+dvisvgm as `<use>` of an outline; reported as ◊ in the font "picture"). Each viewer glyph is matched to the nearest strip
 glyph within `--window` (0.7pt). Reported: the vertical residual along the
 document (a drift is height lost or gained in stacking), per text line the
 offset at its start and the slope along it (a glue or expansion ratio

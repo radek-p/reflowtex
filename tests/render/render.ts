@@ -10,6 +10,10 @@
 //  3. vector-compare.ts opens the page in Chromium with its column pinned to
 //     the PDF's width and matches each glyph the viewer drew with the PDF's.
 //
+// A case with `tex_pictures` has its PDFs drawn with TeX's own TikZ pictures,
+// and its page built from a run of its own (build/<case>/site-run/), made as
+// the pipeline makes it: pictures captured.
+//
 // Builds go to tests/render/build/<case>/ (ignored by git).
 import { appendFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
@@ -47,11 +51,10 @@ export const buildDir = (c: Case, extra: number) => join(BUILD, c.name, extra ? 
 /** A tool's lines, into a log file beside what it built. */
 const logTo = (file: string) => { writeFileSync(file, ''); return (s: string) => appendFileSync(file, `${s}\n`); };
 
-async function pagelessRun(c: Case, extra: number): Promise<string> {
-  const out = buildDir(c, extra);
+async function pagelessRun(c: Case, extra: number, out = buildDir(c, extra), texPictures = c.tex_pictures): Promise<string> {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  await pageless(c.file, { out, passes: c.passes, widthExtra: `${extra}pt`, template: c.template, log: logTo(join(out, 'pageless.log')) });
+  await pageless(c.file, { out, passes: c.passes, widthExtra: `${extra}pt`, template: c.template, texPictures, log: logTo(join(out, 'pageless.log')) });
   return out;
 }
 
@@ -59,11 +62,11 @@ const sites = new Map<string, Promise<string>>();
 /** The viewer page of a case, from its run at its own width (built once). */
 function site(c: Case): Promise<string> {
   if (!sites.has(c.name)) sites.set(c.name, (async () => {
-    const base = buildDir(c, 0);
+    const base = c.tex_pictures ? join(BUILD, c.name, 'site-run') : buildDir(c, 0);
     // Always compiled afresh (once per session, by the map above): a run kept
     // from an earlier session was made by whatever template and serializer
     // were current then, and the page would test those.
-    await pagelessRun(c, 0);
+    await pagelessRun(c, 0, base, false);
     const out = join(base, 'site');
     rmSync(out, { recursive: true, force: true });
     await siteFromRun(base, out, { log: logTo(join(base, 'site.log')) });
@@ -83,7 +86,7 @@ export interface Vector {
 /** The PDF at this width against the case's page: vector.json. */
 export async function compare(c: Case, extra: number, urlRoot: string): Promise<Vector> {
   const page = await site(c);
-  const strip = extra ? await pagelessRun(c, extra) : buildDir(c, 0);
+  const strip = extra || c.tex_pictures ? await pagelessRun(c, extra) : buildDir(c, 0);
   const rel = relative(BUILD, page).split(sep).join('/');
   return await vectorCompare(strip, `${urlRoot}/${rel}/index.html`, { out: join(strip, 'vector'), lineTol: c.tolerance, log: logTo(join(strip, 'compare.log')) }) as unknown as Vector;
 }

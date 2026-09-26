@@ -76,6 +76,20 @@ and a few paragraphs – enough text that its lines break differently at the
 other widths. It is picked up by name. Settings that differ from
 `defaults` go in an entry of `cases.ts`.
 
+## Pictures
+
+Glyphs in TikZ pictures – node text, labels – are compared like any other:
+the viewer draws them as outlines (`<use>`, reported as ◊). By default
+the PDF has the pictures the capture shipped, stacked back at their places,
+so a picture the capture got wrong would be wrong on both sides. A case
+with `tex_pictures` (`tikz-labels`, `tikz-nested`) has its PDFs
+compiled with TikZ's own `\tikzpicture` (`pageless.ts --tex-pictures`):
+TeX draws the pictures in the text, and the capture, dvisvgm and the
+viewer's placing of each picture are all tested against it. Its page is
+built from a run of its own, `build/<case>/site-run/`. TikZ strokes
+straight lines as TeX strokes rules, and the browser draws them as paths:
+the case's `rules_missing` counts them.
+
 ## Known failures and tolerances
 
 A case that fails for a reason not yet fixed gets `known: '…'` in

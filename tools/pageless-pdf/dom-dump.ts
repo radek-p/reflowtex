@@ -77,6 +77,16 @@ export async function dumpDom(url: string, o: { hsize?: number; margin?: number;
           const [gx, gy] = at(te.getScreenCTM()!, x, y);
           glyphs.push({ x: gx, y: gy, w: bb ? bb.width / 2 : 0, text: t.textContent ?? '', font: ff, size: fs / 2 });
         }
+        // A picture's glyphs (TikZ labels, text in an included PDF): dvisvgm
+        // draws each as a <use> of a glyph outline ("g1-4", prefixed per
+        // picture), its origin at the use's x, y. They have no text; ◊ stands
+        // for one, in the font "picture".
+        for (const u of svg.querySelectorAll('.latex-picture use')) {
+          if (!/-g\d+-\d+$/.test(u.getAttribute('href') ?? u.getAttribute('xlink:href') ?? '')) continue;
+          const x = parseFloat(u.getAttribute('x') ?? '0'), y = parseFloat(u.getAttribute('y') ?? '0');
+          const [gx, gy] = at((u as SVGGraphicsElement).getScreenCTM()!, x, y);
+          glyphs.push({ x: gx, y: gy, w: 0, text: '◊', font: 'picture', size: 0 });
+        }
         // Drawn rules only: not a link's transparent hit area, nor the empty
         // mark a \webaside leaves where it stood. Each is its four corners
         // (`pts`, at any angle), and the box around them.
