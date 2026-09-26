@@ -19,8 +19,8 @@ own.
 \section*{DIY: a note behind a button}
 Here \cs{mypopover}\verb|{label}{note}| puts a button in the text, with the
 label on it, that opens the note below. The preamble makes it of a
-\cs{webwidget} and two \cs{webaside}s, the label and the note, which
-\TeX{} typesets with the rest and keeps out of the flow.
+\cs{webwidget} and its two parts, the label and the note (\cs{webpart}),
+which \TeX{} typesets with the rest and keeps out of the flow.
 {{< /latex >}}
 
 {{< latex preamble="popover" show-source="true" >}}
@@ -37,9 +37,9 @@ The preamble:
 
 {{< latex preamble="webfirst" >}}
 The page's script. The widget is an inline instance of kind
-\texttt{popover}; its label and note, the asides with the same
-\verb|for=|, are its parts. It draws them with the parts the companion
-package provides, written with Preact.
+\texttt{popover}, and the label and the note are its parts. It draws them
+with the building blocks the companion package provides, written with
+Preact.
 {{< /latex >}}
 
 {{< include file="examples/popover.js" >}}

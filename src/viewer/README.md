@@ -249,6 +249,9 @@ everything a page draws:
 
 - **Blocks**: `host.blocks()`, `host.block(el)`, `host.onBlock(fn)` (now for
   each block already there, then for each new one), `block.on('layout', fn)`.
+  `host.mount(el)` renders a block element added after the page loaded (a
+  framework's), and `block.destroy()` undoes everything drawn for one and
+  forgets it.
 - **Instances**: everything the companion package makes, and the footnotes
   and `\marginpar`s the pipeline makes, one instance each – `{ id, kind,
   attrs, presentation, placement, parts, parent, children, spaceBefore,
@@ -258,7 +261,12 @@ everything a page draws:
   `host.instances(q)` / `block.instances(q)`, a kind or `{ kind, placement,
   …attrs }`; `host.find(id)`.
 - **Parts**: an instance's content by role – a stream's own content is
-  `body`, a Lean block's code the data part `text`. A typeset part is laid
+  `body`; the author declares others with `\webpart{role}{text}` (of the
+  widget before it in text, or of the environment around it), and the
+  package's own environments name theirs (Lean: `statement`, `tex`, and the
+  data part `code`). A part carries `spaceBefore`, the space TeX put before
+  it in its owner's text. The package's own keys in a stream's parameters
+  (`aside`, `rtx-part`, `rtx-owner`, …) never reach `attrs`. A typeset part is laid
   out into any element with `part.mount(el, { width })` – a number of px,
   `'natural'`, or `'container'` (the default: el's width, followed as it
   changes) – returning a surface: `metrics()`, `setWidth()`, `onChange(fn)`,
@@ -279,10 +287,16 @@ everything a page draws:
     explicit space (`host.setFrame({ top, bottom })`). Its height is its
     content's: open or close something and what follows moves.
     `host.spacing()` is the space the flow put above and below it.
-  - *margin* (`'margin'`): a detached instance with `place=margin`, in the
-    margin (below); `host.el` is the note.
+  - *margin* and *popover* (a `NoteHost`, `'margin'` or `'popover'`): a
+    detached instance the viewer shows in the margin (`place=margin`, below)
+    or in the popover a glyph opens (a footnote, or any stream a glyph refers
+    to); `host.el` is the note or the popover's content, and `setEdges` names
+    the surface whose first line stands on the mark's line.
   - *inline* (`'piece'`): a widget; see Widgets.
 - **Actions** and **text**: see below.
+- **Marks**: `\webid{id}{…}` and `\webclass{classes}{…}` mark glyphs
+  (`Node.mark` → `Document.marks`), drawn with `data-rtx-id` and the classes;
+  `host.mark(id)` gives `{ elements(), rects() }`, one rect per drawn line.
 
 ## Streams
 

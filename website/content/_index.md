@@ -183,7 +183,7 @@ script sets these words, and the lines are broken again around them.
 
 {{< latex preamble="home" >}}
 \cardtitle{HTML widgets}
-\noindent The Moon is on average \webtext{distance}{384\,400}~\webwidget{home:unit}
+\noindent The Moon is on average \webtext{distance}{384\,400}~\webwidget{unit}
 from the Earth. Pick another unit: the paragraph is broken again around it.
 {{< /latex >}}
 
@@ -430,8 +430,8 @@ AMS sample paper \texttt{testmath.tex}.
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && menu) { var o = opener; closeMenu(); if (o) o.focus(); } });
     window.addEventListener('scroll', closeMenu, { passive: true });
-    // \webwidget{home:unit}: an inline instance of kind "home".
-    withHost(function (host) { host.define('home', {
+    // \webwidget{unit}: an inline instance of kind "unit".
+    withHost(function (host) { host.define('unit', {
       measure: function (instance, env) {
         var words = UNITS[unit[instance.id] || 0][1].split(' ');
         var m = function (html) { return env.measure('<span class="home-badge" style="padding:0">' + html + '</span>'); };

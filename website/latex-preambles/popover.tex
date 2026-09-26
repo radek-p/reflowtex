@@ -1,18 +1,13 @@
 % SPDX-License-Identifier: AGPL-3.0-or-later
-% Preamble for the \mypopover example (content/docs/typesetting/footnotes.md).
+% Preamble for the \mypopover example (content/docs/web-first/inline-buttons.md).
 \usepackage{microtype}
 \usepackage{reflowtex}
 % \mypopover{label}{note}: a note behind a button in the text. The button is
-% a widget; its label and the note are asides, typeset by TeX out of the
-% flow, and found by the widget through for=… (examples/popover.js). In
-% print, a footnote.
-\newcounter{mypopover}
+% a widget of kind popover; its label and the note are its parts, typeset by
+% TeX out of the flow (examples/popover.js draws them). In print, a footnote.
 \NewDocumentCommand\mypopover{m +m}{%
   \ifreflowtex
-    \stepcounter{mypopover}%
-    \webwidget{popover:\themypopover}%
-    \webaside[for=\themypopover]{popover-label}{#1}%
-    \webaside[for=\themypopover]{popover-note}{\footnotesize #2}%
+    \webwidget{popover}\webpart{label}{#1}\webpart{note}{\footnotesize #2}%
   \else
     \footnote{#2}%
   \fi}

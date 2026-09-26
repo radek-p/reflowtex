@@ -45,6 +45,17 @@ preamble.
 ```
 
 {{< latex preamble="webfirst" >}}
+Or, with both forms at once – the web's and the PDF's – in one line:
+{{< /latex >}}
+
+```latex
+\NewWebEnvironment{webwarning}{warning}{\par\noindent\textbf{Warning.} }{\par}
+```
+
+{{< latex preamble="webfirst" >}}
+Its \verb|[key=value]| parameters reach the page as they are written (a
+colour may be \verb|#c2410c|). \cs{NewWebAside} does the same for a command
+whose text stands out of the flow, in the margin or a popover.
 \textbf{Step 2: the look.} Style the stream's element like any other. Padding
 narrows the measure: the text inside is broken to fit what is left.
 {{< /latex >}}

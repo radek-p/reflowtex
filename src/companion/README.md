@@ -16,10 +16,11 @@ The Hugo site does this on every page ([partials/companion.html](../../website/l
 
 ## A kind of your own
 
-In LaTeX, open a stream of your kind. Any `key=value` goes to the page:
+In LaTeX, declare an environment of your kind, with its print form beside
+it. Any `key=value` goes to the page, as written:
 
 ```latex
-\newenvironment{warning}[1][]{\begin{webstream}[#1]{warning}}{\end{webstream}}
+\NewWebEnvironment{warning}{warning}{\par\noindent\textbf{Warning.} }{\par}
 
 \begin{warning}[title=Careful]
 Dividing by $x$ assumes $x \neq 0$.
@@ -36,9 +37,10 @@ define('warning', ({ attrs }) => html`
   <${Typeset} />`);
 ```
 
-`define` draws a kind wherever it stands: in the flow, or in the margin
-when it is a `\webaside[place=margin]{kind}` (props.host.type is `'margin'`;
-the viewer puts its first line on the line of its mark). `<Typeset />` is
+`define` draws a kind wherever it stands: in the flow, in the margin when
+it is a `\webaside[place=margin]{kind}` (props.host.type is `'margin'`; the
+viewer puts its first line on the line of its mark), or in the popover a
+glyph opens (`'popover'`: a footnote, drawn your way). `<Typeset />` is
 the instance's body, typeset by TeX and laid out by the viewer at the width
 of the element it stands in. That width is followed as
 it changes, and the text is broken again. The viewer still spaces the block
@@ -53,7 +55,9 @@ whatever your component makes it, and the text below moves when it changes.
 | `props.attrs`, `useAttrs()` | the author's parameters |
 | `useInstanceState(key, initial)` | a signal belonging to the instance. It outlives redraws, so a choice the reader made (the pane they opened) stands |
 | `useAction(verb, fn)` | the reader pressed a `\webaction{verb:arg}{…}` in this instance's text or an instance inside it, wherever shown. `fn({ verb, arg, source, instance })`; return `false` to leave it to an enclosing instance |
-| `useBlockHost()` | the element in the flow or the margin (`host.el`), `setFrame`, `setEdges`, `spacing()` |
+| `useHost()` | where the instance is drawn: `host.type` is `'block'`, `'margin'`, `'popover'` or `'piece'` |
+| `useBlockHost()`, `useNoteHost()` | a block in the flow (`setFrame`, `setEdges`, `spacing()`); a margin note or popover (`setEdges`) |
+| `instance.part(role)` | the instance's parts: `body`, and those the author wrote with `\webpart{role}{…}` (a `TypesetPart` for `<Typeset part={…}>`, or a `DataPart` with `.data`) |
 | `usePiece()` | in a widget's piece: `host.piece`, `host.env` |
 | `<Typeset part of width edge onMetrics />` | a part (`'body'` by default) of this instance or of a child (`of`), at `'container'` width (default), `'natural'` or px. `edge` makes its lines the block's edges for TeX's spacing |
 | `readMotion(el, name, fallback, attr)` | duration, easing and style from CSS (`--rtx-NAME-*`), honouring reduced motion |
@@ -147,16 +151,16 @@ broken across (props.piece). State the pieces share belongs to the instance.
 ```js
 import { defineInline, InlineButton, Popover, Typeset, useState, html } from 'reflowtex/companion';
 
-defineInline('popover', {                   // \webwidget{popover:1}, asides for=1 its parts
-  size: (instance, env) => InlineButton.size(env, instance.part('popover-label').naturalWidth()),
+defineInline('popover', {         // \webwidget{popover}\webpart{label}{…}\webpart{note}{…}
+  size: (instance, env) => InlineButton.size(env, instance.part('label').naturalWidth()),
   View: ({ env }) => {
     const [button, setButton] = useState(null);
     return html`
       <${InlineButton} env=${env} pressed=${!!button} onPress=${e => setButton(button ? null : e.currentTarget)}>
-        <${Typeset} part="popover-label" width="natural" />
+        <${Typeset} part="label" width="natural" />
       </${InlineButton}>
       ${button && html`<${Popover} anchor=${button} onClose=${() => setButton(null)}>
-        <${Typeset} part="popover-note" /></${Popover}>`}`;
+        <${Typeset} part="note" /></${Popover}>`}`;
   },
 });
 ```

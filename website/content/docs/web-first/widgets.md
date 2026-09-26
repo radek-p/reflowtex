@@ -14,12 +14,14 @@ breaker then decides, together with the rest of the paragraph, whether and
 where to split it; in a narrow column it may run over several lines. The
 widget draws each part and marks the cut ends. In print it takes no space
 unless it has a default:
-\verb|\webwidget[|\emph{default}\verb|]{|\emph{name}\verb|}|.
+\verb|\webwidget[default=|\emph{text}\verb|]{|\emph{kind}\verb|}|.
+Other \emph{key=value} parameters go to the page, which reads them from the
+widget's instance.
 Drag the edge of the result to see the badge split.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" show-source="true" >}}
-The sum of the first $n$ odd numbers is $n^2$ \webwidget{lean:sum_odd}.
+The sum of the first $n$ odd numbers is $n^2$ \webwidget[decl=Nat.sum_odd_eq_sq]{lean}.
 The badge shows whether the Lean proof assistant has checked this. When
 its status changes, the paragraph is broken again around it.
 {{< /latex >}}
@@ -28,7 +30,7 @@ The page registers the widget. In outline (the page's source has the full
 menu):
 
 ```js
-reflowtex.host.define('lean', {           // \webwidget{lean:sum_odd}: kind lean, key sum_odd
+reflowtex.host.define('lean', {    // \webwidget[decl=…]{lean}: instance.attrs.decl
   measure(instance, env) {  // the badge as segments, with a break point between each two
     const { segs, gaps } = segment(label());       // at spaces, and after . and _
     return {
@@ -183,10 +185,12 @@ reflowtex.host.define('lean', {           // \webwidget{lean:sum_odd}: kind lean
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
     window.addEventListener('scroll', closeMenu, { passive: true });
 
-    // \webwidget{lean:sum_odd}: an inline instance of kind "lean".
+    // \webwidget[decl=…]{lean}: an inline instance of kind "lean"; the
+    // declaration is its parameter.
     var timer = null;
     function define(host) { host.define('lean', {
       measure: function (instance, env) {
+        DECL = instance.attrs.decl || DECL;
         if (!timer) timer = setTimeout(function () { status = 'done'; env.invalidate(); }, 2500);
         var sg = segment(label()), em = 0.6 * env.fontSize;       // the badge's own font size
         var text = function (t) { return env.measure('<span class="lean-badge"><span style="white-space:pre">' + esc(t) + '</span></span>'); };

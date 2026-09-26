@@ -60,6 +60,11 @@ width by its `.latex-block`'s style, then wait for the resize to settle
 | Widgets: drawn, split across lines, `invalidate()` | `live.spec.ts`, `regressions.spec.ts` |
 | Asides: query, natural width, `render`, `anchor()`, `reflowtex:layout` | `asides.spec.ts` |
 | Side notes: in the margin on their line, no overlap, marks without a margin | `asides.spec.ts` |
+| Host API: instances, parts, surfaces; block kinds (TeX spacing kept, one render, edges, frames, fallback); actions routed; nested frames flush, rtl; mount and destroy; the popover drawn by a kind | `host.spec.ts` |
+| What the author declares: widget parameters, `\webpart`, marks, `\NewWebEnvironment`, `\NewWebAside` | `parts.spec.ts` |
+| Companion accordion: animation, reduced motion, keyboard, styling from LaTeX, nesting, print; a throwing component | `accordion-v2.spec.ts` |
+| Companion Lean widgets: switches, motion, side by side, the code, print, the space after a hidden proof | `lean-v2.spec.ts` |
+| Reading options: corner button, panel, card, the page following theme, width and size | `reading.spec.ts` |
 | Companion: `InlineButton` fits its label on the baseline, `Popover` | `companion.spec.ts` |
 | Themes: the typeset ink follows the page's | `themes.spec.ts` |
 | Hugo: subpath, references, a reference to another page, an example's controls | `hugo.spec.ts` |

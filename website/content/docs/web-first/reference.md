@@ -18,11 +18,28 @@ latexTitle: true
   goes to the innermost instance around it handling \emph{verb}
   (\texttt{instance.onAction}, \texttt{useAction}), then outward, and
   bubbles as a \texttt{reflowtex:action} event; nothing in print.
-\item[\cs{webwidget}\texttt{[default]\{kind:key\}}] an inline instance of
-  \emph{kind}, drawn by the kind the page defines (\texttt{defineInline},
-  or the host API's \texttt{define} with \texttt{measure}), which reports
-  its size and where it may break; the line breaker may break it across
-  lines. Nothing in print, unless given a default.
+\item[\cs{webwidget}\texttt{[key=value, default=text]\{kind\}}] an
+  inline instance of \emph{kind} with those parameters, drawn by the kind
+  the page defines (\texttt{defineInline}, or the host API's
+  \texttt{define} with \texttt{measure}), which reports its size and where
+  it may break; the line breaker may break it across lines. Nothing in
+  print, unless given a default. (The first form,
+  \verb|\webwidget[text]{kind:key}|, still works.)
+\item[\cs{webpart}\texttt{\{role\}\{text\}}] text typeset out of the flow
+  as a part of an instance, \texttt{instance.part(role)}: in running text
+  of the \cs{webwidget} just before it, between paragraphs of the
+  environment around it. Left out in print.
+\item[\cs{webid}\texttt{\{id\}\{text\}}, \cs{webclass}\texttt{\{classes\}\{text\}}]
+  marks: the text named, for \texttt{reflowtex.host.mark(id)} to find, or
+  given CSS classes; they nest. Just the text in print.
+\item[\cs{NewWebEnvironment}\texttt{\{env\}\{kind\}\{print begin\}\{print end\}}]
+  an environment of your own: on the web a block of \emph{kind}, with its
+  \texttt{[key=value]} parameters taken as written; in print, the body
+  between the print code.
+\item[\cs{NewWebAside}\texttt{\{\textbackslash cmd\}\{kind\}\{print form\}}]
+  a command \verb|\cmd[key=value]{text}| of your own: on the web an aside
+  of \emph{kind} (\texttt{place=margin} puts it in the margin); in print,
+  the print form, \verb|#1| its text.
 \item[\cs{webaside}\texttt{[key=value]\{kind\}\{text\}}] text typeset
   out of the flow, in running text too, for a page to show where it likes
   (a popover, a margin note); left out in print. A detached instance:
@@ -30,8 +47,7 @@ latexTitle: true
   \texttt{part('body')}, drawn with \verb|<Typeset>| or
   \texttt{part.mount(el, \{width\})}; with \texttt{place=margin} the
   viewer sets it in the margin, drawn by its kind if the page defines one.
-  An aside with \texttt{for=}\emph{key} is a part of the widget
-  \emph{kind:key}. Example: \cs{mypopover} on the page Inline buttons.
+  Example: \cs{mysidenote} on the page Side notes.
 \item[\cs{webtext}\texttt{\{name\}\{default\}}] text a page may replace:
   \texttt{reflowtex.host.setText(name, text)}, or one instance's
   \texttt{setText(text)}; \texttt{null} for the default again; the
@@ -47,6 +63,8 @@ latexTitle: true
   its Lean code in one frame, each shown or hidden by its own switch; option
   \texttt{leanprint=false} leaves the code out of print. The macros of leanblueprint --
   \cs{lean}, \cs{leanok}, \cs{uses} and the rest -- compile as markers.
+  (The Lean environments are \texttt{reflowtex-lean.sty}, loaded with the
+  package.)
 \item[\cs{DeclareWebBox}\texttt{[new]\{env\}[options]}] draw \emph{env} (or a
   copy of it named \emph{new}) as a box; options \texttt{kind},
   \texttt{accent}, \texttt{background}, \texttt{class}.
