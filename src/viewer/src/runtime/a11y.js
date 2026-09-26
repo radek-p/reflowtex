@@ -39,8 +39,13 @@ import { renderNodes } from '../engine/paint.js';
 import { api } from './page.js';
 import { allData } from './block-data.js';
 
-// The layer turns into a zero-height anchor the pieces hang from; a piece is
-// placed relative to it, so the page may move the block and its layer freely.
+// The layer turns into a zero-height anchor the pieces hang from, and is moved
+// before its block (as shipped it follows it): so every piece hangs below the
+// anchor, at a positive offset. Hung upwards from an anchor after the block,
+// the pieces gave Safari negative heights for the page and its landmarks, and
+// VoiceOver drew its first outline at the block's end. Empty in the flow, the
+// layer moves nothing on the page wherever it is. A piece is placed relative
+// to it, so the page may move the block and its layer freely.
 const ANCHOR = 'position:relative;height:0;margin:0;padding:0;border:0;overflow:visible';
 const PIECE  = 'position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;'
              + 'white-space:normal;pointer-events:none;user-select:none;-webkit-user-select:none';
@@ -65,8 +70,8 @@ export function setAccessibleMath(m) {
     mode = m === 'spoken' ? 'spoken' : 'mathml';
     try { localStorage.setItem(MODE_KEY, mode); } catch { /* not remembered */ }
     for (const data of allData) {
-        const layer = data.el && data.el.nextElementSibling;
-        if (!layer || !layer.classList.contains('latex-a11y')) continue;
+        const layer = layerOf(data.el);
+        if (!layer) continue;
         for (const piece of layer.children) { restore(piece); delete piece.dataset.lines; delete piece.dataset.size; }
         placeAccessibleLayer(data);
     }
@@ -95,11 +100,18 @@ function inMode(piece) {
 
 const maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
 
+/** A block's accessible layer: before it once placed, after it as shipped. */
+export function layerOf(el) {
+    for (const s of el ? [el.previousElementSibling, el.nextElementSibling] : []) if (s && s.classList.contains('latex-a11y')) return s;
+    return null;
+}
+
 /** Lay the block's accessible layer, if it has one, over its lines. */
 export function placeAccessibleLayer(data) {
     const el = data && data.el;
-    const layer = el && el.nextElementSibling;
-    if (!layer || !layer.classList.contains('latex-a11y')) return;
+    const layer = layerOf(el);
+    if (!layer) return;
+    if (layer === el.nextElementSibling) el.before(layer);
     const cache = data.cache;
     const laid = cache.layout && cache.layout.laid;
     if (!laid || !cache.dom) return;

@@ -1975,12 +1975,13 @@ function colourMaps() {
 }
 
 // ── Accessibility ──────────────────────────────────────────────────────────────
-// A block built with the accessible layer (src/pipeline/a11y.ts) has it right
-// after it: pieces – a paragraph (data-para), a display (data-item) – which
+// A block built with the accessible layer (src/pipeline/a11y.ts) has it beside
+// it: pieces – a paragraph (data-para), a display (data-item) – which
 // the viewer lays over the drawing, a paragraph near the window line by line
 // as runs (data-run: text, math). The inspector says what the layer holds for
 // a box, and draws where it lies.
-const layerOf = el => { const l = el && el.nextElementSibling; return l && l.classList.contains('latex-a11y') ? l : null; };
+// (before its block once the viewer placed it, after it as shipped)
+const layerOf = el => (el ? [el.previousElementSibling, el.nextElementSibling] : []).find(l => l && l.classList.contains('latex-a11y')) || null;
 // The layer's pieces for a row: a block's, all; a segment's, its paragraphs'
 // or its display's; a line's or a node's, its paragraph's.
 function accessiblePieces(id) {

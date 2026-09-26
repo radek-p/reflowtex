@@ -17,7 +17,8 @@ test('every formula reaches assistive technology as MathML; the drawing does not
 
   const blocks = page.locator('.latex-block[data-nodelist-b64]');   // the page's, not the viewer's popovers
   for (const b of await blocks.all()) expect(await b.getAttribute('aria-hidden')).toBe('true');
-  expect(await page.locator('.latex-block[data-nodelist-b64] + .latex-a11y').count()).toBe(await blocks.count());
+  // (the viewer moves the layer before its block: see 'the layer is anchored …')
+  expect(await page.locator('.latex-a11y + .latex-block[data-nodelist-b64]').count()).toBe(await blocks.count());
 
   const align = page.locator('.latex-a11y math[display="block"]').nth(1);
   expect(await align.locator('mtable').first().locator(':scope > mtr').count()).toBe(2);
@@ -40,7 +41,7 @@ test('the layer is not seen: the page looks as it did', async ({ openPage }) => 
 async function layerBoxes(page: import('@playwright/test').Page) {
   return page.evaluate(() => [...document.querySelectorAll('.latex-block[data-nodelist-b64]')].map(block => {
     const b = block.getBoundingClientRect();
-    const layer = block.nextElementSibling!;
+    const layer = block.previousElementSibling!;
     return {
       block: { top: b.top + scrollY, bottom: b.bottom + scrollY },
       pieces: [...layer.children].map(p => {
@@ -147,7 +148,7 @@ async function coverage(page: import('@playwright/test').Page) {
       const glyphs = [...block.querySelectorAll('svg text, svg tspan')].filter(g => !g.querySelector('tspan')).map(g => {
         const range = document.createRange(); range.selectNodeContents(g); return range.getBoundingClientRect();
       }).filter(r => r.width > 0 && r.height > 0);
-      for (const run of block.nextElementSibling!.querySelectorAll('[data-run]')) {
+      for (const run of block.previousElementSibling!.querySelectorAll('[data-run]')) {
         const r = run.getBoundingClientRect();
         const inside = glyphs.filter(g => {
           const cx = g.left + g.width / 2, cy = g.top + g.height / 2;
@@ -240,7 +241,7 @@ test('each run\'s text box lies on the drawn line, top and bottom', async ({ ope
     const box = (n: Node) => { const r = document.createRange(); r.selectNodeContents(n); return r.getBoundingClientRect(); };
     for (const block of document.querySelectorAll('.latex-block[data-nodelist-b64]')) {
       const glyphs = [...block.querySelectorAll('svg text, svg tspan')].filter(g => !g.querySelector('tspan')).map(box).filter(r => r.height > 0);
-      for (const run of block.nextElementSibling!.querySelectorAll('[data-run="text"]')) {
+      for (const run of block.previousElementSibling!.querySelectorAll('[data-run="text"]')) {
         const t = box(run);
         const mine = glyphs.filter(g => { const cx = g.left + g.width / 2, cy = g.top + g.height / 2; return cx >= t.left && cx <= t.right && cy >= t.top - 4 && cy <= t.bottom + 4; });
         if (mine.length < 3) continue;
@@ -328,4 +329,24 @@ test('spoken formulas are spaced as the source is', async ({ openPage }) => {
   const text = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y [data-para]')].map(p => p.textContent!).find(t => t.startsWith('Short')));
   await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('mathml'));
   expect(text!.trim()).toBe('Short: a ends. The ith one.');
+});
+
+// The layer is anchored at its block's start and every piece hangs below the
+// anchor, at a positive offset: hung upwards from an anchor after the block
+// (as shipped), Safari gave the page and its landmarks negative heights, and
+// VoiceOver drew its first outline at the block's end. The viewer moves it
+// before the block; empty in the flow, it moves nothing on the page.
+test('the layer is anchored at its block\'s start, its pieces below the anchor', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  const r = await page.evaluate(() => [...document.querySelectorAll('.latex-block[data-nodelist-b64]')].map(block => {
+    const b = block.getBoundingClientRect(), layer = block.previousElementSibling as HTMLElement, l = layer.getBoundingClientRect();
+    return { isLayer: layer.classList.contains('latex-a11y'), above: b.top - l.top, height: l.height,
+             negative: [...layer.children].filter(p => (p as HTMLElement).offsetTop < -0.5).length };
+  }));
+  for (const x of r) {
+    expect(x.isLayer, 'the layer comes before its block').toBe(true);
+    expect(x.above, 'the anchor is at or above the block').toBeGreaterThanOrEqual(-1);
+    expect(x.height, 'and takes no room').toBeLessThanOrEqual(0.5);
+    expect(x.negative, 'pieces above the anchor').toBe(0);
+  }
 });

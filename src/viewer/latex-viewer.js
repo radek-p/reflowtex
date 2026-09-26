@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 664329fe612dce5a1414ba3fd2dd56bebae118ed81aaedb2a22f49a33f66628e
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 c3518f7432b23e47aaa4d8d65174734433f12f21692b819af97776f667531719
 'use strict';
 "use strict";
 (() => {
@@ -2861,8 +2861,8 @@
     } catch {
     }
     for (const data of allData) {
-      const layer = data.el && data.el.nextElementSibling;
-      if (!layer || !layer.classList.contains("latex-a11y")) continue;
+      const layer = layerOf(data.el);
+      if (!layer) continue;
       for (const piece of layer.children) {
         restore(piece);
         delete piece.dataset.lines;
@@ -2896,10 +2896,15 @@
     }
   }
   var maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
+  function layerOf(el) {
+    for (const s of el ? [el.previousElementSibling, el.nextElementSibling] : []) if (s && s.classList.contains("latex-a11y")) return s;
+    return null;
+  }
   function placeAccessibleLayer(data) {
     const el = data && data.el;
-    const layer = el && el.nextElementSibling;
-    if (!layer || !layer.classList.contains("latex-a11y")) return;
+    const layer = layerOf(el);
+    if (!layer) return;
+    if (layer === el.nextElementSibling) el.before(layer);
     const cache = data.cache;
     const laid = cache.layout && cache.layout.laid;
     if (!laid || !cache.dom) return;
