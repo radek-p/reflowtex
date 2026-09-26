@@ -23,7 +23,7 @@ There are infinitely many primes.
 \webnextpane[See the proof]
 \end{webpane}
 \begin{webpane}[expanded]
-\begin{proof}\hfill\webprevpane\par
+\begin{proof}[\proofname\webpanelink{prev}{ (hide)}]
 Suppose $p_1, \dots, p_k$ were all of them, and let
 \[ N = p_1 p_2 \cdots p_k + 1 . \]
 No $p_i$ divides $N$, since each leaves remainder $1$. Yet $N > 1$ has a
@@ -117,9 +117,10 @@ is made of:
 {{< latex preamble="webfirst" >}}
 \section*{In print}
 A PDF prints one pane: the last, the fullest, unless \texttt{print=} names
-another. The links are left out, but line breaks around them stay:
-\verb|\hfill\webprevpane\par| still ends the first line of the proof in
-print. Put it in \texttt{webonly} if the PDF should not break there. Printing the web page shows the same pane as the PDF.
+another. The links are left out, and so is anything inside them: the proof
+above puts its link in its heading, \verb|[\proofname\webpanelink{prev}{ (hide)}]|,
+with the space inside the link, so the PDF reads \emph{Proof.} and nothing
+more. Printing the web page shows the same pane as the PDF.
 The option \texttt{initial=} picks the pane shown first (default: the first).
 {{< /latex >}}
 

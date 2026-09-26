@@ -262,23 +262,39 @@ export function installStreamStyles() {
     st.textContent = `
       /* Frames (note, hint, theorem, proof) grow outward: a top-level one
          reaches into the margin by its padding and border
-         (--latex-outset-l/-r), so its text keeps the column's full measure
-         and lines up with the text around it. Inside another frame a box
-         stays within it, a little narrower per level. The outsets do not
-         inherit, so a stream inside a frame (a pane, say) has none.
-         A page's own framed kind can set the same two variables. */
-      :where(.latex-stream) { --latex-outset-l: initial; --latex-outset-r: initial; }
+         (--latex-outset-start/-end), so its text keeps the column's full
+         measure and lines up with the text around it. Inside another frame
+         a box is set in by the enclosing frame's padding at the start of
+         the line only (left, or right in right-to-left text), so the start
+         edges step in per level while the end edges all stand flush: each
+         frame hands its end padding to what it holds (--latex-enclosing-end)
+         and a frame inside takes it back as a negative margin. A stream
+         with no padding (a pane) passes it on unchanged. The outsets do not
+         inherit, so a stream inside a frame has none. A page's own framed
+         kind can set the same variables (--latex-outset-l/-r, the earlier
+         names, still work). All sides are logical, for right-to-left text. */
+      :where(.latex-stream) { --latex-outset-start: initial; --latex-outset-end: initial;
+                              --latex-outset-l: initial; --latex-outset-r: initial; }
       .latex-stream {
-        margin-left: calc(-1 * var(--latex-outset-l, 0px));
-        margin-right: calc(-1 * var(--latex-outset-r, 0px)); }
+        margin-inline-start: calc(-1 * var(--latex-outset-start, var(--latex-outset-l, 0px)));
+        margin-inline-end: calc(-1 * var(--latex-outset-end, var(--latex-outset-r, 0px))); }
       :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
           .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"],
           .latex-stream[data-kind="leancode"]) .latex-stream {
-        margin-left: 0; margin-right: 0; }
+        margin-inline-start: 0; margin-inline-end: 0; }
+      :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
+          .latex-stream[data-kind="note"], .latex-stream[data-kind="leancode"]) > * {
+        --latex-enclosing-end: var(--latex-pad-end, 0px); }
+      :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
+          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"],
+          .latex-stream[data-kind="leancode"])
+        :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
+            .latex-stream[data-kind="note"], .latex-stream[data-kind="leancode"]) {
+        margin-inline-end: calc(-1 * var(--latex-enclosing-end, 0px)); }
       .latex-stream[data-kind="note"] {
-        --latex-outset-l: calc(1rem + 3px); --latex-outset-r: 1rem;
-        padding: .6rem 1rem;
-        border-left: 3px solid var(--latex-note-accent, #2f6fb3);
+        --latex-outset-start: calc(1rem + 3px); --latex-outset-end: 1rem; --latex-pad-end: 1rem;
+        padding-block: .6rem; padding-inline: 1rem var(--latex-pad-end);
+        border-inline-start: 3px solid var(--latex-note-accent, #2f6fb3);
         background: color-mix(in srgb, var(--latex-note-accent, #2f6fb3) 8%, transparent); }
       /* The hint's content is blurred, not the box, so a label can sit
          sharp over it while it is hidden (--latex-hint-label, a string). */
@@ -300,16 +316,17 @@ export function installStreamStyles() {
          (zero specificity, so a page's rule or the box's own inline value wins). */
       :where(.latex-stream) { --latex-box-accent: initial; --latex-box-background: initial; }
       .latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"] {
-        --latex-outset-l: calc(.85rem + 3px); --latex-outset-r: .7rem;
+        --latex-outset-start: calc(.85rem + 3px); --latex-outset-end: .7rem; --latex-pad-end: .7rem;
         --latex-box-space: calc(4.31 * var(--latex-pt));
         --latex-cap-height: calc(6.83 * var(--latex-pt));
-        padding: max(2px, calc(var(--latex-box-space) + var(--latex-cap-height) - var(--latex-first-ascent, 0px))) .7rem
-                 max(2px, calc(var(--latex-box-space) - var(--latex-last-depth, 0px))) .85rem;
+        padding-block: max(2px, calc(var(--latex-box-space) + var(--latex-cap-height) - var(--latex-first-ascent, 0px)))
+                       max(2px, calc(var(--latex-box-space) - var(--latex-last-depth, 0px)));
+        padding-inline: .85rem var(--latex-pad-end);
         /* --latex-box-accent / --latex-box-background: set per box (\DeclareWebBox
            accent=, background=) or by a page; else the kind's defaults – a
            page may give theorems a background of their own
            (--latex-theorem-background), else a tint of their accent. */
-        border-left: 3px solid var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
+        border-inline-start: 3px solid var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
         background: var(--latex-box-background, var(--latex-theorem-background,
           color-mix(in srgb, var(--latex-theorem-accent, #2f6fb3) 7%, transparent))); }
       /* A box with an accent of its own and no background: a tint of that accent. */
@@ -317,7 +334,7 @@ export function installStreamStyles() {
         background: var(--latex-box-background,
           color-mix(in srgb, var(--latex-box-accent) 7%, transparent)); }
       .latex-stream[data-kind="proof"] {
-        border-left-color: var(--latex-box-accent, var(--latex-proof-accent, #8a8f98));
+        border-inline-start-color: var(--latex-box-accent, var(--latex-proof-accent, #8a8f98));
         background: var(--latex-box-background,
           color-mix(in srgb, var(--latex-box-accent, var(--latex-proof-accent, #8a8f98)) 6%, transparent)); }
       /* Margin notes (placeMarginNotes): the layer is the block's, the notes
@@ -393,9 +410,9 @@ export function installStreamStyles() {
           flex: 1 0 auto; } }
       /* The code's frame: the proof's, in the Lean colour (--latex-lean-accent). */
       .latex-stream[data-kind="leancode"] {
-        --latex-outset-l: calc(.85rem + 3px); --latex-outset-r: .7rem;
-        padding: .6rem .7rem .7rem .85rem;
-        border-left: 3px solid var(--latex-lean-accent, #2e8b7a);
+        --latex-outset-start: calc(.85rem + 3px); --latex-outset-end: .7rem; --latex-pad-end: .7rem;
+        padding-block: .6rem .7rem; padding-inline: .85rem var(--latex-pad-end);
+        border-inline-start: 3px solid var(--latex-lean-accent, #2e8b7a);
         background: color-mix(in srgb, var(--latex-lean-accent, #2e8b7a) 7%, transparent); }
       .latex-lean-head { padding: 0 0 .35rem; opacity: .65; font: .72rem ui-monospace, "SF Mono", Menlo, monospace; }
       .latex-lean-head a { color: inherit; }

@@ -273,3 +273,34 @@ def test_defined_before_the_viewer(open_page):
     page.wait_for_function("""() => document.querySelectorAll('.latex-stream[data-kind="pane"]')[1]
       .querySelectorAll('tspan').length > 0""")
     assert page.evaluate('__renders') == 2
+
+
+# ── Boxed theorems: nested frames ────────────────────────────────────────────
+
+FRAMES = """() => [...document.querySelectorAll('.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"]')]
+  .map(b => { const r = b.getBoundingClientRect();
+              let depth = 0; for (let e = b.parentElement; e; e = e.parentElement)
+                if (e.matches && e.matches('.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"]')) depth++;
+              return { depth, left: r.left, right: r.right }; })"""
+
+
+def test_nested_boxes_end_flush_start_stepped(open_page):
+    page = open_page('boxes')
+    fs = page.evaluate(FRAMES)
+    proof = [f for f in fs if f['depth'] == 0][1]          # the outer proof (after the theorem)
+    inner = [f for f in fs if f['depth'] >= 1]
+    assert len(inner) == 2, fs                              # the claim, and its proof
+    for f in inner:
+        assert abs(f['right'] - proof['right']) < 0.5, 'a nested box stops short of the right edge'
+        assert f['left'] > proof['left'] + 5, 'a nested box is not set in on the left'
+
+
+def test_nested_boxes_mirror_right_to_left(open_page):
+    page = open_page('boxes')
+    page.evaluate("document.documentElement.dir = 'rtl'")
+    page.wait_for_timeout(400)
+    fs = page.evaluate(FRAMES)
+    proof = [f for f in fs if f['depth'] == 0][1]
+    for f in [f for f in fs if f['depth'] >= 1]:
+        assert abs(f['left'] - proof['left']) < 0.5, 'right to left: the end (left) edges stand flush'
+        assert f['right'] < proof['right'] - 5, 'right to left: set in at the start (right)'

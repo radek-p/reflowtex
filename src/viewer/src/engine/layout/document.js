@@ -353,7 +353,10 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         // narrows shrinks the whole picture (it has a viewBox) for the frame or
         // two before the reflow lands. Uncapped, the lines keep their size and
         // hang past the column until they are re-broken.
-        svg.style.cssText = 'display:block;overflow:visible;max-width:none;font-weight:normal;font-style:normal;overflow-anchor:none';
+        // direction:ltr: every glyph is placed where TeX put it, so the page's
+        // direction (an rtl page, whose frames mirror) must not make the
+        // browser reorder or re-anchor the text runs.
+        svg.style.cssText = 'display:block;overflow:visible;max-width:none;font-weight:normal;font-style:normal;overflow-anchor:none;direction:ltr;unicode-bidi:isolate';
         const box = document.createElement('div');
         box.appendChild(svg);
         const gap = document.createElement('div');

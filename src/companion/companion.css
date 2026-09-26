@@ -61,8 +61,9 @@
 }
 .latex-stream[data-variant="accent"] {
   background: var(--rtx-box-background, color-mix(in srgb, var(--rtx-accent) 7%, transparent));
-  border-left: 3px solid var(--rtx-accent);
-  border-radius: 0 var(--rtx-box-radius, var(--rtx-radius)) var(--rtx-box-radius, var(--rtx-radius)) 0;
+  /* The bar at the start of the line: left, or right in right-to-left text. */
+  border-inline-start: 3px solid var(--rtx-accent);
+  border-start-start-radius: 0; border-end-start-radius: 0;
 }
 
 /* ── <Typeset> ─────────────────────────────────────────────────────────── */
@@ -74,7 +75,10 @@
    Motion: --rtx-accordion-motion (slide · fade · none), -duration, -easing;
    or the author's motion=…. */
 .rtx-accordion { position: relative; }
-.rtx-accordion[data-animating] { overflow: clip; overflow-clip-margin: 4px; }
+/* While the height eases, what is below the accordion's edge is cut off – but
+   only below: a frame inside (a boxed proof) reaches out into the margin
+   sideways, and must not vanish until the movement ends. */
+.rtx-accordion[data-animating] { overflow-x: visible; overflow-y: clip; overflow-clip-margin: 4px; }
 /* A closed pane keeps its width (its text stays laid out, ready) but takes
    no height and cannot be reached. */
 .rtx-pane[data-state="closed"] { height: 0; overflow: hidden; visibility: hidden; }
