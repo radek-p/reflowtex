@@ -1,0 +1,18 @@
+% What is neither a line of a paragraph nor a display on the main vertical
+% list: a rule, a box set in vertical mode, a paragraph holding only a rule.
+% The serializer used to drop them without a word.
+\documentclass{article}
+\begin{document}
+A paragraph before a rule drawn across the page with \verb|\hrule|, which
+TeX puts on the vertical list itself, between two lines.
+\hrule
+A paragraph after it, long enough to break across lines differently at
+every width the test tries, so that what follows the rule moves.
+
+\hbox{A box set in vertical mode, which TeX stacks as it is.}
+\medskip
+\noindent\rule{\textwidth}{0.4pt}
+
+A last paragraph after a paragraph that holds nothing but a rule, like a
+separator between two parts of a text.
+\end{document}

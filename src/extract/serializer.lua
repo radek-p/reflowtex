@@ -1074,18 +1074,28 @@ local seen_para = {}
 -- amsmath leaves an empty paragraph behind after an alignment (a zero-content
 -- fire that exists only to close the display group). Skip those, but retain a
 -- paragraph whose only visible node is a picture: \mypic commonly expands to
--- exactly such a paragraph.
+-- exactly such a paragraph – or a rule: \noindent\rule{\textwidth}{0.4pt} is
+-- a separator. A rule with no width, or no height and depth, is a strut and
+-- draws nothing.
+local RUNNING = -1073741824
+local function inked_rule(n)
+    return (n.width or 0) ~= 0
+        and ((n.height or 0) ~= 0 or (n.depth or 0) ~= 0 or n.height == RUNNING or n.depth == RUNNING)
+end
 local function has_visible_nodes(nodes)
     for _, n in ipairs(nodes) do
         if n.type == "glyph" or n.type == "picture" then return true end
+        if n.type == "rule" and inked_rule(n) then return true end
         if n.children and has_visible_nodes(n.children) then return true end
         if n.replace and has_visible_nodes(n.replace) then return true end
     end
     return false
 end
 
--- The band of the most recent paragraph; displays inherit it.
+-- The band of the most recent paragraph; displays inherit it. And its
+-- leading, which a fixed box (emit_fixed) is set with.
 local cur_band = { indent = 0, width = 0 }
+local cur_leading = {}
 -- What the flow last stacked – "line", "blank" (a line with no ink: the
 -- indent box of a paragraph that opens with a display) or "display" – and
 -- the display item the next below-display glue belongs to.
@@ -1220,6 +1230,89 @@ local function place_gap(ctx, next_sid, sp, explicit, parts)
     end
 end
 
+-- ── What else the vertical list holds ─────────────────────────────────────
+-- The walk knows lines of paragraphs, displays, label markers, boxes of lines
+-- (vlists, walked into), insertions and spacing. Anything else that draws – a
+-- rule set in vertical mode (\hrule, a class's title rules), a box set in
+-- vertical mode (\hbox, \@makecaption's \hbox to\hsize) – used to be dropped
+-- without a word, and the space it took with it. It is kept as a fixed display
+-- instead: the box as TeX set it, at its place, which the viewer draws and
+-- scrolls like any display. Losing content silently is the worst failure; a
+-- box that does not reflow is a lesser one, and the log counts them.
+local fixed_items = 0
+
+-- A fixed box goes into the stream as a display does: the space before it,
+-- then the item, placed at its shift from the left of the text.
+--
+-- Unlike a display it has no skips of its own, but TeX set interline glue
+-- above a box (not a rule) from the depth of the line before, and below it
+-- for the line after; the lines around it are broken again at another width,
+-- so that glue must be redone there. The viewer redoes it for an equation
+-- display, from the glue TeX used (display_interline_above/below) and the
+-- leading in force – so the box is wrapped in one (hlist subtype 6), with
+-- skips of zero, which makes its skip choice a no-op. A pre-display size of
+-- -\maxdimen says no empty line stands above it: the depth above is the
+-- previous item's own.
+local HL_EQUATION_WRAP = 6
+local function emit_fixed(n, box, pending, ctx)
+    local gap = (pending.sp or 0) + ((last_box == "blank" and pending.blank_sp) or 0)
+    place_gap(ctx, stream_attr(n), gap, gap, pending.parts)
+    reset_pending(pending)
+    pending.blank_sp = nil
+    local out = stream_out(ctx, stream_attr(n))
+    ctx.last_sid, ctx.last_kind = stream_attr(n), "display"
+    out[#out + 1] = {
+        kind = "display",
+        display_width  = (source_width > 0) and source_width or box.width,
+        display_indent = 0,
+        display_shift  = n.shift or 0,
+        display_pre_size    = -1073741823,
+        display_above       = 0, display_above_short = 0,
+        display_below       = 0, display_below_short = 0,
+        display_used_above  = 0,
+        display_interline_above = pending.interline,
+        display_baselineskip  = cur_leading.bskip,
+        display_lineskip      = cur_leading.lskip,
+        display_lineskiplimit = cur_leading.lskiplimit,
+        display_after_line  = false,
+        box = { type = "hlist", subtype = HL_EQUATION_WRAP, width = box.width, height = box.height,
+                depth = box.depth, shift = 0, glue_set = 0, glue_sign = 0, glue_order = 0,
+                children = { box } },
+    }
+    last_display = out[#out]; last_box = "display"
+    pending.above_skip = nil; pending.interline = nil
+    fixed_items = fixed_items + 1
+end
+
+-- The node on its own, serialized (serialize_nodelist walks a whole list, so
+-- it is given a copy without neighbours).
+local function serialize_one(n)
+    local c = node.copy(n)
+    local out = serialize_nodelist(c)[1]
+    node.flush_node(c)
+    return out
+end
+
+local function fixed_box(n, t)
+    if t == "rule" then
+        -- On a vertical list a rule's running width is the enclosing box's:
+        -- the text width.
+        local w = (n.width == RUNNING) and source_width or n.width
+        local rule = { type = "rule", width = w, height = n.height, depth = n.depth, color = current_color }
+        if not inked_rule(rule) then return nil end
+        return { type = "hlist", subtype = 2, width = w, height = n.height, depth = n.depth,
+                 shift = 0, glue_set = 0, glue_sign = 0, glue_order = 0, children = { rule } }
+    end
+    local s = serialize_one(n)
+    if not s or not has_visible_nodes({ s }) then return nil end
+    if s.type ~= "hlist" then          -- a picture (a captured TikZ box), or a vlist
+        s = { type = "hlist", subtype = 2, width = n.width, height = n.height, depth = n.depth,
+              shift = 0, glue_set = 0, glue_sign = 0, glue_order = 0, children = { s } }
+    end
+    s.shift = 0                        -- on a vertical list shift is horizontal: display_shift below
+    return s
+end
+
 local function walk_flow(head, pending, ctx)
     ctx = ctx or { out = content, base = nil }
     for n in node.traverse(head) do
@@ -1253,6 +1346,8 @@ local function walk_flow(head, pending, ctx)
             if p then
                 cur_band.indent = all_paragraphs[p].band_indent or all_paragraphs[p].indent
                 cur_band.width  = all_paragraphs[p].band_width or all_paragraphs[p].width
+                cur_leading = { bskip = all_paragraphs[p].baselineskip, lskip = all_paragraphs[p].lineskip,
+                                lskiplimit = all_paragraphs[p].lineskiplimit }
             end
             if p and not seen_para[p] and has_visible_nodes(all_paragraphs[p].nodes) then
                 seen_para[p] = true
@@ -1317,8 +1412,16 @@ local function walk_flow(head, pending, ctx)
                 },
             }
             last_display = out[#out]; last_box = "display"; pending.above_skip = nil; pending.interline = nil
+        elseif t == "vlist" and node.get_attribute(n, TIKZ_PIC_ATTR) then
+            -- a captured TikZ picture set in vertical mode: not a vlist of lines
+            local box = fixed_box(n, t)
+            if box then emit_fixed(n, box, pending, ctx) end
         elseif t == "vlist" then
             walk_flow(n.head, pending, ctx)
+        elseif t == "rule" or t == "hlist" then
+            -- neither a line nor a display (those are above): see fixed_box
+            local box = fixed_box(n, t)
+            if box then emit_fixed(n, box, pending, ctx) end
         elseif t == "ins" then
             -- A footnote is not part of the pageless main stream. Retain its
             -- fully typeset paragraphs/displays as a stream of kind "footnote"
@@ -1461,6 +1564,9 @@ local function write_output()
     end
     for _, s in ipairs(stream_list) do
         if s.kind == "footnote" then n_fn = n_fn + 1 end
+    end
+    if fixed_items > 0 then
+        texio.write_nl(string.format("serializer: %d box(es) or rule(s) outside any paragraph kept as fixed displays", fixed_items))
     end
     texio.write_nl(string.format(
         "serializer: wrote output.json (%d paragraph(s), %d item(s) in stream, %d display(s), %d stream(s) of which %d footnote(s))",
