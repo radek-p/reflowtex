@@ -80,10 +80,9 @@ test('the gap in a link is hoverable', async ({ openPage }) => {
 // ── Fonts ───────────────────────────────────────────────────────────────────
 
 // A font that failed to download left text silently missing; now a bar says
-// so (970f543).
+// so (970f543). Dismissing it once did nothing: the bar's display: flex
+// outranked the hidden attribute.
 test('a font failure is shown and dismissed', async ({ openPage }) => {
-  test.fail(true, 'Dismiss sets hidden on the bar, but its CSS display:flex overrides [hidden] ' +
-    '(fix: .latex-font-warning[hidden] { display: none }); left to the viewer refactor');
   const page = await openPage('notes', { route: ['**/*.otf', r => r.fulfill({ status: 404 })] });
   page.errors.length = 0;                               // the 404s are the point here
   const bar = page.locator('.latex-font-warning');

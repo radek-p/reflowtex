@@ -26,8 +26,9 @@ are called the atoms of arithmetic.
 {{< /latex >}}
 
 ```css
+/* a highlighter; a stroke of the same colour pads it, with round corners */
 .latex-block rect.latex-mark[data-mark~="key"] {
-  fill: color-mix(in srgb, var(--lt-primary) 18%, transparent);
+  fill: #fff176; stroke: #fff176; stroke-width: 3px; stroke-linejoin: round;
 }
 ```
 
@@ -44,5 +45,9 @@ for (const r of rects()) { /* one rectangle per line */ }
 ```
 
 <style>
-  .latex-block rect.latex-mark[data-mark~="key"] { fill: color-mix(in srgb, var(--lt-primary) 18%, transparent); }
+  :root { --mark-highlight: #fff176; }
+  html.dark, [data-latex-theme="dark"] { --mark-highlight: #5c5000; }
+  .latex-block rect.latex-mark[data-mark~="key"] {
+    fill: var(--mark-highlight); stroke: var(--mark-highlight); stroke-width: 3px; stroke-linejoin: round;
+  }
 </style>

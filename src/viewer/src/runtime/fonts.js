@@ -132,6 +132,8 @@ export function reportFontFailure(names) {
             display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 18px;
             font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; color: #fff; background: #2b2622;
             border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.28); }
+          /* display: flex above would outrank the hidden attribute Dismiss sets */
+          .latex-font-warning[hidden] { display: none; }
           .latex-font-warning p { margin: 0; flex: 1; }
           .latex-font-warning strong { color: #ffcf8a; }
           .latex-font-warning button { font: inherit; font-weight: 600; color: inherit; cursor: pointer;

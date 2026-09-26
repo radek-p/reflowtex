@@ -300,7 +300,8 @@ everything a page draws:
   Each mark also has a band on every line it is on, drawn under the text:
   `rect.latex-mark` with the classes in `data-mark` and the id in
   `data-rtx-id`, transparent until a page styles it (a highlighter:
-  `rect.latex-mark[data-mark~="key"] { fill: … }`).
+  `rect.latex-mark[data-mark~="key"] { fill: #fff176 }`; a stroke of the
+  same colour pads it).
 
 ## Streams
 
