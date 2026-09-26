@@ -33,6 +33,12 @@ const SVG_COLOR_RE = /\b(fill|stroke)='#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})'/g;
 const SVG_ROOT_RE = /<svg\b[^>]*\bviewBox='([\d.eE+-]+) ([\d.eE+-]+) ([\d.eE+-]+) ([\d.eE+-]+)'[^>]*>([\s\S]*)<\/svg>/;
 const SVG_PAGE_RECT_RE = /<path d='M0 0H([\d.eE+-]+)V([\d.eE+-]+)H0V0Z?'(?: fill='#(?:fff|ffffff)')?\/>\s*/g;
 
+// Every optimisation but collapse-groups. In dvisvgm 3.4.4 (Debian trixie's,
+// reading the PDF through mutool 1.25) that module drops the transform of a
+// group around a single glyph: a TikZ node label is drawn at y = -8 in a
+// picture 60 pt tall, a whole picture height above where it belongs.
+export const DVISVGM_OPTIMIZE = '--optimize=all,-collapse-groups';
+
 export interface Picture { svg: string; vb_w: number; vb_h: number }
 
 /** The markup inside dvisvgm's <svg>, ids prefixed and colours themed, with
@@ -150,7 +156,7 @@ export async function convertPictures(data: SerializerOutput, buildDir: string, 
         // so concurrent conversions collide and some silently lose every glyph.
         const tmp = mkdtempSync(join(tmpdir(), 'dvisvgm-'));
         try {
-          await run('dvisvgm', ['--pdf', `--page=${page}`, '--no-fonts', '--optimize=all', `--tmpdir=${tmp}`, `--output=${out}`, input], { cwd: buildDir });
+          await run('dvisvgm', ['--pdf', `--page=${page}`, '--no-fonts', DVISVGM_OPTIMIZE, `--tmpdir=${tmp}`, `--output=${out}`, input], { cwd: buildDir });
         } catch (e) {
           if (!existsSync(out)) throw new PictureError(`dvisvgm failed on ${pdf}:\n${String((e as { stderr?: string }).stderr ?? e).slice(-2000)}`, block);
         } finally { rmSync(tmp, { recursive: true, force: true }); }
