@@ -284,10 +284,14 @@
       \csname reflowtex@wa@\string#1\endcsname{##2}%
     \fi}}
 
-% ── Marks: \webid, \webclass ─────────────────────────────────────────────────
-% \webid{id}{text}          the text named, for a page to find
-%                           (reflowtex.host.mark(id)) and point at
-% \webclass{classes}{text}  the text given CSS classes (space-separated)
+% ── Marks: \webspan (and \webid, \webclass) ──────────────────────────────────
+% \webspan[id=myid, class={one two}]{text}
+%                           the text named and given CSS classes: a page finds
+%                           it (reflowtex.host.mark(id)) and styles it. The
+%                           classes are separated by spaces or commas (inside
+%                           braces: a comma outside would start a new key).
+% \webid{id}{text}          short for \webspan[id=id]{text}
+% \webclass{classes}{text}  short for \webspan[class={classes}]{text}
 %
 % Every glyph typeset inside is marked (attribute 916): the viewer draws it
 % with data-rtx-id and the classes, however the lines break. They nest: an
@@ -295,11 +299,43 @@
 % to the outer ones. In print the text is simply typeset.
 \ifdefined\reflowtexMarkCount\else\newcount\reflowtexMarkCount\fi
 \def\reflowtex@mark@id{}\def\reflowtex@mark@classes{}
+\ExplSyntaxOn
+\tl_new:N \l__reflowtex_span_id_tl
+\tl_new:N \l__reflowtex_span_class_tl
+\seq_new:N \l__reflowtex_span_class_seq
+\keys_define:nn { reflowtex/span }
+  {
+    id    .code:n = \tl_set:Ne \l__reflowtex_span_id_tl { \tl_to_str:n {#1} } ,
+    class .code:n =
+      {
+        \tl_set:Ne \l_tmpa_tl { \tl_to_str:n {#1} }
+        \tl_replace_all:Nnn \l_tmpa_tl { , } { ~ }
+        \seq_set_split:NnV \l__reflowtex_span_class_seq { ~ } \l_tmpa_tl
+        \seq_remove_all:Nn \l__reflowtex_span_class_seq { }
+        \tl_put_right:Ne \l__reflowtex_span_class_tl
+          { \tl_if_empty:NF \l__reflowtex_span_class_tl { ~ } \seq_use:Nn \l__reflowtex_span_class_seq { ~ } }
+      } ,
+    unknown .code:n = \PackageError { reflowtex }
+      { \token_to_str:N \webspan :~ unknown~key~` \l_keys_key_str ' }
+      { It~takes~id=~and~class=. }
+  }
+% \reflowtex@span{keys}: the id and the classes (the outer ones first) the
+% keys give, in \reflowtex@span@id and \reflowtex@span@classes.
+\cs_new_protected:Npn \reflowtex@span #1
+  {
+    \tl_set_eq:NN \l__reflowtex_span_id_tl \reflowtex@mark@id
+    \tl_set_eq:NN \l__reflowtex_span_class_tl \reflowtex@mark@classes
+    \keys_set:nn { reflowtex/span } {#1}
+    \tl_set_eq:NN \reflowtex@span@id \l__reflowtex_span_id_tl
+    \tl_set_eq:NN \reflowtex@span@classes \l__reflowtex_span_class_tl
+  }
+\ExplSyntaxOff
 \ifreflowtex
-  \NewDocumentCommand\webid{m +m}{\reflowtex@mark{\detokenize{#1}}{\reflowtex@mark@classes}{#2}}
-  \NewDocumentCommand\webclass{m +m}{%
-    \reflowtex@mark{\reflowtex@mark@id}%
-      {\ifx\reflowtex@mark@classes\@empty\else\reflowtex@mark@classes\space\fi\detokenize{#1}}{#2}}
+  % (\reflowtex@mark takes the id and classes by \edef: the strings.)
+  \NewDocumentCommand\webspan{O{} +m}{%
+    \reflowtex@span{#1}\reflowtex@mark\reflowtex@span@id\reflowtex@span@classes{#2}}
+  \NewDocumentCommand\webid{m +m}{\webspan[id={#1}]{#2}}
+  \NewDocumentCommand\webclass{m +m}{\webspan[class={#1}]{#2}}
   \long\def\reflowtex@mark#1#2#3{%
     \begingroup
       \edef\reflowtex@mark@id{#1}\edef\reflowtex@mark@classes{#2}%
@@ -309,6 +345,8 @@
       \attribute916=\reflowtexMarkCount\relax #3%
     \endgroup}
 \else
+  % The keys are read in print too, so that a misspelt one is caught there.
+  \NewDocumentCommand\webspan{O{} +m}{\begingroup\reflowtex@span{#1}\endgroup #2}
   \NewDocumentCommand\webid{m +m}{#2}
   \NewDocumentCommand\webclass{m +m}{#2}
 \fi

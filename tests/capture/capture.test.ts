@@ -239,6 +239,22 @@ test('marks: ids and classes, nested', async () => {
   assert.deepEqual(glyphs.slice(0, 4), [['A', 1], ['b', 1], ['c', 2], ['d', 3]]);
 });
 
+// \webspan[id=, class=] is the general form; \webid and \webclass are its
+// short forms, and all three nest alike. Classes may be given with spaces or
+// commas inside braces; an id with a TeX special (_) is taken as written.
+test('marks: \\webspan, its short forms, nesting and class lists', async () => {
+  const out: any = await capture(
+    '\\webspan[id=a, class={one, two}]{Ab} \\webspan[class=x]{c\\webspan[id=b, class={y  z}]{d}\\webid{e}{f}}'
+    + ' \\webclass{p q}{h} \\webspan[id=a_1]{i}.', pkg);
+  assert.deepEqual(out.marks, [
+    { id: 'a', classes: 'one two' }, { id: '', classes: 'x' }, { id: 'b', classes: 'x y z' },
+    { id: 'e', classes: 'x' }, { id: '', classes: 'p q' }, { id: 'a_1', classes: '' }]);
+});
+
+test('marks: \\webspan refuses a key it does not know', async () => {
+  await assert.rejects(capture('\\webspan[colour=red]{x}.', pkg));
+});
+
 test('NewWebEnvironment passes its parameters as written', async () => {
   const out: any = await capture('\\begin{warn}[variant=card, --rtx-accent=#c2410c]Careful.\\end{warn}',
     pkg + '\n\\NewWebEnvironment{warn}{warning}{}{}');

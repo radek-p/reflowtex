@@ -45,6 +45,22 @@ test('marks: classes and ids on the glyphs, found by id', async ({ openPage }) =
   expect(r.none).toBe(0);
 });
 
+// \webspan is the general form: an id and classes at once, the classes
+// given with commas; drawn as \webid's and \webclass's are.
+test('\\webspan: named and classed at once', async ({ openPage }) => {
+  const page = await openPage('parts');
+  const r = await page.evaluate(() => {
+    const m = reflowtex.host.mark('both'), els = m.elements();
+    const band = document.querySelector('rect.latex-mark[data-rtx-id="both"]');
+    return { n: els.length, text: els.map((e: Element) => e.textContent).join(''),
+             classed: els.every((e: Element) => e.classList.contains('warm') && e.classList.contains('cool')),
+             band: band && band.getAttribute('data-mark') };
+  });
+  expect(r.text).toBe('Thisisnamedandclassedatonce.');
+  expect(r.classed).toBe(true);
+  expect(r.band, 'the classes in the band\'s data-mark, a space between').toBe('warm cool');
+});
+
 test('a mark is styled by CSS, however the lines break', async ({ openPage }) => {
   const page = await openPage('parts');
   await page.addStyleTag({ content: '.latex-block svg .hot { fill: rgb(200, 0, 0) !important; }' });

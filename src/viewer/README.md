@@ -296,7 +296,8 @@ everything a page draws:
     the surface whose first line stands on the mark's line.
   - *inline* (`'piece'`): a widget; see Widgets.
 - **Actions** and **text**: see below.
-- **Marks**: `\webid{id}{…}` and `\webclass{classes}{…}` mark glyphs
+- **Marks**: `\webspan[id=…, class={…}]{…}` (short forms `\webid{id}{…}`,
+  `\webclass{classes}{…}`) mark glyphs
   (`Node.mark` → `Document.marks`), drawn with `data-rtx-id` and the classes;
   `host.mark(id)` gives `{ elements(), rects() }`, one rect per drawn line.
   Each mark also has a band on every line it is on, drawn under the text:

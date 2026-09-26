@@ -9,20 +9,25 @@ latexTitle: true
 \bigskip
 Some text should be found or styled on its own: a key sentence, the term
 being defined, a step of a proof that a script points at.
-\verb|\webclass{|\emph{classes}\verb|}{|\emph{text}\verb|}| gives the text
-CSS classes, and \verb|\webid{|\emph{id}\verb|}{|\emph{text}\verb|}| names
-it. Every glyph inside carries the mark however the lines break, so a rule
+\verb|\webspan[id=|\emph{id}\verb|, class={|\emph{classes}\verb|}]{|\emph{text}\verb|}|
+names the text and gives it CSS classes, either or both; the classes are
+separated by spaces or commas, inside the braces. For one of the two alone
+there are short forms: \verb|\webid{|\emph{id}\verb|}{|\emph{text}\verb|}|
+and \verb|\webclass{|\emph{classes}\verb|}{|\emph{text}\verb|}|. Every glyph inside carries the mark however the lines break, so a rule
 in the page's stylesheet reaches all of it. Behind the text, each line of a
 mark also has a band, from its first glyph to its last, spaces included:
 it is invisible until the page gives it a colour, and makes a highlighter,
 which a link's colour cannot be mistaken for. Marks nest: an inner one keeps
-the outer classes. In print the text is simply typeset.
+the outer classes, and the outer id unless it names its own. In print the
+text is simply typeset; a key \verb|\webspan| does not know is an error in
+both.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" show-source="true" >}}
-A prime is a number with exactly two divisors. \webclass{key}{Every number
-above one is a product of primes, in only one way}, and that is why they
-are called the atoms of arithmetic.
+A prime is a number with exactly two divisors.
+\webspan[id=euclid, class=key]{Every number above one is a product of
+primes, in only one way}, and that is why they are called the atoms of
+arithmetic.
 {{< /latex >}}
 
 ```css

@@ -222,7 +222,7 @@ takes that part out of any highlight it touches. Declare it once on a page:
 ```
 
 A highlight is a live mark (the viewer's `host.addMark`): drawn as an
-author's `\webclass` is, a band behind each of its lines, kept as the text
+author's `\webspan` is, a band behind each of its lines, kept as the text
 breaks again. Its bands carry `rtx-highlight rtx-highlight-NAME` in
 `data-mark`, and look like the Marks page's example: filled with
 `--rtx-highlight-NAME` and padded by a stroke of the same colour

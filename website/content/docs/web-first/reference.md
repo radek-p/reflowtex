@@ -29,9 +29,12 @@ latexTitle: true
   as a part of an instance, \texttt{instance.part(role)}: in running text
   of the \cs{webwidget} just before it, between paragraphs of the
   environment around it. Left out in print.
+\item[\cs{webspan}\texttt{[id=\ldots, class=\{\ldots\}]\{text\}}]
+  a mark: the text named, for \texttt{reflowtex.host.mark(id)} to find,
+  and given CSS classes (spaces or commas between them, inside the
+  braces); marks nest. Just the text in print.
 \item[\cs{webid}\texttt{\{id\}\{text\}}, \cs{webclass}\texttt{\{classes\}\{text\}}]
-  marks: the text named, for \texttt{reflowtex.host.mark(id)} to find, or
-  given CSS classes; they nest. Just the text in print.
+  short for \cs{webspan}\texttt{[id=\ldots]} and \cs{webspan}\texttt{[class=\{\ldots\}]}.
 \item[\cs{NewWebEnvironment}\texttt{\{env\}\{kind\}\{print begin\}\{print end\}}]
   an environment of your own: on the web a block of \emph{kind}, with its
   \texttt{[key=value]} parameters taken as written; in print, the body

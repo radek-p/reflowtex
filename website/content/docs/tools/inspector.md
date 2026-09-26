@@ -72,8 +72,8 @@ its words is stretched or shrunk to fit whatever width it is given.
   popover's boxes appear in the tree), and its links and labels.
 \item[Widgets and marks.] \emph{Resources} lists the page's instances --
   every widget, aside and stream, with its kind, attributes and parts --
-  the kinds a script has defined, and the marks made with \verb|\webid|
-  and \verb|\webclass|. Hover one to outline it on the page.
+  the kinds a script has defined, and the marks made with \verb|\webspan|
+  (or \verb|\webid| and \verb|\webclass|). Hover one to outline it on the page.
 \item[Colours.] \emph{Colours} shows every colour map the page uses, one
   cell per colour and tint. Click a theme's name to switch the page to it.
   Change a cell with its picker or type any CSS colour, and the page is

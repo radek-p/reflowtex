@@ -133,7 +133,7 @@ collapsed. While the filter has text, every kind with a match is expanded.
   its data part (a Lean block's code). Hovering outlines its text.
 - **Kinds the page defines** (`host.define`): each with whether it measures
   (an inline kind) and its instances on the page.
-- **Marks**: each `\webid` and `\webclass`, with its glyphs; hovering
+- **Marks**: each `\webspan` (`\webid`, `\webclass`), with its glyphs; hovering
   outlines them.
 - **Links, citations, anchors, slots.** Each `\ref` (with whether its label
   is on this page), URL and `\webaction`; each `\lrcite` number, with its
