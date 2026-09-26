@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Every Type 1 face in TeX Live's pdftex.map, converted by type1.ts, against
-// t1_convert.py's conversion (t1_sweep.py writes it): the same addressing,
-// and every code point drawn the same. Slow: it runs when build/t1-sweep/
-// holds the Python side (REFLOWTEX_PYTHON=… .venv/bin/python3
-// tests/parity/t1_sweep.py build/t1-sweep).
+// Every Type 1 outline in TeX Live's pdftex.map (through the first face that
+// uses it), converted by type1.ts, against t1_convert.py's conversion
+// (t1_sweep.py writes it): the same addressing, and every code point drawn the
+// same. Slow: it runs when build/t1-sweep/ holds the Python side
+// (.venv/bin/python3 tests/parity/t1_sweep.py build/t1-sweep).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -13,15 +13,17 @@ import { sameDrawing } from './font-compare.ts';
 import { REPO } from './helpers.ts';
 
 const dir = join(REPO, 'build/t1-sweep');
-const manifestPath = join(dir, 'manifest.json');
+const manifestPath = join(dir, 'manifest.jsonl');
 
 test('Type 1 sweep: every face in pdftex.map', { skip: existsSync(manifestPath) ? false : 'no sweep (tests/parity/t1_sweep.py)' }, () => {
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, null | { pfb: string; served?: string; addressing?: Record<string, number>; error?: string }>;
+  type Row = { name: string; outline?: null; pfb?: string; served?: string; addressing?: Record<string, number>; error?: string };
+  const rows = readFileSync(manifestPath, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l) as Row);
   let same = 0, bothFail = 0;
   const differ: string[] = [];
-  for (const [name, py] of Object.entries(manifest)) {
+  for (const py of rows) {
+    const name = py.name;
     const found = findOutline(name);
-    if (!py) { if (found) differ.push(`${name}: no outline for Python, one for us`); continue; }
+    if (py.outline === null) { if (found) differ.push(`${name}: no outline for Python, one for us`); continue; }
     let ts: ReturnType<typeof convertOutline> | null = null, err = '';
     try { ts = convertOutline(found![0], name, found![1]); } catch (e) { err = (e as Error).message; }
     if (py.error || !ts) {
