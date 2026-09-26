@@ -258,6 +258,9 @@ local ASIDE_MARK_ATTR    = 915 -- the empty box a \webaside leaves where it stoo
 -- A \webid / \webclass (reflowtex.sty): every glyph typeset inside carries
 -- the mark's number (the innermost; its classes include the outer ones').
 local MARK_ATTR          = 916
+-- MathML (mathml.lua, when the pipeline put it here): the formula number on
+-- an inline formula's begin-math node, and on a box its conversion refers to.
+local MathML = lfs.isfile("mathml.lua") and dofile("mathml.lua") or nil
 local RULE_IMAGE  = 2
 local picture_files = {}
 local source_width = 0
@@ -828,6 +831,7 @@ local function serialize_nodelist(head)
                 -- A \webaside's mark, likewise an empty box: where the aside
                 -- stood, for a page to place it by.
                 aside      = node.get_attribute(n, ASIDE_MARK_ATTR),
+                mathml_box = MathML and node.get_attribute(n, MathML.BOX_ATTR) or nil,
                 children   = n.head and serialize_nodelist(n.head) or {},
             }
 
@@ -838,6 +842,7 @@ local function serialize_nodelist(head)
                 type     = "math",
                 subtype  = n.subtype,
                 surround = n.surround,
+                mathml   = MathML and n.subtype == 0 and node.get_attribute(n, MathML.ATTR) or nil,
             }
 
         else
@@ -1484,6 +1489,9 @@ local function walk_flow(head, pending, ctx)
             local note = display_notes[node.get_attribute(n, DISPLAY_ATTR) or -1]
             out[#out + 1] = {
                 kind = "display",
+                -- the display's number: its formula's, or the one an
+                -- alignment's rows share (MathML)
+                display_no = MathML and node.get_attribute(n, DISPLAY_ATTR) or nil,
                 -- The band this display occupies, and where TeX put the box
                 -- inside it. display_shift is carried out here rather than on
                 -- the box because in a vertical list shift means a horizontal
@@ -1788,6 +1796,7 @@ local function write_output()
         slots      = dense("slot", slot_table, function() return json_object({ name = "" }) end),
         marks      = dense("mark", mark_table, function() return json_object({}) end),
         outline    = json_array(outline),
+        mathml     = MathML and json_array(MathML.formulas) or nil,
     }))
     f:close()
     local n_disp, n_fn = 0, 0

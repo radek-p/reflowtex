@@ -305,7 +305,8 @@ test('MathML: typesetting is untouched', async () => {
 
 test('MathML: every inline formula, and nothing nested twice', async () => {
   const d = await capture(FORMULAS, '', 2);
-  const [first, , see] = inlineMathml(d);
+  const [first] = inlineMathml(d);
+  const see = d.paragraphs.find(p => glyphText(p.nodes).startsWith('See'))!;
   assert.equal(first.length, 6);
   assert.equal(first[0], '<math><msup><mi>𝑥</mi><mn>2</mn></msup><mo>+</mo><msup><mi>𝑦</mi><mn>2</mn></msup><mo>=</mo><msup><mi>𝑧</mi><mn>2</mn></msup></math>');
   assert.match(first[2], /<mi mathvariant="normal">ℝ<\/mi>|<mi>ℝ<\/mi>/, '\\mathbb in the classic fonts');
@@ -313,7 +314,7 @@ test('MathML: every inline formula, and nothing nested twice', async () => {
   assert.doesNotMatch(first[4], /<math>.*<math>/, 'the formula inside \\text is part of the outer one');
   assert.match(first[4], /<mtext>the set<\/mtext>.*<mi>𝑆<\/mi>/);
   assert.match(first[5], /<mfrac linethickness="0"><mi>𝑛<\/mi><mi>𝑘<\/mi><\/mfrac>/);
-  assert.deepEqual(see, [], '\\eqref is text');
+  assert.deepEqual(inlineMathml({ ...d, paragraphs: [see] }), [[]], '\\eqref is text');
   for (const m of d.paragraphs.flatMap(p => inlineMathml({ ...d, paragraphs: [p] }).flat()))
     assert.doesNotMatch(m, /mglyph|�|[-]/, m);
 });
@@ -325,7 +326,7 @@ test('MathML: displays, and an alignment read as one table', async () => {
   assert.match(equation!, /^<math display="block">.*<mfrac><mn>1<\/mn><mn>2<\/mn><\/mfrac>/);
   assert.match(align1!, /^<math display="block"><mtable><mtr>.*<mtable>.*otherwise.*<\/mtr><mtr>.*<mi>𝑔<\/mi>.*<mtable>.*<\/mtr><\/mtable><\/math>$/,
     'rows of align, with cases and pmatrix as tables inside');
-  assert.match(align1!, /<mtext>\(1\)<\/mtext>/, 'the equation number');
+  assert.match(align1!, /<mtext>\(2\)<\/mtext>/, 'the equation number (the equation above is 1)');
   assert.equal(align2, undefined, 'the second row is read with the first');
   assert.match(gather!, /<munder><mi>lim<\/mi>/);
   for (const m of [integral, equation, align1, gather]) assert.doesNotMatch(m!, /mglyph|�|<math[^>]*>.*<math/);
