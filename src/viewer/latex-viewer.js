@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 ef52ffc1aa15e19c059cb461b20d65742ec9b83457261cd1b3ea0c5e605f106f
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 6c8aaf1826807d30565d43c34ca78135e36c4ed57a7c473741ab0cfd88a8b60c
 'use strict';
 "use strict";
 (() => {
@@ -3039,6 +3039,7 @@
     anchorOf;
     children = [];
     parts = /* @__PURE__ */ new Map();
+    spaceBefore = 0;
     part(role) {
       return this.parts.get(role);
     }
@@ -3062,7 +3063,7 @@
     return { attrs, presentation: { classes, properties }, aside };
   }
   var NO_PRESENTATION = Object.freeze({ classes: Object.freeze([]), properties: Object.freeze({}) });
-  function normalise(doc, block, key, parts, anchorOf) {
+  function normalise(doc, block, key, parts, anchorOf, spToPx = 0) {
     const streams = doc.streams || [];
     const slots = doc.slots || [];
     const roots = [];
@@ -3149,10 +3150,17 @@
       }
     };
     function walkContent(items, parent) {
+      let space = 0;
       for (const it of items) {
+        if (it.kind === "vspace") {
+          space += it.amount || 0;
+          continue;
+        }
+        const before = space;
+        space = 0;
         if (it.kind === "stream") {
           if (it.stream && !seenStream.has(it.stream) && streams[it.stream - 1])
-            streamInstance(it.stream, "block", parent, { type: "none" });
+            streamInstance(it.stream, "block", parent, { type: "none" }).spaceBefore = before * spToPx;
         } else if (it.kind === "display") {
           walkNodes(it.box ? [it.box] : [], parent);
         } else if (!it.kind || it.kind === "paragraph") {
@@ -3225,7 +3233,8 @@
           this,
           this.key,
           { typeset: (inst, role, stream) => new TypesetPartImpl(role, inst, this.data, stream) },
-          (src) => this.anchor(src)
+          (src) => this.anchor(src),
+          SP_TO_PX
         );
       }
       return this._roots;
@@ -3395,6 +3404,12 @@
         if (next.top === rec.frame.top && next.bottom === rec.frame.bottom) return;
         rec.frame = next;
         if (rec.laid) relayoutSoon(owner);
+      },
+      spacing() {
+        const segs = owner.dom && owner.dom.segs || [];
+        const i = segs.findIndex((sg) => sg.box === box);
+        const px = (el) => el && parseFloat(el.style.height) || 0;
+        return { before: i >= 0 ? px(segs[i].gap) : 0, after: i >= 0 && i + 1 < segs.length ? px(segs[i + 1].gap) : 0 };
       },
       setEdges(e) {
         rec.edges = { ...rec.edges || {}, ...e };
@@ -4456,125 +4471,7 @@
   }
 
   // src/index.js
-  var LEAN_KEYWORDS = new Set("theorem lemma def example instance structure class inductive where by fun have show from at with match calc exact exacts intro intros induction cases rcases obtain simp simp_all rw rwa rfl apply refine use constructor omega norm_num linarith nlinarith ring ring_nf field_simp decide aesop sorry let in if then else do return namespace open section end variable noncomputable private protected theorem abbrev deriving universe mutual termination_by decreasing_by nat_cases positivity gcongr unfold subst specialize contradiction exfalso trivial assumption tauto push_neg by_contra by_cases".split(" "));
-  function highlightLean(code) {
-    const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const re = /(\/-[\s\S]*?-\/)|(--[^\n]*)|("(?:[^"\\]|\\.)*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_'.!?]*)/g;
-    let out = "", last = 0, m;
-    while (m = re.exec(code)) {
-      out += esc(code.slice(last, m.index));
-      const [t] = m;
-      if (m[1] || m[2]) out += `<span class="lean-com">${esc(t)}</span>`;
-      else if (m[3]) out += `<span class="lean-str">${esc(t)}</span>`;
-      else if (m[4]) out += `<span class="lean-num">${esc(t)}</span>`;
-      else if (LEAN_KEYWORDS.has(t)) out += `<span class="lean-kw">${esc(t)}</span>`;
-      else out += esc(t);
-      last = re.lastIndex;
-    }
-    return out + esc(code.slice(last));
-  }
-  function leanSwitches(box, ctx, host2, fallback) {
-    if (!ctx.state.show) {
-      const init2 = (ctx.attrs.show || fallback).toLowerCase();
-      ctx.state.show = { proof: init2 === "proof" || init2 === "both", lean: init2 === "lean" || init2 === "both" };
-    }
-    const row = document.createElement("div");
-    row.className = "latex-lean-switches";
-    row.setAttribute("role", "group");
-    row.setAttribute("aria-label", "Show the proof, its Lean code, or both");
-    const buttons = {};
-    const apply = () => {
-      for (const k of ["proof", "lean"]) {
-        box.classList.toggle("latex-show-" + k, ctx.state.show[k]);
-        buttons[k].setAttribute("aria-pressed", String(ctx.state.show[k]));
-      }
-    };
-    const heightOf = (el) => el && parseFloat(el.style.height) || 0;
-    const adjust = () => {
-      box.style.marginBottom = "";
-      if (ctx.state.show.proof) return;
-      let after = box.nextElementSibling;
-      while (after && after.classList.contains("latex-anchor")) after = after.nextElementSibling;
-      const stmt = box.firstElementChild && box.firstElementChild.querySelector(':scope > .latex-stream[data-kind="leanstatement"]');
-      const want = heightOf(stmt ? stmt.nextElementSibling : box.previousElementSibling);
-      const d = want - heightOf(after);
-      if (d < 0) box.style.marginBottom = `${d}px`;
-    };
-    for (const [k, label] of [["proof", "Proof"], ["lean", "Lean"]]) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = label;
-      b.addEventListener("click", () => {
-        ctx.state.show[k] = !ctx.state.show[k];
-        apply();
-        ctx.relayout();
-        ctx.paint();
-        adjust();
-      });
-      buttons[k] = b;
-      row.appendChild(b);
-    }
-    host2.appendChild(row);
-    apply();
-    requestAnimationFrame(adjust);
-    window.addEventListener("resize", () => requestAnimationFrame(adjust), { passive: true });
-  }
   var STREAM_KINDS = {
-    // reflowtex.sty's leancode: Lean source carried as text (Stream.text),
-    // shown as highlighted, selectable code under a small header naming the
-    // declaration (linked when the author gave url=).
-    leancode: {
-      mount(box, ctx) {
-        if (ctx.attrs.decl) {
-          const head = document.createElement("div");
-          head.className = "latex-lean-head";
-          const d = document.createElement(ctx.attrs.url ? "a" : "span");
-          d.textContent = ctx.attrs.decl;
-          if (ctx.attrs.url) {
-            d.href = ctx.attrs.url;
-            d.target = "_blank";
-            d.rel = "noopener";
-          }
-          head.appendChild(d);
-          box.appendChild(head);
-        }
-        const pre = document.createElement("pre");
-        const code = document.createElement("code");
-        code.innerHTML = highlightLean(ctx.stream.text || "");
-        pre.appendChild(code);
-        box.appendChild(pre);
-      }
-    },
-    // reflowtex.sty's leanproof: one frame (the proof's look) holding a TeX
-    // part (leantex) and its Lean code (leancode), with Proof and Lean
-    // switches on top (placed first by CSS order: the layout code takes a
-    // stream box's first child for its content).
-    leanproof: {
-      mount(box, ctx) {
-        leanSwitches(box, ctx, box, "proof");
-      }
-    },
-    // reflowtex.sty's leantheorem: the statement (leanstatement), its proof
-    // (leantex) and the code (leancode). The switches hang under the
-    // theorem's frame, from its left edge, like tabs (under the statement
-    // when theorems are not boxed); the proof and code open beneath them,
-    // initially neither.
-    leantheorem: {
-      mount(box, ctx) {
-        const root = box.firstElementChild;
-        const stmt = root && root.querySelector(':scope > .latex-stream[data-kind="leanstatement"]');
-        const thm = stmt && stmt.querySelector('.latex-stream[data-kind="theorem"]');
-        leanSwitches(box, ctx, stmt || box, "none");
-        if (thm) {
-          const row = (stmt || box).lastElementChild;
-          row.classList.add("latex-lean-hang");
-          for (const v of ["--latex-box-accent", "--latex-box-background"]) {
-            const val = thm.style.getPropertyValue(v);
-            if (val) row.style.setProperty(v, val);
-          }
-        }
-      }
-    },
     // reflowtex.sty's webhint: blurred (CSS) until the reader clicks it or
     // presses Enter/Space on it, and blurred again by the next click. Clicks
     // on a link inside, or that end a text selection, leave it as it is. The
@@ -4678,17 +4575,15 @@
         margin-inline-start: calc(-1 * var(--latex-outset-start, var(--latex-outset-l, 0px)));
         margin-inline-end: calc(-1 * var(--latex-outset-end, var(--latex-outset-r, 0px))); }
       :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"],
-          .latex-stream[data-kind="leancode"]) .latex-stream {
+          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"]) .latex-stream {
         margin-inline-start: 0; margin-inline-end: 0; }
       :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-          .latex-stream[data-kind="note"], .latex-stream[data-kind="leancode"]) > * {
+          .latex-stream[data-kind="note"]) > * {
         --latex-enclosing-end: var(--latex-pad-end, 0px); }
       :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"],
-          .latex-stream[data-kind="leancode"])
+          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"])
         :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-            .latex-stream[data-kind="note"], .latex-stream[data-kind="leancode"]) {
+            .latex-stream[data-kind="note"]) {
         margin-inline-end: calc(-1 * var(--latex-enclosing-end, 0px)); }
       .latex-stream[data-kind="note"] {
         --latex-outset-start: calc(1rem + 3px); --latex-outset-end: 1rem; --latex-pad-end: 1rem;
@@ -4753,80 +4648,6 @@
       }
       .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"]:not(.latex-pane-active) {
         display: none; }
-      /* Lean beside a proof. leanproof: one frame (the proof's look), its
-         switches on top, the proof box inside giving up its own frame.
-         leantheorem: the switches in the theorem's frame, the proof (in its
-         usual box) and the code beneath. The code has no background: just
-         space from the proof. */
-      .latex-stream[data-kind="leanproof"] { display: flex; flex-direction: column; container-type: inline-size; }
-      .latex-stream[data-kind="leanproof"] > .latex-lean-switches { order: -1; margin-bottom: .6rem; }
-      .latex-stream[data-kind="leanproof"]:not(.latex-show-proof):not(.latex-show-lean) > .latex-lean-switches { margin-bottom: 0; }
-      .latex-stream[data-kind="leantheorem"] { container-type: inline-size; }
-      .latex-stream[data-kind="leantheorem"] .latex-lean-switches { justify-content: flex-start; margin-top: .4rem; }
-      /* Hanging from a boxed theorem: flush with the frame's bottom, starting
-         where its text ("Theorem") starts, in the box's own colours (set by
-         the script from the box). Only the label is dimmed, never the fill. */
-      .latex-stream[data-kind="leantheorem"] .latex-lean-switches.latex-lean-hang {
-        margin: 0; gap: 2px;
-        --lt-accent: var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
-        --lt-bg: var(--latex-box-background, var(--latex-theorem-background,
-          color-mix(in srgb, var(--lt-accent) 7%, transparent))); }
-      .latex-stream[data-kind="leantheorem"] .latex-lean-switches.latex-lean-hang[style*="--latex-box-accent"] {
-        --lt-bg: var(--latex-box-background, color-mix(in srgb, var(--lt-accent) 7%, transparent)); }
-      /* Borderless in every state, so nothing but colour changes on hover. */
-      .latex-lean-switches.latex-lean-hang button,
-      .latex-lean-switches.latex-lean-hang button:hover {
-        border: 0; opacity: 1; color: color-mix(in srgb, currentColor 72%, transparent);
-        background: linear-gradient(color-mix(in srgb, var(--lt-accent) 7%, transparent) 0 0), var(--lt-bg); }
-      .latex-lean-switches.latex-lean-hang button:hover { color: inherit; }
-      .latex-lean-switches.latex-lean-hang button[aria-pressed="true"] {
-        color: inherit; background: linear-gradient(color-mix(in srgb, var(--lt-accent) 20%, transparent) 0 0), var(--lt-bg); }
-      .latex-lean-switches { display: flex; gap: .3rem; }
-      .latex-lean-switches button {
-        font: 500 .72rem/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .02em; color: inherit;
-        padding: .34rem .7rem; border-radius: 0; cursor: pointer; opacity: .75;
-        background: none; border: 1px solid color-mix(in srgb, currentColor 24%, transparent); }
-      .latex-lean-switches button:hover { opacity: 1; }
-      .latex-lean-switches button[aria-pressed="true"] {
-        opacity: 1; border-color: transparent; background: color-mix(in srgb, currentColor 13%, transparent); }
-      .latex-lean-switches button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-      :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]) > div:first-child {
-        display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem 2rem; align-items: start; }
-      :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]) > div:first-child > :not(.latex-stream) { display: none; }
-      .latex-stream[data-kind="leantheorem"] > div:first-child > .latex-stream[data-kind="leanstatement"] { grid-column: 1 / -1; }
-      :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]):not(.latex-show-proof) > div:first-child > .latex-stream[data-kind="leantex"],
-      :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]):not(.latex-show-lean) > div:first-child > .latex-stream[data-kind="leancode"] { display: none; }
-      /* Side by side, the proof and the code are one height: the row
-         stretches both, and the proof's own box (inside leantex) with it. */
-      @container (min-width: 44rem) {
-        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]).latex-show-proof.latex-show-lean > div:first-child {
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 3.2rem; align-items: stretch; }
-        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]).latex-show-proof.latex-show-lean .latex-stream[data-kind="leantex"] {
-          display: flex; flex-direction: column; }
-        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]).latex-show-proof.latex-show-lean .latex-stream[data-kind="leantex"] > div {
-          flex: 1 0 auto; display: flex; flex-direction: column; }
-        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]).latex-show-proof.latex-show-lean .latex-stream[data-kind="leantex"] > div > .latex-stream {
-          flex: 1 0 auto; } }
-      /* The code's frame: the proof's, in the Lean colour (--latex-lean-accent). */
-      .latex-stream[data-kind="leancode"] {
-        --latex-outset-start: calc(.85rem + 3px); --latex-outset-end: .7rem; --latex-pad-end: .7rem;
-        padding-block: .6rem .7rem; padding-inline: .85rem var(--latex-pad-end);
-        border-inline-start: 3px solid var(--latex-lean-accent, #2e8b7a);
-        background: color-mix(in srgb, var(--latex-lean-accent, #2e8b7a) 7%, transparent); }
-      .latex-lean-head { padding: 0 0 .35rem; opacity: .65; font: .72rem ui-monospace, "SF Mono", Menlo, monospace; }
-      .latex-lean-head a { color: inherit; }
-      .latex-stream[data-kind="leancode"] pre {
-        margin: 0; padding: 0; border: 0; border-radius: 0; background: none; overflow-x: auto;
-        font: .8rem/1.55 ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace; white-space: pre; }
-      .latex-stream[data-kind="leancode"] pre code { font: inherit; }
-      .lean-kw  { color: var(--code-kw, #1f5fa8); }
-      .lean-com { color: var(--code-com, #7b7f86); font-style: italic; }
-      .lean-str { color: var(--code-str, #2a7a3b); }
-      .lean-num { color: var(--code-num, #a0522d); }
-      @media print {
-        .latex-lean-switches { display: none; }
-        :is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]) > div:first-child > .latex-stream { display: block !important; }
-      }
       @media print {
         .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"] { display: none; }
         .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"].latex-pane-print {

@@ -47,6 +47,11 @@ export interface Instance {
     readonly parts: ReadonlyMap<string, Part>;
     part(role: string): Part | undefined;
     readonly parent: Instance | null;
+    /** The vertical space TeX put before the instance in its parent's text
+     *  (the author's skips, \topsep, …), in CSS px; 0 when none, and for any
+     *  instance not in a flow. For a component that hides a part and wants
+     *  the space that preceded it after what stays. */
+    readonly spaceBefore: number;
     /** Nested instances, in document order. */
     readonly children: readonly Instance[];
     readonly block: Block;
@@ -168,6 +173,10 @@ export interface BlockHost {
      *  text. Default (never called): a surface of the `body` part mounted
      *  inside el, for both. */
     setEdges(edges: { top?: Surface | null; bottom?: Surface | null }): void;
+    /** The space the flow puts above and below el as last laid out, in CSS
+     *  px: TeX's gaps and interline glue. Read after a layout (block
+     *  'layout' event); 0 where there is no neighbour. */
+    spacing(): { before: number; after: number };
 }
 
 export interface Host {

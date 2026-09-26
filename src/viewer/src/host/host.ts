@@ -6,6 +6,7 @@
 // first use.
 
 import { api } from '../runtime/page.js';
+import { SP_TO_PX } from '../engine/core.js';
 import { normalise, walk, matches, type AnchorSource, type Doc, type DocStream, type InstanceImpl } from './instances.ts';
 import { TypesetPartImpl, type BlockData } from './surface.ts';
 import { defineBlockKind } from './block-hosts.ts';
@@ -34,7 +35,7 @@ class BlockImpl implements Block {
         if (!this._roots) {
             this._roots = normalise(this.data.doc, this, this.key,
                 { typeset: (inst, role, stream: DocStream) => new TypesetPartImpl(role, inst, this.data, stream) },
-                src => this.anchor(src));
+                src => this.anchor(src), SP_TO_PX);
         }
         return this._roots;
     }

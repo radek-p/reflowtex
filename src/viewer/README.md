@@ -262,6 +262,10 @@ exists once the viewer script has run; a module that may load first waits for
   changes) – returning a surface: `metrics()`, `setWidth()`, `onChange(fn)`,
   `dispose()`. A part may be mounted in several places at once; one in a
   hidden element is painted when shown.
+- **Spacing data**: `instance.spaceBefore`, the vertical space TeX put
+  before an instance in its parent's text (px), and, for a block drawn by
+  the page, `host.spacing()`, the space the flow put above and below it as
+  last laid out.
 - **Block kinds**: `host.define(kind, { render(instance, host) })` draws
   every block instance of a kind with the page's own code, in `host.el` – the
   stream's element, placed in the flow with its data-* parameters, classes and
@@ -360,20 +364,10 @@ Built in:
     control of the new pane.
   - If a switch leaves the box's top above the viewport, it is scrolled back
     into view.
-- **`leantheorem`** / **`leanproof`**, with parts **`leanstatement`**,
-  **`leantex`** and **`leancode`**: reflowtex.sty's theorem or proof with its
-  Lean code. `leancode` carries the code as `Stream.text` and draws it as
-  highlighted, selectable text, under the declaration's name (`data-decl`,
-  linked by `data-url`). Both widgets have two switches, Proof and Lean
-  (initially `data-show`: proof, lean, both or none), toggling their parts
-  independently; both parts stand side by side from 44rem, stacked below it.
-  `leantheorem` hangs the switches under the theorem's frame, from its left edge; `leanproof` puts
-  them on a row above its parts. The code has a frame like a proof's, in
-  `--latex-lean-accent` (a muted teal by default). While the proof is hidden, the
-  widget's bottom margin takes back the space TeX left after the proof.
-  Every change lays the block out again through `ctx.relayout()`, which
-  re-lays out the whole block at its current width, for any behaviour that
-  changes a stream's width.
+- **`leantheorem`** / **`leanproof`** (parts `leanstatement`, `leantex`,
+  `leancode`): drawn by the companion package, not the viewer
+  ([src/companion/src/kinds/lean.tsx](../companion/src/kinds/lean.tsx)).
+  Without it, their TeX parts show as plain streams and the code does not.
 - **`footnote`**: shown in the popover from its marker, never in the flow.
 
 ## Live text (optional)

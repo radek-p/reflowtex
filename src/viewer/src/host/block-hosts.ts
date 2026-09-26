@@ -118,6 +118,14 @@ function makeRecord(box: HTMLElement, index: number, instance: Instance, def: Bl
             rec.frame = next;
             if (rec.laid) relayoutSoon(owner);
         },
+        spacing() {
+            // The spacers the layout put before this box and before the next
+            // segment (layoutDocument: each segment is a spacer, then its box).
+            const segs: any[] = (owner.dom && owner.dom.segs) || [];
+            const i = segs.findIndex(sg => sg.box === box);
+            const px = (el: HTMLElement | undefined) => (el && parseFloat(el.style.height)) || 0;
+            return { before: i >= 0 ? px(segs[i].gap) : 0, after: i >= 0 && i + 1 < segs.length ? px(segs[i + 1].gap) : 0 };
+        },
         setEdges(e: { top?: Surface | null; bottom?: Surface | null }) {
             rec.edges = { ...(rec.edges || {}), ...e } as HostRecord['edges'];
             if (rec.laid && !sameEdges(rec.laid, edgeValues(rec))) relayoutSoon(owner);

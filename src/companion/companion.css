@@ -93,6 +93,82 @@
   .latex-stream[data-variant] { box-shadow: none !important; }
 }
 
+/* ── Lean beside a proof ───────────────────────────────────────────────── */
+/* .rtx-lean[data-proof][data-lean]: the parts showing.
+   .rtx-lean-part[data-part=tex|code][data-state=open|closed].
+   Motion: --rtx-lean-motion (slide · fade · none), -duration, -easing.
+   Colours: --latex-lean-accent (the code's bar), --code-kw/-com/-str/-num. */
+:is(.latex-stream[data-kind="leanproof"], .latex-stream[data-kind="leantheorem"]) { container-type: inline-size; }
+.rtx-lean-body[data-animating] { overflow-x: visible; overflow-y: clip; overflow-clip-margin: 4px; }
+.rtx-lean-part[data-state="closed"] { display: none; }
+.rtx-lean-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem 2rem; align-items: start; }
+.rtx-lean:is([data-proof], [data-lean]) .rtx-lean-pair { padding-top: .6rem; }
+.rtx-lean:is([data-proof], [data-lean]) > .rtx-lean-statement + .rtx-lean-body .rtx-lean-pair { padding-top: 1rem; }
+/* Side by side, the proof and the code are one height: the row stretches
+   both, and the proof's own box with them. */
+@container (min-width: 44rem) {
+  .rtx-lean-pair[data-both] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 3.2rem; align-items: stretch; }
+  .rtx-lean-pair[data-both] > [data-part="tex"],
+  .rtx-lean-pair[data-both] > [data-part="tex"] > .rtx-typeset,
+  .rtx-lean-pair[data-both] > [data-part="tex"] > .rtx-typeset > .latex-part,
+  .rtx-lean-pair[data-both] > [data-part="tex"] > .rtx-typeset > .latex-part > div { display: flex; flex-direction: column; flex: 1 0 auto; }
+  .rtx-lean-pair[data-both] > [data-part="tex"] > .rtx-typeset > .latex-part > div > .latex-stream { flex: 1 0 auto; }
+}
+
+/* The switches. */
+.rtx-lean-switches { display: flex; gap: .3rem; }
+.rtx-lean-switches button {
+  font: 500 .72rem/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .02em; color: inherit;
+  padding: .34rem .7rem; border-radius: 0; cursor: pointer; opacity: .75;
+  background: none; border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  transition: background-color .15s, opacity .15s, color .15s; }
+.rtx-lean-switches button:hover { opacity: 1; }
+.rtx-lean-switches button[aria-pressed="true"] {
+  opacity: 1; border-color: transparent; background: color-mix(in srgb, currentColor 13%, transparent); }
+.rtx-lean-switches button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+/* Hanging from a boxed theorem (leantheorem): flush with the frame's
+   bottom, from where its text starts, in the box's own colours. Only the
+   label is dimmed, never the fill. */
+.rtx-lean-switches.rtx-lean-hang {
+  margin: 0; gap: 2px;
+  --lt-accent: var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
+  --lt-bg: var(--latex-box-background, var(--latex-theorem-background,
+    color-mix(in srgb, var(--lt-accent) 7%, transparent))); }
+.rtx-lean-switches.rtx-lean-hang[style*="--latex-box-accent"] {
+  --lt-bg: var(--latex-box-background, color-mix(in srgb, var(--lt-accent) 7%, transparent)); }
+.rtx-lean-switches.rtx-lean-hang button,
+.rtx-lean-switches.rtx-lean-hang button:hover {
+  border: 0; opacity: 1; color: color-mix(in srgb, currentColor 72%, transparent);
+  background: linear-gradient(color-mix(in srgb, var(--lt-accent) 7%, transparent) 0 0), var(--lt-bg); }
+.rtx-lean-switches.rtx-lean-hang button:hover { color: inherit; }
+.rtx-lean-switches.rtx-lean-hang button[aria-pressed="true"] {
+  color: inherit; background: linear-gradient(color-mix(in srgb, var(--lt-accent) 20%, transparent) 0 0), var(--lt-bg); }
+.rtx-lean-statement > .rtx-lean-switches:not(.rtx-lean-hang) { margin-top: .4rem; }
+
+/* The code, in a frame like a proof's, in the Lean colour; like the
+   viewer's frames it reaches into the margin by its padding and bar. */
+.rtx-lean-code {
+  margin-inline: calc(-.85rem - 3px) -.7rem;
+  padding-block: .6rem .7rem; padding-inline: .85rem .7rem;
+  border-inline-start: 3px solid var(--latex-lean-accent, #2e8b7a);
+  background: color-mix(in srgb, var(--latex-lean-accent, #2e8b7a) 7%, transparent); }
+.rtx-lean-head { padding: 0 0 .35rem; opacity: .65; font: .72rem ui-monospace, "SF Mono", Menlo, monospace; }
+.rtx-lean-head a { color: inherit; }
+.rtx-lean-code pre {
+  margin: 0; padding: 0; border: 0; border-radius: 0; background: none; overflow-x: auto;
+  font: .8rem/1.55 ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace; white-space: pre; }
+.rtx-lean-code pre code { font: inherit; }
+.lean-kw  { color: var(--code-kw, #1f5fa8); }
+.lean-com { color: var(--code-com, #7b7f86); font-style: italic; }
+.lean-str { color: var(--code-str, #2a7a3b); }
+.lean-num { color: var(--code-num, #a0522d); }
+
+@media print {
+  .rtx-lean-switches { display: none; }
+  .rtx-lean-part { display: block !important; opacity: 1 !important; transform: none !important; }
+  .rtx-lean .rtx-lean-pair { padding-top: .6rem; grid-template-columns: minmax(0, 1fr) !important; }
+}
+
 /* ── The first version's parts (legacy.ts) ─────────────────────────────── */
 .rtx-aside .latex-block { margin: 0; }
 

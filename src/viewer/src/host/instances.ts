@@ -33,7 +33,7 @@ export interface DocNode {
     stream?: number; slot?: number; aside?: number; link?: number;
     children?: DocNode[]; replace?: DocNode[]; pre?: DocNode[]; post?: DocNode[];
 }
-export interface DocItem { kind?: string; para?: number; box?: DocNode; stream?: number }
+export interface DocItem { kind?: string; para?: number; box?: DocNode; stream?: number; amount?: number }
 export interface DocStream { kind?: string; content?: DocItem[]; attrs?: { key?: string; value?: string }[]; text?: string }
 export interface DocSlot { name?: string; kind?: string }
 export interface Doc {
@@ -58,6 +58,7 @@ export type AnchorSource =
 export class InstanceImpl implements Instance {
     readonly children: InstanceImpl[] = [];
     readonly parts = new Map<string, Part>();
+    spaceBefore = 0;
     constructor(
         readonly id: string,
         readonly kind: string,
@@ -93,8 +94,10 @@ export function splitAttrs(list: DocStream['attrs']): { attrs: Record<string, st
 
 const NO_PRESENTATION: Presentation = Object.freeze({ classes: Object.freeze([]) as readonly string[], properties: Object.freeze({}) });
 
-/** Build a block's instance tree. `key` prefixes every id. */
-export function normalise(doc: Doc, block: Block, key: string, parts: PartFactory, anchorOf: AnchorOf): InstanceImpl[] {
+/** Build a block's instance tree. `key` prefixes every id; `spToPx`
+ *  converts TeX's scaled points to CSS px. */
+export function normalise(doc: Doc, block: Block, key: string, parts: PartFactory, anchorOf: AnchorOf,
+                          spToPx = 0): InstanceImpl[] {
     const streams = doc.streams || [];
     const slots = doc.slots || [];
     const roots: InstanceImpl[] = [];
@@ -159,10 +162,14 @@ export function normalise(doc: Doc, block: Block, key: string, parts: PartFactor
         }
     };
     function walkContent(items: DocItem[], parent: InstanceImpl | null) {
+        let space = 0;                       // the vspace items just before
         for (const it of items) {
+            if (it.kind === 'vspace') { space += it.amount || 0; continue; }
+            const before = space;
+            space = 0;
             if (it.kind === 'stream') {
                 if (it.stream && !seenStream.has(it.stream) && streams[it.stream - 1])
-                    streamInstance(it.stream, 'block', parent, { type: 'none' });
+                    streamInstance(it.stream, 'block', parent, { type: 'none' }).spaceBefore = before * spToPx;
             } else if (it.kind === 'display') {
                 walkNodes(it.box ? [it.box] : [], parent);
             } else if (!it.kind || it.kind === 'paragraph') {

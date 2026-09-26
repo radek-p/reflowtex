@@ -2,7 +2,7 @@
 
 The browser side of the companion package ([reflowtex.sty](../latex/reflowtex.sty)).
 It is one ES module with its stylesheet. Load it on a page and the package's
-kinds (the accordion, so far) are drawn by it. Import from it to draw kinds
+kinds (the accordion and the Lean widgets) are drawn by it. Import from it to draw kinds
 of your own.
 
 ```html
@@ -106,6 +106,31 @@ it does not use itself.
   link of the pane it opens.
 - **Print.** The `print=` pane (by default the last) is printed, whatever is
   open on screen.
+
+## Lean beside a proof
+
+`leantheorem[decl=, url=, show=]` and `leanproof[decl=, url=, show=]`
+(with `leancode` inside) have Proof and Lean switches, which open either
+part, or both. The parts sit side by side when the widget is at least
+44rem wide, and one under the other below that.
+
+- **Motion.** Opening a part fades it in while the widget's height eases to
+  fit; closing fades it out, then the height eases shut. Set it with
+  `--rtx-lean-motion` (`slide`, `fade` or `none`), `-duration`, `-easing`,
+  or `motion=`.
+- **Space around.** While the proof is hidden, the space after the widget
+  is the space TeX put after the statement (or before the widget), not the
+  space after the hidden proof.
+- **State for CSS.** `.rtx-lean[data-proof][data-lean]` and
+  `.rtx-lean-part[data-part=tex|code][data-state=open|closed]`.
+- **Code.** The code is highlighted (`.lean-kw`, `.lean-com`, `.lean-str`,
+  `.lean-num`, coloured by `--code-*`), and the frame colour is
+  `--latex-lean-accent`.
+- **Print.** Both parts are printed, without the switches.
+
+The building blocks it uses are exported for kinds of your own:
+`animateHeight(el, fromPx, motion)`, `fadeIn(el, motion)` and
+`fadeOut(el, motion)`.
 
 ## The first version's API
 
