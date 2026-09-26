@@ -13,7 +13,7 @@ This stage turns a LaTeX snippet into `output.json`, the finished node list.
 
 ## Placeholders
 
-The pipeline (`src/encode/pipeline.py`) does a plain text substitution of two
+The pipeline (`src/pipeline/pipeline.ts`) does a plain text substitution of two
 markers in `template.tex` – each is the word `PREAMBLE` or `CONTENT` wrapped in
 double percent signs. Because the replacement is literal, those exact tokens must
 appear **only** at their two real sites; the template's own comments deliberately

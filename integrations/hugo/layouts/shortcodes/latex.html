@@ -137,7 +137,7 @@
 {{- end }}
 {{- else }}
 <div class="latex-block latex-block--missing">
-  LaTeX block not compiled – run <code>python prebuild.py</code>.
+  LaTeX block not compiled – run <code>node prebuild.ts</code>.
   <small>({{ with $file }}file <code>{{ . }}</code>{{ else }}hash <code>{{ $key }}</code>{{ end }})</small>
 </div>
 {{- end }}

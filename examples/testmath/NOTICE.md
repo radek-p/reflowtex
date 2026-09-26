@@ -39,6 +39,6 @@ document's own `\title`/`\author` also print "American Mathematical Society").
 `testmath.tex` is a classic `amsmath` document written for the Computer Modern
 fonts, so this demo renders it that way — no `fontspec`, no `unicode-math`. The
 classic 8-bit Type1 math fonts (`cmmi`, `cmsy`, `cmex`, …) have no OpenType form,
-so Reflow TeX converts them to web fonts on the fly (`src/encode/t1_convert.py`).
+so Reflow TeX converts them to web fonts on the fly (`src/pipeline/fonts/type1.ts`).
 Those converted fonts, and any Latin Modern faces the build serves, carry their
 own licenses — see the repository's `THIRD-PARTY-LICENSES.md`.

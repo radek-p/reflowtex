@@ -8,7 +8,7 @@ shape.
 Mirror the [Hugo integration](../hugo): a thin shell over
 [`../../src`](../../src), no logic of its own.
 
-- **A prebuild step** (`prebuild.py`, reusing `src/encode/pipeline.py`) scans the
+- **A prebuild step** (`prebuild.ts`, reusing `src/pipeline/pipeline.ts`) scans the
   site's pages/posts for Reflow TeX blocks, compiles each, and writes the results
   into Jekyll's data and static directories:
   - compiled blocks + the schema into `_data/` (e.g. `_data/reflowtex/…`),
@@ -16,7 +16,7 @@ Mirror the [Hugo integration](../hugo): a thin shell over
 - **A Liquid tag or include** emits the block markup –
   `<div class="latex-block" data-nodelist-b64="…">` – by looking up the compiled
   block by the same content hash the prebuild uses
-  (`pipeline.content_key`, boundary `===REFLOWTEX-PREAMBLE-BOUNDARY===`).
+  (`contentKey` in `src/pipeline/pipeline.ts`, boundary `===REFLOWTEX-PREAMBLE-BOUNDARY===`).
 - **A viewer include** embeds the schema, the minimal CSS, and the two scripts –
   the analogue of Hugo's `partials/reflowtex-viewer.html`.
 

@@ -3,7 +3,6 @@
 #
 # Prerequisites on PATH: lualatex (TeX Live), gs (Ghostscript), dvisvgm, Node >= 22.18.
 # Node deps: installed into node_modules/ on first use – see the `node-deps` target.
-# (The tools and tests not yet moved to TypeScript still use a local .venv.)
 
 PORT ?= 8000
 DEMO_OUT := build/demo-site
@@ -18,15 +17,11 @@ HTM_VERSION        = 3.1.1
 SIGNALS_VERSION    = 2.11.2
 ESBUILD_VERSION    = 0.28.2
 
-VENV := .venv
-PYTHON := $(CURDIR)/$(VENV)/bin/python3
-
-.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all test-web clean vendor-protobuf vendor-inspector venv build-viewer minify-viewer
+.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all test-web clean vendor-protobuf vendor-inspector build-viewer minify-viewer
 
 help:
 	@echo "Reflow TeX targets:"
 	@echo "  make node-deps        install the Node dependencies (npm ci)"
-	@echo "  make venv             create .venv for the tools not yet in TypeScript"
 	@echo "  make check            verify the pipeline prerequisites are installed"
 	@echo "  make demo             build the vanilla demo site into $(DEMO_OUT)"
 	@echo "  make display-model-smoke  build the narrow display regression site"
@@ -43,26 +38,6 @@ help:
 	@echo "  make test-render-all  the same, with the whole-document cases (testmath)"
 	@echo "  make test-web         the web tests: the viewer, companion and Hugo integration in Chromium and WebKit (tests/web)"
 	@echo "  make vendor-inspector refresh src/inspector/vendor/preact.js (preact@$(PREACT_VERSION), htm, signals)"
-
-# Python deps live in a project-local virtualenv, not the system interpreter.
-# Everything below depends on this and calls $(PYTHON), so `make demo` etc. set
-# it up on first use – no manual `pip install` needed. Needs Python 3.9+ (see
-# scripts/find_python.sh – macOS's bundled python3 qualifies); rebuilds the
-# venv if it's missing or was created with a too-old interpreter.
-venv:
-	@if [ -x $(VENV)/bin/python3 ] && $(VENV)/bin/python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then \
-	  : ; \
-	else \
-	  py="$$(./scripts/find_python.sh)" || exit 1; \
-	  echo "Creating $(VENV) with $$py ($$($$py --version))"; \
-	  rm -rf $(VENV); \
-	  $$py -m venv $(VENV); \
-	fi; \
-	if [ ! -f $(VENV)/.deps-installed ] || [ src/encode/requirements.txt -nt $(VENV)/.deps-installed ]; then \
-	  $(VENV)/bin/pip install --upgrade pip; \
-	  $(VENV)/bin/pip install -r src/encode/requirements.txt; \
-	  touch $(VENV)/.deps-installed; \
-	fi
 
 # The build runs on Node, straight from the TypeScript sources (src/pipeline);
 # its dependencies are installed on first use and again when the lock changes.
@@ -108,10 +83,6 @@ testmath-demo: node-deps
 website:
 	cd website && ./build.sh
 
-# Forces every block (including testmath.tex on the Showcase page) to
-# recompile from scratch – needed after touching src/extract/template.tex,
-# font handling, or anything else that isn't reflected in a block's own
-# content hash. Slower; use `website` for routine content edits.
 # The render tests (tests/render/README.md), with Playwright's Chromium
 # (downloaded once).
 test-render-deps: node-deps
@@ -129,6 +100,10 @@ test-web: node-deps
 	@npx playwright install chromium webkit
 	npx playwright test -c tests/web
 
+# Forces every block (including testmath.tex on the Showcase page) to
+# recompile from scratch – needed after touching src/extract/template.tex,
+# font handling, or anything else that isn't reflected in a block's own
+# content hash. Slower; use `website` for routine content edits.
 website-clean:
 	cd website && rm -rf public resources .reflowtex-build .hugo_build.lock \
 	       data/latex_blocks data/latex_schema.json data/latex_files.json data/latex_font_map.json \

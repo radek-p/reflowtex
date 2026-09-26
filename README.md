@@ -46,7 +46,7 @@ you'd rather not use a container.
 - *(Windows isn't covered here yet – the container should still work under
   WSL2, just untested.)*
 
-**2. Run the pipeline** – no local TeX Live, Python venv, or Hugo install
+**2. Run the pipeline** – no local TeX Live, Node, or Hugo install
 needed, the container has all of it:
 
 ```sh
@@ -54,9 +54,10 @@ docker compose run --rm reflowtex make check
 docker compose run --rm --service-ports reflowtex make serve   # → http://localhost:8000
 ```
 
-Open the URL and resize the window – the text re-breaks live. `.venv` lives
-in its own named Docker volume rather than the bind-mounted repo, so it can't
-collide with a `.venv` you might also build on the host outside the container.
+Open the URL and resize the window – the text re-breaks live.
+`node_modules` lives in its own named Docker volume rather than the
+bind-mounted repo, so it can't collide with a `node_modules` you might also
+install on the host outside the container.
 
 **In VS Code** (Dev Containers extension, or OrbStack's Container Tools):
 open the repo folder and run **Dev Containers: Reopen in Container** (or the
@@ -95,7 +96,7 @@ If you'd rather not use a container, you need the [prerequisites](#prerequisites
 below on your own machine. Then:
 
 ```sh
-make check     # confirm lualatex, dvisvgm, protoc, python deps are present
+make check     # confirm lualatex, dvisvgm, gs and Node are present
 make serve     # compile examples/demo and serve it at http://localhost:8000
 ```
 
@@ -108,8 +109,8 @@ Open the URL and resize the window – the text re-breaks live.
        │  lualatex + serializer.lua          ┐
        ▼                                     │  src/extract
   output.json  (the finished node list)      ┘
-       │  transforms.py  (strip · glyph-normalise · tikz→SVG)     ┐
-       │  encode_pb.py   (→ Protocol Buffers, schema/latex.proto) │  src/encode
+       │  transforms.ts  (strip · glyph-normalise · tikz→SVG)     ┐
+       │  encode.ts      (→ Protocol Buffers, schema/latex.proto) │  src/pipeline
        ▼                                                          ┘
   nodelist.pb  (base64, embedded in the page)
        │  latex-viewer.js  (Knuth–Plass line breaking → inline SVG)  ┐
@@ -134,7 +135,7 @@ snippets come from anywhere but you, read
 | [`src/extract/`](src/extract/) | LuaTeX serializer + the wrapper template (LaTeX → `output.json`) |
 | [`src/schema/latex.proto`](src/schema/latex.proto) | the node-list schema – the single source of truth |
 | [`src/latex/`](src/latex/) | `reflowtex.sty`, the companion package for documents written for the web (accordions of collapsible panes, web-only text, streams) |
-| [`src/encode/`](src/encode/) | the build pipeline: transforms, protobuf encoder, font handling |
+| [`src/pipeline/`](src/pipeline/) | the build pipeline (TypeScript, on Node): compiling, transforms, protobuf encoder, font handling |
 | [`src/viewer/`](src/viewer/) | the browser renderer (`latex-viewer.js`) + vendored `protobuf.min.js` |
 | [`src/inspector/`](src/inspector/) | a floating panel showing the boxes and glue behind the blocks on a page (Alt+Shift+I on the website) |
 | [`integrations/vanilla/`](integrations/vanilla/) | reference integration: `.tex` snippets → a static site |
@@ -152,7 +153,7 @@ The simplest path is the **vanilla** integration – a directory of `.tex` snipp
 becomes a self-contained static site:
 
 ```sh
-python integrations/vanilla/build.py my-snippets/ -o site/
+node integrations/vanilla/build.ts my-snippets/ -o site/
 open site/index.html                 # self-contained – works straight off disk
 ```
 
@@ -168,13 +169,10 @@ The build pipeline shells out to a real TeX toolchain:
 - **LuaTeX** (`lualatex`) – TeX Live 2023+
 - **Ghostscript** (`gs`) – normalises ICC-coloured included PDFs before SVG conversion
 - **dvisvgm** – converts captured TikZ pages and included PDFs to SVG
-- **protoc** – the Protocol Buffers compiler (`apt install protobuf-compiler`)
-- **Python 3.9+** (macOS's bundled `python3` qualifies) with the packages in
-  [`src/encode/requirements.txt`](src/encode/requirements.txt), installed into a
-  project-local virtualenv – `make venv` creates `.venv/` and installs them; every
-  other `make` target (and `website/build.sh`) depends on it, so this happens
-  automatically. To do it by hand: `python3 -m venv .venv && .venv/bin/pip install
-  -r src/encode/requirements.txt`
+- **Node 22.18+** – the build is TypeScript, which Node runs straight from the
+  sources; its packages (`package.json`) are installed into `node_modules/` by
+  `npm ci`, which every `make` target (and `website/build.sh`) does on first
+  use
 
 The **browser** side needs no build step of its own and no external dependency beyond the
 vendored `protobuf.min.js`: the committed `latex-viewer.js` is ready to serve (maintainers

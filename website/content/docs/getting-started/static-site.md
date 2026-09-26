@@ -15,8 +15,8 @@ preamble.
 {{< /latex >}}
 
 ```sh
-python integrations/vanilla/build.py examples/demo -o site
-python -m http.server -d site          # or open site/index.html from disk
+node integrations/vanilla/build.ts examples/demo -o site
+node scripts/serve.ts site             # or open site/index.html from disk
 ```
 
 {{< latex preamble="docs" >}}

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Reflow TeX build environment: LuaTeX + Ghostscript + dvisvgm + protoc + Python on top of a
+# Reflow TeX build environment: LuaTeX + Ghostscript + dvisvgm + Node on top of a
 # small TeX Live scheme (scheme-basic, ~350MB) instead of scheme-full (~2.5GB).
 # Used both as the Dev Container image (see .devcontainer/devcontainer.json)
 # and standalone (docker build/run, CI) for anyone who doesn't want to install
@@ -57,21 +57,20 @@ RUN tlmgr update --self && \
     done && \
     tlmgr path add
 
-# ── protoc + Python + PDF tools ──────────────────────────────────────────────
-# python3-venv (not python3-pip) – its bundled ensurepip is enough for `make
-# venv`, without pulling in python3-pip's build-essential dependency chain.
+# ── Node + PDF tools ─────────────────────────────────────────────────────────
 # mutool (mupdf-tools): dvisvgm's PDF backend needs Ghostscript < 10.01.0 or
 # mutool – the Debian testing Ghostscript this image's base pulls in (10.07.1)
 # is too new for dvisvgm to drive directly, so mutool is what dvisvgm shells
 # out to for reading the externalised TikZ picture PDFs it converts to SVG.
 # Ghostscript itself normalises ICC-coloured included PDFs to DeviceRGB before
 # dvisvgm sees them; without that pass, Figma fills are silently lost.
-# nodejs + npm: the render tests (tests/render) drive Chromium with
-# Playwright; its browser is fetched when the tests are set up, not here.
+# nodejs + npm: the whole build runs on Node (22.18 or later: it runs the
+# TypeScript sources directly); its packages are installed by `make
+# node-deps`, and the tests' browsers (Playwright) when they are set up.
+# Poppler's pdftotext: tools/pageless-pdf/check-against-paged.ts.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ghostscript \
-      protobuf-compiler \
-      python3-venv \
+      poppler-utils \
       mupdf-tools \
       nodejs \
       npm \

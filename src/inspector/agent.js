@@ -1382,7 +1382,7 @@ function resources() {
         anchors, slots,
     };
 }
-// How the pipeline served a font (see src/encode/fonts.py): 'converted', a
+// How the pipeline served a font (see src/pipeline/fonts/fonts.ts): 'converted', a
 // classic Type 1 font it rebuilt as OpenType (the document names the new file,
 // NAME.reflowtex-HASH.otf); 'patched', an OpenType font whose cmap it extended
 // with code points LuaTeX used – private-use ones among them – and serves

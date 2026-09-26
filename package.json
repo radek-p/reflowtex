@@ -10,7 +10,6 @@
   "scripts": {
     "typecheck": "tsc -p .",
     "test": "node --test \"tests/unit/**/*.test.ts\"",
-    "test:parity": "node --test \"tests/parity/**/*.test.ts\"",
     "test:web": "playwright test -c tests/web"
   },
   "dependencies": {

@@ -11,8 +11,8 @@ its prose is set through the reflowtex pipeline itself – the page is its own d
 ```
 
 `build.sh` vendors the shortcode and viewer partial from `../integrations/hugo`,
-runs `prebuild.py` (which needs the pipeline prerequisites – `lualatex`,
-`dvisvgm`, `protoc`, and the Python deps; see the repo `Makefile`'s `check`
+runs `prebuild.ts` (which needs the pipeline prerequisites – `lualatex`,
+`dvisvgm`, `gs` and Node; see the repo `Makefile`'s `check`
 target), then runs Hugo. Everything it generates is git-ignored, `public/`
 included: the deployed site is built in CI, never committed.
 

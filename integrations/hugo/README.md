@@ -8,7 +8,7 @@ This directory is also a **runnable example site** – try it first:
 
 ```sh
 cd integrations/hugo
-python prebuild.py . --demos-dir ../../examples/demo   # compile the shared demos
+node prebuild.ts . --demos-dir ../../examples/demo   # compile the shared demos
 hugo server                                            # open the printed URL
 ```
 
@@ -53,13 +53,13 @@ hugo server                                            # open the printed URL
    (defaults to the current directory):
 
    ```sh
-   python /path/to/reflowtex/integrations/hugo/prebuild.py .
+   node /path/to/reflowtex/integrations/hugo/prebuild.ts .
    hugo
    ```
 
    It writes `data/latex_blocks/`, `data/latex_schema.json`, provisions fonts
    into `static/fonts/`, and copies the viewer scripts into `static/`. A good
-   habit is to wire it into your build: `python prebuild.py . && hugo`.
+   habit is to wire it into your build: `node prebuild.ts . && hugo`.
 
 ## Options
 
@@ -170,5 +170,5 @@ installation on the deploy host.
 ## Requirements
 
 The build host needs the Reflow TeX pipeline prerequisites: `lualatex`, `gs`,
-`dvisvgm`, `protoc`, and the Python packages in `../../src/encode/requirements.txt`. See the
+`dvisvgm` and Node 22.18+ (with `npm ci` run in the repository). See the
 [top-level README](../../README.md).

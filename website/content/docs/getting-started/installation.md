@@ -7,8 +7,7 @@ latexTitle: true
 {{< latex preamble="docs" >}}
 \pagetitle[Getting started]{Installation}
 \bigskip
-The build needs Lua\TeX, \texttt{dvisvgm}, Ghostscript, \texttt{protoc}
-and Python. The simplest way to get them all is the project's container,
+The build needs Lua\TeX, \texttt{dvisvgm}, Ghostscript and Node. The simplest way to get them all is the project's container,
 which needs only a container runtime.
 \section*{In a container}
 With Docker (or OrbStack, Colima, Podman) available, from a checkout of the
@@ -26,15 +25,15 @@ snippet's preamble may \verb|\usepackage| anything; a package the image lacks is
 installed with \texttt{tlmgr} the first time it is used.
 \section*{Locally}
 You need a \TeX{} installation (\texttt{lualatex}, \texttt{dvisvgm}),
-Ghostscript, \texttt{protoc}, and Python 3.9 or later. Running \texttt{make check}
-verifies them; \texttt{make venv} sets up the Python side in a project-local
-\texttt{.venv}.
+Ghostscript, and Node 22.18 or later (it runs the build's TypeScript
+directly). Running \texttt{make check} verifies them, and installs the
+build's Node packages into \texttt{node\_modules}.
 
 \medskip\noindent\textbf{macOS} (Homebrew):
 {{< /latex >}}
 
 ```sh
-brew install protobuf
+brew install node
 brew install --cask mactex-no-gui
 ```
 
@@ -54,12 +53,14 @@ brew install mupdf-tools
 
 ```sh
 sudo apt install texlive-luatex texlive-latex-extra texlive-fonts-recommended \
-                  texlive-extra-utils protobuf-compiler python3-venv
+                  texlive-extra-utils nodejs npm
 ```
 
 {{< latex preamble="docs" >}}
 On Debian and Ubuntu, \texttt{texlive-extra-utils} carries \texttt{dvisvgm};
-adjust the names for other distributions. The build compiles \LaTeX, which is
+adjust the names for other distributions. An older release's
+\texttt{nodejs} may be below 22.18: \texttt{make check} says so, and
+\texttt{nodejs.org} has current builds. The build compiles \LaTeX, which is
 a programming language: if the snippets come from anyone but you, read
 \texttt{docs/security.md} in the repository first.
 {{< /latex >}}

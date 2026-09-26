@@ -1,4 +1,0 @@
-# reflowtex build pipeline (src/encode) Python dependencies.
-# Also needs, on PATH: lualatex (TeX Live / LuaTeX), gs, dvisvgm, protoc.
-protobuf>=4.21
-fonttools>=4.0

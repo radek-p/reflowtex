@@ -30,7 +30,9 @@ A pull request cannot be merged before its author has signed.
 
 ## Working on the code
 
-- `make check` verifies the toolchain; `make venv` sets up Python.
+- `make check` verifies the toolchain; `make node-deps` installs the Node
+  packages (every other target does it on first use). `npm run typecheck`
+  and `npm test` check the TypeScript.
 - `make website` rebuilds the documentation site, which doubles as the
   broadest test: every page is compiled and rendered by the pipeline.
 - New source files start with an SPDX header:

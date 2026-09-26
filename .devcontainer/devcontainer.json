@@ -7,13 +7,13 @@
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
   "mounts": [
-    // .venv gets its own volume, not the bind mount above: it holds compiled
-    // extensions (protobuf, fonttools) built for the container's Linux/glibc
-    // target, which would collide with a host-native macOS .venv every time
-    // you rebuild outside the container otherwise (see docker-compose.yml).
-    "source=reflowtex-venv,target=/workspace/.venv,type=volume"
+    // node_modules gets its own volume, not the bind mount above: it holds
+    // native modules (sharp) built for the container's Linux/glibc target,
+    // which would collide with a host-native macOS node_modules every time you
+    // install outside the container otherwise (see docker-compose.yml).
+    "source=reflowtex-node-modules,target=/workspace/node_modules,type=volume"
   ],
-  "postCreateCommand": "make venv",
+  "postCreateCommand": "make node-deps",
   "forwardPorts": [8000, 1313],
   "portsAttributes": {
     "8000": {
@@ -28,7 +28,6 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-python.python",
         "James-Yu.latex-workshop"
       ]
     }

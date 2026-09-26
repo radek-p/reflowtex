@@ -43,7 +43,7 @@ INSPECTOR_V="$(node -e '
   const root = process.argv[1], h = createHash("sha256"), files = [];
   (function walk(d) { for (const f of fs.readdirSync(d)) { const p = path.join(d, f);
     if (fs.statSync(p).isDirectory()) walk(p); else if (/\.(js|css)$/.test(f)) files.push(path.relative(root, p).split(path.sep).join("/")); } })(root);
-  // path by path, component by component, as Python sorts Path objects
+  // path by path, component by component (the order the hash has always used)
   const cmp = (a, b) => { const x = a.split("/"), y = b.split("/");
     for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
     return x.length - y.length; };

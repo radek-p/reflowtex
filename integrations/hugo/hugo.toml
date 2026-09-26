@@ -1,4 +1,4 @@
-# This directory doubles as a runnable reflowtex example site: `python prebuild.py`
+# This directory doubles as a runnable reflowtex example site: `node prebuild.ts`
 # then `hugo server`. In your own site you only need layouts/shortcodes/latex.html
 # and layouts/partials/reflowtex-viewer.html (copy them into your layouts/), plus
 # prebuild.py run before every build.

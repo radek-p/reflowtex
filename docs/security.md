@@ -10,7 +10,7 @@ trusted.
 
 ## What the pipeline does
 
-**Shell escape is off.** `src/encode/pipeline.py` invokes LuaTeX with
+**Shell escape is off.** `src/pipeline/lualatex.ts` invokes LuaTeX with
 `-no-shell-escape`. With shell escape enabled, a `\write18{...}` or a
 `\directlua{os.execute(...)}` anywhere in a snippet or its preamble runs
 arbitrary commands as the build user, which turns "render this author's maths"

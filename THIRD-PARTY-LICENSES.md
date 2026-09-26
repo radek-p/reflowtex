@@ -70,7 +70,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ## Shipped by the build (not committed here)
 
 The build compiles LaTeX with your TeX installation and copies the OTF fonts it
-used into each site's `fonts/` directory (see `src/encode/fonts.py`). Those fonts
+used into each site's `fonts/` directory (see `src/pipeline/fonts/fonts.ts`). Those fonts
 are **redistributed in the built site**, so their licenses apply to whatever you
 deploy — not to this repository, which contains none of them.
 

@@ -7,8 +7,8 @@ quickest way to get LaTeX onto a page.
 ## Use
 
 ```sh
-python build.py <snippets-dir> -o site/
-python -m http.server -d site        # then open http://localhost:8000
+node build.ts <snippets-dir> -o site/
+node ../../scripts/serve.ts site     # then open http://localhost:8000
 ```
 
 Serve the output directory from anywhere – a domain root, a subpath, or a

@@ -56,7 +56,7 @@ book:
 {{< /latex >}}
 
 ```sh
-python integrations/hugo/prebuild.py website --demos-dir examples/book
+node integrations/hugo/prebuild.ts website --demos-dir examples/book
 hugo --source website
 ```
 
@@ -91,7 +91,7 @@ chapter each.
 
 {{< latex preamble="docs" >}}
 \section*{How it works}
-\texttt{prebuild.py} collects every block of a batch -- across all pages
+\texttt{prebuild.ts} collects every block of a batch -- across all pages
 -- orders them by \texttt{weight} (ties go by page, then by position on the
 page), and compiles them as one document, as if a \texttt{main.tex}
 had \verb|\include|d them in that order. Between the parts it places a

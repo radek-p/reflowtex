@@ -89,7 +89,7 @@ narrower than its ink and never wider than the measure it was compiled at, and
 becomes horizontally scrollable. Reflow TeX does not reproduce amsmath's
 print-oriented fallback of moving an equation number onto another line.
 
-### 2. Encode (`src/encode`)
+### 2. Encode (`src/pipeline`)
 
 After display-width modelling, three transforms run on `output.json` before it
 is encoded:
@@ -107,11 +107,11 @@ is encoded:
   rectangle is then removed wherever it occurs in the page group. Generated TikZ
   pages are deliberately exempt from both operations.
 
-Then `encode_pb.py` serialises the result to Protocol Buffers against
+Then `encode.ts` serialises the result to Protocol Buffers against
 `schema/latex.proto`, interning per-glyph metrics into a shared table (see
-[binary-format.md](binary-format.md)). `fonts.py` provisions and cmap-patches the
+[binary-format.md](binary-format.md)). `fonts/fonts.ts` provisions and cmap-patches the
 OTF files the page will serve, and subsets the ones it modified (patched or
-converted) to the characters the blocks draw; unmodified fonts are served whole. `pipeline.py` ties these together into one
+converted) to the characters the blocks draw; unmodified fonts are served whole. `pipeline.ts` ties these together into one
 `compile(snippet) → bytes` call that the integrations drive.
 
 ### 3. View (`src/viewer`)
@@ -124,7 +124,7 @@ and paints inline SVG – re-breaking on resize and repainting on theme change. 
 ## Why a schema-bound binary format
 
 The node list is large and finicky, and it crosses three languages (Lua producer,
-Python encoder, JavaScript consumer). A schema (`latex.proto`) that all three bind
+TypeScript encoder, JavaScript consumer). A schema (`latex.proto`) that all three bind
 to keeps them from drifting: change a field in one place and the others are
 generated or validated against it, rather than silently disagreeing. Protocol
 Buffers gives that plus a compact wire form. See [binary-format.md](binary-format.md).

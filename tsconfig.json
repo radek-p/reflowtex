@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["tests/render/**/*.ts", "src/shared/**/*.ts", "src/pipeline/**/*.ts", "src/pipeline/**/*.d.ts", "integrations/**/*.ts", "examples/**/*.ts", "tools/**/*.ts", "website/tools/**/*.ts", "tests/unit/**/*.ts", "tests/web/*.ts", "tests/parity/**/*.ts"]
+  "include": ["tests/render/**/*.ts", "src/shared/**/*.ts", "src/pipeline/**/*.ts", "src/pipeline/**/*.d.ts", "integrations/**/*.ts", "examples/**/*.ts", "tools/**/*.ts", "website/tools/**/*.ts", "tests/unit/**/*.ts", "tests/web/*.ts"]
 }

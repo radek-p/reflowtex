@@ -2,9 +2,9 @@
 
 The node list is serialised to Protocol Buffers against
 [`src/schema/latex.proto`](../src/schema/latex.proto). The `.proto` is the single
-source of truth: the Python encoder is descriptor-driven (it walks the schema, so
-it can't encode a field the schema doesn't declare), and the browser parses the
-same `.proto` text at runtime to decode. Change the schema in one place and both
+source of truth: the encoder (`src/pipeline/encode.ts`) loads the same `.proto`
+with protobufjs (so it can't encode a field the schema doesn't declare), and the
+browser parses the same `.proto` text at runtime to decode. Change the schema in one place and both
 sides follow.
 
 ## Key decisions
