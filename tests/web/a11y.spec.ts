@@ -137,9 +137,10 @@ test('the browser gives a screen reader every formula of the layer', async ({ op
 // Checked against the union of the drawn glyphs whose middle lies inside the
 // run: across, the two overlap almost wholly (a run spans the line's height,
 // the ink less, so up and down the glyphs need only sit in its middle).
-test('each run of the layer covers exactly the glyphs it stands for', async ({ openPage }) => {
-  const page = await openPage('mathml', { height: 900 });
-  const runs = await page.evaluate(() => {
+/** Each run against the drawn glyphs whose middle lies inside it: how much
+ *  of their extent across the run spans, and how far off its middle they sit. */
+async function coverage(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
     const out: { text: string; across: number; off: number; glyphs: number }[] = [];
     for (const block of document.querySelectorAll('.latex-block[data-nodelist-b64]')) {
       // a glyph's box: its text's (WebKit gives a <tspan> an empty rectangle)
@@ -153,8 +154,7 @@ test('each run of the layer covers exactly the glyphs it stands for', async ({ o
           return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
         });
         if (!inside.length) { out.push({ text: (run.textContent ?? '').slice(0, 30), across: 0, off: 1, glyphs: 0 }); continue; }
-        const u = { left: Math.min(...inside.map(g => g.left)), right: Math.max(...inside.map(g => g.right)),
-                    top: Math.min(...inside.map(g => g.top)), bottom: Math.max(...inside.map(g => g.bottom)) };
+        const u = { left: Math.min(...inside.map(g => g.left)), right: Math.max(...inside.map(g => g.right)) };
         const ix = Math.max(0, Math.min(r.right, u.right) - Math.max(r.left, u.left));
         const across = ix / (Math.max(r.right, u.right) - Math.min(r.left, u.left));
         // (the median glyph: a big operator's box is its font's, far taller than its ink)
@@ -165,11 +165,29 @@ test('each run of the layer covers exactly the glyphs it stands for', async ({ o
     }
     return out;
   });
+}
+function expectCovered(runs: Awaited<ReturnType<typeof coverage>>) {
   expect(runs.length, 'the layer is laid out line by line').toBeGreaterThan(10);
   for (const r of runs) {
     expect(r.across, `"${r.text}" (${r.glyphs} glyphs) spans its glyphs`).toBeGreaterThan(0.8);
     expect(r.off, `"${r.text}" has its glyphs in its middle`).toBeLessThan(0.3);
   }
+}
+
+test('each run of the layer covers exactly the glyphs it stands for', async ({ openPage }) => {
+  const page = await openPage('mathml', { height: 900 });
+  expectCovered(await coverage(page));
+});
+
+// Spoken, a formula is its words squeezed onto its glyphs – and the text
+// after it stays on its own (WebKit spaces one letter fewer than Chromium).
+test('spoken formulas, and the text after them, cover their glyphs too', async ({ openPage }) => {
+  const page = await openPage('mathml', { height: 900 });
+  await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('spoken'));
+  await page.waitForTimeout(300);
+  const runs = await coverage(page);
+  await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('mathml'));
+  expectCovered(runs);
 });
 
 // A display's MathML is scaled onto its ink – measured from its natural size,
@@ -271,6 +289,9 @@ test('the reading options offer the choice', async ({ openPage }) => {
   await page.locator('#lt-reader-button').click();
   const spoken = page.locator('#lt-reader-panel [data-m="spoken"]');
   await expect(spoken).toBeVisible();
+  const [row, a, b] = await Promise.all(['#lt-math-row .lt-seg', '#lt-reader-panel [data-m="mathml"]', '#lt-reader-panel [data-m="spoken"]']
+    .map(q => page.locator(q).boundingBox()));
+  expect(a!.width + b!.width, 'the two options fill the row').toBeGreaterThan(row!.width - 12);
   await spoken.click();
   await expect(spoken).toHaveAttribute('aria-checked', 'true');
   expect(await page.evaluate(() => (window as any).reflowtex.accessibleMath())).toBe('spoken');
@@ -287,9 +308,12 @@ test('a paragraph\'s runs are one flow of text, lines broken, none placed alone'
     const piece = document.querySelector('.latex-a11y [data-para]')!;
     const runs = [...piece.querySelectorAll('[data-run="text"]')];
     return { runs: runs.length, placed: runs.filter(x => getComputedStyle(x).position !== 'static').length,
-             blocks: runs.filter(x => getComputedStyle(x).display !== 'inline').length };
+             blocks: runs.filter(x => getComputedStyle(x).display !== 'inline').length,
+             // (a formula's MathML sits in a box of its own: that is the formula)
+             others: [...piece.children].filter(c => !c.hasAttribute('data-run') && c.localName !== 'br' && !c.querySelector(':scope > math')).map(c => c.outerHTML.slice(0, 60)) };
   });
   expect(r.runs).toBeGreaterThan(2);
   expect(r.placed, 'runs placed on their own').toBe(0);
+  expect(r.others, 'elements besides runs, formulas and line breaks').toEqual([]);
   expect(r.blocks, 'runs that are not inline text').toBe(0);
 });

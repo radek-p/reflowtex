@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 1046632d4a52e32b0bff1bec4ddae251c2f3ad5c201030b9fb2feaa89f74b3f3
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 6f65daa7ce4570aeb651d3c7da4f8d77825c8876a536736a5b15852ceb32eeea
 'use strict';
 "use strict";
 (() => {
@@ -2976,6 +2976,7 @@
           const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
           piece.style.cssText = `${PIECE};top:${top2}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
           math.dataset.run = math.localName === "math" ? "display" : "spoken";
+          if (math.localName !== "math") math.style.whiteSpace = "nowrap";
           math.style.display = "inline-block";
           scaled.push({ el: math, w, h: hh });
           return;
@@ -3146,12 +3147,6 @@
       byLine.get(r.line).runs.push(r);
     }
     const frag = document.createDocumentFragment(), fit = [];
-    const spacer = (d) => {
-      const sp = document.createElement("span");
-      sp.setAttribute("aria-hidden", "true");
-      sp.style.cssText = d >= 0 ? `display:inline-block;width:${d}px;height:0` : `display:inline-block;width:0;height:0;margin-right:${d}px`;
-      frag.appendChild(sp);
-    };
     let flowTop = 0, first = true;
     for (const ln of byLine.values()) {
       if (!first) frag.appendChild(document.createElement("br"));
@@ -3162,10 +3157,10 @@
       let x = 0;
       for (const r of ln.runs) {
         const left = m.a * r.x0 + m.e - pieceLeft, w = Math.max(1, m.a * (r.x1 - r.x0));
-        if (Math.abs(left - x) > 0.25) spacer(left - x);
+        const gap = Math.abs(left - x) > 0.25 ? `;margin-left:${left - x}px` : "";
         if (r.mathml && mode === "mathml") {
           const box = document.createElement("span");
-          box.style.cssText = `display:inline-block;position:relative;width:${w}px;height:0;vertical-align:top`;
+          box.style.cssText = `display:inline-block;position:relative;width:${w}px;height:0;vertical-align:top${gap}`;
           box.innerHTML = r.mathml;
           const math = box.firstElementChild;
           math.dataset.run = "math";
@@ -3176,7 +3171,7 @@
           const span = document.createElement("span");
           span.dataset.run = r.mathml ? "spoken" : "text";
           span.textContent = r.mathml ? ` ${wordsOf(r.mathml)} `.replace(/^ /, r.lead === false ? "" : " ") : r.text;
-          span.style.cssText = `white-space:pre;font-size:${c / ratio}px;line-height:${lh}px`;
+          span.style.cssText = `white-space:pre;font-size:${c / ratio}px;line-height:${lh}px${gap}`;
           frag.appendChild(span);
           fit.push({ el: span, w });
         }
@@ -3213,13 +3208,32 @@
     });
     items.forEach((it, k) => {
       const [nw, nh] = sizes[k];
+      it.nw = nw;
       if (it.scale) {
         if (nw > 0 && nh > 0) it.el.style.transform = `scale(${it.w / nw}, ${it.h / nh})`;
         return;
       }
       const n = [...it.el.textContent || ""].length;
-      if (n && nw > 0) it.el.style.letterSpacing = `${(it.w - nw) / n}px`;
+      if (n && nw > 0) {
+        it.ls = (it.w - nw) / n;
+        it.el.style.letterSpacing = `${it.ls}px`;
+      }
     });
+    const spaced = items.filter((it) => it.ls);
+    const widths = spaced.map((it) => textWidth(it.el));
+    spaced.forEach((it, k) => {
+      const letters = (widths[k] - it.nw) / it.ls;
+      if (letters > 0.5 && Math.abs(widths[k] - it.w) > 0.25) it.el.style.letterSpacing = `${(it.w - it.nw) / letters}px`;
+    });
+    const final = spaced.map((it) => textWidth(it.el));
+    spaced.forEach((it, k) => {
+      if (final[k] > it.w + 0.25) it.el.style.marginRight = `${it.w - final[k]}px`;
+    });
+  }
+  function textWidth(el) {
+    const g = document.createRange();
+    g.selectNodeContents(el);
+    return g.getBoundingClientRect().width;
   }
   function scaleOnto(items) {
     for (const { el } of items) el.style.transform = "none";

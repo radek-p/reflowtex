@@ -170,6 +170,7 @@ export function placeAccessibleLayer(data) {
                 const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
                 piece.style.cssText = `${PIECE};top:${top}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
                 math.dataset.run = math.localName === 'math' ? 'display' : 'spoken';
+                if (math.localName !== 'math') math.style.whiteSpace = 'nowrap';   // one line, scaled onto the formula
                 math.style.display = 'inline-block';           // its own size, not the piece's width
                 scaled.push({ el: math, w, h: hh });
                 return;
@@ -340,12 +341,6 @@ function layOutRuns({ piece, p, runs, origin }) {
         byLine.get(r.line).runs.push(r);
     }
     const frag = document.createDocumentFragment(), fit = [];
-    const spacer = d => {
-        const sp = document.createElement('span');
-        sp.setAttribute('aria-hidden', 'true');
-        sp.style.cssText = d >= 0 ? `display:inline-block;width:${d}px;height:0` : `display:inline-block;width:0;height:0;margin-right:${d}px`;
-        frag.appendChild(sp);
-    };
     let flowTop = 0, first = true;
     for (const ln of byLine.values()) {
         if (!first) frag.appendChild(document.createElement('br'));
@@ -357,12 +352,14 @@ function layOutRuns({ piece, p, runs, origin }) {
         let x = 0;
         for (const r of ln.runs) {
             const left = m.a * r.x0 + m.e - pieceLeft, w = Math.max(1, m.a * (r.x1 - r.x0));
-            if (Math.abs(left - x) > 0.25) spacer(left - x);
+            // where it does not start where the last ended (an indent, a gap
+            // the runs leave out): a margin of its own – no element between
+            const gap = Math.abs(left - x) > 0.25 ? `;margin-left:${left - x}px` : '';
             if (r.mathml && mode === 'mathml') {
                 // a box as wide as the formula and of no height (so no line
                 // grows), the MathML in it on the formula's own glyphs
                 const box = document.createElement('span');
-                box.style.cssText = `display:inline-block;position:relative;width:${w}px;height:0;vertical-align:top`;
+                box.style.cssText = `display:inline-block;position:relative;width:${w}px;height:0;vertical-align:top${gap}`;
                 box.innerHTML = r.mathml;
                 const math = box.firstElementChild;
                 math.dataset.run = 'math';
@@ -374,7 +371,7 @@ function layOutRuns({ piece, p, runs, origin }) {
                 const span = document.createElement('span');
                 span.dataset.run = r.mathml ? 'spoken' : 'text';
                 span.textContent = r.mathml ? ` ${wordsOf(r.mathml)} `.replace(/^ /, r.lead === false ? '' : ' ') : r.text;
-                span.style.cssText = `white-space:pre;font-size:${c / ratio}px;line-height:${lh}px`;
+                span.style.cssText = `white-space:pre;font-size:${c / ratio}px;line-height:${lh}px${gap}`;
                 frag.appendChild(span);
                 fit.push({ el: span, w });
             }
@@ -414,11 +411,27 @@ function fitRuns(items) {
     });
     items.forEach((it, k) => {
         const [nw, nh] = sizes[k];
+        it.nw = nw;
         if (it.scale) { if (nw > 0 && nh > 0) it.el.style.transform = `scale(${it.w / nw}, ${it.h / nh})`; return; }
         const n = [...(it.el.textContent || '')].length;
-        if (n && nw > 0) it.el.style.letterSpacing = `${(it.w - nw) / n}px`;
+        if (n && nw > 0) { it.ls = (it.w - nw) / n; it.el.style.letterSpacing = `${it.ls}px`; }
     });
+    // Measured once more: Chromium spaces every letter, WebKit all but the
+    // last, so a run squeezed hard (a formula's words) comes out a letter's
+    // spacing too wide. What a letter's spacing actually added corrects it.
+    const spaced = items.filter(it => it.ls);
+    const widths = spaced.map(it => textWidth(it.el));
+    spaced.forEach((it, k) => {
+        const letters = (widths[k] - it.nw) / it.ls;
+        if (letters > 0.5 && Math.abs(widths[k] - it.w) > 0.25) it.el.style.letterSpacing = `${(it.w - it.nw) / letters}px`;
+    });
+    // A run squeezed so hard that letters would need a negative width (WebKit
+    // stops at none) stays wider than its stretch: a negative margin as wide
+    // as the excess brings what follows back where it is drawn.
+    const final = spaced.map(it => textWidth(it.el));
+    spaced.forEach((it, k) => { if (final[k] > it.w + 0.25) it.el.style.marginRight = `${it.w - final[k]}px`; });
 }
+function textWidth(el) { const g = document.createRange(); g.selectNodeContents(el); return g.getBoundingClientRect().width; }
 
 /** Each element scaled from its natural size onto w × h – all measured first,
  *  then all scaled: one layout. The scale a layout before left is taken off

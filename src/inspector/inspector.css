@@ -322,7 +322,9 @@ input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(
 .details .a11y .piece hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
 .details .a11y .said { margin: 0; font-family: system-ui, sans-serif; font-size: 12.5px; line-height: 1.6; }
 .details .a11y .spoken { background: rgba(46,125,50,.12); border-radius: 3px; padding: 0 3px; }
-.details .a11y .mml { background: rgba(46,125,50,.08); border-radius: 3px; padding: 0 2px; }
+.details .a11y .mml { background: rgba(46,125,50,.08); border-radius: 3px; padding: 0 2px;
+  display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: middle; }   /* a wide display scrolls in its own box */
+.details .a11y { overflow-wrap: anywhere; white-space: normal; }
 .details .a11y .mml math { font-size: 1.05em; }
 
 /* Floating: the frame that resizes the panel from every edge and corner

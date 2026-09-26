@@ -17,16 +17,19 @@ export const IconCheck = () => html`<${Svg} size=${14}>
     <path d="M4.5 10.5l3.5 3.5 7.5-8" ...${stroke} stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><//>`;
 export const Caret = () => html`<svg viewBox="0 0 8 8" width="8" height="8" aria-hidden="true">
     <path d="M1 2.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`;
-// Chrome's "Dock side": a window, with the panel's place filled in.
+// Chrome's "Dock side": a window, with the panel's place filled in. Made
+// afresh for every icon (Preact must not be handed one element twice), each
+// with an rx: an icon that changed had its rx removed, which WebKit takes as
+// rx="" – an error in the page.
 const DOCK_FILL = {
-    float: html`<rect x="6" y="7" width="8" height="6" rx="1" fill="currentColor"/>`,
-    left: html`<rect x="3" y="4" width="5.5" height="12" fill="currentColor"/>`,
-    bottom: html`<rect x="3" y="10" width="14" height="6" fill="currentColor"/>`,
-    right: html`<rect x="11.5" y="4" width="5.5" height="12" fill="currentColor"/>`,
+    float: () => html`<rect x="6" y="7" width="8" height="6" rx="1" fill="currentColor"/>`,
+    left: () => html`<rect x="3" y="4" width="5.5" height="12" rx="0" fill="currentColor"/>`,
+    bottom: () => html`<rect x="3" y="10" width="14" height="6" rx="0" fill="currentColor"/>`,
+    right: () => html`<rect x="11.5" y="4" width="5.5" height="12" rx="0" fill="currentColor"/>`,
 };
 export const IconDock = ({ side }) => html`<${Svg}>
     <rect x="2.5" y="3.5" width="15" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
-    ${DOCK_FILL[side]}<//>`;
+    ${DOCK_FILL[side] && DOCK_FILL[side]()}<//>`;
 
 // ── Buttons and tables ─────────────────────────────────────────────────────────
 // A toolbar button: an icon, 28px, its title its name.

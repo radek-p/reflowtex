@@ -309,3 +309,18 @@ test('the floating panel resizes from every edge and corner', async ({ openPage 
   });
   expect(Object.fromEntries(cursor)).toMatchObject({ n: 'ns-resize', e: 'ew-resize', se: 'nwse-resize', ne: 'nesw-resize' });
 });
+
+// A display's MathML can be wider than the tab: it scrolls in its own box,
+// and the tab's text wraps; the tab itself never scrolls sideways.
+test('the Accessibility tab never scrolls sideways', async ({ openPage }) => {
+  const page = await openPage('mathml', { width: 1200, height: 900 });
+  await page.evaluate(() => { localStorage.clear(); reflowtex.inspector.open(document.querySelector('.latex-block[data-nodelist-b64]'), { dock: 'right', scroll: false }); });
+  const details = page.locator('[data-rtx-ui] .details:not(.rdetails)');
+  await details.locator('[role="tab"][data-dtab="a11y"]').click();
+  for (const mode of ['mathml', 'spoken']) {
+    await details.locator(`.a11y [data-mode="${mode}"]`).click();
+    await expect(details.locator('.a11y .said').first()).toBeVisible();
+    const over = await details.evaluate(d => d.scrollWidth - d.clientWidth);
+    expect(over, `${mode}: the tab scrolls sideways by ${over}px`).toBeLessThanOrEqual(1);
+  }
+});
