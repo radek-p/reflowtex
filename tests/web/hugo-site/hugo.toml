@@ -1,0 +1,4 @@
+# The web tests' Hugo site (tests/web/web.py builds it, served under /hugo/).
+baseURL = "http://example.org/hugo/"
+title = "Reflow TeX – Hugo fixture"
+disableKinds = ["taxonomy", "term", "RSS", "sitemap"]

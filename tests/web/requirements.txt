@@ -1,0 +1,3 @@
+# The web tests (tests/web): pytest and Playwright for Python.
+pytest>=8
+playwright==1.58.0

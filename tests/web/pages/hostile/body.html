@@ -1,0 +1,16 @@
+<script type="module">
+  import { html, useState, widget, Aside, InlineButton, Popover } from 'reflowtex/companion';
+  const aside = (ctx, kind) => ctx.asides({ kind, for: ctx.name.slice('popover:'.length) })[0];
+  widget('popover:*', {
+    size: ctx => InlineButton.size(ctx, aside(ctx, 'popover-label').width()),
+    render: ({ ctx }) => {
+      const [button, setButton] = useState(null);
+      return html`
+        <${InlineButton} ctx=${ctx} pressed=${!!button} onPress=${e => setButton(button ? null : e.currentTarget)}>
+          <${Aside} aside=${aside(ctx, 'popover-label')} />
+        </${InlineButton}>
+        ${button && html`<${Popover} anchor=${button} onClose=${() => setButton(null)}>
+          <${Aside} aside=${aside(ctx, 'popover-note')} width="fill" /></${Popover}>`}`;
+    },
+  });
+</script>

@@ -1,0 +1,12 @@
+A picture in a paragraph of its own, clipped, with labels:
+
+\begin{center}
+\begin{tikzpicture}
+  \clip (-1.6,-1.1) rectangle (1.6,1.1);
+  \draw[dashed] (-2,0) -- (2,0);
+  \draw[thick] (-1,-0.8) rectangle (1,0.8);
+  \node at (0,0.4) {$|x|, |y| \le 1$};
+  \node[below] at (1,0) {$2$};
+\end{tikzpicture}
+\end{center}
+and text after it.
