@@ -127,3 +127,149 @@ def test_anchors(open_page):
     }""")
     assert r['margin'] is not None
     assert r['text'] is None and r['block'] is None
+
+
+# ── Block kinds (host.define) ────────────────────────────────────────────────
+
+# The baselines of the first block's lines, from its top, px: every drawn
+# glyph's baseline, deduplicated.
+BASELINES = """() => {
+  const b = reflowtex.host.blocks()[0].el, top = b.getBoundingClientRect().top;
+  const ys = [...b.querySelectorAll('svg text tspan')].map(t => {
+    const p = t.ownerSVGElement.createSVGPoint(); p.y = parseFloat(t.getAttribute('y'));
+    return Math.round((p.matrixTransform(t.getScreenCTM()).y - top) * 100) / 100; });
+  return [...new Set(ys)].sort((a, b) => a - b);
+}"""
+
+DEFINE_CALLOUT = """() => {
+  window.__renders = 0; window.__undos = 0;
+  window.__undefine = reflowtex.host.define('callout', {
+    render(instance, host) {
+      window.__renders++;
+      const d = document.createElement('div'); d.className = 'mine';
+      host.el.append(d);
+      window.__surface = instance.part('body').mount(d);
+      window.__host = host;
+      return () => { window.__undos++; };
+    },
+  });
+}"""
+
+
+def settle(page, ms=250):
+    page.wait_for_timeout(ms)
+
+
+def test_define_late_keeps_tex_spacing(open_page):
+    page = open_page('host')
+    before = page.evaluate(BASELINES)
+    page.evaluate(DEFINE_CALLOUT)
+    settle(page)
+    r = page.evaluate("""() => ({ renders: __renders,
+      mine: document.querySelectorAll('.latex-stream[data-kind="callout"] > .mine .latex-part').length,
+      classes: document.querySelector('.latex-stream[data-kind="callout"]').className,
+      tone: document.querySelector('.latex-stream[data-kind="callout"]').dataset.tone })""")
+    assert r['renders'] == 1 and r['mine'] == 1
+    assert 'fancy' in r['classes'] and r['tone'] == 'warm', 'the host keeps its parameters'
+    after = page.evaluate(BASELINES)
+    assert len(after) == len(before)
+    worst = max(abs(a - b) for a, b in zip(before, after))
+    assert worst < 0.5, f'a line moved by {worst:.2f} px when the page drew the callout'
+
+
+def test_render_once_across_relayout(open_page):
+    page = open_page('host')
+    page.evaluate(DEFINE_CALLOUT)
+    settle(page)
+    page.evaluate("document.querySelector('.latex-stream[data-kind=\"callout\"]').dataset.tag = 'same'")
+    block = page.locator('.latex-block[data-nodelist-b64]').first
+    for w in ('320px', '500px', '260px'):
+        block.evaluate(f"b => {{ b.style.width = '{w}'; }}")
+        settle(page, 300)
+    r = page.evaluate("""() => ({ renders: __renders, undos: __undos,
+      tag: document.querySelector('.latex-stream[data-kind="callout"]').dataset.tag,
+      width: __surface.metrics().width })""")
+    assert r['renders'] == 1 and r['undos'] == 0 and r['tag'] == 'same'
+    assert r['width'] < 262, 'the body follows the narrower column'
+
+
+def test_content_height_moves_what_follows(open_page):
+    page = open_page('host')
+    page.evaluate(DEFINE_CALLOUT)
+    settle(page)
+    full = page.evaluate(BASELINES)
+    page.evaluate("document.querySelector('.mine').style.display = 'none'")
+    settle(page)
+    hidden = page.evaluate(BASELINES)
+    assert hidden[-1] < full[-1] - 20, 'the text after the callout moved up'
+    page.evaluate("document.querySelector('.mine').style.display = ''")
+    settle(page)
+    back = page.evaluate(BASELINES)
+    assert max(abs(a - b) for a, b in zip(full, back)) < 0.5
+
+
+def test_undefine_draws_by_default_again(open_page):
+    page = open_page('host')
+    before = page.evaluate(BASELINES)
+    page.evaluate(DEFINE_CALLOUT)
+    settle(page)
+    page.evaluate('__undefine()')
+    settle(page)
+    r = page.evaluate("""() => ({ undos: __undos, mine: document.querySelectorAll('.mine').length,
+      glyphs: document.querySelectorAll('.latex-stream[data-kind="callout"] tspan').length })""")
+    assert r['undos'] == 1 and r['mine'] == 0 and r['glyphs'] > 0
+    after = page.evaluate(BASELINES)
+    assert max(abs(a - b) for a, b in zip(before, after)) < 0.5
+
+
+def test_throwing_renderer_falls_back(open_page):
+    page = open_page('host')
+    page.evaluate("reflowtex.host.define('callout', { render() { throw new Error('boom'); } })")
+    settle(page)
+    glyphs = page.evaluate("document.querySelectorAll('.latex-stream[data-kind=\"callout\"] tspan').length")
+    assert glyphs > 0, 'drawn by default'
+    assert any('render failed' in e for e in page.errors)
+    page.errors.clear()
+
+
+def test_edges_decide_the_glue(open_page):
+    page = open_page('host')
+    page.evaluate(DEFINE_CALLOUT)
+    settle(page)
+    before = page.evaluate(BASELINES)
+    # No line of text at either edge: no interline glue to the text around.
+    page.evaluate("__host.setEdges({ top: null, bottom: null })")
+    settle(page)
+    after = page.evaluate(BASELINES)
+    assert after != before, 'the edges changed nothing'
+    page.evaluate("__host.setEdges({ top: __surface, bottom: __surface })")
+    settle(page)
+    assert max(abs(a - b) for a, b in zip(before, page.evaluate(BASELINES))) < 0.5
+
+
+def test_frame_keeps_glue_without_explicit_space(open_page):
+    # A framed edge drops TeX's glue only where the author left explicit
+    # space; the callout has none, so framing it moves nothing.
+    page = open_page('host')
+    page.evaluate(DEFINE_CALLOUT)
+    settle(page)
+    before = page.evaluate(BASELINES)
+    page.evaluate("__host.setFrame({ top: true, bottom: true })")
+    settle(page)
+    assert max(abs(a - b) for a, b in zip(before, page.evaluate(BASELINES))) < 0.5
+
+
+def test_defined_before_the_viewer(open_page):
+    page = open_page('host-defined')
+    r = page.evaluate("""() => ({ renders: __renders,
+      marks: [...document.querySelectorAll('.latex-stream[data-kind="pane"] > .mine')].map(m => m.textContent),
+      shown: [...document.querySelectorAll('.latex-stream[data-kind="pane"]')].map(p => p.getClientRects().length > 0) })""")
+    assert r['renders'] == 2 and r['marks'] == ['collapsed', 'expanded']
+    assert r['shown'] == [True, False], 'the (legacy) accordion still shows one pane'
+    # Its action link is drawn in the page's surface, and still reaches the accordion.
+    page.locator('.latex-stream[data-kind="pane"] .latex-action').first.click()
+    page.wait_for_function("""() => [...document.querySelectorAll('.latex-stream[data-kind="pane"]')]
+      .map(p => p.getClientRects().length > 0).join() === 'false,true'""")
+    page.wait_for_function("""() => document.querySelectorAll('.latex-stream[data-kind="pane"]')[1]
+      .querySelectorAll('tspan').length > 0""")
+    assert page.evaluate('__renders') == 2

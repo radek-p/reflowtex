@@ -11,7 +11,7 @@ import { installLinks, installWidgetStates, pageLabels } from '../host/links.js'
 import { applySlots, slotBlocks } from '../host/slots.js';
 import { installStreamStyles } from '../index.js';
 import {
-    NATURAL_PROBE_PT, blockData, naturalWidthPt, remeasureStreams, ro, scheduleFontRepaint,
+    NATURAL_PROBE_PT, blockData, naturalWidthPt, reflowBlock, remeasureStreams, ro, scheduleFontRepaint,
 } from './blocks.js';
 import { installColorMaps } from './colour.js';
 import { decodeBlock, loadSchema } from './decode.js';
@@ -68,7 +68,11 @@ export async function initBlock(el) {
     let widthPt = natural ? NATURAL_PROBE_PT : el.dataset.latexWidth
         ? parseInt(el.dataset.latexWidth)
         : (el.clientWidth / ZOOM) || DEFAULT_WIDTH_PT;
-    const cache = { bcs: null, dom: null, layout: null, stats: null };  // bcs: Map(paraIdx → break candidates), built lazily
+    // bcs: Map(paraIdx → break candidates), built lazily. blockEl and relayout
+    // are for the host API (block-hosts.ts): the block the layout's instances
+    // belong to, and how to lay it out again when a host's edges change.
+    const cache = { bcs: null, dom: null, layout: null, stats: null, blockEl: el,
+                    relayout: () => { if (blockData.get(el)) { blockData.get(el).lastWidth = -1; reflowBlock(el); } } };
     const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false,
                     seq: ++docSeq, el };
     blockData.set(el, data);

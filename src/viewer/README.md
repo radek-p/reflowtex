@@ -262,6 +262,19 @@ exists once the viewer script has run; a module that may load first waits for
   changes) – returning a surface: `metrics()`, `setWidth()`, `onChange(fn)`,
   `dispose()`. A part may be mounted in several places at once; one in a
   hidden element is painted when shown.
+- **Block kinds**: `host.define(kind, { render(instance, host) })` draws
+  every block instance of a kind with the page's own code, in `host.el` – the
+  stream's element, placed in the flow with its data-* parameters, classes and
+  custom properties – typically by mounting its parts there. Called once per
+  host (not again on resize or font load); returns what undoes it. The flow
+  still spaces the element as TeX would: from its *edges*, the first and last
+  lines of the body's surface inside it by default (`host.setEdges({ top,
+  bottom })` names others, or `null` for no line of text), with no glue
+  across a framed edge where the author left explicit space
+  (`host.setFrame({ top, bottom })`). Its height is its content's: open or
+  close something and what follows moves. A kind defined late draws the
+  instances already there anew; the function `define` returns undefines it.
+  A renderer that throws leaves its instance drawn by default.
 
 The registries below (`streamKinds`, `widgets`, `marginNotes`, `asides`) are
 the previous API, kept until the companion package's second version

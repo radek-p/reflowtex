@@ -7,6 +7,7 @@ import {
 } from './display.js';
 import { lineProfile, minRequiredAdvance, texInterlineAdvance, texInterlineGlue } from './lines.js';
 import { layoutStreamSegment } from './stream.js';
+import { keptHostBox } from '../../host/block-hosts.ts';
 import { layoutTextSegment, segmentsOf } from './text.js';
 import { svgEl } from '../paint.js';
 import { held, linkTargets } from '../../host/links.js';
@@ -220,6 +221,9 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // by stream index. Lives on the top-level cache and is shared down into
     // the nested ones, so it survives a rebuild of the DOM (rerenderBlock).
     cache.streamState = cache.streamState || new Map();
+    // The hosts of block instances a page draws (host/block-hosts.ts), by
+    // stream index; shared down like streamState, and kept across rebuilds.
+    cache.hosts = cache.hosts || new Map();
     cache.blockKey = cache.blockKey || `b${++blockSeq}`;
     const minGapPx = p.minGapPt * ZOOM;
     const padPx    = p.padPt    * ZOOM;
@@ -304,6 +308,14 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // The per-segment elements persist across renders; only contents reconcile.
     while (dom.segs.length < segs.length) {
         const seg = segs[dom.segs.length];
+        if (seg.kind === 'stream' && keptHostBox(cache, seg.index)) {
+            // A host the page draws in (see block-hosts.ts): the same box
+            // again, with what the page put in it, when the DOM is rebuilt.
+            const gap = document.createElement('div');
+            gap.style.cssText = 'height:0px;overflow-anchor:none';
+            dom.segs.push({ svg: null, box: keptHostBox(cache, seg.index), gap, wrap: null, pairs: [], sub: null });
+            continue;
+        }
         if (seg.kind === 'stream') {
             // The box is what the page styles and scripts by kind, and holds
             // the nested layout (layoutStreamSegment) rather than an <svg>.
@@ -417,7 +429,8 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
             }
             want.push(a);
         }
-        if (mount.parentNode !== s.box) s.box.replaceChildren(mount);
+        // (A host the page draws in may be empty: no mount.)
+        if (mount && mount.parentNode !== s.box) s.box.replaceChildren(mount);
         want.push(s.gap, s.box);
         if (overflows) {
             // Initial layout may still be detached from the document. Check in

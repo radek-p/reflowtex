@@ -7,6 +7,7 @@ import { STREAM_KINDS } from '../../index.js';
 import { blockData, reflowBlock } from '../../runtime/blocks.js';
 import { api } from '../../runtime/page.js';
 import { paintVisibleNow } from '../../runtime/visibility.js';
+import { layoutHostedSegment } from '../../host/block-hosts.ts';
 // ── end of imports
 
 // Size and position one segment's element for layout L: the <svg> surface, the
@@ -32,9 +33,13 @@ import { paintVisibleNow } from '../../runtime/visibility.js';
 // first, detached layout it falls back to the column and asks for one more
 // pass (remeasureStreams).
 export function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
+    // A kind the page draws itself (host.define): its host, not a nested layout.
+    const hosted = layoutHostedSegment(s, seg, widthPt, cache);
+    if (hosted) return hosted;
     if (!s.sub) {
         s.sub = { bcs: cache.bcs, dom: null, layout: null, stats: null,
-                  streamState: cache.streamState };
+                  streamState: cache.streamState, hosts: cache.hosts,
+                  blockEl: cache.blockEl, relayout: cache.relayout };
     }
     // clientWidth includes the padding a kind's CSS may add; the measure is
     // what is left inside it.

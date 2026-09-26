@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 32fce1be8d404d1cc389a71ef7da76befef7c493e0e438693c306c2c2497a20d
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 5943a4a776aeacefd174f9c1d92fab7afaef661c10bab5c4dbc0b00dc8dcfa16
 'use strict';
 "use strict";
 (() => {
@@ -1585,7 +1585,27 @@
 
   // src/host/surface.ts
   var live = /* @__PURE__ */ new WeakMap();
-  var newCache = (blockKey) => ({ bcs: null, dom: null, layout: null, stats: null, blockKey });
+  function edgesOf(cache) {
+    const laid = cache.layout && cache.layout.laid || [];
+    const first = laid[0], last = laid[laid.length - 1];
+    const textAt = (L) => !!(L && L.seg && L.seg.kind === "text");
+    return {
+      firstAscent: first ? first.firstAscent : 0,
+      firstMeta: first ? first.firstMeta : null,
+      textFirst: textAt(first),
+      lastDepth: last ? last.lastDepth : 0,
+      textLast: textAt(last)
+    };
+  }
+  var surfaceHooks = {
+    changed: (_s) => {
+    },
+    disposeHosts: (_cache) => {
+    }
+  };
+  function surfacesOf(blockEl) {
+    return live.get(blockEl) || [];
+  }
   var TypesetPartImpl = class {
     constructor(role, instance, data, stream) {
       this.role = role;
@@ -1600,9 +1620,12 @@
     natural = null;
     doc;
     /** Lay the part out at `px` into a fresh cache (or the one given). */
-    layout(px, cache = newCache()) {
+    layout(px, cache = this.newCache()) {
       const root = layoutDocument(this.data.fontInfo, this.doc, px / ZOOM, this.data.params, cache);
       return { cache, root };
+    }
+    newCache(relayout) {
+      return { bcs: null, dom: null, layout: null, stats: null, blockEl: this.data.el, relayout };
     }
     naturalWidth() {
       if (this.natural === null) {
@@ -1625,7 +1648,7 @@
       this.part = part;
       this.el = el;
       this.width = width;
-      this.cache = newCache();
+      this.cache = part.newCache(() => this.relayout(true));
       this.box.className = "latex-block latex-part";
       this.box.style.margin = "0";
       let set = live.get(part.data.el);
@@ -1698,6 +1721,13 @@
           console.error("[latex-viewer] surface listener:", e);
         }
       }
+      surfaceHooks.changed(this);
+    }
+    edges() {
+      return edgesOf(this.cache);
+    }
+    get isDisposed() {
+      return this.disposed;
     }
     /** New elements for every glyph (the face that just loaded), same layout. */
     rerender() {
@@ -1726,9 +1756,11 @@
       if (this.ro) this.ro.disconnect();
       if (this.frame) cancelAnimationFrame(this.frame);
       unobserveAll(this.cache);
+      surfaceHooks.disposeHosts(this.cache);
       this.listeners.clear();
       if (this.box.parentNode === this.el) this.el.removeChild(this.box);
       live.get(this.part.data.el)?.delete(this);
+      surfaceHooks.changed(this);
     }
   };
   function rerenderSurfaces(blockEl) {
@@ -2691,7 +2723,7 @@
   function classifyDisplayGaps(fontInfo, item) {
     const cached = displayGapKinds.get(item);
     if (cached) return cached;
-    const kinds = /* @__PURE__ */ new Map();
+    const kinds2 = /* @__PURE__ */ new Map();
     const gaps = [];
     let inkMin = Infinity, inkMax = -Infinity;
     const ink = (x, w) => {
@@ -2728,16 +2760,16 @@
     const ABUT = SP_TO_PX;
     for (const g of gaps) {
       const internal = inkMin <= g.x1 + ABUT && inkMax >= g.x2 - ABUT;
-      let fields = kinds.get(g.n);
-      if (!fields) kinds.set(g.n, fields = {});
+      let fields = kinds2.get(g.n);
+      if (!fields) kinds2.set(g.n, fields = {});
       fields[g.field] = internal;
     }
-    displayGapKinds.set(item, kinds);
-    return kinds;
+    displayGapKinds.set(item, kinds2);
+    return kinds2;
   }
-  function affineFloorWidthNode(n, sourceWidthSp, floorSp, kinds) {
+  function affineFloorWidthNode(n, sourceWidthSp, floorSp, kinds2) {
     let minimum = 0;
-    const fields = kinds.get(n);
+    const fields = kinds2.get(n);
     if (fields) {
       for (const field of ["width", "kern", "surround"]) {
         const rate = n[`${field}_rate`];
@@ -2751,15 +2783,15 @@
     }
     for (const key of AFFINE_CHILD_LISTS) {
       for (const child of n[key] || []) {
-        minimum = Math.max(minimum, affineFloorWidthNode(child, sourceWidthSp, floorSp, kinds));
+        minimum = Math.max(minimum, affineFloorWidthNode(child, sourceWidthSp, floorSp, kinds2));
       }
     }
-    if (n.leader) minimum = Math.max(minimum, affineFloorWidthNode(n.leader, sourceWidthSp, floorSp, kinds));
+    if (n.leader) minimum = Math.max(minimum, affineFloorWidthNode(n.leader, sourceWidthSp, floorSp, kinds2));
     return minimum;
   }
   function affineFloorWidthItem(fontInfo, item, sourceWidthSp, floorSp) {
-    const kinds = classifyDisplayGaps(fontInfo, item);
-    let minimum = affineFloorWidthNode(item.box, sourceWidthSp, floorSp, kinds);
+    const kinds2 = classifyDisplayGaps(fontInfo, item);
+    let minimum = affineFloorWidthNode(item.box, sourceWidthSp, floorSp, kinds2);
     if (item.display_shift_floor && item.display_shift_rate > 0) {
       minimum = Math.max(
         minimum,
@@ -2927,7 +2959,7 @@
     const forms = seg.rows.map((r) => displayForm(r.item, targetSp, displayModel.sourceWidthSp));
     const minWidthSp = Math.max(0, ...forms.map((f) => affineFloorWidthItem(fontInfo, f.item, f.anchorSp, floorSp)));
     const evaluatedSp = Math.max(targetSp, minWidthSp);
-    const kinds = forms.map((f) => classifyDisplayGaps(fontInfo, f.item));
+    const kinds2 = forms.map((f) => classifyDisplayGaps(fontInfo, f.item));
     seg = { ...seg, rows: seg.rows.map((r, i) => ({
       ...r,
       item: placeEquationNumber(affineDisplayItem(forms[i].item, evaluatedSp - forms[i].anchorSp))
@@ -2959,7 +2991,7 @@
         minWidthSp,
         evaluatedSp,
         floorSp,
-        kinds,
+        kinds: kinds2,
         items: seg.rows.map((r) => r.item)
       }
     };
@@ -2973,15 +3005,474 @@
     );
   }
 
+  // src/host/instances.ts
+  var InstanceImpl = class {
+    constructor(id, kind, attrs, presentation, placement, parent, block, source, anchorOf) {
+      this.id = id;
+      this.kind = kind;
+      this.attrs = attrs;
+      this.presentation = presentation;
+      this.placement = placement;
+      this.parent = parent;
+      this.block = block;
+      this.source = source;
+      this.anchorOf = anchorOf;
+    }
+    id;
+    kind;
+    attrs;
+    presentation;
+    placement;
+    parent;
+    block;
+    source;
+    anchorOf;
+    children = [];
+    parts = /* @__PURE__ */ new Map();
+    part(role) {
+      return this.parts.get(role);
+    }
+    anchor() {
+      return this.source.type === "none" ? null : this.anchorOf(this.source);
+    }
+  };
+  function splitAttrs(list) {
+    const attrs = {};
+    const classes = [];
+    const properties = {};
+    let aside = false;
+    for (const a of list || []) {
+      const k = a.key || "", v = a.value || "";
+      if (!/^[a-z0-9-]+$/i.test(k)) continue;
+      if (k === "aside") aside = v === "true";
+      else if (k === "class") classes.push(...v.split(/\s+/).filter(Boolean));
+      else if (k.startsWith("--")) properties[k] = v;
+      else attrs[k] = v;
+    }
+    return { attrs, presentation: { classes, properties }, aside };
+  }
+  var NO_PRESENTATION = Object.freeze({ classes: Object.freeze([]), properties: Object.freeze({}) });
+  function normalise(doc, block, key, parts, anchorOf) {
+    const streams = doc.streams || [];
+    const slots = doc.slots || [];
+    const roots = [];
+    const seenStream = /* @__PURE__ */ new Set();
+    const seenSlot = /* @__PURE__ */ new Set();
+    const widgetsByKey = /* @__PURE__ */ new Map();
+    const pendingAsides = [];
+    const adopt = (inst, parent) => {
+      (parent ? parent.children : roots).push(inst);
+    };
+    const streamInstance = (index, placement, parent, source) => {
+      seenStream.add(index);
+      const s = streams[index - 1];
+      const { attrs, presentation } = splitAttrs(s.attrs);
+      const inst = new InstanceImpl(
+        `${key}/s${index}`,
+        s.kind || "",
+        Object.freeze(attrs),
+        presentation,
+        placement,
+        parent,
+        block,
+        source,
+        anchorOf
+      );
+      inst.parts.set("body", parts.typeset(inst, "body", s));
+      if (s.text !== void 0) {
+        const data = { type: "data", role: "text", instance: inst, data: s.text };
+        inst.parts.set("text", data);
+      }
+      adopt(inst, parent);
+      walkContent(s.content || [], inst);
+      return inst;
+    };
+    const slotInstance = (index, parent) => {
+      seenSlot.add(index);
+      const slot = slots[index - 1] || {};
+      const name = slot.name || "";
+      if (slot.kind === "widget") {
+        const colon = name.indexOf(":");
+        const kind = colon >= 0 ? name.slice(0, colon) : name;
+        const attrs = { name };
+        if (colon >= 0) attrs.key = name.slice(colon + 1);
+        const inst = new InstanceImpl(
+          `${key}/w${index}`,
+          kind,
+          Object.freeze(attrs),
+          NO_PRESENTATION,
+          "inline",
+          parent,
+          block,
+          { type: "widget", slot: index },
+          anchorOf
+        );
+        if (attrs.key !== void 0 && !widgetsByKey.has(attrs.key)) widgetsByKey.set(attrs.key, inst);
+        adopt(inst, parent);
+      } else {
+        adopt(new InstanceImpl(
+          `${key}/t${index}`,
+          "text",
+          Object.freeze({ name }),
+          NO_PRESENTATION,
+          "text",
+          parent,
+          block,
+          { type: "none" },
+          anchorOf
+        ), parent);
+      }
+    };
+    const walkNodes = (nodes, parent) => {
+      for (const n of nodes || []) {
+        if (n.slot && !seenSlot.has(n.slot)) slotInstance(n.slot, parent);
+        if (n.aside && !seenStream.has(n.aside)) {
+          pendingAsides.push({ index: n.aside, parent });
+          seenStream.add(n.aside);
+        }
+        if (n.stream && !seenStream.has(n.stream) && streams[n.stream - 1])
+          streamInstance(n.stream, "detached", parent, { type: "glyph", stream: n.stream });
+        walkNodes(n.children, parent);
+        walkNodes(n.replace, parent);
+        walkNodes(n.pre, parent);
+        walkNodes(n.post, parent);
+      }
+    };
+    function walkContent(items, parent) {
+      for (const it of items) {
+        if (it.kind === "stream") {
+          if (it.stream && !seenStream.has(it.stream) && streams[it.stream - 1])
+            streamInstance(it.stream, "block", parent, { type: "none" });
+        } else if (it.kind === "display") {
+          walkNodes(it.box ? [it.box] : [], parent);
+        } else if (!it.kind || it.kind === "paragraph") {
+          if (it.para) walkNodes(doc.paragraphs[it.para - 1]?.nodes, parent);
+        }
+      }
+    }
+    walkContent(doc.content || [], null);
+    streams.forEach((s, i) => {
+      if (!seenStream.has(i + 1) && splitAttrs(s.attrs).aside) pendingAsides.push({ index: i + 1, parent: null });
+    });
+    for (const { index, parent } of pendingAsides) {
+      const s = streams[index - 1];
+      const { attrs } = splitAttrs(s.attrs);
+      const owner = attrs.for !== void 0 ? widgetsByKey.get(attrs.for) : void 0;
+      if (owner && !owner.parts.has(s.kind || "")) {
+        owner.parts.set(s.kind || "", parts.typeset(owner, s.kind || "", s));
+        continue;
+      }
+      seenStream.delete(index);
+      streamInstance(index, "detached", parent, { type: "aside", stream: index });
+    }
+    streams.forEach((_, i) => {
+      if (!seenStream.has(i + 1)) streamInstance(i + 1, "detached", null, { type: "none" });
+    });
+    return roots;
+  }
+  function* walk(list) {
+    for (const i of list) {
+      yield i;
+      yield* walk(i.children);
+    }
+  }
+  function matches(inst, query) {
+    if (query === void 0) return true;
+    if (typeof query === "string") return inst.kind === query;
+    for (const [k, v] of Object.entries(query)) {
+      if (v === void 0) continue;
+      const have = k === "kind" ? inst.kind : k === "placement" ? inst.placement : inst.attrs[k];
+      if (have !== String(v)) return false;
+    }
+    return true;
+  }
+
+  // src/host/host.ts
+  function screenPoint(el, x, y) {
+    const ctm = el && el.getScreenCTM && el.getScreenCTM();
+    if (!ctm) return null;
+    const p = new DOMPoint(x, y).matrixTransform(ctm);
+    return new DOMRect(p.x, p.y, 0, 0);
+  }
+  var num = (el, a) => parseFloat(el.getAttribute(a) || "0") || 0;
+  var BlockImpl = class {
+    constructor(data) {
+      this.data = data;
+    }
+    data;
+    _roots = null;
+    byId = null;
+    get el() {
+      return this.data.el;
+    }
+    get key() {
+      return this.data.cache.blockKey || "";
+    }
+    get roots() {
+      if (!this._roots) {
+        this._roots = normalise(
+          this.data.doc,
+          this,
+          this.key,
+          { typeset: (inst, role, stream) => new TypesetPartImpl(role, inst, this.data, stream) },
+          (src) => this.anchor(src)
+        );
+      }
+      return this._roots;
+    }
+    instances(query) {
+      return [...walk(this.roots)].filter((i) => matches(i, query));
+    }
+    find(id) {
+      if (!this.byId) this.byId = new Map([...walk(this.roots)].map((i) => [i.id, i]));
+      return this.byId.get(id);
+    }
+    on(event, fn) {
+      const h = (e) => {
+        if (e.detail?.block === this.el) fn();
+      };
+      this.el.addEventListener("reflowtex:" + event, h);
+      return () => this.el.removeEventListener("reflowtex:" + event, h);
+    }
+    anchor(src) {
+      const el = this.el;
+      if (src.type === "aside") {
+        const m = el.querySelector(`.latex-aside-mark[data-aside="${src.stream}"]`);
+        return m && screenPoint(m, num(m, "x"), num(m, "y"));
+      }
+      if (src.type === "glyph") {
+        const g = el.querySelector(`[data-footnote="${src.stream}"]`);
+        return g && screenPoint(g, num(g, "x"), num(g, "y"));
+      }
+      if (src.type === "widget") {
+        const w = el.querySelector(`.latex-widget[data-widget="${CSS.escape(`${this.key}:${src.slot}`)}"]`);
+        return w ? w.getBoundingClientRect() : null;
+      }
+      return null;
+    }
+  };
+  var blocks = [];
+  var byEl = /* @__PURE__ */ new WeakMap();
+  function blockOf(el) {
+    let b = byEl.get(el);
+    if (!b) {
+      const data = blockData.get(el);
+      if (!data) return void 0;
+      byEl.set(el, b = new BlockImpl(data));
+    }
+    return b;
+  }
+  var blockListeners = /* @__PURE__ */ new Set();
+  var host = {
+    version: 1,
+    define: defineBlockKind,
+    blocks: () => blocks.slice(),
+    block: (el) => blocks.includes(byEl.get(el)) ? byEl.get(el) : void 0,
+    instances: (query) => blocks.flatMap((b) => b.instances(query)),
+    find: (id) => {
+      const b = blocks.find((b2) => id.startsWith(b2.key + "/"));
+      return b && b.find(id);
+    },
+    onBlock(fn) {
+      blockListeners.add(fn);
+      for (const b of blocks) fn(b);
+      return () => {
+        blockListeners.delete(fn);
+      };
+    }
+  };
+  function registerBlock(data) {
+    const b = blockOf(data.el);
+    if (!b || blocks.includes(b)) return;
+    blocks.push(b);
+    for (const fn of [...blockListeners]) {
+      try {
+        fn(b);
+      } catch (e) {
+        console.error("[latex-viewer] onBlock listener:", e);
+      }
+    }
+  }
+  function installHost() {
+    api.host = host;
+    document.dispatchEvent(new CustomEvent("reflowtex:host", { detail: { host } }));
+  }
+
+  // src/host/block-hosts.ts
+  var kinds = /* @__PURE__ */ new Map();
+  var records = /* @__PURE__ */ new Set();
+  var byBox = /* @__PURE__ */ new WeakMap();
+  var pending = /* @__PURE__ */ new Set();
+  var frame = 0;
+  function relayoutSoon(owner) {
+    if (!owner.relayout) return;
+    pending.add(owner.relayout);
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const fns = [...pending];
+      pending.clear();
+      for (const fn of fns) fn();
+    });
+  }
+  function currentEdges(rec) {
+    if (rec.edges) return { top: rec.edges.top ?? null, bottom: rec.edges.bottom ?? null };
+    const body = rec.instance.part("body");
+    let found = null;
+    for (const s of surfacesOf(rec.instance.block.el)) {
+      if (s.part === body && !s.isDisposed && rec.box.contains(s.el)) {
+        found = s;
+        break;
+      }
+    }
+    return { top: found, bottom: found };
+  }
+  function edgeValues(rec) {
+    const { top, bottom } = currentEdges(rec);
+    const t = top && !top.isDisposed ? top.edges() : null;
+    const b = bottom && !bottom.isDisposed ? bottom.edges() : null;
+    return {
+      firstAscent: t ? t.firstAscent : 0,
+      firstMeta: t ? t.firstMeta : null,
+      textFirst: !!(t && t.textFirst),
+      lastDepth: b ? b.lastDepth : 0,
+      textLast: !!(b && b.textLast)
+    };
+  }
+  var sameEdges = (a, b) => !!a && a.firstAscent === b.firstAscent && a.lastDepth === b.lastDepth && a.firstMeta === b.firstMeta && a.textFirst === b.textFirst && a.textLast === b.textLast;
+  surfaceHooks.changed = (s) => {
+    for (let el = s.el; el; el = el.parentElement) {
+      const rec = byBox.get(el);
+      if (!rec) continue;
+      if (rec.laid && !sameEdges(rec.laid, edgeValues(rec))) relayoutSoon(rec.owner);
+      return;
+    }
+  };
+  surfaceHooks.disposeHosts = (cache) => {
+    for (const rec of [...records]) if (rec.owner.hosts === cache.hosts) dispose(rec);
+  };
+  function dispose(rec) {
+    records.delete(rec);
+    rec.owner.hosts?.delete(rec.index);
+    if (rec.undo) {
+      try {
+        rec.undo();
+      } catch (e) {
+        console.error(`[latex-viewer] kind "${rec.kind}": undoing render failed:`, e);
+      }
+    }
+    rec.undo = null;
+  }
+  function makeRecord(box, index, instance, def, owner) {
+    const rec = {
+      box,
+      index,
+      instance,
+      kind: instance.kind,
+      def,
+      owner,
+      undo: null,
+      laid: null,
+      failed: false,
+      frame: { top: false, bottom: false },
+      edges: null
+    };
+    rec.host = {
+      el: box,
+      instance,
+      setFrame(f) {
+        const next = { top: !!f.top, bottom: !!f.bottom };
+        if (next.top === rec.frame.top && next.bottom === rec.frame.bottom) return;
+        rec.frame = next;
+        if (rec.laid) relayoutSoon(owner);
+      },
+      setEdges(e) {
+        rec.edges = { ...rec.edges || {}, ...e };
+        if (rec.laid && !sameEdges(rec.laid, edgeValues(rec))) relayoutSoon(owner);
+      }
+    };
+    return rec;
+  }
+  function keptHostBox(cache, index) {
+    const rec = cache.hosts && cache.hosts.get(index);
+    return rec && !rec.failed ? rec.box : null;
+  }
+  function layoutHostedSegment(s, seg, widthPt, cache) {
+    const def = kinds.get(seg.stream.kind || "");
+    if (!def || !cache.blockEl) return null;
+    const hosts = cache.hosts || (cache.hosts = /* @__PURE__ */ new Map());
+    let rec = hosts.get(seg.index);
+    if (rec && rec.failed) return null;
+    if (!rec) {
+      const block = blockOf(cache.blockEl);
+      const instance = block && block.find(`${block.key}/s${seg.index}`);
+      if (!instance) return null;
+      rec = makeRecord(s.box, seg.index, instance, def, cache);
+      hosts.set(seg.index, rec);
+      records.add(rec);
+      byBox.set(s.box, rec);
+      try {
+        const undo = def.render(instance, rec.host);
+        rec.undo = typeof undo === "function" ? undo : null;
+      } catch (e) {
+        console.error(`[latex-viewer] kind "${rec.kind}": render failed, drawn by default:`, e);
+        rec.failed = true;
+        records.delete(rec);
+        s.box.replaceChildren();
+        return null;
+      }
+    }
+    const E = rec.laid = edgeValues(rec);
+    const fa = E.textFirst ? `${E.firstAscent}px` : "var(--latex-cap-height, 0px)";
+    const ld = E.textLast ? `${E.lastDepth}px` : "0px";
+    if (s.box.style.getPropertyValue("--latex-first-ascent") !== fa) s.box.style.setProperty("--latex-first-ascent", fa);
+    if (s.box.style.getPropertyValue("--latex-last-depth") !== ld) s.box.style.setProperty("--latex-last-depth", ld);
+    return {
+      seg,
+      lines: [],
+      H: s.box.offsetHeight,
+      W: widthPt * ZOOM,
+      firstAscent: E.firstAscent,
+      lastDepth: E.lastDepth,
+      firstMeta: E.firstMeta,
+      alts: null,
+      frameTop: rec.frame.top,
+      frameBottom: rec.frame.bottom,
+      gapBefore: seg.gapBefore || 0
+    };
+  }
+  function redraw(kind) {
+    for (const rec of [...records]) if (rec.kind === kind) dispose(rec);
+    for (const el of document.querySelectorAll("[data-nodelist-b64]")) {
+      const block = blockOf(el);
+      if (block && blockData.get(el) && block.instances({ kind, placement: "block" }).length) rerenderBlock(el);
+    }
+  }
+  function defineBlockKind(kind, def) {
+    if (!def || typeof def.render !== "function") throw new TypeError(`host.define("${kind}"): render(instance, host) is required`);
+    kinds.set(kind, def);
+    redraw(kind);
+    return () => {
+      if (kinds.get(kind) !== def) return;
+      kinds.delete(kind);
+      redraw(kind);
+    };
+  }
+
   // src/engine/layout/stream.js
   function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
+    const hosted = layoutHostedSegment(s, seg, widthPt, cache);
+    if (hosted) return hosted;
     if (!s.sub) {
       s.sub = {
         bcs: cache.bcs,
         dom: null,
         layout: null,
         stats: null,
-        streamState: cache.streamState
+        streamState: cache.streamState,
+        hosts: cache.hosts,
+        blockEl: cache.blockEl,
+        relayout: cache.relayout
       };
     }
     let innerPx = 0, frameTop = false, frameBottom = false;
@@ -3169,6 +3660,7 @@
     cache.anchors = doc.anchors || [];
     cache.streams = doc.streams || [];
     cache.streamState = cache.streamState || /* @__PURE__ */ new Map();
+    cache.hosts = cache.hosts || /* @__PURE__ */ new Map();
     cache.blockKey = cache.blockKey || `b${++blockSeq}`;
     const minGapPx = p.minGapPt * ZOOM;
     const padPx = p.padPt * ZOOM;
@@ -3230,6 +3722,12 @@
     };
     while (dom.segs.length < segs.length) {
       const seg = segs[dom.segs.length];
+      if (seg.kind === "stream" && keptHostBox(cache, seg.index)) {
+        const gap2 = document.createElement("div");
+        gap2.style.cssText = "height:0px;overflow-anchor:none";
+        dom.segs.push({ svg: null, box: keptHostBox(cache, seg.index), gap: gap2, wrap: null, pairs: [], sub: null });
+        continue;
+      }
       if (seg.kind === "stream") {
         const box2 = document.createElement("div");
         box2.className = "latex-stream";
@@ -3315,7 +3813,7 @@
         }
         want.push(a);
       }
-      if (mount.parentNode !== s.box) s.box.replaceChildren(mount);
+      if (mount && mount.parentNode !== s.box) s.box.replaceChildren(mount);
       want.push(s.gap, s.box);
       if (overflows) {
         requestAnimationFrame(() => updateDisplayOverflowCue(s.wrap));
@@ -3616,288 +4114,6 @@
     return { left: L, top: T, right: R, bottom: B, width: R - L, height: B - T };
   }
 
-  // src/host/instances.ts
-  var InstanceImpl = class {
-    constructor(id, kind, attrs, presentation, placement, parent, block, source, anchorOf) {
-      this.id = id;
-      this.kind = kind;
-      this.attrs = attrs;
-      this.presentation = presentation;
-      this.placement = placement;
-      this.parent = parent;
-      this.block = block;
-      this.source = source;
-      this.anchorOf = anchorOf;
-    }
-    id;
-    kind;
-    attrs;
-    presentation;
-    placement;
-    parent;
-    block;
-    source;
-    anchorOf;
-    children = [];
-    parts = /* @__PURE__ */ new Map();
-    part(role) {
-      return this.parts.get(role);
-    }
-    anchor() {
-      return this.source.type === "none" ? null : this.anchorOf(this.source);
-    }
-  };
-  function splitAttrs(list) {
-    const attrs = {};
-    const classes = [];
-    const properties = {};
-    let aside = false;
-    for (const a of list || []) {
-      const k = a.key || "", v = a.value || "";
-      if (!/^[a-z0-9-]+$/i.test(k)) continue;
-      if (k === "aside") aside = v === "true";
-      else if (k === "class") classes.push(...v.split(/\s+/).filter(Boolean));
-      else if (k.startsWith("--")) properties[k] = v;
-      else attrs[k] = v;
-    }
-    return { attrs, presentation: { classes, properties }, aside };
-  }
-  var NO_PRESENTATION = Object.freeze({ classes: Object.freeze([]), properties: Object.freeze({}) });
-  function normalise(doc, block, key, parts, anchorOf) {
-    const streams = doc.streams || [];
-    const slots = doc.slots || [];
-    const roots = [];
-    const seenStream = /* @__PURE__ */ new Set();
-    const seenSlot = /* @__PURE__ */ new Set();
-    const widgetsByKey = /* @__PURE__ */ new Map();
-    const pendingAsides = [];
-    const adopt = (inst, parent) => {
-      (parent ? parent.children : roots).push(inst);
-    };
-    const streamInstance = (index, placement, parent, source) => {
-      seenStream.add(index);
-      const s = streams[index - 1];
-      const { attrs, presentation } = splitAttrs(s.attrs);
-      const inst = new InstanceImpl(
-        `${key}/s${index}`,
-        s.kind || "",
-        Object.freeze(attrs),
-        presentation,
-        placement,
-        parent,
-        block,
-        source,
-        anchorOf
-      );
-      inst.parts.set("body", parts.typeset(inst, "body", s));
-      if (s.text !== void 0) {
-        const data = { type: "data", role: "text", instance: inst, data: s.text };
-        inst.parts.set("text", data);
-      }
-      adopt(inst, parent);
-      walkContent(s.content || [], inst);
-      return inst;
-    };
-    const slotInstance = (index, parent) => {
-      seenSlot.add(index);
-      const slot = slots[index - 1] || {};
-      const name = slot.name || "";
-      if (slot.kind === "widget") {
-        const colon = name.indexOf(":");
-        const kind = colon >= 0 ? name.slice(0, colon) : name;
-        const attrs = { name };
-        if (colon >= 0) attrs.key = name.slice(colon + 1);
-        const inst = new InstanceImpl(
-          `${key}/w${index}`,
-          kind,
-          Object.freeze(attrs),
-          NO_PRESENTATION,
-          "inline",
-          parent,
-          block,
-          { type: "widget", slot: index },
-          anchorOf
-        );
-        if (attrs.key !== void 0 && !widgetsByKey.has(attrs.key)) widgetsByKey.set(attrs.key, inst);
-        adopt(inst, parent);
-      } else {
-        adopt(new InstanceImpl(
-          `${key}/t${index}`,
-          "text",
-          Object.freeze({ name }),
-          NO_PRESENTATION,
-          "text",
-          parent,
-          block,
-          { type: "none" },
-          anchorOf
-        ), parent);
-      }
-    };
-    const walkNodes = (nodes, parent) => {
-      for (const n of nodes || []) {
-        if (n.slot && !seenSlot.has(n.slot)) slotInstance(n.slot, parent);
-        if (n.aside && !seenStream.has(n.aside)) {
-          pendingAsides.push({ index: n.aside, parent });
-          seenStream.add(n.aside);
-        }
-        if (n.stream && !seenStream.has(n.stream) && streams[n.stream - 1])
-          streamInstance(n.stream, "detached", parent, { type: "glyph", stream: n.stream });
-        walkNodes(n.children, parent);
-        walkNodes(n.replace, parent);
-        walkNodes(n.pre, parent);
-        walkNodes(n.post, parent);
-      }
-    };
-    function walkContent(items, parent) {
-      for (const it of items) {
-        if (it.kind === "stream") {
-          if (it.stream && !seenStream.has(it.stream) && streams[it.stream - 1])
-            streamInstance(it.stream, "block", parent, { type: "none" });
-        } else if (it.kind === "display") {
-          walkNodes(it.box ? [it.box] : [], parent);
-        } else if (!it.kind || it.kind === "paragraph") {
-          if (it.para) walkNodes(doc.paragraphs[it.para - 1]?.nodes, parent);
-        }
-      }
-    }
-    walkContent(doc.content || [], null);
-    streams.forEach((s, i) => {
-      if (!seenStream.has(i + 1) && splitAttrs(s.attrs).aside) pendingAsides.push({ index: i + 1, parent: null });
-    });
-    for (const { index, parent } of pendingAsides) {
-      const s = streams[index - 1];
-      const { attrs } = splitAttrs(s.attrs);
-      const owner = attrs.for !== void 0 ? widgetsByKey.get(attrs.for) : void 0;
-      if (owner && !owner.parts.has(s.kind || "")) {
-        owner.parts.set(s.kind || "", parts.typeset(owner, s.kind || "", s));
-        continue;
-      }
-      seenStream.delete(index);
-      streamInstance(index, "detached", parent, { type: "aside", stream: index });
-    }
-    streams.forEach((_, i) => {
-      if (!seenStream.has(i + 1)) streamInstance(i + 1, "detached", null, { type: "none" });
-    });
-    return roots;
-  }
-  function* walk(list) {
-    for (const i of list) {
-      yield i;
-      yield* walk(i.children);
-    }
-  }
-  function matches(inst, query) {
-    if (query === void 0) return true;
-    if (typeof query === "string") return inst.kind === query;
-    for (const [k, v] of Object.entries(query)) {
-      if (v === void 0) continue;
-      const have = k === "kind" ? inst.kind : k === "placement" ? inst.placement : inst.attrs[k];
-      if (have !== String(v)) return false;
-    }
-    return true;
-  }
-
-  // src/host/host.ts
-  function screenPoint(el, x, y) {
-    const ctm = el && el.getScreenCTM && el.getScreenCTM();
-    if (!ctm) return null;
-    const p = new DOMPoint(x, y).matrixTransform(ctm);
-    return new DOMRect(p.x, p.y, 0, 0);
-  }
-  var num = (el, a) => parseFloat(el.getAttribute(a) || "0") || 0;
-  var BlockImpl = class {
-    constructor(data) {
-      this.data = data;
-    }
-    data;
-    _roots = null;
-    byId = null;
-    get el() {
-      return this.data.el;
-    }
-    get key() {
-      return this.data.cache.blockKey || "";
-    }
-    get roots() {
-      if (!this._roots) {
-        this._roots = normalise(
-          this.data.doc,
-          this,
-          this.key,
-          { typeset: (inst, role, stream) => new TypesetPartImpl(role, inst, this.data, stream) },
-          (src) => this.anchor(src)
-        );
-      }
-      return this._roots;
-    }
-    instances(query) {
-      return [...walk(this.roots)].filter((i) => matches(i, query));
-    }
-    find(id) {
-      if (!this.byId) this.byId = new Map([...walk(this.roots)].map((i) => [i.id, i]));
-      return this.byId.get(id);
-    }
-    on(event, fn) {
-      const h = (e) => {
-        if (e.detail?.block === this.el) fn();
-      };
-      this.el.addEventListener("reflowtex:" + event, h);
-      return () => this.el.removeEventListener("reflowtex:" + event, h);
-    }
-    anchor(src) {
-      const el = this.el;
-      if (src.type === "aside") {
-        const m = el.querySelector(`.latex-aside-mark[data-aside="${src.stream}"]`);
-        return m && screenPoint(m, num(m, "x"), num(m, "y"));
-      }
-      if (src.type === "glyph") {
-        const g = el.querySelector(`[data-footnote="${src.stream}"]`);
-        return g && screenPoint(g, num(g, "x"), num(g, "y"));
-      }
-      if (src.type === "widget") {
-        const w = el.querySelector(`.latex-widget[data-widget="${CSS.escape(`${this.key}:${src.slot}`)}"]`);
-        return w ? w.getBoundingClientRect() : null;
-      }
-      return null;
-    }
-  };
-  var blocks = [];
-  var byEl = /* @__PURE__ */ new WeakMap();
-  var blockListeners = /* @__PURE__ */ new Set();
-  var host = {
-    version: 1,
-    blocks: () => blocks.slice(),
-    block: (el) => byEl.get(el),
-    instances: (query) => blocks.flatMap((b) => b.instances(query)),
-    find: (id) => {
-      const b = blocks.find((b2) => id.startsWith(b2.key + "/"));
-      return b && b.find(id);
-    },
-    onBlock(fn) {
-      blockListeners.add(fn);
-      for (const b of blocks) fn(b);
-      return () => {
-        blockListeners.delete(fn);
-      };
-    }
-  };
-  function registerBlock(data) {
-    if (byEl.has(data.el)) return;
-    const b = new BlockImpl(data);
-    blocks.push(b);
-    byEl.set(data.el, b);
-    for (const fn of [...blockListeners]) {
-      try {
-        fn(b);
-      } catch (e) {
-        console.error("[latex-viewer] onBlock listener:", e);
-      }
-    }
-  }
-  api.host = host;
-  document.dispatchEvent(new CustomEvent("reflowtex:host", { detail: { host } }));
-
   // src/host/inspect.js
   var inspectable = /* @__PURE__ */ new Set();
   api.inspect = {
@@ -4126,7 +4342,19 @@
     const params = paramsFromEl(el);
     const natural = el.dataset.latexWidth === "natural";
     let widthPt = natural ? NATURAL_PROBE_PT : el.dataset.latexWidth ? parseInt(el.dataset.latexWidth) : el.clientWidth / ZOOM || DEFAULT_WIDTH_PT;
-    const cache = { bcs: null, dom: null, layout: null, stats: null };
+    const cache = {
+      bcs: null,
+      dom: null,
+      layout: null,
+      stats: null,
+      blockEl: el,
+      relayout: () => {
+        if (blockData.get(el)) {
+          blockData.get(el).lastWidth = -1;
+          reflowBlock(el);
+        }
+      }
+    };
     const data = {
       doc,
       fontInfo,
@@ -4583,5 +4811,6 @@
     `;
     document.head.appendChild(st);
   }
+  installHost();
   document.addEventListener("DOMContentLoaded", init);
 })();

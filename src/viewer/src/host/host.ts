@@ -8,6 +8,8 @@
 import { api } from '../runtime/page.js';
 import { normalise, walk, matches, type AnchorSource, type Doc, type DocStream, type InstanceImpl } from './instances.ts';
 import { TypesetPartImpl, type BlockData } from './surface.ts';
+import { defineBlockKind } from './block-hosts.ts';
+import { blockData } from '../runtime/blocks.js';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
 
 interface ViewerBlockData extends BlockData { cache: { blockKey?: string } }
@@ -67,14 +69,27 @@ class BlockImpl implements Block {
     }
 }
 
-const blocks: BlockImpl[] = [];
-const byEl = new WeakMap<Element, BlockImpl>();
+const blocks: BlockImpl[] = [];                 // announced (registerBlock), in page order
+const byEl = new WeakMap<Element, BlockImpl>();   // every block made, announced or not
+
+/** The Block of a block element the viewer has data for – before it is
+ *  announced too, as its first layout needs it (block-hosts.ts). */
+export function blockOf(el: Element): BlockImpl | undefined {
+    let b = byEl.get(el);
+    if (!b) {
+        const data = blockData.get(el);
+        if (!data) return undefined;
+        byEl.set(el, b = new BlockImpl(data));
+    }
+    return b;
+}
 const blockListeners = new Set<(b: Block) => void>();
 
 export const host: Host = {
     version: 1,
+    define: defineBlockKind,
     blocks: () => blocks.slice(),
-    block: el => byEl.get(el),
+    block: el => blocks.includes(byEl.get(el) as BlockImpl) ? byEl.get(el) : undefined,
     instances: query => blocks.flatMap(b => b.instances(query)),
     find: id => {
         const b = blocks.find(b => id.startsWith(b.key + '/'));
@@ -89,16 +104,20 @@ export const host: Host = {
 
 /** From initBlock, once the block is laid out (so it has its key). */
 export function registerBlock(data: ViewerBlockData) {
-    if (byEl.has(data.el)) return;
-    const b = new BlockImpl(data);
+    const b = blockOf(data.el);
+    if (!b || blocks.includes(b)) return;
     blocks.push(b);
-    byEl.set(data.el, b);
     for (const fn of [...blockListeners]) {
         try { fn(b); } catch (e) { console.error('[latex-viewer] onBlock listener:', e); }
     }
 }
 
-(api as Record<string, unknown>).host = host;
-document.dispatchEvent(new CustomEvent('reflowtex:host', { detail: { host } }));
+/** From the entry module, once every module has been evaluated: a page's
+ *  listener may call host.define at once, which needs block-hosts.ts ready
+ *  (it and this module import each other). */
+export function installHost() {
+    (api as Record<string, unknown>).host = host;
+    document.dispatchEvent(new CustomEvent('reflowtex:host', { detail: { host } }));
+}
 
 export type { Doc };

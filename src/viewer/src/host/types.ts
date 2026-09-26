@@ -139,9 +139,44 @@ export interface Block {
     on<E extends keyof BlockEvents>(event: E, fn: BlockEvents[E]): () => void;
 }
 
+/** How a kind of `block` instance is drawn: the page's code, not the
+ *  viewer's. Kinds without one are drawn by default: the stream's own
+ *  element (`.latex-stream[data-kind]`, with its data-* parameters, classes
+ *  and custom properties) holding the body laid out at its width. */
+export interface BlockKind {
+    /** Draw `instance` in `host.el`, an element the viewer placed in the flow
+     *  and sized across; its height is whatever the content makes it. Called
+     *  once per host, which lives as long as the text around it: not again
+     *  on relayout, resize or font load. Returns what undoes it, if anything
+     *  (called when the kind is redefined, or the layout holding the host
+     *  goes away). If it throws, the instance is drawn by default. */
+    render(instance: Instance, host: BlockHost): void | (() => void);
+}
+
+/** Where a block instance stands in the flow, and what the flow needs to
+ *  know about it to space it as TeX would. */
+export interface BlockHost {
+    readonly el: HTMLElement;
+    readonly instance: Instance;
+    /** A framed edge (a border, padding: the instance draws a box) stops
+     *  TeX's interline glue from reaching across it; the author's explicit
+     *  space around the environment stays. Default: unframed. */
+    setFrame(frame: { top?: boolean; bottom?: boolean }): void;
+    /** The surfaces whose first and last lines stand for the instance's
+     *  edges in the text: the glue above is computed from `top`'s first
+     *  line, below from `bottom`'s last. null: that edge is not a line of
+     *  text. Default (never called): a surface of the `body` part mounted
+     *  inside el, for both. */
+    setEdges(edges: { top?: Surface | null; bottom?: Surface | null }): void;
+}
+
 export interface Host {
     /** Bumped on incompatible changes. */
     readonly version: 1;
+    /** Draw every `block` instance of a kind with `def`, from now on and,
+     *  by drawing them again, those already drawn. Returns what undefines
+     *  it (the kind is then drawn by default again). */
+    define(kind: string, def: BlockKind): () => void;
     /** Blocks initialised so far, in page order. */
     blocks(): Block[];
     block(el: Element): Block | undefined;

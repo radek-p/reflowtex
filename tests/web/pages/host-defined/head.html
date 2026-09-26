@@ -1,0 +1,18 @@
+<script>
+  // Defined before the viewer runs: every pane is drawn by the page – its
+  // body mounted in an element of the page's own, under a marker.
+  window.__renders = 0; window.__undos = 0;
+  document.addEventListener('reflowtex:host', e => {
+    e.detail.host.define('pane', {
+      render(instance, host) {
+        window.__renders++;
+        const mark = document.createElement('div');
+        mark.className = 'mine'; mark.textContent = instance.attrs.name;
+        const body = document.createElement('div');
+        host.el.append(mark, body);
+        instance.part('body').mount(body);
+        return () => { window.__undos++; };
+      },
+    });
+  });
+</script>

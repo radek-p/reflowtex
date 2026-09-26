@@ -27,8 +27,37 @@ export interface BlockData {
 // Live surfaces per block element, for the font re-render (rerenderSurfaces).
 const live = new WeakMap<HTMLElement, Set<SurfaceImpl>>();
 
-type Cache = { bcs: unknown; dom: any; layout: any; stats: unknown; blockKey?: string };
-const newCache = (blockKey?: string): Cache => ({ bcs: null, dom: null, layout: null, stats: null, blockKey });
+/** A layout's cache, as far as the host modules use it. `blockEl` and
+ *  `relayout` travel down into nested caches: the block whose instances the
+ *  layout holds, and how to lay out again the layout that owns it (the
+ *  block, or a surface). `hosts` holds its block instances' hosts
+ *  (block-hosts.ts), by stream index. */
+export type Cache = {
+    bcs: unknown; dom: any; layout: any; stats: unknown;
+    blockEl?: HTMLElement; relayout?: () => void; hosts?: Map<number, unknown>;
+};
+
+/** What a layout's first and last lines give the text around it. */
+export interface Edges { firstAscent: number; firstMeta: unknown; textFirst: boolean; lastDepth: number; textLast: boolean }
+export function edgesOf(cache: Cache): Edges {
+    const laid = (cache.layout && cache.layout.laid) || [];
+    const first = laid[0], last = laid[laid.length - 1];
+    const textAt = (L: any) => !!(L && L.seg && L.seg.kind === 'text');
+    return { firstAscent: first ? first.firstAscent : 0, firstMeta: first ? first.firstMeta : null,
+             textFirst: textAt(first), lastDepth: last ? last.lastDepth : 0, textLast: textAt(last) };
+}
+
+/** Set by block-hosts.ts: a surface appeared or went, and a layout's hosts
+ *  must go with it. (A hook rather than an import, to keep the two apart.) */
+export const surfaceHooks = {
+    changed: (_s: SurfaceImpl) => {},
+    disposeHosts: (_cache: Cache) => {},
+};
+
+/** The live surfaces of a block (every part of its instances, wherever mounted). */
+export function surfacesOf(blockEl: HTMLElement): Iterable<SurfaceImpl> {
+    return live.get(blockEl) || [];
+}
 
 export class TypesetPartImpl implements TypesetPart {
     readonly type = 'typeset' as const;
@@ -38,9 +67,12 @@ export class TypesetPartImpl implements TypesetPart {
         this.doc = { ...data.doc, content: stream.content || [] };
     }
     /** Lay the part out at `px` into a fresh cache (or the one given). */
-    layout(px: number, cache: Cache = newCache()): { cache: Cache; root: HTMLElement } {
+    layout(px: number, cache: Cache = this.newCache()): { cache: Cache; root: HTMLElement } {
         const root = layoutDocument(this.data.fontInfo, this.doc, px / ZOOM, this.data.params, cache) as HTMLElement;
         return { cache, root };
+    }
+    newCache(relayout?: () => void): Cache {
+        return { bcs: null, dom: null, layout: null, stats: null, blockEl: this.data.el, relayout };
     }
     naturalWidth(): number {
         if (this.natural === null) {
@@ -59,7 +91,7 @@ export class TypesetPartImpl implements TypesetPart {
     }
 }
 
-class SurfaceImpl implements Surface {
+export class SurfaceImpl implements Surface {
     private box = document.createElement('div');
     private cache: Cache;
     private px = 0;                              // the measure last laid out at
@@ -73,7 +105,7 @@ class SurfaceImpl implements Surface {
         // A key of its own (layoutDocument gives one): a link inside gets its
         // own tab stop, which it would not if it shared the block's key with
         // the same link drawn in the text.
-        this.cache = newCache();
+        this.cache = part.newCache(() => this.relayout(true));
         this.box.className = 'latex-block latex-part';
         // Its own size and nothing else: no margin a page gives its blocks.
         this.box.style.margin = '0';
@@ -134,7 +166,11 @@ class SurfaceImpl implements Surface {
         for (const fn of [...this.listeners]) {
             try { fn(this.last); } catch (e) { console.error('[latex-viewer] surface listener:', e); }
         }
+        surfaceHooks.changed(this);
     }
+
+    edges(): Edges { return edgesOf(this.cache); }
+    get isDisposed() { return this.disposed; }
 
     /** New elements for every glyph (the face that just loaded), same layout. */
     rerender() {
@@ -156,9 +192,11 @@ class SurfaceImpl implements Surface {
         if (this.ro) this.ro.disconnect();
         if (this.frame) cancelAnimationFrame(this.frame);
         unobserveAll(this.cache);
+        surfaceHooks.disposeHosts(this.cache);
         this.listeners.clear();
         if (this.box.parentNode === this.el) this.el.removeChild(this.box);
         live.get(this.part.data.el)?.delete(this);
+        surfaceHooks.changed(this);
     }
 }
 
