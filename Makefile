@@ -20,7 +20,7 @@ ESBUILD_VERSION    = 0.28.2
 VENV := .venv
 PYTHON := $(CURDIR)/$(VENV)/bin/python3
 
-.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check clean vendor-protobuf vendor-inspector venv minify-viewer
+.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all clean vendor-protobuf vendor-inspector venv minify-viewer
 
 help:
 	@echo "Reflow TeX targets:"
@@ -36,6 +36,8 @@ help:
 	@echo "  make clean            remove build artefacts"
 	@echo "  make vendor-protobuf  refresh src/viewer/protobuf.min.js from protobufjs@$(PROTOBUFJS_VERSION)"
 	@echo "  make minify-viewer    regenerate src/viewer/latex-viewer.min.js (maintainers; after editing the viewer)"
+	@echo "  make test-render      the render tests: every glyph in the browser against TeX (tests/render)"
+	@echo "  make test-render-all  the same, with the whole-document cases (testmath)"
 	@echo "  make vendor-inspector refresh src/inspector/vendor/preact.js (preact@$(PREACT_VERSION), htm, signals)"
 
 # Python deps live in a project-local virtualenv, not the system interpreter.
@@ -100,6 +102,19 @@ website:
 # recompile from scratch – needed after touching src/extract/template.tex,
 # font handling, or anything else that isn't reflected in a block's own
 # content hash. Slower; use `website` for routine content edits.
+# The render tests (tests/render/README.md): pytest in the venv, and the
+# tests' own Playwright with its Chromium (downloaded once).
+RENDER := tests/render
+test-render-deps: venv
+	@$(PYTHON) -m pip install -q -r $(RENDER)/requirements.txt -r tools/pageless-pdf/requirements.txt
+	@cd $(RENDER) && { [ -d node_modules/playwright ] || npm ci --no-audit --no-fund; } && npx playwright install chromium
+
+test-render: test-render-deps
+	$(PYTHON) -m pytest $(RENDER) -m "not slow"
+
+test-render-all: test-render-deps
+	$(PYTHON) -m pytest $(RENDER)
+
 website-clean:
 	cd website && rm -rf public resources .reflowtex-build .hugo_build.lock \
 	       data/latex_blocks data/latex_schema.json data/latex_files.json data/latex_font_map.json \

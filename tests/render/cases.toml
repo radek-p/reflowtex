@@ -1,0 +1,35 @@
+# The render tests: each case is compiled to a pageless PDF and shown by the
+# viewer, and every glyph the browser draws is compared with TeX's (see
+# README.md). Settings here apply to every case unless a case overrides them.
+
+[defaults]
+# Widths to test, as changes to the document's own \textwidth (pt): 0 is the
+# width it was typeset at; the others make the browser break the lines
+# again, and TeX is compiled at that width to say where they should be.
+widths = [0, -100, 85]
+# Largest distance (pt) between a glyph in the browser and the same glyph in
+# the PDF, across and down; and for rules (rule_tolerance, the same unless
+# given).
+tolerance = 0.05
+# lualatex passes (2 or 3 for references).
+passes = 2
+
+# A case needs a section only to change something. `known` marks a case
+# that fails for a reason on record: it runs as an expected failure, and
+# when it passes again the suite says so, to have the mark taken off. The document itself is
+# cases/<name>.tex, unless `file` names another (from the repository root).
+
+[testmath]
+file = "examples/testmath/testmath.tex"
+template = "examples/testmath/template.tex"
+passes = 3
+widths = [0]
+slow = true
+# What it achieves today (2026-09-26), as ceilings: all 41 566 glyphs found,
+# the worst 0.092 pt off; the worst of 165 rules 0.4 pt. Lower them as the
+# viewer gets closer.
+tolerance = 0.1
+rule_tolerance = 0.45
+
+[alignments]
+known = "the viewer leaves 4 pt too little space above the gather* display after a short line (amsmath takes the full skip there), and everything after it moves up"

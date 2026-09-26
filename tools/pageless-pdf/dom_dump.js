@@ -67,7 +67,9 @@ const colPx = Math.round(hsize * 2), marginPx = Math.round(margin * 2);
         const bb = t.getBBox ? t.getBBox() : null;
         glyphs.push({ x: (left + x) / 2, y: (top + y) / 2, w: bb ? bb.width / 2 : 0, text: t.textContent, font: ff, size: fs / 2 });
       }
-      for (const e of svg.querySelectorAll('rect')) {
+      // Drawn rules only: not a link's transparent hit area, nor the empty
+      // mark a \webaside leaves where it stood.
+      for (const e of svg.querySelectorAll('rect:not(.latex-link-hit):not(.latex-aside-mark)')) {
         if (e.closest('.latex-missing-glyph')) continue;
         rects.push({ x: (left + parseFloat(e.getAttribute('x'))) / 2, y: (top + parseFloat(e.getAttribute('y'))) / 2,
                      w: parseFloat(e.getAttribute('width')) / 2, h: parseFloat(e.getAttribute('height')) / 2 });

@@ -1,0 +1,20 @@
+% amsmath alignments: align, gather, multline, cases, a matrix.
+\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+A derivation aligned on its relations:
+\begin{align}
+  (a+b)^2 &= a^2 + 2ab + b^2 \\
+          &\le 2a^2 + 2b^2, \\
+  \lvert x \rvert &= \begin{cases} x & x \ge 0, \\ -x & x < 0. \end{cases}
+\end{align}
+Gathered, unnumbered:
+\begin{gather*}
+  \det\begin{pmatrix} a & b \\ c & d \end{pmatrix} = ad - bc, \\
+  e^{i\theta} = \cos\theta + i \sin\theta.
+\end{gather*}
+And one long equation:
+\begin{multline}
+  p(x) = x^8 + 8x^7 + 28x^6 + 56x^5 \\ + 70x^4 + 56x^3 + 28x^2 + 8x + 1.
+\end{multline}
+\end{document}

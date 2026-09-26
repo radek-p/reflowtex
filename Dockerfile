@@ -66,11 +66,15 @@ RUN tlmgr update --self && \
 # out to for reading the externalised TikZ picture PDFs it converts to SVG.
 # Ghostscript itself normalises ICC-coloured included PDFs to DeviceRGB before
 # dvisvgm sees them; without that pass, Figma fills are silently lost.
+# nodejs + npm: the render tests (tests/render) drive Chromium with
+# Playwright; its browser is fetched when the tests are set up, not here.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ghostscript \
       protobuf-compiler \
       python3-venv \
       mupdf-tools \
+      nodejs \
+      npm \
       git \
       make \
     && rm -rf /var/lib/apt/lists/*

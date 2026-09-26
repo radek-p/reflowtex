@@ -1,0 +1,17 @@
+% Displayed equations: unnumbered, numbered, with the text around them.
+\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+The Gaussian integral is
+\[ \int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}, \]
+and the Basel problem asks for the sum
+\begin{equation}\label{eq:basel}
+  \sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}.
+\end{equation}
+Equation~\eqref{eq:basel} was proved by Euler. A short line then
+\[ a = b \]
+and a display that ends the paragraph:
+\begin{equation}
+  \zeta(s) = \prod_{p} \frac{1}{1 - p^{-s}}.
+\end{equation}
+\end{document}

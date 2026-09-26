@@ -305,7 +305,9 @@
 \newdimen\reflowtexWidthExtra
 \reflowtexWidthExtra=%%WIDTH-EXTRA-SP%%sp\relax
 \AtBeginDocument{%
-  \ifdim\reflowtexWidthExtra>0pt
+  % Wider for the display model's samples; narrower too, for the render
+  % tests (tests/render), which compare the browser with TeX at other widths.
+  \ifdim\reflowtexWidthExtra=0pt\else
     \advance\textwidth by \reflowtexWidthExtra
     \hsize=\textwidth
     \linewidth=\textwidth

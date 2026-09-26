@@ -1,0 +1,56 @@
+name: Render tests
+
+# Every glyph the browser draws, against TeX's own pageless PDF of the same
+# document (tests/render/README.md): the feature cases at three widths each,
+# and testmath. Runs in the project's container image – the same TeX the
+# website is built with – with Chromium through Playwright.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The image the other workflows build; its layers come from the Actions
+      # cache, so this is quick unless the Dockerfile changed.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: reflowtex:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Playwright's Chromium, kept between runs.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('tests/render/package-lock.json') }}
+
+      - name: Run the render tests
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            -v "$HOME/.cache/ms-playwright":/root/.cache/ms-playwright \
+            reflowtex:ci bash -lc '
+              set -e
+              (cd tests/render && npm ci --no-audit --no-fund && npx playwright install --with-deps chromium)
+              make test-render-all
+            '
+
+      # What failed, for a look: each case's comparison report and logs.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: render-reports
+          path: |
+            tests/render/build/**/vector/vector.json
+            tests/render/build/**/*.log
+          if-no-files-found: ignore

@@ -1,0 +1,21 @@
+% Sectioning and lists.
+\documentclass{article}
+\begin{document}
+\section{Introduction}
+Some text under a numbered section.
+\subsection{A subsection}
+\begin{itemize}
+  \item A first item, long enough to break onto a second line when the
+        column is narrow.
+  \item A second item.
+\end{itemize}
+\subsection*{An unnumbered one}
+\begin{enumerate}
+  \item First.
+  \item Second, with a nested list:
+  \begin{enumerate}
+    \item nested one;
+    \item nested two.
+  \end{enumerate}
+\end{enumerate}
+\end{document}

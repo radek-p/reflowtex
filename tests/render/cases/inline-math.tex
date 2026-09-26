@@ -1,0 +1,12 @@
+% Inline formulas: sub- and superscripts, fractions, operators, spacing.
+\documentclass{article}
+\usepackage{amsmath,amssymb}
+\begin{document}
+Let $f(x) = \sum_{k=0}^{n} a_k x^k$ with $a_k \in \mathbb{R}$, so that
+$\lim_{x \to 0} f(x) = a_0$ and $\int_0^1 f(x)\,dx = \sum_k \frac{a_k}{k+1}$.
+For $n \ge 2$ the roots $x_{1,2} = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$ of a
+quadratic are real when $b^2 \geq 4ac$, and $e^{i\pi} + 1 = 0$ joins the five
+constants $0$, $1$, $\pi$, $e$ and $i$. A long formula such as
+$a_1 + a_2 + a_3 + a_4 + a_5 + a_6 + a_7 + a_8 + a_9 + a_{10} = 55$ may be
+broken after a relation or an operator.
+\end{document}

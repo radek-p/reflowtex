@@ -1,0 +1,2 @@
+# The render tests (tests/render): pytest, besides tools/pageless-pdf's own.
+pytest>=8
