@@ -370,7 +370,9 @@ function layOutRuns({ piece, p, runs, origin }) {
             } else {
                 const span = document.createElement('span');
                 span.dataset.run = r.mathml ? 'spoken' : 'text';
-                span.textContent = r.mathml ? ` ${wordsOf(r.mathml)} `.replace(/^ /, r.lead === false ? '' : ' ') : r.text;
+                // a formula's words, no spaces of their own: the text around
+                // them has the source's ("The ith", not "The i th")
+                span.textContent = r.mathml ? wordsOf(r.mathml) : r.text;
                 span.style.cssText = `white-space:pre;font-size:${c / ratio}px;line-height:${lh}px${gap}`;
                 frag.appendChild(span);
                 fit.push({ el: span, w });

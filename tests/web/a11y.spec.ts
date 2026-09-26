@@ -9,8 +9,8 @@ test('every formula reaches assistive technology as MathML; the drawing does not
   const tree = await page.locator('body').ariaSnapshot();
   const maths = tree.split('\n').filter(l => /^\s*- math\b/.test(l));
   // first block: three inline formulas, the integral, the alignment (one
-  // table for its rows); second block: two inline formulas; third: one
-  expect(maths.length).toBe(8);
+  // table for its rows); second block: two inline formulas; third: two
+  expect(maths.length).toBe(9);
   expect(tree).toContain('Inline');
   expect(tree).toContain('The end.');
   expect(tree).not.toMatch(/- img\b/);            // the drawn block, glyph by glyph, is hidden
@@ -316,4 +316,16 @@ test('a paragraph\'s runs are one flow of text, lines broken, none placed alone'
   expect(r.placed, 'runs placed on their own').toBe(0);
   expect(r.others, 'elements besides runs, formulas and line breaks').toEqual([]);
   expect(r.blocks, 'runs that are not inline text').toBe(0);
+});
+
+// Spoken, a formula's words take the source's spacing, no more: one space
+// before "a" (the text's own), none between "i" and "th" – a reader heard
+// "i (pause) th" otherwise.
+test('spoken formulas are spaced as the source is', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('spoken'));
+  await page.waitForTimeout(300);
+  const text = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y [data-para]')].map(p => p.textContent!).find(t => t.startsWith('Short')));
+  await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('mathml'));
+  expect(text!.trim()).toBe('Short: a ends. The ith one.');
 });

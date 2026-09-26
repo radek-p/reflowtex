@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 6f65daa7ce4570aeb651d3c7da4f8d77825c8876a536736a5b15852ceb32eeea
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 664329fe612dce5a1414ba3fd2dd56bebae118ed81aaedb2a22f49a33f66628e
 'use strict';
 "use strict";
 (() => {
@@ -3170,7 +3170,7 @@
         } else {
           const span = document.createElement("span");
           span.dataset.run = r.mathml ? "spoken" : "text";
-          span.textContent = r.mathml ? ` ${wordsOf(r.mathml)} `.replace(/^ /, r.lead === false ? "" : " ") : r.text;
+          span.textContent = r.mathml ? wordsOf(r.mathml) : r.text;
           span.style.cssText = `white-space:pre;font-size:${c / ratio}px;line-height:${lh}px${gap}`;
           frag.appendChild(span);
           fit.push({ el: span, w });
