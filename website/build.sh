@@ -20,11 +20,16 @@ TESTMATH="$REPO/examples/testmath"               # testmath.tex, rendered on the
 BOOK="$REPO/examples/book"                       # the batch example (Books in parts)
 SYMBOL="$REPO/examples/symbol"                   # a symbol of one's own (Symbols of your own)
 
-# Python deps (protobuf, fonttools) live in the repo-root virtualenv, not the
-# system interpreter. `make venv` (in $REPO) creates it; build it here too so
-# this script works standalone. Needs Python 3.9+ (the floor of the protobuf
-# and fonttools packages; macOS's bundled /usr/bin/python3 qualifies), so
-# rebuild the venv if it's missing or was created with a too-old interpreter.
+# The build runs on Node, straight from the TypeScript sources; its
+# dependencies are installed into the repo's node_modules on first use.
+if [ ! -d "$REPO/node_modules" ] || [ "$REPO/package-lock.json" -nt "$REPO/node_modules/.package-lock.json" ]; then
+  (cd "$REPO" && npm ci --no-audit --no-fund)
+fi
+
+# The pageless PDF and the pixel comparison (steps 3 and 4) are still Python
+# tools, with their deps in the repo-root virtualenv; build it here too so this
+# script works standalone. Needs Python 3.9+ (macOS's bundled python3
+# qualifies), so rebuild the venv if it's missing or too old.
 VENV="$REPO/.venv"
 if [ -x "$VENV/bin/python3" ] && "$VENV/bin/python3" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
   :
@@ -55,15 +60,17 @@ cp "$HUGO_INT/layouts/partials/reflowtex-viewer.html" "$SITE/layouts/partials/re
 #    each other by plain relative paths, which no ?v= can follow, so a new
 #    version must be new URLs throughout – no browser then mixes a cached old
 #    module with new ones. The partial reads the folder from data/inspector.json.
-INSPECTOR_V="$("$PYTHON" - "$REPO/src/inspector" <<'PY'
-import hashlib, pathlib, sys
-root, h = pathlib.Path(sys.argv[1]), hashlib.sha256()
-for p in sorted(root.rglob('*')):
-    if p.is_file() and p.suffix in ('.js', '.css'):
-        h.update(str(p.relative_to(root)).encode()); h.update(p.read_bytes())
-print(h.hexdigest()[:10])
-PY
-)"
+INSPECTOR_V="$(node -e '
+  const { createHash } = require("node:crypto"), fs = require("node:fs"), path = require("node:path");
+  const root = process.argv[1], h = createHash("sha256"), files = [];
+  (function walk(d) { for (const f of fs.readdirSync(d)) { const p = path.join(d, f);
+    if (fs.statSync(p).isDirectory()) walk(p); else if (/\.(js|css)$/.test(f)) files.push(path.relative(root, p).split(path.sep).join("/")); } })(root);
+  // path by path, component by component, as Python sorts Path objects
+  const cmp = (a, b) => { const x = a.split("/"), y = b.split("/");
+    for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+    return x.length - y.length; };
+  for (const f of files.sort(cmp)) { h.update(f); h.update(fs.readFileSync(path.join(root, f))); }
+  console.log(h.digest("hex").slice(0, 10));' "$REPO/src/inspector")"
 rm -rf "$SITE/static/inspector"
 mkdir -p "$SITE/static/inspector/$INSPECTOR_V" "$SITE/data"
 (cd "$REPO/src/inspector" && cp -R inspector.js inspector.css agent.js panel vendor "$SITE/static/inspector/$INSPECTOR_V/")
@@ -83,7 +90,7 @@ printf '{"dir": "companion/%s"}\n' "$COMPANION_V" > "$SITE/data/companion.json"
 # 2. Compile all LaTeX blocks, embed the schema, provision + patch fonts.
 #    Set PREBUILD_ARGS to pass extra flags (e.g. --force, --prune, -j 8).
 # shellcheck disable=SC2086
-"$PYTHON" "$HUGO_INT/prebuild.py" "$SITE" --demos-dir "$DEMOS" --demos-dir "$TESTMATH" --demos-dir "$BOOK" --demos-dir "$SYMBOL" ${PREBUILD_ARGS:-}
+node "$HUGO_INT/prebuild.ts" "$SITE" --demos-dir "$DEMOS" --demos-dir "$TESTMATH" --demos-dir "$BOOK" --demos-dir "$SYMBOL" ${PREBUILD_ARGS:-}
 
 # 3. testmath.tex as a pageless PDF, for the Tools page (one page as tall as
 #    the document). Rebuilt only when the document, its template or the tool

@@ -27,7 +27,7 @@ def build(name: str) -> Path:
     """Build pages/<name> once per session; return its folder."""
     src, out = PAGES / name, BUILD / name
     shutil.rmtree(out, ignore_errors=True)
-    r = subprocess.run([sys.executable, REPO / 'integrations' / 'vanilla' / 'build.py', src, '-o', out,
+    r = subprocess.run(['node', REPO / 'integrations' / 'vanilla' / 'build.ts', src, '-o', out,
                         '--title', name], capture_output=True, text=True, cwd=REPO)
     (BUILD / f'{name}.log').write_text(r.stdout + r.stderr)
     if r.returncode != 0:
@@ -56,7 +56,7 @@ def build(name: str) -> Path:
 def build_hugo() -> Path:
     """The Hugo fixture site (hugo-site/), as a Hugo user builds theirs: the
     integration's shortcode and viewer partial copied into layouts/,
-    prebuild.py, then hugo – with the site under a subpath, /hugo/, as a
+    prebuild.ts, then hugo – with the site under a subpath, /hugo/, as a
     project site on GitHub Pages is. Served from build/hugo/."""
     src, out = BUILD / 'hugo-src', BUILD / 'hugo'
     shutil.rmtree(src, ignore_errors=True)
@@ -67,7 +67,7 @@ def build_hugo() -> Path:
         (src / 'layouts' / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(integ / rel, src / 'layouts' / rel)
     log = BUILD / 'hugo.log'
-    for cmd in ([sys.executable, REPO / 'integrations' / 'hugo' / 'prebuild.py', src],
+    for cmd in (['node', REPO / 'integrations' / 'hugo' / 'prebuild.ts', src],
                 ['hugo', '--source', src, '--destination', out, '--baseURL', '/hugo/']):
         r = subprocess.run([str(a) for a in cmd], capture_output=True, text=True, cwd=REPO)
         with log.open('a') as f:

@@ -21,8 +21,14 @@ import { TexError } from './errors.ts';
 export interface LuaLatexOptions {
   /** directories searched before TeX's own tree (TEXINPUTS) */
   texinputs: string[];
-  /** at most this many runs; fewer once the files TeX reads back settle */
+  /** at most this many runs; fewer once the files TeX reads back settle
+   *  (unless `settle` is false: then exactly this many) */
   passes: number;
+  settle?: boolean;
+  /** the file a successful run leaves (default: the serializer's output.json) */
+  expect?: string;
+  /** called after each run with its log */
+  onPass?: (pass: number, log: string) => void;
   /** how the block is named in messages */
   block?: string;
 }
@@ -59,14 +65,16 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<s
   rmSync(outputJson, { force: true });
   let before = readBack(dir);
   let result: Awaited<ReturnType<typeof lualatex>> | null = null;
+  const log = join(dir, 'input.log');
+  const expect = join(dir, opts.expect ?? 'output.json');
   for (let n = 0; n < Math.max(1, opts.passes); n++) {
     result = await lualatex(dir, env);
+    opts.onPass?.(n + 1, existsSync(log) ? readFileSync(log, 'utf8') : '');
     const after = readBack(dir);
-    if (n > 0 && after === before) break;
+    if (opts.settle !== false && n > 0 && after === before) break;
     before = after;
   }
-  const log = join(dir, 'input.log');
-  if (!existsSync(outputJson)) {
+  if (!existsSync(expect)) {
     let detail = (existsSync(log) ? readFileSync(log, 'utf8') : result!.stdout).slice(-3000);
     // stderr is where a lualatex wrapper says what it tried (the container's
     // lazy package install)
@@ -79,5 +87,5 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<s
     throw new TexError(`lualatex reported ${errors.length} error(s) (nonstopmode continued, so the node list would be ` +
       `silently wrong):\n${[...new Set(errors)].slice(0, 10).map(e => `  ${e}`).join('\n')}\n  see ${log}`, opts.block);
   }
-  return readFileSync(outputJson, 'utf8');
+  return existsSync(outputJson) ? readFileSync(outputJson, 'utf8') : '';
 }

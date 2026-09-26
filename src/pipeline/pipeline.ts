@@ -88,8 +88,6 @@ export interface CompileOptions {
   name?: string;
 }
 
-interface Sample { data: SerializerOutput; dir: string }
-
 export class Pipeline {
   readonly buildRoot: string;
   readonly fonts: Fonts;
@@ -263,75 +261,108 @@ export class Pipeline {
     };
     rmSync(join(dir, 'samples'), { recursive: true, force: true });
 
-    // ── Display geometry: sample the document at additive widths ────────────
-    // A sliding window of three samples; a topology change or a non-affine
-    // field rejects only the smallest width and sampling moves up. A text-only
-    // snippet compiles once.
+    // The document at its own width, then (sampleDisplays) at wider ones if it
+    // has displays to model.
     const first: Sample = { data: await run(dir, 0, o.passes ?? 1), dir };
-    let final: Sample = first;
-    if (DM.wantsModel(first.data)) {
-      // Samples are taken in order and each is looked at before the next is
-      // needed, but the first two wider ones are compiled at once.
-      const at = (i: number): Promise<Sample> => { const d = sampleDir(); return run(d, i * DISPLAY_SAMPLE_STEP_SP, 1).then(data => ({ data, dir: d })); };
-      const ahead: Promise<Sample>[] = [at(1), at(2)];
-      let next = 3;
-      let samples: Sample[] = [];
-      for (let s: Sample | null = first; s; ) {
-        if (s !== first && !DM.wantsModel(s.data)) { final = s; break; }
-        const w = Number(s.data.source_width ?? 0);
-        if (w <= 0) throw new BuildError(`display-bearing template ${this.template} did not report a positive source width ` +
-          `(is ${WIDTH_EXTRA_MARK} and the Serializer.note_source_width hook missing?)`, label);
-        if (samples.length && w <= Number(samples[samples.length - 1].data.source_width))
-          throw new BuildError(`display sample width did not increase: ${samples[samples.length - 1].data.source_width}, ${w}`, label);
-        samples.push(s);
-        if (samples.length >= 3) {
-          const [a, b, c] = samples.slice(-3);
-          const [ok, reason] = DM.checkSamples(a.data, b.data, c.data);
-          if (ok) {
-            const widths = [a, b, c].map(x => DM.pyG(Number(x.data.source_width) / 65536)).join(', ');
-            if (a === first) {
-              final = { data: DM.attachModel(a.data, b.data, c.data), dir: a.dir };
-              this.log(`  ${label}: display model stable at ${widths} pt`);
-            } else {
-              // The document's own width fell outside the affine law; it is still
-              // the width the page must match exactly.
-              const [data] = DM.anchorModel(first.data, b.data, c.data);
-              const x0 = Number(first.data.source_width);
-              // Displays set another way there get the wider regime as a second
-              // form, from the width TeX switches at – found by compiling in between.
-              const [nWide, nProbes] = await DM.wideVariants(data, b.data, c.data, async wd => run(sampleDir(), wd - x0, 1));
-              final = { data, dir: first.dir };
-              this.log(`  ${label}: display model stable at ${widths} pt, anchored at the document's ${DM.pyG(x0 / 65536)} pt` +
-                (nWide ? `; ${nWide} display(s) set another way there get a wide form (${nProbes} more compilation(s) to find where)` : ''));
-            }
-            break;
-          }
-          this.log(`  ${label}: rejected display sample at ${DM.pyG(Number(a.data.source_width) / 65536)} pt: ${reason}`);
-          samples = samples.slice(-2);
-        }
-        if (w + DISPLAY_SAMPLE_STEP_SP >= TEX_MAX_DIMEN_SP) throw new BuildError('no stable affine display topology before \\maxdimen', label);
-        if (!ahead.length) ahead.push(at(next++));
-        s = await ahead.shift()!;
-      }
-    }
+    const final = await sampleDisplays(first, {
+      at: async extraSp => { const d = sampleDir(); return { data: await run(d, extraSp, 1), dir: d }; },
+      probe: async extraSp => run(sampleDir(), extraSp, 1),
+      label, log: this.log, template: this.template,
+    });
 
-    // ── Transforms ──────────────────────────────────────────────────────────
     const data = final.data;
-    const docTag = key.replace(/[^0-9A-Za-z]/g, '').slice(0, 8);
+    await this.transform(data, final.dir, { block: label, docTag: key.replace(/[^0-9A-Za-z]/g, '').slice(0, 8) });
+    writeFileSync(join(dir, 'output.json'), writeSerializerOutput(data));
+    return { data, dir, key, label };
+  }
+
+  /** The passes between the serializer and the encoder, in their order: forget
+   *  unreferenced paragraphs, pictures to SVG (from `dir`'s PDF), strip what the
+   *  wire format does not model, convert classic fonts (first: it gives
+   *  'unknown' fonts real files, which the glyph addressing and provisioning
+   *  that follow then see), address glyphs. Changes `data`. */
+  async transform(data: SerializerOutput, dir: string, o: { block?: string; docTag?: string } = {}): Promise<void> {
     const nDropped = dropUnreferencedParagraphs(data);
-    const nPictures = await convertPictures(data, final.dir, label, docTag);
+    const nPictures = await convertPictures(data, dir, o.block, o.docTag);
     const nStripped = stripUnsupportedNodes(data);
-    // Legacy fonts first: they give 'unknown' fonts real files, which the glyph
-    // addressing and the provisioning that follow then see.
     const nLegacy = normaliseLegacyFontAddressing(data, this.fonts);
     const nRewritten = normaliseGlyphAddressing(data, this.fonts, this.log);
-    writeFileSync(join(dir, 'output.json'), writeSerializerOutput(data));
     const bits = [
       nDropped && `dropped ${nDropped} unreferenced paragraph(s)`, nStripped && `stripped ${nStripped} node(s)`,
       nRewritten && `rewrote ${nRewritten} glyph(s) to PUA`, nLegacy && `converted legacy fonts, ${nLegacy} glyph(s) to PUA`,
       nPictures && `converted ${nPictures} picture(s)`,
     ].filter(Boolean);
-    if (bits.length) this.log(`  ${label}: ${bits.join(', ')}`);
-    return { data, dir, key, label };
+    if (bits.length) this.log(`  ${o.block ?? basename(dir)}: ${bits.join(', ')}`);
+  }
+
+  /** Declare a document compiled elsewhere (already transformed) as one of
+   *  this pipeline's blocks: finishFonts() serves its fonts too. */
+  adopt(key: string, data: SerializerOutput): void { this.blocks.set(key, data); }
+}
+
+// ── Display geometry ────────────────────────────────────────────────────────
+// A display-bearing document is compiled at additive widths W, W + 128 pt, …
+// in a sliding window of three samples: a topology change or a non-affine
+// field rejects only the smallest width, and sampling moves up. Samples are
+// taken in order and each is looked at before the next is needed, but the
+// first two wider ones are compiled at once. A text-only document compiles
+// once.
+
+export interface Sample { data: SerializerOutput; dir: string }
+
+export interface SamplingOptions {
+  /** compile at the document's width + extraSp (a sample) */
+  at(extraSp: number): Promise<Sample>;
+  /** compile at the document's width + extraSp to find where a display
+   *  changes regime (display-model.ts, wideVariants) */
+  probe(extraSp: number): Promise<SerializerOutput | null>;
+  label: string;
+  log: (line: string) => void;
+  /** named in the message when a template reports no width */
+  template?: string;
+}
+
+/** The document of record with its display model: `first` (the document at
+ *  its own width) with rates attached, or a wider sample's when the model
+ *  had to be anchored elsewhere. */
+export async function sampleDisplays(first: Sample, o: SamplingOptions): Promise<Sample> {
+  if (!DM.wantsModel(first.data)) return first;
+  const { label } = o;
+  const ahead: Promise<Sample>[] = [o.at(DISPLAY_SAMPLE_STEP_SP), o.at(2 * DISPLAY_SAMPLE_STEP_SP)];
+  let next = 3;
+  let samples: Sample[] = [];
+  for (let s: Sample = first; ; s = await ahead.shift()!) {
+    if (s !== first && !DM.wantsModel(s.data)) return s;
+    const w = Number(s.data.source_width ?? 0);
+    if (w <= 0) throw new BuildError(`display-bearing template ${o.template ?? ''} did not report a positive source width ` +
+      `(is ${WIDTH_EXTRA_MARK} and the Serializer.note_source_width hook missing?)`, label);
+    if (samples.length && w <= Number(samples[samples.length - 1].data.source_width))
+      throw new BuildError(`display sample width did not increase: ${samples[samples.length - 1].data.source_width}, ${w}`, label);
+    samples.push(s);
+    if (samples.length >= 3) {
+      const [a, b, c] = samples.slice(-3);
+      const [ok, reason] = DM.checkSamples(a.data, b.data, c.data);
+      if (ok) {
+        const widths = [a, b, c].map(x => DM.pyG(Number(x.data.source_width) / 65536)).join(', ');
+        if (a === first) {
+          o.log(`  ${label}: display model stable at ${widths} pt`);
+          return { data: DM.attachModel(a.data, b.data, c.data), dir: a.dir };
+        }
+        // The document's own width fell outside the affine law; it is still the
+        // width the page must match exactly. Displays set another way there get
+        // the wider regime as a second form, from the width TeX switches at –
+        // found by compiling in between.
+        const [data] = DM.anchorModel(first.data, b.data, c.data);
+        const x0 = Number(first.data.source_width);
+        const [nWide, nProbes] = await DM.wideVariants(data, b.data, c.data, async wd => o.probe(wd - x0));
+        o.log(`  ${label}: display model stable at ${widths} pt, anchored at the document's ${DM.pyG(x0 / 65536)} pt` +
+          (nWide ? `; ${nWide} display(s) set another way there get a wide form (${nProbes} more compilation(s) to find where)` : ''));
+        return { data, dir: first.dir };
+      }
+      o.log(`  ${label}: rejected display sample at ${DM.pyG(Number(a.data.source_width) / 65536)} pt: ${reason}`);
+      samples = samples.slice(-2);
+    }
+    if (w + DISPLAY_SAMPLE_STEP_SP >= TEX_MAX_DIMEN_SP) throw new BuildError('no stable affine display topology before \\maxdimen', label);
+    if (!ahead.length) ahead.push(o.at(next++ * DISPLAY_SAMPLE_STEP_SP));
   }
 }

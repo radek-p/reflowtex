@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Reflow TeX – one-command demos.
 #
-# Prerequisites on PATH: lualatex (TeX Live), gs (Ghostscript), dvisvgm, protoc, python3.
-# Python deps: managed automatically in a local .venv – see the `venv` target.
+# Prerequisites on PATH: lualatex (TeX Live), gs (Ghostscript), dvisvgm, Node >= 22.18.
+# Node deps: installed into node_modules/ on first use – see the `node-deps` target.
+# (The tools and tests not yet moved to TypeScript still use a local .venv.)
 
 PORT ?= 8000
 DEMO_OUT := build/demo-site
@@ -20,11 +21,12 @@ ESBUILD_VERSION    = 0.28.2
 VENV := .venv
 PYTHON := $(CURDIR)/$(VENV)/bin/python3
 
-.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all test-web clean vendor-protobuf vendor-inspector venv build-viewer minify-viewer
+.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all test-web clean vendor-protobuf vendor-inspector venv build-viewer minify-viewer
 
 help:
 	@echo "Reflow TeX targets:"
-	@echo "  make venv             create .venv and install the Python deps into it"
+	@echo "  make node-deps        install the Node dependencies (npm ci)"
+	@echo "  make venv             create .venv for the tools not yet in TypeScript"
 	@echo "  make check            verify the pipeline prerequisites are installed"
 	@echo "  make demo             build the vanilla demo site into $(DEMO_OUT)"
 	@echo "  make display-model-smoke  build the narrow display regression site"
@@ -62,41 +64,47 @@ venv:
 	  touch $(VENV)/.deps-installed; \
 	fi
 
-check: venv
+# The build runs on Node, straight from the TypeScript sources (src/pipeline);
+# its dependencies are installed on first use and again when the lock changes.
+node-deps:
+	@if [ ! -d node_modules ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then \
+	  npm ci --no-audit --no-fund; \
+	fi
+
+check: node-deps
 	@ok=1; \
-	for t in lualatex gs dvisvgm protoc python3; do \
+	for t in lualatex kpsewhich gs dvisvgm node; do \
 	  if command -v $$t >/dev/null 2>&1; then echo "  found: $$t"; \
 	  else echo "  MISSING: $$t"; ok=0; fi; \
 	done; \
-	$(PYTHON) -c "import google.protobuf, fontTools" 2>/dev/null \
-	  && echo "  found: python protobuf + fonttools (in $(VENV))" \
-	  || { echo "  MISSING: python protobuf and/or fonttools (run: make venv)"; ok=0; }; \
+	node -e 'const [a, b] = process.versions.node.split(".").map(Number); process.exit(a > 22 || (a === 22 && b >= 18) ? 0 : 1)' \
+	  && echo "  found: Node $$(node --version) (runs TypeScript directly)" \
+	  || { echo "  MISSING: Node >= 22.18 (found $$(node --version))"; ok=0; }; \
 	[ $$ok -eq 1 ] && echo "All prerequisites present." || { echo "Some prerequisites are missing."; exit 1; }
 
-demo: venv
-	$(PYTHON) integrations/vanilla/build.py examples/demo -o $(DEMO_OUT) --title "Reflow TeX demo"
+demo: node-deps
+	node integrations/vanilla/build.ts examples/demo -o $(DEMO_OUT) --title "Reflow TeX demo"
 
-display-model-smoke: venv
-	$(PYTHON) integrations/vanilla/build.py examples/display-model-narrow \
+display-model-smoke: node-deps
+	node integrations/vanilla/build.ts examples/display-model-narrow \
 		-o build/display-model-smoke --title "Display model smoke test"
 
 serve: demo
-	@echo "Serving $(DEMO_OUT) at http://localhost:$(PORT)  (Ctrl-C to stop)"
-	$(PYTHON) -m http.server -d $(DEMO_OUT) $(PORT)
+	node scripts/serve.ts $(DEMO_OUT) $(PORT)
 
-hugo-demo: venv
-	cd integrations/hugo && $(PYTHON) prebuild.py . --demos-dir ../../examples/demo && hugo server --port $(PORT)
+hugo-demo: node-deps
+	cd integrations/hugo && node prebuild.ts . --demos-dir ../../examples/demo && hugo server --port $(PORT)
 
 # Renders AMS' testmath.tex (bundled verbatim, LPPL 1.3c – see
 # examples/testmath/NOTICE.md) with the classic Computer Modern fonts, exercising
 # the Type1→web-font conversion. Output is a self-contained site under build/.
-testmath-demo: venv
-	$(PYTHON) examples/testmath/build.py
-	@echo "Serve it: python3 -m http.server -d build/testmath-site $(PORT)"
+testmath-demo: node-deps
+	node examples/testmath/build.ts
+	@echo "Serve it: node scripts/serve.ts build/testmath-site $(PORT)"
 
-# The actual reflowtex.dev site (website/). build.sh manages its own venv, so
-# this doesn't depend on the `venv` target above. Incremental: only blocks
-# whose content changed since the last run get recompiled.
+# The actual reflowtex.dev site (website/). build.sh installs what it needs
+# itself. Incremental: only blocks whose content changed since the last run
+# get recompiled.
 website:
 	cd website && ./build.sh
 
