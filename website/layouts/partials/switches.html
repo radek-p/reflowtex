@@ -2,9 +2,10 @@
 {{- /*
   Reading options: the companion package's <ReadingButton> (src/companion/
   src/reading.tsx), a round "Aa" button in the corner opening a panel –
-  text size, colour theme, the inspector's entry, and on pages with
+  text size, colour theme, how selected text looks (the browser's
+  highlight or the viewer's even bands), the inspector's entry, and on pages with
   widthControl: true (a full paper) the column width. The width a reader
   picked is saved like the rest, but only pages that offer the control
   apply it (<html data-width-control>, see baseof.html).
 */ -}}
-<div data-rtx="reading-button"{{ if .Params.widthControl }} data-width="true"{{ end }}></div>
+<div data-rtx="reading-button" data-selection="true"{{ if .Params.widthControl }} data-width="true"{{ end }}></div>

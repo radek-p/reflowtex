@@ -12,6 +12,7 @@
 import { ZOOM } from './engine/core.js';
 import { init } from './runtime/init.js';
 import { installHost } from './host/host.ts';
+import { SELECTION_CSS, installSelection } from './host/selection.ts';
 // ── end of imports
 
 // The viewer's own styles: what it draws itself (margin notes, the unit
@@ -39,9 +40,10 @@ export function installViewerStyles() {
            .latex-block svg .latex-link colour rule, which is also !important. */
         .latex-block svg .latex-link.latex-action { fill: transparent !important; }
       }
-    `;
+    ` + SELECTION_CSS;
     document.head.appendChild(st);
 }
 
 installHost();
+installSelection();
 document.addEventListener('DOMContentLoaded', init);

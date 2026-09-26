@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 8e7d8ef43c8aa55760bb34da0009c7e4f77dd41e1583642b2007406c77fa7884
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 48621598b315ca47867ab173c0f3465b79aa992fdffde54d0d19a6b354b17542
 'use strict';
 "use strict";
 (() => {
@@ -1828,8 +1828,14 @@
     const m = live.get(id);
     return m && { id: m.id, classes: m.classes };
   }
-  function repaint(blocks2) {
-    for (const d of blocks2) {
+  function nodesOf(r) {
+    const data = blockByKey(r.block);
+    if (!data) return null;
+    const ix = glyphIndex(data.doc), from = Math.max(0, r.from), to = Math.min(ix.nodes.length - 1, r.to);
+    return { data, nodes: ix.nodes.slice(from, to + 1) };
+  }
+  function repaint(blocks3) {
+    for (const d of blocks3) {
       if (!d.el.isConnected) continue;
       markDirty(d.cache);
       paintVisibleNow(d.fontInfo, d.cache);
@@ -1909,6 +1915,51 @@
     return ms.map(liveHandle);
   }
 
+  // src/host/selection.ts
+  var selected = /* @__PURE__ */ new Set();
+  var blocks = /* @__PURE__ */ new Set();
+  var selectedGlyph = (n) => selected.has(n);
+  function bandsIn(el) {
+    const at = el.closest("[data-latex-selection]");
+    return !!at && at.getAttribute("data-latex-selection") === "bands";
+  }
+  function update() {
+    frame = 0;
+    const next = /* @__PURE__ */ new Set(), nextBlocks = /* @__PURE__ */ new Set();
+    const sel = getSelection();
+    if (sel && !sel.isCollapsed && sel.rangeCount) {
+      for (let i = 0; i < sel.rangeCount; i++) {
+        for (const r of rangesOf(sel.getRangeAt(i))) {
+          const at = nodesOf(r);
+          if (!at || !bandsIn(at.data.el)) continue;
+          nextBlocks.add(at.data);
+          for (const n of at.nodes) next.add(n);
+        }
+      }
+    }
+    if (next.size === selected.size && [...next].every((n) => selected.has(n))) return;
+    const touched = /* @__PURE__ */ new Set([...blocks, ...nextBlocks]);
+    selected = next;
+    blocks = nextBlocks;
+    repaint(touched);
+  }
+  var frame = 0;
+  var schedule = () => {
+    if (!frame) frame = requestAnimationFrame(update);
+  };
+  function installSelection() {
+    document.addEventListener("selectionchange", schedule);
+    new MutationObserver(schedule).observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ["data-latex-selection"] });
+  }
+  var SELECTION_CSS = `
+  /* The selection as bands (host/selection.ts): the browser's highlight
+     hidden in the text, a band per line drawn under it instead. */
+  [data-latex-selection="bands"] .latex-block :is(text, tspan):not([data-latex-selection="native"] *)::selection {
+    background: transparent;
+  }
+  .latex-block rect.latex-selection { fill: var(--latex-selection-color, Highlight); }
+`;
+
   // src/engine/paint.js
   function svgEl(tag, attrs) {
     const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -1946,6 +1997,7 @@
     const stack = [];
     const linkRuns = /* @__PURE__ */ new Map();
     const markRuns = /* @__PURE__ */ new Map();
+    let selRun = null;
     const extend = (runs, key, el, x, n, y) => {
       const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
       const r = runs.get(key);
@@ -2039,6 +2091,17 @@
         if (el.dataset.link && !stack.length) extend(linkRuns, el.dataset.link, el, x, n, y);
         if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
         if (live3 && !stack.length) for (const id of live3) extend(markRuns, id, el, x, n, y);
+        if (!stack.length && selectedGlyph(n)) {
+          const em = fi?.size_px ?? 12, x1 = x + gW(n) * SP_TO_PX;
+          const top = Math.min(y - 0.8 * em, y - gH(n) * SP_TO_PX), bottom = Math.max(y + 0.3 * em, y + gD(n) * SP_TO_PX);
+          if (!selRun) selRun = { x0: x, x1, top, bottom };
+          else {
+            selRun.x0 = Math.min(selRun.x0, x);
+            selRun.x1 = Math.max(selRun.x1, x1);
+            selRun.top = Math.min(selRun.top, top);
+            selRun.bottom = Math.max(selRun.bottom, bottom);
+          }
+        }
       },
       // The references' extents on the line just drawn; starts afresh.
       takeLinkRuns() {
@@ -2050,6 +2113,11 @@
         const runs = [...markRuns.entries()];
         markRuns.clear();
         return runs;
+      },
+      takeSelectionRun() {
+        const r = selRun;
+        selRun = null;
+        return r;
       },
       // A glyph whose font could not be loaded: draw its TeX metric boxes – the
       // advance width by the height above the baseline, and by the depth below –
@@ -2362,7 +2430,7 @@
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
     const used = /* @__PURE__ */ new Set();
     const sink = reconcileSink(dom.byNode, used, stats, cache);
-    const linkRuns = [], markRuns = [];
+    const linkRuns = [], markRuns = [], selRuns = [];
     while (s.pairs.length < L.lines.length) {
       const g = svgEl("g", { "aria-hidden": "true", style: "user-select:none;pointer-events:none" });
       const text = svgEl("text", {});
@@ -2396,9 +2464,12 @@
       );
       linkRuns.push(...sink.takeLinkRuns());
       markRuns.push(...sink.takeMarkRuns());
+      const sel = sink.takeSelectionRun();
+      if (sel) selRuns.push(sel);
     }
     paintLinkHits(s, linkRuns);
     paintMarkBands(s, markRuns, cache);
+    paintSelectionBands(s, selRuns);
     if (s.live) {
       for (const el of s.live) if (!used.has(el)) {
         el.remove();
@@ -2451,6 +2522,24 @@
       if (m.classes) rect.dataset.mark = m.classes;
       if (m.id) rect.dataset.rtxId = m.id;
       rect.setAttribute("fill", "transparent");
+      return rect;
+    }));
+  }
+  function paintSelectionBands(s, runs) {
+    if (!runs.length && !s.selBands) return;
+    if (!s.selBands) {
+      s.selBands = svgEl("g", { "aria-hidden": "true", style: "pointer-events:none" });
+      const first = s.pairs.find((p) => p.attached);
+      s.svg.insertBefore(s.selBands, first ? first.g : null);
+    }
+    s.selBands.replaceChildren(...runs.map((r) => {
+      const rect = svgEl("rect", {
+        x: r.x0,
+        y: r.top,
+        width: Math.max(0, r.x1 - r.x0),
+        height: Math.max(0, r.bottom - r.top)
+      });
+      rect.setAttribute("class", "latex-selection");
       return rect;
     }));
   }
@@ -3480,13 +3569,13 @@
   var records = /* @__PURE__ */ new Set();
   var byBox = /* @__PURE__ */ new WeakMap();
   var pending = /* @__PURE__ */ new Set();
-  var frame = 0;
+  var frame2 = 0;
   function relayoutSoon(owner) {
     if (!owner.relayout) return;
     pending.add(owner.relayout);
-    if (frame) return;
-    frame = requestAnimationFrame(() => {
-      frame = 0;
+    if (frame2) return;
+    frame2 = requestAnimationFrame(() => {
+      frame2 = 0;
       const fns = [...pending];
       pending.clear();
       for (const fn of fns) fn();
@@ -4287,7 +4376,7 @@
     }
   };
   var blockKeyOf = (el) => el && blockOf(el)?.key || "";
-  var blocks = [];
+  var blocks2 = [];
   var byEl = /* @__PURE__ */ new WeakMap();
   function blockOf(el) {
     let b = byEl.get(el);
@@ -4310,11 +4399,11 @@
     liveMarks: (at) => liveMarks(at),
     colorMaps: () => getColorMaps(),
     setColorMaps: (maps) => setColorMaps(maps),
-    blocks: () => blocks.slice(),
-    block: (el) => blocks.includes(byEl.get(el)) ? byEl.get(el) : void 0,
-    instances: (query) => blocks.flatMap((b) => b.instances(query)),
+    blocks: () => blocks2.slice(),
+    block: (el) => blocks2.includes(byEl.get(el)) ? byEl.get(el) : void 0,
+    instances: (query) => blocks2.flatMap((b) => b.instances(query)),
     find: (id) => {
-      const b = blocks.find((b2) => id.startsWith(b2.key + "/"));
+      const b = blocks2.find((b2) => id.startsWith(b2.key + "/"));
       return b && b.find(id);
     },
     async mount(el) {
@@ -4325,7 +4414,7 @@
     },
     onBlock(fn) {
       blockListeners.add(fn);
-      for (const b of blocks) fn(b);
+      for (const b of blocks2) fn(b);
       return () => {
         blockListeners.delete(fn);
       };
@@ -4334,14 +4423,14 @@
   function unregisterBlock(el) {
     const b = byEl.get(el);
     if (!b) return;
-    const i = blocks.indexOf(b);
-    if (i >= 0) blocks.splice(i, 1);
+    const i = blocks2.indexOf(b);
+    if (i >= 0) blocks2.splice(i, 1);
     byEl.delete(el);
   }
   function registerBlock(data) {
     const b = blockOf(data.el);
-    if (!b || blocks.includes(b)) return;
-    blocks.push(b);
+    if (!b || blocks2.includes(b)) return;
+    blocks2.push(b);
     for (const fn of [...blockListeners]) {
       try {
         fn(b);
@@ -4937,25 +5026,25 @@
     watchFonts();
   }
   async function init() {
-    const blocks2 = [...document.querySelectorAll("[data-nodelist-b64]")];
-    if (blocks2.length === 0) return;
+    const blocks3 = [...document.querySelectorAll("[data-nodelist-b64]")];
+    if (blocks3.length === 0) return;
     const tStart = performance.now();
     installPage();
     let idx = 0, segPainted = 0, segTotal = 0;
-    for (const el of blocks2) {
+    for (const el of blocks3) {
       try {
         const t = await renderOnce(el);
         if (!t) continue;
         segPainted += t.segPainted;
         segTotal += t.segTotal;
-        debugLog(`[latex-viewer] block ${++idx}/${blocks2.length}: ${t.total.toFixed(1)} ms (decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) – ${t.segPainted}/${t.segTotal} segments painted`);
+        debugLog(`[latex-viewer] block ${++idx}/${blocks3.length}: ${t.total.toFixed(1)} ms (decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) – ${t.segPainted}/${t.segTotal} segments painted`);
       } catch (e) {
         el.textContent = `Render error: ${e.message}`;
         console.error(e);
       }
     }
     const segDeferred = segTotal - segPainted;
-    debugLog(`[latex-viewer] ${blocks2.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms · ${segPainted}/${segTotal} segments painted` + (segDeferred ? `, ${segDeferred} deferred (painted on scroll)` : ""));
+    debugLog(`[latex-viewer] ${blocks3.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms · ${segPainted}/${segTotal} segments painted` + (segDeferred ? `, ${segDeferred} deferred (painted on scroll)` : ""));
     watchFonts();
   }
   function destroyBlock(el) {
@@ -5003,9 +5092,10 @@
            .latex-block svg .latex-link colour rule, which is also !important. */
         .latex-block svg .latex-link.latex-action { fill: transparent !important; }
       }
-    `;
+    ` + SELECTION_CSS;
     document.head.appendChild(st);
   }
   installHost();
+  installSelection();
   document.addEventListener("DOMContentLoaded", init);
 })();

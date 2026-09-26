@@ -39,7 +39,7 @@ export { Accordion, findPane } from './kinds/accordion.tsx';
 export { LeanProof, LeanTheorem, LeanCode, highlightLean } from './kinds/lean.tsx';
 export { Hint } from './kinds/hint.tsx';
 export { InlineButton, PILL, Popover } from './controls.tsx';
-export { reading, scopedReading, ReadingOptions, ReadingButton, PreviewOptions, THEMES, WIDTHS,
+export { reading, scopedReading, ReadingOptions, ReadingButton, PreviewOptions, THEMES, WIDTHS, SELECTIONS,
          type Theme, type ReadingState, type ReadingOptionsProps } from './reading.tsx';
 export { registerElement, mountAll } from './mount.ts';
 export { Highlighter, highlight, erase, HIGHLIGHT_COLOURS, type HighlighterProps } from './highlighter.tsx';

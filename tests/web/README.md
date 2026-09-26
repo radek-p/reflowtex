@@ -58,6 +58,7 @@ width by its `.latex-block`'s style, then wait for the resize to settle
 | Cross-references: `\eqref` goes to its anchor | `links.spec.ts` |
 | Live text: `reflowtex.setText`, and back to the default | `live.spec.ts` |
 | Live marks and the highlighter: selection to ranges, bands through a reflow, two blocks, saved and restored, re-found by text, eraser, recolour | `highlighter.spec.ts` |
+| The selection as bands (flag): off by default, even bands per line, through a reflow, a block kept native, beside marks, the reader's switch | `selection.spec.ts` |
 | Widgets: drawn, split across lines, `invalidate()` | `live.spec.ts`, `regressions.spec.ts` |
 | Asides: query, natural width, `render`, `anchor()`, `reflowtex:layout` | `asides.spec.ts` |
 | Side notes: in the margin on their line, no overlap, marks without a margin | `asides.spec.ts` |

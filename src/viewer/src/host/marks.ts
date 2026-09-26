@@ -62,7 +62,7 @@ type GNode = { type?: string; char?: number; text?: string; stream?: number;
               children?: GNode[]; pre?: GNode[]; post?: GNode[]; replace?: GNode[] };
 type Item = { kind?: string; para?: number; box?: GNode; stream?: number };
 type Doc = { paragraphs?: { nodes?: GNode[] }[]; content?: Item[]; streams?: { content?: Item[] }[] };
-interface BlockData { doc: Doc; el: HTMLElement; fontInfo: unknown; cache: { blockKey?: string } }
+export interface BlockData { doc: Doc; el: HTMLElement; fontInfo: unknown; cache: { blockKey?: string } }
 
 interface GlyphIndex {
     nodes: GNode[];
@@ -212,9 +212,18 @@ export function liveInfo(id: string): Mark | undefined {
     return m && { id: m.id, classes: m.classes };
 }
 
+/** The glyph nodes of a range (resolved as addMark does), and the block's
+ *  data; null when it is not on the page. For selection.ts. */
+export function nodesOf(r: TextRange): { data: BlockData; nodes: GNode[] } | null {
+    const data = blockByKey(r.block);
+    if (!data) return null;
+    const ix = glyphIndex(data.doc), from = Math.max(0, r.from), to = Math.min(ix.nodes.length - 1, r.to);
+    return { data, nodes: ix.nodes.slice(from, to + 1) };
+}
+
 // Draw again the lines that are drawn (the rest will be, with the marks,
 // when they are reached): the block's, and every part of it shown elsewhere.
-function repaint(blocks: Iterable<BlockData>) {
+export function repaint(blocks: Iterable<BlockData>) {
     for (const d of blocks) {
         if (!d.el.isConnected) continue;
         markDirty(d.cache);

@@ -24,12 +24,15 @@
 import { signal, useSignal, type Signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 
-const KEYS = { theme: 'reflowtex-theme', zoom: 'reflowtex-zoom', width: 'reflowtex-width' };
+const KEYS = { theme: 'reflowtex-theme', zoom: 'reflowtex-zoom', width: 'reflowtex-width', selection: 'reflowtex-selection' };
 const ZOOM = { min: 0.5, max: 3, step: 1.1 };
 
 export interface Theme { name: string; label?: string }
 export const THEMES: Theme[] = [{ name: 'light' }, { name: 'dark' }, { name: 'sepia' }, { name: 'contrast' }];
 export const WIDTHS = ['auto', 'narrow', 'normal', 'wide'];
+/** How selected text looks: the browser's own highlight, or the viewer's
+ *  even bands (data-latex-selection on <html>; the viewer's host/selection.ts). */
+export const SELECTIONS = [{ name: 'native', label: 'Browser' }, { name: 'bands', label: 'Even' }];
 
 const load = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
@@ -55,13 +58,18 @@ export interface ReadingState {
     setTheme(t: string): void;
     zoomBy(dir: -1 | 0 | 1): void;
     setWidth(w: string): void;
+    /** How selected text looks ('native' or 'bands'); a page's only. */
+    selection?: Signal<string>;
+    setSelection?(s: string): void;
 }
 
 /** The reader's choices, applied to the page as they change. */
-export const reading: ReadingState & { setZoom(z: number): void } = {
+export const reading: ReadingState & { setZoom(z: number): void; selection: Signal<string>; setSelection(s: string): void } = {
     theme: signal(initialTheme()),
     zoom: signal(initialZoom()),
     width: signal(html().getAttribute('data-width') || load(KEYS.width) || 'auto'),
+    // The reader's choice, else the page's default (its data-latex-selection).
+    selection: signal(load(KEYS.selection) || html().getAttribute('data-latex-selection') || 'native'),
     /** The themes a page offers (the class names its CSS styles). */
     themes: THEMES,
 
@@ -91,7 +99,14 @@ export const reading: ReadingState & { setZoom(z: number): void } = {
         reading.width.value = w;
         resize();
     },
+    setSelection(sel: string) {
+        html().setAttribute('data-latex-selection', sel);
+        save(KEYS.selection, sel);
+        reading.selection!.value = sel;
+    },
 };
+// A choice the reader made before stands on every page.
+if (load(KEYS.selection)) html().setAttribute('data-latex-selection', reading.selection!.value);
 
 // The theme set from elsewhere (the inspector's Colours view, a page's own
 // script) by the same convention, data-theme on <html>: the options show it.
@@ -135,6 +150,9 @@ export interface ReadingOptionsProps {
     state?: ReadingState;
     /** Offer the column width (a page that lets its column change). */
     width?: boolean;
+    /** Offer how selected text looks: the browser's highlight or even
+     *  bands (a page's options only). */
+    selection?: boolean;
     /** Offer the inspector (when the page has it). Default true. */
     inspect?: boolean;
     themes?: Theme[];
@@ -144,7 +162,7 @@ export interface ReadingOptionsProps {
 }
 
 /** The controls: text size, colour theme, (column width), (inspector). */
-export function ReadingOptions({ state = reading, width = false, inspect = true, themes = state.themes, onDone, class: cls }: ReadingOptionsProps) {
+export function ReadingOptions({ state = reading, width = false, selection = false, inspect = true, themes = state.themes, onDone, class: cls }: ReadingOptionsProps) {
     const inspector = (window.reflowtex as any)?.inspector;
     return (
         <div class={cls ? `rtx-reading ${cls}` : 'rtx-reading'}>
@@ -167,6 +185,14 @@ export function ReadingOptions({ state = reading, width = false, inspect = true,
                     {WIDTHS.map(w => (
                         <button type="button" role="radio" data-w={w} aria-checked={state.width.value === w}
                                 onClick={() => state.setWidth(w)}>{title(w)}</button>))}
+                </div>
+            </div>}
+            {selection && state.selection && state.setSelection && <div class="rtx-reading-row">
+                <p class="rtx-reading-caption" id="rtx-selection-label">Selection</p>
+                <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-selection-label">
+                    {SELECTIONS.map(o => (
+                        <button type="button" role="radio" data-s={o.name} aria-checked={state.selection!.value === o.name}
+                                onClick={() => state.setSelection!(o.name)}>{o.label}</button>))}
                 </div>
             </div>}
             {inspect && inspector && <div class="rtx-reading-row">

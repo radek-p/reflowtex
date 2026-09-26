@@ -186,7 +186,13 @@ card set into the page. Declare them in HTML, and the companion draws them:
 <div data-rtx="reading-options"></div>                     <!-- the card -->
 ```
 
-Or use the components: `<ReadingButton width inspect themes />` and
+With `data-selection="true"` they also offer how selected text looks:
+*Browser*, the browser's own highlight, or *Even*, the viewer's bands (its
+`data-latex-selection="bands"`: one even rectangle per line). The choice is
+`data-latex-selection` on `<html>`, remembered as `reflowtex-selection`; a
+page's own `data-latex-selection` is the default until the reader picks.
+
+Or use the components: `<ReadingButton width selection inspect themes />` and
 `<ReadingOptions … />`. The state is `reading`, a set of signals with
 setters: `reading.theme`, `.zoom` and `.width`, and `reading.setTheme(t)`,
 `.zoomBy(±1 | 0)` and `.setWidth(w)`. The page follows it through `<html>`:

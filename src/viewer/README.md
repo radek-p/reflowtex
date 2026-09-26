@@ -52,6 +52,7 @@ viewport.
 |---|---|
 | `data-latex-width` | layout width in pt (default: the element's own pixel width ÷ 2); `natural`: the width of its text set on one line, like an `\hbox`, which the viewer also gives the element as its CSS width – for a word in the page's own HTML |
 | `data-align` | `justify` (default) · `left` · `right` · `center` |
+| `data-latex-selection` | How selected text looks, on `<html>` or a block (the nearest wins): `native` (default), the browser's own highlight, glyph by glyph; `bands`, the viewer's, drawn as a mark's band is: one even rect per line (`rect.latex-selection`, coloured `var(--latex-selection-color, Highlight)`), spaces included, over marks and under the text. The selection itself stays the browser's (copy, keyboard, `getSelection()`); only its look changes. [host/selection.ts](src/host/selection.ts) |
 | `data-color-map` | name of an entry in the page's `#latex-color-maps` island to recolour this block with (see Theming below); omitted = TeX/tikz colours render as-is |
 | `data-display-min-space` | Minimum space (pt) kept between two pieces of a display – an align's columns, or an equation and its number – as the measure decreases, before the display freezes and scrolls (default `10`; `0` permits zero). A display's *outer* space (centring, margin) is not covered by this and always closes to zero first |
 | `data-display-overflow-tolerance` | Tiny horizontal overhang ignored before adding a display scrollbar (default `2` CSS px) |

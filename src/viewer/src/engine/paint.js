@@ -12,6 +12,7 @@ import { registerLinkGlyph, restoreLinkStates } from '../host/links.js';
 import { colorFill } from '../runtime/colour.js';
 import { renderPiece } from '../host/inline.ts';
 import { applyMark, liveInfo, liveOn, registerGlyph } from '../host/marks.ts';
+import { selectedGlyph } from '../host/selection.ts';
 // ── end of imports
 
 // ── SVG renderer ──────────────────────────────────────────────────────────────
@@ -73,6 +74,7 @@ export function reconcileSink(byNode, used, stats, cache) {
     const stack = [];
     const linkRuns = new Map();   // data-link key → { el, x0, x1, top, bottom }
     const markRuns = new Map();   // mark index, or live mark id → { el, x0, x1, top, bottom }
+    let selRun = null;            // the selection on this line, drawn as a band (host/selection.ts)
     const extend = (runs, key, el, x, n, y) => {
         const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
         const r = runs.get(key);
@@ -163,10 +165,21 @@ export function reconcileSink(byNode, used, stats, cache) {
             // And of each mark, for its band (see paintMarkBands).
             if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
             if (live && !stack.length) for (const id of live) extend(markRuns, id, el, x, n, y);
+            // And of the selection, when it is drawn as bands: of one height
+            // for one size of type (0.8 em above the baseline, 0.3 below),
+            // so that its lines are even, grown only for a glyph taller.
+            if (!stack.length && selectedGlyph(n)) {
+                const em = fi?.size_px ?? 12, x1 = x + gW(n) * SP_TO_PX;
+                const top = Math.min(y - 0.8 * em, y - gH(n) * SP_TO_PX), bottom = Math.max(y + 0.3 * em, y + gD(n) * SP_TO_PX);
+                if (!selRun) selRun = { x0: x, x1, top, bottom };
+                else { selRun.x0 = Math.min(selRun.x0, x); selRun.x1 = Math.max(selRun.x1, x1);
+                       selRun.top = Math.min(selRun.top, top); selRun.bottom = Math.max(selRun.bottom, bottom); }
+            }
         },
         // The references' extents on the line just drawn; starts afresh.
         takeLinkRuns() { const runs = [...linkRuns.values()]; linkRuns.clear(); return runs; },
         takeMarkRuns() { const runs = [...markRuns.entries()]; markRuns.clear(); return runs; },
+        takeSelectionRun() { const r = selRun; selRun = null; return r; },
         // A glyph whose font could not be loaded: draw its TeX metric boxes – the
         // advance width by the height above the baseline, and by the depth below –
         // as two outlined rects, so the missing ink's place and size are visible.
@@ -522,7 +535,7 @@ export function paintSegment(fontInfo, cache, i) {
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
     const used  = new Set();
     const sink  = reconcileSink(dom.byNode, used, stats, cache);
-    const linkRuns = [], markRuns = [];
+    const linkRuns = [], markRuns = [], selRuns = [];
 
     // Grow/shrink the pool of per-line group pairs. Detached pairs are kept for
     // later regrowth; their stale children are swept by the live set.
@@ -554,9 +567,12 @@ export function paintSegment(fontInfo, cache, i) {
                     fillOrder ? fillRatio : ratio, er, fillOrder || 0);
         linkRuns.push(...sink.takeLinkRuns());
         markRuns.push(...sink.takeMarkRuns());
+        const sel = sink.takeSelectionRun();
+        if (sel) selRuns.push(sel);
     }
     paintLinkHits(s, linkRuns);
     paintMarkBands(s, markRuns, cache);
+    paintSelectionBands(s, selRuns);
 
     // Detach this segment's elements no longer rendered (disc paths toggled off,
     // spaces consumed by new break points). They stay cached in byNode.
@@ -626,6 +642,24 @@ export function paintMarkBands(s, runs, cache) {
         if (m.classes) rect.dataset.mark = m.classes;
         if (m.id) rect.dataset.rtxId = m.id;
         rect.setAttribute('fill', 'transparent');     // an attribute: any page rule wins
+        return rect;
+    }));
+}
+
+// The selection, when drawn as bands (host/selection.ts): one rect per
+// line, class latex-selection, over the marks' bands and under the text.
+export function paintSelectionBands(s, runs) {
+    if (!runs.length && !s.selBands) return;
+    if (!s.selBands) {
+        s.selBands = svgEl('g', { 'aria-hidden': 'true', style: 'pointer-events:none' });
+        // After the marks' bands (and link hits), before the first line.
+        const first = s.pairs.find(p => p.attached);
+        s.svg.insertBefore(s.selBands, first ? first.g : null);
+    }
+    s.selBands.replaceChildren(...runs.map(r => {
+        const rect = svgEl('rect', { x: r.x0, y: r.top, width: Math.max(0, r.x1 - r.x0),
+                                     height: Math.max(0, r.bottom - r.top) });
+        rect.setAttribute('class', 'latex-selection');
         return rect;
     }));
 }
