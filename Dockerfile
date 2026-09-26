@@ -64,19 +64,36 @@ RUN tlmgr update --self && \
 # out to for reading the externalised TikZ picture PDFs it converts to SVG.
 # Ghostscript itself normalises ICC-coloured included PDFs to DeviceRGB before
 # dvisvgm sees them; without that pass, Figma fills are silently lost.
-# nodejs + npm: the whole build runs on Node (22.18 or later: it runs the
-# TypeScript sources directly); its packages are installed by `make
-# node-deps`, and the tests' browsers (Playwright) when they are set up.
+# Node comes from nodejs.org, below, not from here.
 # Poppler's pdftotext: tools/pageless-pdf/check-against-paged.ts.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ghostscript \
       poppler-utils \
       mupdf-tools \
-      nodejs \
-      npm \
       git \
       make \
     && rm -rf /var/lib/apt/lists/*
+
+# ── Node ─────────────────────────────────────────────────────────────────────
+# The whole build runs on Node (22.18 or later), which runs the TypeScript
+# sources directly; its packages are installed by `make node-deps`, and the
+# tests' browsers (Playwright) when they are set up. Node's own build, pinned
+# and checked against its SHASUMS256, not Debian's nodejs package: Debian
+# builds Node without its TypeScript support, and every .ts fails with
+# ERR_UNKNOWN_FILE_EXTENSION. The last line fails the image if that support
+# is missing.
+ARG NODE_VERSION=24.14.1
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) arch=x64 ;; arm64) arch=arm64 ;; *) echo "no Node build for this architecture" >&2; exit 1 ;; \
+    esac; \
+    base="https://nodejs.org/dist/v${NODE_VERSION}"; file="node-v${NODE_VERSION}-linux-${arch}.tar.gz"; \
+    curl -fsSL -o "/tmp/${file}" "${base}/${file}"; \
+    curl -fsSL "${base}/SHASUMS256.txt" | grep " ${file}$" | (cd /tmp && sha256sum -c -); \
+    tar -xzf "/tmp/${file}" -C /usr/local --strip-components=1 --no-same-owner \
+      --exclude CHANGELOG.md --exclude LICENSE --exclude README.md; \
+    rm -f "/tmp/${file}"; \
+    node -e 'if (!process.features.typescript) { console.error("Node without TypeScript support"); process.exit(1); }'
 
 # ── Hugo ─────────────────────────────────────────────────────────────────────
 # Needed for website/build.sh (the reflowtex.dev site) and `make hugo-demo`.
