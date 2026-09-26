@@ -1,0 +1,18 @@
+{
+  // Type checking only: Node runs the .ts files directly (type stripping), so
+  // nothing is emitted, and the code keeps to syntax that can simply be erased.
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/pipeline/**/*.ts", "tests/unit/**/*.ts", "tests/parity/**/*.ts"]
+}

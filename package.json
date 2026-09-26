@@ -1,0 +1,22 @@
+{
+  "name": "reflowtex",
+  "private": true,
+  "description": "Reflow TeX: LaTeX typeset by LuaTeX, re-broken in the browser. The build pipeline (src/pipeline, TypeScript run directly by Node).",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "node --test \"tests/unit/**/*.test.ts\"",
+    "test:parity": "node --test \"tests/parity/**/*.test.ts\""
+  },
+  "dependencies": {
+    "protobufjs": "^8.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2"
+  }
+}
