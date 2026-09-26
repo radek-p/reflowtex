@@ -74,6 +74,9 @@ picture of the difference.
 make render-report      # after a run; http://localhost:8010/
 ```
 
+Whole documents (testmath) are in it once `make test-render-all` has run
+them: every result there is shows, from whichever run made it.
+
 A page for your own machine (it is not published): for each test, TeX's
 pageless PDF beside the page the browser reflowed, each glyph or rule that
 does not match boxed in red on both sides. The **error thresholds**, above
