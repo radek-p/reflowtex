@@ -15,13 +15,15 @@ tolerance = 0.05
 # lualatex passes (2 or 3 for references).
 passes = 2
 
-# Each case has a section with its ceilings: `tolerance` (and
-# `rule_tolerance` where it draws rules) is the worst it attains today,
+# Each case has a section with its ceilings, the worst it attains today
 # across all its widths, so that it can only get better – when a run shows
-# it doing better, lower them to match. `known` marks a case
-# that fails for a reason on record: it runs as an expected failure, and
-# when it passes again the suite says so, to have the mark taken off. The document itself is
-# cases/<name>.tex, unless `file` names another (from the repository root).
+# it doing better, lower them to match: `tolerance`, `rule_tolerance` where
+# it draws rules (the farthest a corner of one is from TeX's), and
+# `rules_missing` (0 unless given), how many of TeX's rules the browser may
+# leave out. `known` marks a case that fails for a reason on record: it
+# runs as an expected failure, and when it passes again the suite says so,
+# to have the mark taken off. The document itself is cases/<name>.tex,
+# unless `file` names another (from the repository root).
 
 # Worst attained 2026-09-26.
 
@@ -33,14 +35,18 @@ widths = [0]
 slow = true
 # All 41 566 glyphs found; 165 rules.
 tolerance = 0.092
-rule_tolerance = 0.4
+rule_tolerance = 0.005
+# TeX's rules the browser may leave out: the class is `draft`, and TeX
+# marks two overfull lines (verbatim, beside the column) with
+# \overfullrule's black box; the viewer draws no such marks.
+rules_missing = 2
 
 [alignments]
 tolerance = 0.012
 
 [displays]
 tolerance = 0.01
-rule_tolerance = 0.004
+rule_tolerance = 0.005
 
 [footnotes]
 tolerance = 0.009
@@ -57,3 +63,7 @@ tolerance = 0.014
 
 [paragraph]
 tolerance = 0.009
+
+[rules]
+tolerance = 0.009
+rule_tolerance = 0.004

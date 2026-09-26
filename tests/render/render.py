@@ -24,7 +24,7 @@ TOOLS = REPO / 'tools' / 'pageless-pdf'
 BUILD = HERE / 'build'
 PY = sys.executable
 # Each test's worst offsets, kept on pytest's config for the summary
-# (conftest.py): a list of (test id, case, (glyph, rule)).
+# (conftest.py): a list of (test id, case, (glyph, rule), rules not drawn).
 WORST = pytest.StashKey[list]()
 
 
@@ -123,13 +123,14 @@ class Quiet(http.server.SimpleHTTPRequestHandler):
 
 def worst(v: dict) -> tuple[float, float | None]:
     """The largest offset (pt, across or down) of a matched glyph, and of a
-    matched rule (None when the browser drew no rules)."""
+    matched rule – the farthest one of its corners is from TeX's (None when
+    the browser drew no rules)."""
     g = max((max(abs(m['dx']), abs(m['dy'])) for m in v['matched']), default=0.0)
-    rs = [max(abs(r['dx']), abs(r['dy'])) for r in v['rules'] if 'dx' in r]
+    rs = [r['off'] for r in v['rules'] if 'off' in r]
     return g, (max(rs) if rs else None)
 
 
-def problems(v: dict, tolerance: float, rule_tolerance: float | None = None) -> list[str]:
+def problems(v: dict, tolerance: float, rule_tolerance: float | None = None, rules_missing: int = 0) -> list[str]:
     """What is wrong in a comparison, in words; empty when it passes."""
     out = []
     g = v['glyphs']
@@ -148,10 +149,14 @@ def problems(v: dict, tolerance: float, rule_tolerance: float | None = None) -> 
     unmatched_rules = [r for r in v['rules'] if r.get('unmatched')]
     if unmatched_rules:
         out.append(f'{len(unmatched_rules)} rules drawn by the browser are not in the PDF')
+    if len(v.get('rules_missing', [])) > rules_missing:
+        sample = ', '.join(f"at y {r['y']}" for r in v['rules_missing'][:5])
+        out.append(f"{len(v['rules_missing'])} rules in the PDF the browser did not draw "
+                   f"({rules_missing} allowed): {sample}")
     rt = tolerance if rule_tolerance is None else rule_tolerance
-    rules_off = sorted((r for r in v['rules'] if 'dx' in r and max(abs(r['dx']), abs(r['dy'])) > rt),
-                       key=lambda r: -max(abs(r['dx']), abs(r['dy'])))
+    rules_off = sorted((r for r in v['rules'] if 'off' in r and r['off'] > rt), key=lambda r: -r['off'])
     if rules_off:
-        sample = ', '.join(f"at y {r['y']} ({r['dx']:+.3f}, {r['dy']:+.3f})" for r in rules_off[:5])
+        sample = ', '.join(f"at y {r['y']} (corners {r['off']:.3f} off; centre {r['dx']:+.3f}, {r['dy']:+.3f})"
+                           for r in rules_off[:5])
         out.append(f'{len(rules_off)} rules off by more than {rt} pt: {sample}')
     return out

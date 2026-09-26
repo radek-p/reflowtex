@@ -18,7 +18,8 @@ geometry departs from TeX's, to a hundredth of a point:
   - horizontal: per text line, the offset at the line's start (protrusion
     or indentation differences) and the slope along the line (a glue or
     expansion ratio that differs from TeX's);
-  - rules: the viewer's rects against the strip's stroked rules.
+  - rules: the viewer's rects against the strip's rules, corner by corner,
+    at any angle.
 
 Writes vector.json (every matched glyph's residual, the per-line table,
 the rule table) and prints the lines that are off. This is the check to
@@ -41,8 +42,8 @@ PT_PER_BP = 72.27 / 72
 
 
 def trace_strip(pdf: Path, out: Path) -> tuple[list, list]:
-    """Glyphs [(x, y, unicode, font, size)] and rules [(x, top, w, h)] of the
-    strip's single page, in pt, y from the top."""
+    """Glyphs [(x, y, unicode, font, size)] and rules [4×2 array of corners]
+    of the strip's single page, in pt, y from the top."""
     txt = subprocess.run(['mutool', 'trace', str(pdf), '1'], capture_output=True, text=True, check=True).stdout
     out.write_text(txt)
     glyphs, rules = [], []
@@ -55,17 +56,35 @@ def trace_strip(pdf: Path, out: Path) -> tuple[list, list]:
                 x, y = float(g.group(2)), float(g.group(3))
                 glyphs.append(((a * x + c * y + e) * PT_PER_BP, (b * x + d * y + f) * PT_PER_BP,
                                g.group(1), font, trm[3] * PT_PER_BP, trm[0] / trm[3] if trm[3] else 1.0))
-    for m in re.finditer(r'<stroke_path linewidth="([^"]+)"[^>]*transform="([^"]+)">(.*?)</stroke_path>', txt, re.S):
-        lw = float(m.group(1)) * PT_PER_BP
-        a, b, c, d, e, f = [float(v) for v in m.group(2).split()]
+    # Rules: the four corners of what each path paints, at any angle. LuaTeX
+    # strokes a rule along its centre line, lw thick (butt caps; a square
+    # cap reaches lw/2 further), horizontal or vertical as the rule is wide
+    # or tall, and under \rotatebox through a rotating transform; a filled
+    # four-cornered path is taken as it stands.
+    for m in re.finditer(r'<(stroke|fill)_path ([^>]*)>(.*?)</(?:stroke|fill)_path>', txt, re.S):
+        attrs = dict(re.findall(r'(\w+)="([^"]*)"', m.group(2)))
+        a, b, c, d, e, f = [float(v) for v in attrs['transform'].split()]
         pts = [(float(p.group(1)), float(p.group(2)))
                for p in re.finditer(r'<(?:moveto|lineto) x="([^"]+)" y="([^"]+)"', m.group(3))]
-        if len(pts) < 2:
-            continue
-        xs = [(a * x + c * y + e) * PT_PER_BP for x, y in pts]
-        ys = [(b * x + d * y + f) * PT_PER_BP for x, y in pts]
-        # a TeX rule is a stroke along its centre line, lw thick
-        rules.append((min(xs), min(ys) - lw / 2, max(xs) - min(xs), max(ys) - min(ys) + lw))
+        if m.group(1) == 'stroke':
+            if len(pts) != 2:
+                continue
+            (x0, y0), (x1, y1) = pts
+            length = np.hypot(x1 - x0, y1 - y0)
+            if length == 0:
+                continue
+            ux, uy = (x1 - x0) / length, (y1 - y0) / length
+            hw = float(attrs['linewidth']) / 2
+            cap = hw if attrs.get('linecap', '0').split(',')[0] != '0' else 0.0
+            x0, y0, x1, y1 = x0 - ux * cap, y0 - uy * cap, x1 + ux * cap, y1 + uy * cap
+            nx, ny = -uy * hw, ux * hw
+            pts = [(x0 + nx, y0 + ny), (x1 + nx, y1 + ny), (x1 - nx, y1 - ny), (x0 - nx, y0 - ny)]
+        else:
+            if len(pts) == 5 and pts[0] == pts[4]:
+                pts = pts[:4]
+            if len(pts) != 4:
+                continue
+        rules.append(np.array([((a * x + c * y + e) * PT_PER_BP, (b * x + d * y + f) * PT_PER_BP) for x, y in pts]))
     return glyphs, rules
 
 
@@ -158,34 +177,47 @@ def main() -> None:
     for t in sorted(off, key=lambda t: -t['max_abs_dx'])[:25]:
         print(f'  y {t["y"]:9.2f}  start {t["start_dx"]:+.2f}  end {t["end_dx"]:+.2f}  slope {t["slope_pt_per_100pt"]:+.3f}/100pt  {t["text"]!r}')
 
-    # rules: each viewer rect against the nearest strip rule
-    R = np.array(rules) if rules else np.zeros((0, 4))
-    rule_rows = []
+    # rules: each viewer rect against the strip rule whose corners are
+    # nearest. `off` is the farthest any corner of either is from the
+    # other's nearest corner (pt): position, size and angle in one number.
+    # dx/dy are the move between their centres (strip − viewer).
+    def corner_distance(A, B):
+        dd = np.hypot(*(A[:, None, :] - B[None, :, :]).transpose(2, 0, 1))
+        return max(dd.min(1).max(), dd.min(0).max())
+    centres = np.array([q.mean(0) for q in rules]) if rules else np.zeros((0, 2))
+    rule_rows, drawn = [], set()
     for r in dom['rects']:
-        if r['w'] <= 0 or r['h'] <= 0 or len(R) == 0:
+        if r['w'] <= 0 or r['h'] <= 0:
             continue
-        x, y = r['x'] + shift, r['y']
-        dd = np.abs(R[:, :2] - np.array([x, y]))
-        k = int(np.argmin(dd.sum(1)))
-        if dd[k, 0] < 2 and dd[k, 1] < 2:
-            rule_rows.append({'y': round(y, 2), 'dx': round(float(R[k, 0] - x), 3), 'dy': round(float(R[k, 1] - y), 3),
-                              'dw': round(float(R[k, 2] - r['w']), 3), 'dh': round(float(R[k, 3] - r['h']), 3)})
+        V = np.array(r['pts']) + [shift, 0]
+        c = V.mean(0)
+        near = np.where(np.abs(centres - c).max(1) < 2 + np.ptp(V, 0).max() / 2)[0] if len(rules) else []
+        best = min(((corner_distance(V, rules[k]), k) for k in near), default=None)
+        if best and best[0] < 2:
+            off, k = best
+            drawn.add(k)
+            rule_rows.append({'y': round(r['y'], 2), 'x': round(r['x'] + shift, 2), 'off': round(float(off), 3),
+                              'dx': round(float(centres[k, 0] - c[0]), 3), 'dy': round(float(centres[k, 1] - c[1]), 3)})
         else:
-            rule_rows.append({'y': round(y, 2), 'unmatched': True, 'w': round(r['w'], 2), 'h': round(r['h'], 2)})
+            rule_rows.append({'y': round(r['y'], 2), 'unmatched': True, 'w': round(r['w'], 2), 'h': round(r['h'], 2)})
+    # and the rules TeX drew that the browser did not
+    missing = [{'y': round(float(rules[k][:, 1].min()), 2), 'x': round(float(rules[k][:, 0].min()), 2)}
+               for k in range(len(rules)) if k not in drawn]
     rm = [r for r in rule_rows if 'dx' in r]
     if rm:
         a = np.array([(r['dx'], r['dy']) for r in rm])
-        print(f'rules: {len(rm)} matched of {len(rule_rows)} drawn; strip − viewer x sd {a[:, 0].std():.3f}, y sd {a[:, 1].std():.3f}, '
-              f'largest |dx| {np.abs(a[:, 0]).max():.2f}, |dy| {np.abs(a[:, 1]).max():.2f} pt')
-    for r in sorted((r for r in rm if max(abs(r['dx']), abs(r['dy'])) > args.line_tol), key=lambda r: -max(abs(r['dx']), abs(r['dy'])))[:10]:
-        print(f'  rule at y {r["y"]:9.2f}: dx {r["dx"]:+.2f} dy {r["dy"]:+.2f} pt')
+        print(f'rules: {len(rm)} matched of {len(rule_rows)} drawn, {len(missing)} of TeX\'s not drawn; '
+              f'strip − viewer x sd {a[:, 0].std():.3f}, y sd {a[:, 1].std():.3f}, '
+              f'largest corner distance {max(r["off"] for r in rm):.3f} pt')
+    for r in sorted((r for r in rm if r['off'] > args.line_tol), key=lambda r: -r['off'])[:10]:
+        print(f'  rule at y {r["y"]:9.2f}: corners {r["off"]:.2f} pt off, centre dx {r["dx"]:+.2f} dy {r["dy"]:+.2f} pt')
 
     (out / 'vector.json').write_text(json.dumps({
         'hsize_pt': hsize, 'margin_pt': margin, 'window_pt': args.window,
         'glyphs': {'strip': len(P), 'viewer': n_ink, 'matched': len(matched)},
         'vertical': {'mean': round(float(M[:, 1].mean()), 4), 'sd': round(float(M[:, 1].std()), 4),
                      'max_abs': round(float(np.abs(M[:, 1]).max()), 4), 'drift_per_250pt': drift},
-        'lines': table, 'lines_off': off, 'rules': rule_rows,
+        'lines': table, 'lines_off': off, 'rules': rule_rows, 'rules_missing': missing,
         'matched': [{'y': round(G[j]['y'], 2), 'x': round(D[j, 0], 2), 'text': G[j]['text'], 'font': G[j]['font'],
                      'dx': round(dx, 3), 'dy': round(dy, 3)} for (j, i, dx, dy) in matched],
     }, indent=1))

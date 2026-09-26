@@ -86,11 +86,14 @@ after the viewer.
 
 **Geometry first: `vector_compare.py`.** No pixels. `mutool trace` gives
 every glyph and rule in the strip with its origin; `dom_dump.js` gives
-every glyph the viewer drew (tspan x/y) in the same frame. Each viewer glyph
-is matched to the nearest strip glyph within `--window` (0.7pt). Reported:
-the vertical residual along the document (a drift is height lost or gained
-in stacking), per text line the offset at its start and the slope along it
-(a glue or expansion ratio different from TeX's), and the rules. Whatever
+every glyph and rule the viewer drew in the same frame, through any
+transform (`\rotatebox`). Each viewer glyph is matched to the nearest strip
+glyph within `--window` (0.7pt). Reported: the vertical residual along the
+document (a drift is height lost or gained in stacking), per text line the
+offset at its start and the slope along it (a glue or expansion ratio
+different from TeX's), and the rules – each as its four corners, at any
+angle, matched to the strip rule whose corners are nearest, with TeX's
+rules the viewer did not draw. Whatever
 it reports is geometry, not rasterisation, so run it first.
 
 **Pixels: `compare.py`.** Both sides are drawn at `--ppp` pixels per TeX

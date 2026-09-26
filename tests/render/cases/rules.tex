@@ -1,0 +1,21 @@
+% Rules at any angle: a square root, a fraction, a QED box and a frame, upright and in \rotatebox.
+\documentclass{article}
+\usepackage{amsmath,amsthm,graphicx}
+\begin{document}
+Rules are the bars of fractions such as $\frac{a+b}{2}$, the vinculum of a
+square root like $\sqrt{x^2+y^2}$, and the four sides of the box that ends
+a proof. Turned by \rotatebox{45}{$\sqrt{x+1}$} forty-five degrees, each
+is a rule no longer upright, and so is a frame turned by thirty,
+\rotatebox{30}{\fbox{framed}}, or a whole fraction turned the other way,
+\rotatebox{-45}{$\frac{1}{n}$}, in the middle of a sentence that goes on
+long enough to break across lines differently at every width.
+\begin{proof}
+The square root of two is not a fraction $p/q$, for then $p^2 = 2q^2$ and
+both would be even; so its expansion $\sqrt{2} = 1.41421\ldots$ never ends,
+and the proof ends with a box turned on its corner.
+\renewcommand{\qedsymbol}{\rotatebox{45}{\openbox}}
+\end{proof}
+\begin{proof}
+And one upright, for comparison, after a sentence of its own.
+\end{proof}
+\end{document}

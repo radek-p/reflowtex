@@ -55,9 +55,14 @@ const colPx = Math.round(hsize * 2), marginPx = Math.round(margin * 2);
     const blockTop = root.getBoundingClientRect().top + window.scrollY;
     const blockLeft = root.getBoundingClientRect().left + window.scrollX;
     const glyphs = [], rects = [];
+    // A point in an element's own coordinates, in the strip's frame (pt):
+    // through the element's transform to the screen, so that what the
+    // viewer rotates (\rotatebox: a matrix() on a group) comes out rotated.
+    const at = (m, x, y) => {
+      const p = new DOMPoint(x, y).matrixTransform(m);
+      return [(p.x + window.scrollX - blockLeft + marginPx) / 2, (p.y + window.scrollY - blockTop) / 2];
+    };
     for (const svg of root.querySelectorAll('svg')) {
-      const r = svg.getBoundingClientRect();
-      const top = r.top + window.scrollY - blockTop, left = r.left + window.scrollX - blockLeft + marginPx;
       for (const t of svg.querySelectorAll('tspan')) {
         const x = parseFloat(t.getAttribute('x')), y = parseFloat(t.getAttribute('y'));
         if (isNaN(x) || isNaN(y)) continue;
@@ -65,14 +70,22 @@ const colPx = Math.round(hsize * 2), marginPx = Math.round(margin * 2);
         const ff = (t.getAttribute('font-family') || te.getAttribute('font-family') || '').split(',')[0].replace(/["']/g, '');
         const fs = parseFloat(t.getAttribute('font-size') || te.getAttribute('font-size') || '0');
         const bb = t.getBBox ? t.getBBox() : null;
-        glyphs.push({ x: (left + x) / 2, y: (top + y) / 2, w: bb ? bb.width / 2 : 0, text: t.textContent, font: ff, size: fs / 2 });
+        const [gx, gy] = at(te.getScreenCTM(), x, y);
+        glyphs.push({ x: gx, y: gy, w: bb ? bb.width / 2 : 0, text: t.textContent, font: ff, size: fs / 2 });
       }
       // Drawn rules only: not a link's transparent hit area, nor the empty
-      // mark a \webaside leaves where it stood.
+      // mark a \webaside leaves where it stood. Each is its four corners
+      // (`pts`, at any angle), and the box around them (x, y, w, h).
       for (const e of svg.querySelectorAll('rect:not(.latex-link-hit):not(.latex-aside-mark)')) {
         if (e.closest('.latex-missing-glyph')) continue;
-        rects.push({ x: (left + parseFloat(e.getAttribute('x'))) / 2, y: (top + parseFloat(e.getAttribute('y'))) / 2,
-                     w: parseFloat(e.getAttribute('width')) / 2, h: parseFloat(e.getAttribute('height')) / 2 });
+        const x = parseFloat(e.getAttribute('x')), y = parseFloat(e.getAttribute('y'));
+        const w = parseFloat(e.getAttribute('width')), h = parseFloat(e.getAttribute('height'));
+        if (!(w > 0) || !(h > 0)) continue;
+        const m = e.getScreenCTM();
+        const pts = [at(m, x, y), at(m, x + w, y), at(m, x + w, y + h), at(m, x, y + h)];
+        const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+        rects.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs),
+                     h: Math.max(...ys) - Math.min(...ys), pts });
       }
     }
     return { height: root.getBoundingClientRect().height / 2, glyphs, rects };

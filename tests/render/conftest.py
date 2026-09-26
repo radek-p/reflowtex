@@ -11,7 +11,8 @@ def pytest_configure(config):
 
 def pytest_terminal_summary(terminalreporter, config):
     """Each test's worst glyph and rule, against its ceiling and the target
-    (cases.toml): a test doing better than its ceiling says to lower it."""
+    (cases.toml), and TeX's rules it did not draw: a test doing better than
+    its ceilings says to lower them."""
     import render
     rows = config.stash.get(render.WORST, [])
     if not rows:
@@ -20,21 +21,25 @@ def pytest_terminal_summary(terminalreporter, config):
     tr.section('render: worst offsets (pt)')
     tr.write_line(f'{"test":<28} {"glyph":>7} {"ceiling":>8} {"rule":>7} {"ceiling":>8}   target {rows[0][1]["target"]}')
     lower = set()
-    for tid, case, (g, r) in sorted(rows, key=lambda x: x[0]):
+    for tid, case, (g, r), miss in sorted(rows, key=lambda x: x[0]):
         rt = case.get('rule_tolerance', case['tolerance'])
         note = []
-        if g <= case['target'] and (r is None or r <= case['target']):
+        if miss:
+            note.append(f'{miss} of TeX\'s rules not drawn')
+        elif g <= case['target'] and (r is None or r <= case['target']):
             note.append('meets target')
         # a case's ceilings are its worst over all its widths
-        by_case = [(g2, r2) for t2, c2, (g2, r2) in rows if c2['name'] == case['name']]
+        by_case = [(g2, r2, m2) for t2, c2, (g2, r2), m2 in rows if c2['name'] == case['name']]
         if len(by_case) == len(case['widths']):
             cg = max(x[0] for x in by_case)
             cr = max((x[1] for x in by_case if x[1] is not None), default=None)
-            if cg < case['tolerance'] or (cr is not None and cr < rt):
-                lower.add((case['name'], cg, cr))
+            cm = max(x[2] for x in by_case)
+            if cg < case['tolerance'] or (cr is not None and cr < rt) or cm < case.get('rules_missing', 0):
+                lower.add((case['name'], cg, cr, cm if case.get('rules_missing') else None))
         rule = '' if r is None else f'{r:.3f}'
         rceil = '' if r is None else f'{rt:.3f}'
         tr.write_line(f'{tid:<28} {g:>7.3f} {case["tolerance"]:>8.3f} {rule:>7} {rceil:>8}   {", ".join(note)}')
-    for name, cg, cr in sorted(lower):
+    for name, cg, cr, cm in sorted(lower, key=lambda x: x[0]):
         tr.write_line(f'{name} does better than its ceilings: lower them in cases.toml to '
-                      f'tolerance = {cg:.3f}' + (f', rule_tolerance = {cr:.3f}' if cr is not None else ''))
+                      f'tolerance = {cg:.3f}' + (f', rule_tolerance = {cr:.3f}' if cr is not None else '')
+                      + (f', rules_missing = {cm}' if cm is not None else ''))

@@ -13,7 +13,10 @@ not from pixels) with the PDF's. A case passes when:
   has its glyph in the PDF;
 - no glyph is further than the case's `tolerance` from it, across or
   down;
-- every rule the browser drew is in the PDF, within `rule_tolerance`.
+- every rule the browser drew is in the PDF, and every rule in the PDF is
+  drawn (but for the case's `rules_missing`); a rule is its four corners,
+  so it may be at any angle, and none is further than `rule_tolerance`
+  from TeX's, corner by corner.
 
 Because it compares coordinates, not pixels, the result is the same on any
 system: macOS and the Linux of GitHub's runners draw text differently, but
@@ -25,8 +28,8 @@ Both, for different reasons.
 
 - **Small cases** (`cases/*.tex`), one feature each: a paragraph, inline
   mathematics, displays, alignments, lists and headings, footnotes,
-  microtype. When one fails, its name says where to look, and it takes a few
-  seconds to run again.
+  microtype, rules at any angle. When one fails, its name says where to
+  look, and it takes a few seconds to run again.
 - **Whole documents** (testmath, in `cases.toml`, marked slow): what the
   small cases do not think of – how features meet, and how small errors add
   up over 15 000 pt.
