@@ -30,9 +30,11 @@ def server():
 
 
 @pytest.mark.parametrize('name,extra', PARAMS)
-def test_glyphs(name, extra, server):
+def test_glyphs(name, extra, server, request):
     case = CASES[name]
     v = render.compare(case, extra, server.url)
+    # for the summary at the end of the run (conftest.py)
+    request.config.stash.setdefault(render.WORST, []).append((request.node.callspec.id, case, render.worst(v)))
     found = render.problems(v, case['tolerance'], case.get('rule_tolerance'))
     assert not found, (f'{name} at {v["hsize_pt"]} pt:\n  ' + '\n  '.join(found)
                        + f'\n  report: {render.build_dir(case, extra) / "vector" / "vector.json"}')

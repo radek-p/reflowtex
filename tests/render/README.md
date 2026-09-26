@@ -11,8 +11,8 @@ not from pixels) with the PDF's. A case passes when:
 
 - the browser drew the same number of glyphs as TeX, and every one of them
   has its glyph in the PDF;
-- no glyph is further than `tolerance` (0.05 pt by default) from it, across
-  or down;
+- no glyph is further than the case's `tolerance` from it, across or
+  down;
 - every rule the browser drew is in the PDF, within `rule_tolerance`.
 
 Because it compares coordinates, not pixels, the result is the same on any
@@ -78,6 +78,10 @@ other widths. It is picked up by name. Settings that differ from
 A case that fails for a reason not yet fixed gets `known = "…"` in
 `cases.toml`: it still runs, as an expected failure, so the suite stays
 green – and the day it passes, the suite fails, to have the mark taken off.
-A case that is right only to within some distance gets its own
-`tolerance`: the most it is off today, so that it can only get better.
-Lower it when it does.
+`tolerance` in `[defaults]` (0.05 pt, 0.1 px at the viewer's 2 px to the
+point) is the target every case is to meet. Each case also has its own
+ceilings in its section: `tolerance`, and `rule_tolerance` where it draws
+rules – the worst it attains today, across all its widths, so that it can
+only get better. At the end of a run a table gives each test's worst glyph
+and rule against its ceilings and the target, and names any case doing
+better than its ceilings, with the values to lower them to.

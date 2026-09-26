@@ -16,11 +16,16 @@ Builds go to tests/render/build/<case>/ (ignored by git).
 import functools, hashlib, http.server, json, os, shutil, subprocess, sys, threading, tomllib
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 TOOLS = REPO / 'tools' / 'pageless-pdf'
 BUILD = HERE / 'build'
 PY = sys.executable
+# Each test's worst offsets, kept on pytest's config for the summary
+# (conftest.py): a list of (test id, case, (glyph, rule)).
+WORST = pytest.StashKey[list]()
 
 
 def cases() -> dict:
@@ -33,6 +38,8 @@ def cases() -> dict:
     out = {}
     for name, extra in found.items():
         c = {**defaults, **extra, 'name': name}
+        # the global target; `tolerance` is the case's own ceiling
+        c['target'] = defaults['tolerance']
         c['file'] = REPO / c['file'] if 'file' in c else HERE / 'cases' / f'{name}.tex'
         if 'template' in c:
             c['template'] = REPO / c['template']
@@ -112,6 +119,14 @@ class Server:
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
+
+
+def worst(v: dict) -> tuple[float, float | None]:
+    """The largest offset (pt, across or down) of a matched glyph, and of a
+    matched rule (None when the browser drew no rules)."""
+    g = max((max(abs(m['dx']), abs(m['dy'])) for m in v['matched']), default=0.0)
+    rs = [max(abs(r['dx']), abs(r['dy'])) for r in v['rules'] if 'dx' in r]
+    return g, (max(rs) if rs else None)
 
 
 def problems(v: dict, tolerance: float, rule_tolerance: float | None = None) -> list[str]:
