@@ -112,18 +112,16 @@ website:
 # recompile from scratch – needed after touching src/extract/template.tex,
 # font handling, or anything else that isn't reflected in a block's own
 # content hash. Slower; use `website` for routine content edits.
-# The render tests (tests/render/README.md): pytest in the venv, and the
-# tests' own Playwright with its Chromium (downloaded once).
-RENDER := tests/render
-test-render-deps: venv
-	@$(PYTHON) -m pip install -q -r $(RENDER)/requirements.txt -r tools/pageless-pdf/requirements.txt
-	@cd $(RENDER) && { [ -d node_modules/playwright ] || npm ci --no-audit --no-fund; } && npx playwright install chromium
+# The render tests (tests/render/README.md), with Playwright's Chromium
+# (downloaded once).
+test-render-deps: node-deps
+	@npx playwright install chromium
 
 test-render: test-render-deps
-	$(PYTHON) -m pytest $(RENDER) -m "not slow"
+	node --test tests/render/render.test.ts
 
 test-render-all: test-render-deps
-	$(PYTHON) -m pytest $(RENDER)
+	REFLOWTEX_RENDER_ALL=1 node --test tests/render/render.test.ts
 
 # The web tests (tests/web/README.md): pytest and Playwright for Python, with
 # Chromium and WebKit (downloaded once); Hugo for the integration's site.

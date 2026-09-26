@@ -1,5 +1,0 @@
-{
-  "private": true,
-  "description": "The render tests' browser: Playwright, for tools/pageless-pdf/dom_dump.js.",
-  "dependencies": { "playwright": "1.58.2" }
-}

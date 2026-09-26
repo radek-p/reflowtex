@@ -26,9 +26,11 @@ export const passesFor = (content: string): number => (REF_RE.test(content) ? RE
 /** The schema as a page embeds it. */
 export const schemaBase64 = (): string => Buffer.from(protoText(), 'utf8').toString('base64');
 
-/** A block's element: the viewer finds it by data-nodelist-b64. */
-export const blockHtml = (bytes: Uint8Array): string =>
-  `<div class="latex-block" data-nodelist-b64="${Buffer.from(bytes).toString('base64')}"></div>`;
+/** A block's element: the viewer finds it by data-nodelist-b64. `attrs`
+ *  are more attributes for it (data-tex-final-pass="strict", say). */
+export const blockHtml = (bytes: Uint8Array, attrs: Record<string, string> = {}): string =>
+  `<div class="latex-block"${Object.entries(attrs).map(([k, v]) => ` ${k}="${escapeHtml(v)}"`).join('')} ` +
+  `data-nodelist-b64="${Buffer.from(bytes).toString('base64')}"></div>`;
 
 /** Python's html.escape(s, quote=True). */
 export const escapeHtml = (s: string): string =>

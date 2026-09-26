@@ -19,6 +19,10 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
+    "mupdf": "^1.28.1",
+    "pdf-lib": "^1.17.1",
+    "playwright": "1.58.2",
+    "sharp": "^0.35.4",
     "typescript": "^7.0.2"
   }
 }
