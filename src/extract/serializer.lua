@@ -255,6 +255,9 @@ local STREAM_ATTR        = 911 -- nodes typeset inside \begin{webstream} (reflow
 local SLOT_ATTR          = 913
 local ASIDE_ATTR         = 914 -- the insertion of a \webaside (reflowtex.sty): its stream id
 local ASIDE_MARK_ATTR    = 915 -- the empty box a \webaside leaves where it stood: the same id
+-- A \webid / \webclass (reflowtex.sty): every glyph typeset inside carries
+-- the mark's number (the innermost; its classes include the outer ones').
+local MARK_ATTR          = 916
 local RULE_IMAGE  = 2
 local picture_files = {}
 local source_width = 0
@@ -267,6 +270,8 @@ local anchor_labels = {}
 -- interword glue of the font it was set in (\fontdimen2–4, sp), which the
 -- viewer puts between the words of a replacement text.
 local slot_table = {}
+-- id → { id, classes }: the \webid / \webclass marks (see MARK_ATTR).
+local mark_table = {}
 
 Serializer = Serializer or {}
 -- A reference's destination is recorded as the *label* the author wrote, not as
@@ -302,9 +307,13 @@ end
 function Serializer.note_link_action(id, action)
     link_labels[id] = { action = tostring(action) }
 end
-function Serializer.note_slot(id, name, space, stretch, shrink, kind)
+function Serializer.note_slot(id, name, space, stretch, shrink, kind, attrs)
     slot_table[id] = { name = tostring(name), space = space, stretch = stretch, shrink = shrink,
-                       kind = kind and tostring(kind) or nil }
+                       kind = kind and tostring(kind) or nil,
+                       attrs = attrs and Serializer.parse_attrs(attrs) or nil }
+end
+function Serializer.note_mark(id, htmlid, classes)
+    mark_table[tonumber(id)] = { id = tostring(htmlid or ""), classes = tostring(classes or "") }
 end
 function Serializer.note_label(id, label)
     anchor_labels[id] = clean_label(label)
@@ -351,7 +360,7 @@ local footnote_index = {}   -- template footnote id → stream index
 -- value is kept with an empty one. Keys are letters, digits and "-" (they
 -- become data-KEY in the page); anything else is dropped.
 local function parse_stream_attrs(text)
-    local out = {}
+    local out = json_array({})           -- a list, empty or not
     for item in tostring(text or ""):gmatch("[^,]+") do
         local k, v = item:match("^%s*([^=]-)%s*=%s*(.-)%s*$")
         if not k then k, v = item:match("^%s*(.-)%s*$"), "" end
@@ -373,6 +382,7 @@ function Serializer.note_stream_text(id, text)
         streams[id].text = (tostring(text or ""):gsub("^%s*\n", ""):gsub("%s+$", ""))
     end
 end
+Serializer.parse_attrs = function (text) return parse_stream_attrs(text) end
 function Serializer.note_stream(id, kind, parent, attrs)
     id = tonumber(id); parent = tonumber(parent)
     streams[id] = { kind = tostring(kind), content = {},
@@ -698,6 +708,7 @@ local function serialize_nodelist(head)
                 footnote   = node.get_attribute(n, FOOTNOTE_MARK_ATTR),
                 link       = node.get_attribute(n, LINK_ATTR),
                 slot       = node.get_attribute(n, SLOT_ATTR),
+                mark       = node.get_attribute(n, MARK_ATTR),
             }
             if not g.link and not g.footnote then g.link = open_link_id() end
             cur[#cur + 1] = g
@@ -1775,6 +1786,7 @@ local function write_output()
         links      = dense("link", link_labels, function() return json_object({}) end),
         anchors    = dense("anchor", anchor_labels, function() return "" end),
         slots      = dense("slot", slot_table, function() return json_object({ name = "" }) end),
+        marks      = dense("mark", mark_table, function() return json_object({}) end),
         outline    = json_array(outline),
     }))
     f:close()

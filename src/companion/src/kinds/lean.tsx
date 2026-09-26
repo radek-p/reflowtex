@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Lean beside a proof (reflowtex.sty's leanproof and leantheorem).
 //
-//   leanproof    parts leantex (the TeX proof) and leancode (Lean source,
+//   leanproof    parts tex (the TeX proof) and code (the Lean source,
 //                carried as text): Proof and Lean switches on top.
-//   leantheorem  parts leanstatement (the theorem), leantex, leancode: the
-//                switches hang under the theorem's frame, in its colours.
+//   leantheorem  parts statement (the theorem), tex and code: the switches
+//                hang under the theorem's frame, in its colours.
+// decl= and url= (the widget's parameters) name the declaration and link it.
 //
 // The switches are independent: neither part, either, or both – side by
 // side from 44rem of width, else stacked. show=proof | lean | both | none
@@ -20,7 +21,7 @@
 import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { useInstanceState } from '../context.ts';
 import type { BlockProps } from '../define.tsx';
-import type { Instance, Surface } from '../host.ts';
+import type { Surface } from '../host.ts';
 import { animateHeight, fadeIn, fadeOut, readMotion } from '../motion.ts';
 import { Typeset } from '../typeset.tsx';
 
@@ -52,11 +53,8 @@ export function highlightLean(code: string): string {
 }
 
 /** Lean source as highlighted, selectable code, under a header naming the
- *  declaration (linked, given url=). */
-export function LeanCode({ of }: { of: Instance }) {
-    const text = of.part('text');
-    const code = text && text.type === 'data' ? text.data : '';
-    const { decl, url } = of.attrs;
+ *  declaration (linked, given a url). */
+export function LeanCode({ code, decl, url }: { code: string; decl?: string; url?: string }) {
     return (
         <div class="rtx-lean-code">
             {decl && <div class="rtx-lean-head">
@@ -74,8 +72,8 @@ const parseShow = (s: string): Show => {
 };
 
 function LeanWidget({ instance, attrs, host, statement }: BlockProps & { statement: boolean }) {
-    const child = (kind: string) => instance.children.find(c => c.kind === kind);
-    const stmt = statement ? child('leanstatement') : undefined, tex = child('leantex'), code = child('leancode');
+    const stmt = statement ? instance.part('statement') : undefined, tex = instance.part('tex');
+    const codePart = instance.part('code'), code = codePart && codePart.type === 'data' ? codePart.data : null;
     // What the switches say (the reader's choice), and what is drawn: a part
     // being closed stays drawn while it fades.
     const show = useInstanceState<Show>('show', () => parseShow(attrs.show || (statement ? 'none' : 'proof')));
@@ -127,6 +125,8 @@ function LeanWidget({ instance, attrs, host, statement }: BlockProps & { stateme
         });
     }, [drawn.proof, drawn.lean]);
 
+    // The space TeX put between the statement and the proof.
+    const texSpace = tex && tex.type === 'typeset' ? tex.spaceBefore : undefined;
     // TeX's space after the widget is the space after the proof. While the
     // proof is hidden, what follows should stand where the space after the
     // statement (leantheorem) or before the widget (leanproof) puts it: the
@@ -137,7 +137,7 @@ function LeanWidget({ instance, attrs, host, statement }: BlockProps & { stateme
             host.el.style.marginBottom = '';
             if (drawn.proof || host.type !== 'block') return;
             const { before, after } = host.spacing();
-            const want = stmt ? (tex ? tex.spaceBefore : after) : before;
+            const want = stmt ? (texSpace ?? after) : before;
             if (want < after) host.el.style.marginBottom = `${want - after}px`;
         };
         adjust();
@@ -167,16 +167,16 @@ function LeanWidget({ instance, attrs, host, statement }: BlockProps & { stateme
     return (
         <div class="rtx-lean" data-proof={drawn.proof ? '' : undefined} data-lean={drawn.lean ? '' : undefined}>
             {stmt ? <div class="rtx-lean-statement">
-                <Typeset of={stmt} onMetrics={(_, s) => { surfaces.current.stmt = s; }} />
+                <Typeset part={stmt} onMetrics={(_, s) => { surfaces.current.stmt = s; }} />
                 {switches}
             </div> : switches}
             <div ref={body} class="rtx-lean-body">
                 <div class="rtx-lean-pair" data-both={drawn.proof && drawn.lean ? '' : undefined}>
                     {tex && <div ref={parts.proof} class="rtx-lean-part" data-part="tex" data-state={drawn.proof ? 'open' : 'closed'}>
-                        <Typeset of={tex} onMetrics={(_, s) => { surfaces.current.tex = s; }} />
+                        <Typeset part={tex} onMetrics={(_, s) => { surfaces.current.tex = s; }} />
                     </div>}
-                    {code && <div ref={parts.lean} class="rtx-lean-part" data-part="code" data-state={drawn.lean ? 'open' : 'closed'}>
-                        <LeanCode of={code} />
+                    {code !== null && <div ref={parts.lean} class="rtx-lean-part" data-part="code" data-state={drawn.lean ? 'open' : 'closed'}>
+                        <LeanCode code={code} decl={attrs.decl} url={attrs.url} />
                     </div>}
                 </div>
             </div>

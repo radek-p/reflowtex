@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 8fdd4ddddceddc96d793690a4f405732afffdc006631705670514e6d9909bdcc
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 ade52082e93ab66caa7c25e657b5785313c767fd88bfd4e000c11d61d97da04d
 'use strict';
 "use strict";
 (() => {
@@ -250,16 +250,19 @@
     const attrs = {};
     const classes = [];
     const properties = {};
-    let aside = false;
+    let aside = false, part, owner;
     for (const a of list || []) {
       const k = a.key || "", v = a.value || "";
       if (!/^[a-z0-9-]+$/i.test(k)) continue;
       if (k === "aside") aside = v === "true";
+      else if (k === "rtx-part") part = v;
+      else if (k === "rtx-owner") owner = v;
+      else if (k.startsWith("rtx-")) continue;
       else if (k === "class") classes.push(...v.split(/\s+/).filter(Boolean));
       else if (k.startsWith("--")) properties[k] = v;
       else attrs[k] = v;
     }
-    return { attrs, presentation: { classes, properties }, aside };
+    return { attrs, presentation: { classes, properties }, aside, part, owner };
   }
   var NO_PRESENTATION = Object.freeze({ classes: Object.freeze([]), properties: Object.freeze({}) });
   function normalise(doc, block, key, parts, anchorOf, spToPx = 0) {
@@ -269,6 +272,22 @@
     const seenStream = /* @__PURE__ */ new Set();
     const seenSlot = /* @__PURE__ */ new Set();
     const widgetsByKey = /* @__PURE__ */ new Map();
+    const bySlot = /* @__PURE__ */ new Map(), byStream = /* @__PURE__ */ new Map();
+    const makePart = (index, role, owner, spaceBefore = 0) => {
+      seenStream.add(index);
+      const s = streams[index - 1];
+      if (!owner.parts.has(role)) {
+        if (s.text !== void 0) {
+          const data = { type: "data", role, instance: owner, data: s.text };
+          owner.parts.set(role, data);
+        } else {
+          const tp = parts.typeset(owner, role, s);
+          tp.spaceBefore = spaceBefore;
+          owner.parts.set(role, tp);
+        }
+      }
+      walkContent(s.content || [], owner);
+    };
     const pendingAsides = [];
     const adopt = (inst, parent) => {
       (parent ? parent.children : roots).push(inst);
@@ -289,6 +308,7 @@
         anchorOf
       );
       inst.stream = index;
+      byStream.set(index, inst);
       inst.parts.set("body", parts.typeset(inst, "body", s));
       if (s.text !== void 0) {
         const data = { type: "data", role: "text", instance: inst, data: s.text };
@@ -303,15 +323,23 @@
       const slot = slots[index - 1] || {};
       const name = slot.name || "";
       if (slot.kind === "widget") {
-        const colon = name.indexOf(":");
-        const kind = colon >= 0 ? name.slice(0, colon) : name;
-        const attrs = { name };
-        if (colon >= 0) attrs.key = name.slice(colon + 1);
+        let kind, attrs, presentation = NO_PRESENTATION;
+        if (slot.attrs && slot.attrs.length) {
+          const split = splitAttrs(slot.attrs);
+          kind = name;
+          attrs = split.attrs;
+          presentation = split.presentation;
+        } else {
+          const colon = name.indexOf(":");
+          kind = colon >= 0 ? name.slice(0, colon) : name;
+          attrs = { name };
+          if (colon >= 0) attrs.key = name.slice(colon + 1);
+        }
         const inst = new InstanceImpl(
           `${key}/w${index}`,
           kind,
           Object.freeze(attrs),
-          NO_PRESENTATION,
+          presentation,
           "inline",
           parent,
           block,
@@ -319,6 +347,7 @@
           anchorOf
         );
         inst.slot = index;
+        bySlot.set(index, inst);
         if (attrs.key !== void 0 && !widgetsByKey.has(attrs.key)) widgetsByKey.set(attrs.key, inst);
         adopt(inst, parent);
       } else {
@@ -362,8 +391,11 @@
         const before = space;
         space = 0;
         if (it.kind === "stream") {
-          if (it.stream && !seenStream.has(it.stream) && streams[it.stream - 1])
-            streamInstance(it.stream, "block", parent, { type: "none" }).spaceBefore = before * spToPx;
+          const s = it.stream && !seenStream.has(it.stream) ? streams[it.stream - 1] : void 0;
+          if (!s) continue;
+          const role = splitAttrs(s.attrs).part;
+          if (role && parent) makePart(it.stream, role, parent, before * spToPx);
+          else streamInstance(it.stream, "block", parent, { type: "none" }).spaceBefore = before * spToPx;
         } else if (it.kind === "display") {
           walkNodes(it.box ? [it.box] : [], parent);
         } else if (!it.kind || it.kind === "paragraph") {
@@ -377,10 +409,18 @@
     });
     for (const { index, parent } of pendingAsides) {
       const s = streams[index - 1];
-      const { attrs } = splitAttrs(s.attrs);
-      const owner = attrs.for !== void 0 ? widgetsByKey.get(attrs.for) : void 0;
-      if (owner && !owner.parts.has(s.kind || "")) {
-        owner.parts.set(s.kind || "", parts.typeset(owner, s.kind || "", s));
+      const { attrs, part, owner: ownerRef } = splitAttrs(s.attrs);
+      if (part) {
+        const m = /^([ws])(\d+)$/.exec(ownerRef || "");
+        const owner = m ? (m[1] === "w" ? bySlot : byStream).get(Number(m[2])) : void 0;
+        if (owner) {
+          makePart(index, part, owner);
+          continue;
+        }
+      }
+      const legacy = attrs.for !== void 0 ? widgetsByKey.get(attrs.for) : void 0;
+      if (legacy && !legacy.parts.has(s.kind || "")) {
+        legacy.parts.set(s.kind || "", parts.typeset(legacy, s.kind || "", s));
         continue;
       }
       seenStream.delete(index);
@@ -1619,6 +1659,37 @@
     if (any) scheduleSlots();
   });
 
+  // src/host/marks.ts
+  function applyMark(el, index, cache) {
+    const m = cache.marks && cache.marks[index - 1];
+    if (!m) return;
+    if (m.id) el.dataset.rtxId = m.id;
+    for (const c of (m.classes || "").split(/\s+/)) if (c) el.classList.add(c);
+  }
+  function markHandle(id) {
+    const elements = () => [...document.querySelectorAll(`[data-rtx-id="${CSS.escape(id)}"]`)];
+    return {
+      id,
+      elements,
+      rects() {
+        const lines = /* @__PURE__ */ new Map();
+        for (const el of elements()) {
+          const r = glyphScreenRect(el);
+          const key = Math.round(r.bottom);
+          const l = lines.get(key);
+          if (!l) lines.set(key, { left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+          else {
+            l.left = Math.min(l.left, r.left);
+            l.right = Math.max(l.right, r.right);
+            l.top = Math.min(l.top, r.top);
+            l.bottom = Math.max(l.bottom, r.bottom);
+          }
+        }
+        return [...lines.values()].map((l) => new DOMRect(l.left, l.top, l.right - l.left, l.bottom - l.top));
+      }
+    };
+  }
+
   // src/engine/paint.js
   function svgEl(tag, attrs) {
     const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -1717,6 +1788,7 @@
           if (n.color) el.style.fill = colorFill(n.color);
           if (n.stream) registerStreamSource(el, n.stream, cache);
           if (n.link) registerLinkGlyph(el, n.link, cache);
+          if (n.mark) applyMark(el, n.mark, cache);
           if (n.slot && cache.slotNames && cache.slotNames[n.slot - 1] !== void 0)
             el.dataset.slot = cache.slotNames[n.slot - 1];
           byNode.set(n, el);
@@ -3446,6 +3518,7 @@
       minSpacePt: p.displayMinSpacePt
     };
     cache.links = doc.links || [];
+    cache.marks = doc.marks || [];
     cache.slotNames = (doc.slots || []).map((x) => x.name);
     cache.anchors = doc.anchors || [];
     cache.streams = doc.streams || [];
@@ -3720,6 +3793,7 @@
     data;
     type = "typeset";
     natural = null;
+    spaceBefore = 0;
     doc;
     /** Lay the part out at `px` into a fresh cache (or the one given). */
     layout(px, cache = this.newCache()) {
@@ -3969,6 +4043,7 @@
     version: 1,
     define: defineKind,
     setText: (name, text) => setSlotText(name, text),
+    mark: (id) => markHandle(id),
     blocks: () => blocks.slice(),
     block: (el) => blocks.includes(byEl.get(el)) ? byEl.get(el) : void 0,
     instances: (query) => blocks.flatMap((b) => b.instances(query)),

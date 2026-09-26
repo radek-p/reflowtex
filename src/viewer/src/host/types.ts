@@ -72,6 +72,14 @@ export interface Instance {
     setText(text: string | null): void;
 }
 
+export interface MarkHandle {
+    readonly id: string;
+    /** Its glyphs' elements, in drawing order. */
+    elements(): Element[];
+    /** One rect per line it is drawn on, in window coordinates. */
+    rects(): DOMRect[];
+}
+
 /** A \webaction the reader pressed: \webaction{pane:next}{…} is verb
  *  "pane", arg "next". */
 export interface Action {
@@ -95,6 +103,10 @@ export interface TypesetPart {
     /** Its width with every paragraph on one line, in CSS px, as TeX would
      *  set an \hbox. Computed once, on first use. */
     naturalWidth(): number;
+    /** The vertical space TeX put before it in its owner's text, px (a part
+     *  that stood in the flow – a Lean proof after its statement); 0 for
+     *  one typeset out of the flow (\webpart). */
+    readonly spaceBefore: number;
     /** Lay it out in `el` (replacing el's children) and keep it laid out
      *  until disposed. May be mounted any number of times at once. */
     mount(el: HTMLElement, options?: MountOptions): Surface;
@@ -286,6 +298,11 @@ export interface Host {
     /** Show `text` in every \webtext{name}{…}, in every block (null: the
      *  defaults again). */
     setText(name: string, text: string | null): void;
+    /** The text marked \webid{id}{…}, in every block and wherever its parts
+     *  are shown. Its glyph elements carry data-rtx-id (and \webclass's
+     *  classes, which CSS reaches directly); only lines already drawn have
+     *  elements (the viewer draws lines as they near the window). */
+    mark(id: string): MarkHandle;
     /** Blocks initialised so far, in page order. */
     blocks(): Block[];
     block(el: Element): Block | undefined;

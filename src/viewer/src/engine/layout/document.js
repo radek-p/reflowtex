@@ -188,6 +188,7 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // paintSegment is handed only the cache, so the reference tables and this
     // block's id prefix travel on it.
     cache.links   = doc.links   || [];
+    cache.marks   = doc.marks   || [];              // \webid / \webclass (host/marks.ts)
     cache.slotNames = (doc.slots || []).map(x => x.name);   // Node.slot → its name, for data-slot
     cache.anchors = doc.anchors || [];
     cache.streams = doc.streams || [];

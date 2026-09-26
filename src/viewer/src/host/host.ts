@@ -12,6 +12,7 @@ import { TypesetPartImpl, type BlockData } from './surface.ts';
 import './block-hosts.ts';
 import { defineKind } from './kinds.ts';
 import { setSlotText } from './slots.js';
+import { markHandle } from './marks.ts';
 import { destroyBlock, mountBlock } from '../runtime/init.js';
 import { blockData } from '../runtime/blocks.js';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
@@ -97,6 +98,7 @@ export const host: Host = {
     version: 1,
     define: defineKind,
     setText: (name, text) => setSlotText(name, text),
+    mark: id => markHandle(id),
     blocks: () => blocks.slice(),
     block: el => blocks.includes(byEl.get(el) as BlockImpl) ? byEl.get(el) : undefined,
     instances: query => blocks.flatMap(b => b.instances(query)),

@@ -11,6 +11,7 @@ import { materializeSegment } from './layout/document.js';
 import { registerLinkGlyph, restoreLinkStates } from '../host/links.js';
 import { colorFill } from '../runtime/colour.js';
 import { renderPiece } from '../host/inline.ts';
+import { applyMark } from '../host/marks.ts';
 // ── end of imports
 
 // ── SVG renderer ──────────────────────────────────────────────────────────────
@@ -128,6 +129,7 @@ export function reconcileSink(byNode, used, stats, cache) {
                 if (n.color) el.style.fill = colorFill(n.color);
                 if (n.stream)     registerStreamSource(el, n.stream, cache);
                 if (n.link)       registerLinkGlyph(el, n.link, cache);
+                if (n.mark)       applyMark(el, n.mark, cache);
                 // A \webtext's glyphs – TeX's default or a text the page gave
                 // – carry its name, so a page can find (and style) where it is.
                 if (n.slot && cache.slotNames && cache.slotNames[n.slot - 1] !== undefined)

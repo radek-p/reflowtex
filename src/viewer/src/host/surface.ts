@@ -63,6 +63,7 @@ export function surfacesOf(blockEl: HTMLElement): Iterable<SurfaceImpl> {
 export class TypesetPartImpl implements TypesetPart {
     readonly type = 'typeset' as const;
     private natural: number | null = null;
+    spaceBefore = 0;
     readonly doc: Doc;
     constructor(readonly role: string, readonly instance: Instance, readonly data: BlockData, stream: DocStream) {
         this.doc = { ...data.doc, content: stream.content || [] };

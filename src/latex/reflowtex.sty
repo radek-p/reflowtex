@@ -29,7 +29,8 @@
 %                                    \webprevpane)
 %   webnote, webhint                 a framed note; a hint blurred until clicked
 %   leanproof, leancode              a proof with its Lean formalisation beside
-%                                    it (and leanblueprint's macros)
+%                                    it (and leanblueprint's macros):
+%                                    reflowtex-lean.sty, loaded with this
 %   \DeclareWebBox[new]{env}[opts]   an environment drawn as a box on the web
 %                                    (package option boxed: all theorems and
 %                                    proofs)
@@ -172,30 +173,143 @@
   \NewDocumentCommand\webaside{O{} m +m}{\ignorespaces}
 \fi
 
+% ── Parameters, taken as written ─────────────────────────────────────────────
+% \reflowtex@collect{key=value, …} sets \reflowtex@collected to the list as a
+% string (", key=value, …"), each value detokenized: a colour may be #hex, and
+% nothing is expanded. For parameters the package only passes on to the page.
+\ExplSyntaxOn
+\tl_new:N \l__reflowtex_attrs_tl
+\tl_new:N \reflowtex@default
+\keys_define:nn { reflowtex/any }
+  { unknown .code:n = \tl_put_right:Ne \l__reflowtex_attrs_tl { , \l_keys_key_str = \tl_to_str:n {#1} } }
+\keys_define:nn { reflowtex/widget }
+  {
+    default .tl_set:N = \reflowtex@default ,
+    unknown .code:n = \tl_put_right:Ne \l__reflowtex_attrs_tl { , \l_keys_key_str = \tl_to_str:n {#1} } ,
+  }
+\cs_new_protected:Npn \reflowtex@collect #1
+  {
+    \tl_clear:N \l__reflowtex_attrs_tl
+    \keys_set:nn { reflowtex/any } {#1}
+    \tl_set_eq:NN \reflowtex@collected \l__reflowtex_attrs_tl
+  }
+% A widget's optional argument: key=value parameters (default= its print
+% form), or – the first form, with no "=" in it – the print form alone.
+\cs_new_protected:Npn \reflowtex@widgetargs #1
+  {
+    \tl_clear:N \l__reflowtex_attrs_tl
+    \tl_clear:N \reflowtex@default
+    \tl_if_in:nnTF {#1} { = }
+      { \keys_set:nn { reflowtex/widget } {#1} }
+      { \tl_set:Nn \reflowtex@default {#1} }
+    \tl_set_eq:NN \reflowtex@collected \l__reflowtex_attrs_tl
+  }
+\ExplSyntaxOff
+
 % ── A widget: \webwidget ─────────────────────────────────────────────────────
-% \webwidget[default]{name}
+% \webwidget[key=value, …, default=…]{kind}
 %
-% On the web, a page draws HTML here – a status badge, a small control – with
-% a widget it registers: reflowtex.widgets['name'] (or a prefix, 'lean:*').
-% The widget tells the viewer its size and, optionally, where it may break,
-% as a word has hyphenation points; the line breaker weighs those breaks
-% against the rest of the paragraph, and the widget then draws the part on
-% each line the chosen layout puts it across.
+% On the web, a page draws HTML here – a status badge, a small control – as
+% an inline instance of `kind` with the given parameters, which the kind the
+% page defines (the companion's defineInline) measures and draws. The widget
+% tells the viewer its size and, optionally, where it may break, as a word
+% has hyphenation points; the line breaker weighs those breaks against the
+% rest of the paragraph, and the widget then draws the part on each line the
+% chosen layout puts it across. Parts of its own follow it: \webpart.
 %
-% In print it is `default`, empty unless given – and an empty one also takes
+% In print it is `default=`, empty unless given – and an empty one also takes
 % the space after it, so "text \webwidget{x} text" prints as "text text".
 % On the web the spaces either side stay, around the widget. The place is
 % marked like \webtext (attribute 913): the default's glyphs, and a
 % zero-width marked space, so that an empty default still leaves one.
+%
+% The first form, \webwidget[default]{kind:key} (an optional argument with no
+% "="), still works: the page sees kind `kind` with parameter key=`key`.
+\newcount\reflowtex@lastwidget
 \ifreflowtex
   \NewDocumentCommand\webwidget{O{} m}{%
+    \reflowtex@widgetargs{#1}%
     \leavevmode
     \global\advance\reflowtexSlotCount by 1
+    \global\reflowtex@lastwidget=\reflowtexSlotCount
     \directlua{Serializer.note_slot(\the\reflowtexSlotCount,
-      "\luaescapestring{#2}", 0, 0, 0, "widget")}%
-    \begingroup\attribute913=\reflowtexSlotCount\relax #1\hskip\z@\endgroup}
+      "\luaescapestring{#2}", 0, 0, 0, "widget", "\luaescapestring{\reflowtex@collected}")}%
+    \begingroup\attribute913=\reflowtexSlotCount\relax \reflowtex@default\hskip\z@\endgroup}
 \else
-  \NewDocumentCommand\webwidget{O{} m}{\ifx\relax#1\relax\expandafter\ignorespaces\else#1\fi}
+  \NewDocumentCommand\webwidget{O{} m}{%
+    \reflowtex@widgetargs{#1}%
+    \ifx\reflowtex@default\@empty\expandafter\ignorespaces\else\reflowtex@default\fi}
+\fi
+
+% ── A part: \webpart ─────────────────────────────────────────────────────────
+% \webpart{role}{text}
+%
+% Text typeset out of the flow, as \webaside's is, that belongs to an
+% instance as its part `role`, for the page to show as it draws it
+% (instance.part(role)): in running text, to the \webwidget just before it
+% (a button's label, the note it opens); between paragraphs, to the
+% environment around it (a summary a block shows while collapsed). In print
+% it is left out.
+\ifreflowtex
+  \NewDocumentCommand\webpart{m +m}{%
+    \edef\reflowtex@owner{\ifhmode\ifnum\reflowtex@lastwidget>\z@
+      w\the\reflowtex@lastwidget\else s\the\attribute911\fi\else s\the\attribute911\fi}%
+    \reflowtexAside{#1}{rtx-part=#1,rtx-owner=\reflowtex@owner}{#2}}
+\else
+  \NewDocumentCommand\webpart{m +m}{\ignorespaces}
+\fi
+
+% ── Kinds of one's own ───────────────────────────────────────────────────────
+% \NewWebEnvironment{env}{kind}{print begin}{print end}
+%   \begin{env}[key=value, …] … \end{env}: on the web a block instance of
+%   `kind` with those parameters (taken as written), drawn by the kind the
+%   page defines, or plainly; in print, the body between the print code.
+% \NewWebAside{\cmd}{kind}{print form, with #1 the text}
+%   \cmd[key=value, …]{text}: on the web an aside of `kind` (place=margin
+%   puts it in the margin); in print, the print form.
+\NewDocumentCommand\NewWebEnvironment{m m +m +m}{%
+  \ifreflowtex
+    \NewDocumentEnvironment{#1}{O{}}%
+      {\reflowtex@collect{##1}\begin{webstream}[\reflowtex@collected]{#2}}%
+      {\end{webstream}}%
+  \else
+    \NewDocumentEnvironment{#1}{O{}}{#3}{#4}%
+  \fi}
+\NewDocumentCommand\NewWebAside{m m +m}{%
+  \expandafter\newcommand\csname reflowtex@wa@\string#1\endcsname[1]{#3}%
+  \NewDocumentCommand#1{O{} +m}{%
+    \ifreflowtex
+      \reflowtex@collect{##1}\webaside[\reflowtex@collected]{#2}{##2}%
+    \else
+      \csname reflowtex@wa@\string#1\endcsname{##2}%
+    \fi}}
+
+% ── Marks: \webid, \webclass ─────────────────────────────────────────────────
+% \webid{id}{text}          the text named, for a page to find
+%                           (reflowtex.host.mark(id)) and point at
+% \webclass{classes}{text}  the text given CSS classes (space-separated)
+%
+% Every glyph typeset inside is marked (attribute 916): the viewer draws it
+% with data-rtx-id and the classes, however the lines break. They nest: an
+% inner mark keeps the outer id unless it names its own, and adds its classes
+% to the outer ones. In print the text is simply typeset.
+\ifdefined\reflowtexMarkCount\else\newcount\reflowtexMarkCount\fi
+\def\reflowtex@mark@id{}\def\reflowtex@mark@classes{}
+\ifreflowtex
+  \NewDocumentCommand\webid{m +m}{\reflowtex@mark{\detokenize{#1}}{\reflowtex@mark@classes}{#2}}
+  \NewDocumentCommand\webclass{m +m}{%
+    \reflowtex@mark{\reflowtex@mark@id}{\reflowtex@mark@classes\space\detokenize{#1}}{#2}}
+  \long\def\reflowtex@mark#1#2#3{%
+    \begingroup
+      \edef\reflowtex@mark@id{#1}\edef\reflowtex@mark@classes{#2}%
+      \global\advance\reflowtexMarkCount by 1
+      \directlua{Serializer.note_mark(\the\reflowtexMarkCount,
+        "\luaescapestring{\reflowtex@mark@id}", "\luaescapestring{\reflowtex@mark@classes}")}%
+      \attribute916=\reflowtexMarkCount\relax #3%
+    \endgroup}
+\else
+  \NewDocumentCommand\webid{m +m}{#2}
+  \NewDocumentCommand\webclass{m +m}{#2}
 \fi
 
 
@@ -427,124 +541,8 @@
 \fi\fi
 
 % ── Lean beside a proof ─────────────────────────────────────────────────────
-% \begin{leanproof}[decl=Nat.sum_odd, url=https://…, show=proof]
-%   \begin{proof} … \end{proof}
-%   \begin{leancode}
-%   theorem sum_odd (n : ℕ) : … := by
-%     …
-%   \end{leancode}
-% \end{leanproof}
-%
-% On the web the proof (in its usual box) and its Lean code (in a frame like
-% a proof's, in the Lean colour) have two switches above them, Proof and
-% Lean, pressed independently: neither, either one, or both – side by side,
-% or stacked on a narrow column. show= (proof, lean, both or none; default
-% proof) is how it starts.
-% The code is read verbatim – never typeset – and shown as text: highlighted,
-% selectable, copyable. decl= names the declaration in the code's header,
-% url= links it (to doc-gen4 documentation, say). In print the code follows
-% the proof as a verbatim listing (package option leanprint=false leaves it
-% out). The code starts on the line after \begin{leancode}.
-%
-% \begin{leantheorem}[decl=…, url=…, show=none]
-%   \begin{theorem} … \end{theorem}
-%   \begin{proof} … \end{proof}
-%   \begin{leancode} … \end{leancode}
-% \end{leantheorem}
-% The same for a theorem with its proof: the Proof and Lean switches hang
-% under the theorem's frame, and the proof and the code open beneath them. By
-% default neither is shown (show=none), so only the theorem is. Everything
-% before \begin{proof} is the statement.
-%
-% leanblueprint's macros – \lean{…}, \leanok, \uses{…}, \proves{…},
-% \notready, \mathlibok, \discussion{…} – are defined as markers with no
-% output when the document has not defined them, so a blueprint's sources
-% compile.
-\providecommand\lean[1]{}
-\providecommand\leanok{}
-\providecommand\uses[1]{}
-\providecommand\proves[1]{}
-\providecommand\notready{}
-\providecommand\mathlibok{}
-\providecommand\discussion[1]{}
-\RequirePackage{verbatim}
-\DeclareKeys[reflowtex/leanproof]{
-  decl .store = \reflowtex@lp@decl,
-  url  .store = \reflowtex@lp@url,
-  show .store = \reflowtex@lp@show,
-}
-\def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{proof}
-% Declared outside \ifreflowtex: in a print run the branch below is skipped,
-% and a conditional it had yet to declare would not count as one while it is,
-% so its \fi would end \ifreflowtex early.
-\newif\ifreflowtex@inlt
-\ifreflowtex
-  \NewDocumentEnvironment{leantheorem}{O{}}{%
-    \def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{none}%
-    \SetKeys[reflowtex/leanproof]{#1}%
-    \begin{webstream}[show=\reflowtex@lp@show]{leantheorem}%
-    \edef\reflowtex@lp@id{\the\attribute911}%
-    % The statement is a part of its own, until the proof begins.
-    \reflowtex@box@open@{leanstatement}{}%
-    \reflowtex@inlttrue}%
-   {\end{webstream}}
-  % At the leantheorem's own \begin{proof} (the hook runs before the proof's
-  % group opens, at the leantheorem's level): the statement part ends and
-  % the proof part begins, beside which the code will stand.
-  \AddToHook{env/proof/before}{%
-    \ifreflowtex@inlt
-      \reflowtex@inltfalse
-      \attribute911=\reflowtex@lp@id\relax
-      \reflowtex@box@open@{leantex}{}%
-    \fi}
-  \NewDocumentEnvironment{leanproof}{O{}}{%
-    \def\reflowtex@lp@decl{}\def\reflowtex@lp@url{}\def\reflowtex@lp@show{proof}%
-    \SetKeys[reflowtex/leanproof]{#1}%
-    \begin{webstream}[show=\reflowtex@lp@show]{leanproof}%
-    \edef\reflowtex@lp@id{\the\attribute911}%
-    % The TeX side is a stream of its own, so the two can stand side by side.
-    \reflowtex@box@open@{leantex}{}}%
-   {\end{webstream}}
-  % A newline of catcode 12, to join the lines read verbatim.
-  {\catcode`\^^J=12 \gdef\reflowtex@nl{^^J}}
-  % Read the body line by line, as the verbatim package does, keeping every
-  % space and tab (Lean is indentation-sensitive), and collect it instead of
-  % typesetting it.
-  \def\reflowtex@lc@collect{%
-    \let\do\@makeother\dospecials \catcode`\ =12 \catcode`\^^I=12
-    \catcode`\^^M\active
-    \def\verbatim@processline{%
-      \edef\reflowtex@lc@acc{\reflowtex@lc@acc\the\verbatim@line\reflowtex@nl}}%
-    \let\verbatim@finish\relax
-    \verbatim@}
-  \newenvironment{leancode}{%
-    \par
-    % Inside leanproof the code is the pair's second part, beside the TeX one.
-    \ifdefined\reflowtex@lp@id \attribute911=\reflowtex@lp@id\relax \fi
-    \global\advance\reflowtex@streams by 1
-    \edef\reflowtex@lc@id{\the\reflowtex@streams}%
-    \edef\reflowtex@attrs{decl=\detokenize\expandafter{\reflowtex@lp@decl},%
-      url=\detokenize\expandafter{\reflowtex@lp@url}}%
-    \directlua{Serializer.note_stream(\reflowtex@lc@id, "leancode", \the\attribute911,
-      "\luaescapestring{\reflowtex@attrs}")}%
-    \attribute911=\reflowtex@lc@id\relax
-    % An anchor gives the otherwise empty stream its place in the flow.
-    \global\advance\reflowtexAnchorCount by 1
-    \directlua{Serializer.note_label(\the\reflowtexAnchorCount, "reflowtex-lean-\reflowtex@lc@id")}%
-    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
-    \def\reflowtex@lc@acc{}%
-    \reflowtex@lc@collect}%
-   {\directlua{Serializer.note_stream_text(\reflowtex@lc@id,
-      "\luaescapestring{\reflowtex@lc@acc}")}%
-    \par}
-\else
-  \NewDocumentEnvironment{leanproof}{O{}}{\par}{\par}
-  \NewDocumentEnvironment{leantheorem}{O{}}{\par}{\par}
-  \ifreflowtex@leanprint
-    \newenvironment{leancode}{\par\small\verbatim}{\endverbatim}
-  \else
-    \newenvironment{leancode}{\comment}{\endcomment}
-  \fi
-\fi
+% leanproof, leantheorem, leancode and leanblueprint's macros: a package of
+% their own, loaded with this one (reflowtex-lean.sty).
+\RequirePackage{reflowtex-lean}
 
 \endinput

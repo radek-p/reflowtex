@@ -125,6 +125,10 @@ message Node {
   // text (reflowtex.sty) – a 1-based index into Document.streams, the aside's
   // own stream. A page asks for its position to place the aside by it.
   optional uint32 aside  = 55;
+  // glyph: a 1-based index into Document.marks – the \\webid / \\webclass
+  // (reflowtex.sty) the glyph was typeset inside, the innermost; its classes
+  // include the enclosing ones'.
+  optional uint32 mark   = 56;
 }
 
 // A named placeholder in running text (\webtext{name}{default} in
@@ -141,6 +145,16 @@ message Slot {
   // "widget" for \webwidget: the page draws HTML there, which it measures
   // and may break across lines (see the viewer's widgets). Absent: text.
   optional string kind    = 5;
+  // A widget's parameters: \\webwidget[key=value]{kind} (reflowtex.sty).
+  repeated StreamAttr attrs = 6;
+}
+
+// A run of text the author named (\\webid{id}{…}) or classed
+// (\\webclass{classes}{…}), for a page to find, style or point at. Every
+// glyph inside carries the mark's index (Node.mark).
+message Mark {
+  optional string id      = 1;
+  optional string classes = 2;  // space-separated
 }
 
 // What one link points at. Exactly one field is set: `label` for a cross
@@ -367,6 +381,7 @@ message Document {
   // theorem-like environments, each with the anchor marking its place.
   repeated OutlineEntry outline        = 13;
   repeated Slot         slots          = 14;
+  repeated Mark         marks          = 15;
 }
 
 message OutlineEntry {

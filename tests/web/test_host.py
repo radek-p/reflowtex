@@ -38,14 +38,17 @@ def test_instance_tree(open_page):
 def test_data_part_and_query(open_page):
     page = open_page('host')
     r = page.evaluate("""() => {
-      const h = reflowtex.host, code = h.instances('leancode')[0];
-      return { text: code.part('text').data, type: code.part('text').type, parent: code.parent.kind,
+      const h = reflowtex.host, lean = h.instances('leanproof')[0], code = lean.part('code'), tex = lean.part('tex');
+      return { text: code.data, type: code.type, tex: tex.type, kinds: lean.children.map(c => c.kind),
+               attrs: { ...lean.attrs },
                q: h.instances({ kind: 'pane', name: 'expanded' }).length,
                detached: h.instances({ placement: 'detached' }).map(i => i.kind).sort(),
-               found: h.find(code.id) === code };
+               found: h.find(lean.id) === lean };
     }""")
-    assert r['type'] == 'data' and 'theorem foo : 1 = 1' in r['text']
-    assert r['parent'] == 'leanproof' and r['q'] == 1 and r['found']
+    assert r['type'] == 'data' and 'theorem foo : 1 = 1' in r['text'] and r['tex'] == 'typeset'
+    assert 'leancode' not in r['kinds'] and 'leantex' not in r['kinds'], 'parts are not instances'
+    assert r['attrs'].get('decl') == 'foo' and not any(k.startswith('rtx-') for k in r['attrs'])
+    assert r['q'] == 1 and r['found']
     assert r['detached'] == ['footnote', 'marginpar']
 
 

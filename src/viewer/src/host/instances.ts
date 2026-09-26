@@ -17,10 +17,17 @@
 // Parents follow the text: an instance's parent is the stream whose content
 // holds the paragraph, display or item it came from.
 //
-// Stopgap until \webwidget takes parameters (plan stage 6): a widget named
-// "kind:key" is an instance of `kind` with attrs { name, key }, and every
-// aside of its block with for=key becomes one of its parts, by the aside's
-// kind (\mypopover's popover-label and popover-note).
+// Parts. A stream marked rtx-part=ROLE (reflowtex.sty's \webpart, and the
+// Lean environments' pieces) is not an instance of its own but part ROLE of
+// its owner: the stream it stands in, or the one rtx-owner names (w<N>: the
+// widget of slot N; s<N>: stream N). A stream carrying text is a data part,
+// any other a typeset part; instances inside a part are its owner's
+// children. Keys starting rtx- are the package's, never the author's.
+//
+// Widgets: \webwidget[key=value]{kind} is an instance of kind with those
+// parameters. The first form, \webwidget{kind:key} with no parameters, is an
+// instance of `kind` with attrs { name, key }, and every aside of its block
+// with for=key becomes one of its parts, by the aside's kind.
 
 import type {
     Action, Block, DataPart, Instance, InstanceQuery, Part, Placement, Presentation, TypesetPart,
@@ -39,7 +46,7 @@ export interface DocNode {
 }
 export interface DocItem { kind?: string; para?: number; box?: DocNode; stream?: number; amount?: number }
 export interface DocStream { kind?: string; content?: DocItem[]; attrs?: { key?: string; value?: string }[]; text?: string }
-export interface DocSlot { name?: string; kind?: string }
+export interface DocSlot { name?: string; kind?: string; attrs?: DocStream['attrs'] }
 export interface Doc {
     paragraphs: { nodes?: DocNode[] }[];
     content?: DocItem[];
@@ -86,22 +93,27 @@ export class InstanceImpl implements Instance {
     anchor() { return this.source.type === 'none' ? null : this.anchorOf(this.source); }
 }
 
-/** Split a stream's attrs into the author's parameters and presentation,
- *  dropping the keys that only say what the stream is (aside). */
-export function splitAttrs(list: DocStream['attrs']): { attrs: Record<string, string>; presentation: Presentation; aside: boolean } {
+/** Split a stream's attrs into the author's parameters, presentation, and
+ *  the package's own keys (aside, rtx-…), which say what the stream is. */
+export function splitAttrs(list: DocStream['attrs']): {
+    attrs: Record<string, string>; presentation: Presentation; aside: boolean; part?: string; owner?: string;
+} {
     const attrs: Record<string, string> = {};
     const classes: string[] = [];
     const properties: Record<string, string> = {};
-    let aside = false;
+    let aside = false, part: string | undefined, owner: string | undefined;
     for (const a of list || []) {
         const k = a.key || '', v = a.value || '';
         if (!/^[a-z0-9-]+$/i.test(k)) continue;
         if (k === 'aside') aside = v === 'true';
+        else if (k === 'rtx-part') part = v;
+        else if (k === 'rtx-owner') owner = v;
+        else if (k.startsWith('rtx-')) continue;
         else if (k === 'class') classes.push(...v.split(/\s+/).filter(Boolean));
         else if (k.startsWith('--')) properties[k] = v;
         else attrs[k] = v;
     }
-    return { attrs, presentation: { classes, properties }, aside };
+    return { attrs, presentation: { classes, properties }, aside, part, owner };
 }
 
 const NO_PRESENTATION: Presentation = Object.freeze({ classes: Object.freeze([]) as readonly string[], properties: Object.freeze({}) });
@@ -116,6 +128,25 @@ export function normalise(doc: Doc, block: Block, key: string, parts: PartFactor
     const seenStream = new Set<number>();     // 1-based stream indices made into instances
     const seenSlot = new Set<number>();
     const widgetsByKey = new Map<string, InstanceImpl>();
+    const bySlot = new Map<number, InstanceImpl>(), byStream = new Map<number, InstanceImpl>();
+
+    // A stream as part `role` of `owner`: its content (or text) is the part,
+    // and what is inside it belongs to the owner.
+    const makePart = (index: number, role: string, owner: InstanceImpl, spaceBefore = 0) => {
+        seenStream.add(index);
+        const s = streams[index - 1];
+        if (!owner.parts.has(role)) {
+            if (s.text !== undefined) {
+                const data: DataPart = { type: 'data', role, instance: owner, data: s.text };
+                owner.parts.set(role, data);
+            } else {
+                const tp = parts.typeset(owner, role, s);
+                (tp as { spaceBefore: number }).spaceBefore = spaceBefore;
+                owner.parts.set(role, tp);
+            }
+        }
+        walkContent(s.content || [], owner);
+    };
     const pendingAsides: { index: number; parent: InstanceImpl | null }[] = [];
 
     const adopt = (inst: InstanceImpl, parent: InstanceImpl | null) => {
@@ -129,6 +160,7 @@ export function normalise(doc: Doc, block: Block, key: string, parts: PartFactor
         const inst = new InstanceImpl(`${key}/s${index}`, s.kind || '', Object.freeze(attrs), presentation,
                                       placement, parent, block, source, anchorOf);
         inst.stream = index;
+        byStream.set(index, inst);
         inst.parts.set('body', parts.typeset(inst, 'body', s));
         if (s.text !== undefined) {
             const data: DataPart = { type: 'data', role: 'text', instance: inst, data: s.text };
@@ -144,13 +176,20 @@ export function normalise(doc: Doc, block: Block, key: string, parts: PartFactor
         const slot = slots[index - 1] || {};
         const name = slot.name || '';
         if (slot.kind === 'widget') {
-            const colon = name.indexOf(':');
-            const kind = colon >= 0 ? name.slice(0, colon) : name;
-            const attrs: Record<string, string> = { name };
-            if (colon >= 0) attrs.key = name.slice(colon + 1);
-            const inst = new InstanceImpl(`${key}/w${index}`, kind, Object.freeze(attrs), NO_PRESENTATION,
+            let kind: string, attrs: Record<string, string>, presentation = NO_PRESENTATION;
+            if (slot.attrs && slot.attrs.length) {           // \webwidget[key=value]{kind}
+                const split = splitAttrs(slot.attrs);
+                kind = name; attrs = split.attrs; presentation = split.presentation;
+            } else {                                         // the first form: kind:key
+                const colon = name.indexOf(':');
+                kind = colon >= 0 ? name.slice(0, colon) : name;
+                attrs = { name };
+                if (colon >= 0) attrs.key = name.slice(colon + 1);
+            }
+            const inst = new InstanceImpl(`${key}/w${index}`, kind, Object.freeze(attrs), presentation,
                                           'inline', parent, block, { type: 'widget', slot: index }, anchorOf);
             inst.slot = index;
+            bySlot.set(index, inst);
             if (attrs.key !== undefined && !widgetsByKey.has(attrs.key)) widgetsByKey.set(attrs.key, inst);
             adopt(inst, parent);
         } else {
@@ -184,8 +223,11 @@ export function normalise(doc: Doc, block: Block, key: string, parts: PartFactor
             const before = space;
             space = 0;
             if (it.kind === 'stream') {
-                if (it.stream && !seenStream.has(it.stream) && streams[it.stream - 1])
-                    streamInstance(it.stream, 'block', parent, { type: 'none' }).spaceBefore = before * spToPx;
+                const s = it.stream && !seenStream.has(it.stream) ? streams[it.stream - 1] : undefined;
+                if (!s) continue;
+                const role = splitAttrs(s.attrs).part;
+                if (role && parent) makePart(it.stream!, role, parent, before * spToPx);
+                else streamInstance(it.stream!, 'block', parent, { type: 'none' }).spaceBefore = before * spToPx;
             } else if (it.kind === 'display') {
                 walkNodes(it.box ? [it.box] : [], parent);
             } else if (!it.kind || it.kind === 'paragraph') {
@@ -201,11 +243,16 @@ export function normalise(doc: Doc, block: Block, key: string, parts: PartFactor
     });
     for (const { index, parent } of pendingAsides) {
         const s = streams[index - 1];
-        const { attrs } = splitAttrs(s.attrs);
-        const owner = attrs.for !== undefined ? widgetsByKey.get(attrs.for) : undefined;
-        if (owner && !owner.parts.has(s.kind || '')) {
-            // The stopgap above: this aside is a part of its widget.
-            owner.parts.set(s.kind || '', parts.typeset(owner, s.kind || '', s));
+        const { attrs, part, owner: ownerRef } = splitAttrs(s.attrs);
+        if (part) {                                          // \webpart: a part of its owner
+            const m = /^([ws])(\d+)$/.exec(ownerRef || '');
+            const owner = m ? (m[1] === 'w' ? bySlot : byStream).get(Number(m[2])) : undefined;
+            if (owner) { makePart(index, part, owner); continue; }
+        }
+        const legacy = attrs.for !== undefined ? widgetsByKey.get(attrs.for) : undefined;
+        if (legacy && !legacy.parts.has(s.kind || '')) {
+            // The first form: this aside is a part of the kind:key widget.
+            legacy.parts.set(s.kind || '', parts.typeset(legacy, s.kind || '', s));
             continue;
         }
         seenStream.delete(index);
