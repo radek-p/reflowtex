@@ -108,9 +108,10 @@ test-web: node-deps
 	npx playwright test -c tests/web
 
 # Forces every block (including testmath.tex on the Showcase page) to
-# recompile from scratch – needed after touching src/extract/template.tex,
-# font handling, or anything else that isn't reflected in a block's own
-# content hash. Slower; use `website` for routine content edits.
+# recompile from scratch. `website` already recompiles a block whose content,
+# preamble or toolchain (src/extract, src/latex, src/schema, src/pipeline)
+# changed; this is for what neither records – a new TeX Live, fonts installed
+# on the machine. Slower.
 website-clean:
 	cd website && rm -rf public resources .reflowtex-build .hugo_build.lock \
 	       data/latex_blocks data/latex_schema.json data/latex_files.json data/latex_font_map.json \

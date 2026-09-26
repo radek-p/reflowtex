@@ -17,7 +17,7 @@
 //
 // and this writes:
 //
-//     <site>/data/latex_blocks/<key>.json   {nodelist_b64, content_hash}
+//     <site>/data/latex_blocks/<key>.json   {nodelist_b64, content_hash, toolchain}
 //     <site>/data/latex_schema.json         {schema_b64}
 //     <site>/data/latex_files.json          {"name.tex": key} for file refs and as="…"
 //     <site>/data/latex_color_maps.json     {name: <colour map>, …}
@@ -35,7 +35,7 @@ import { parseArgs } from 'node:util';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { basename, join, relative, resolve, sep } from 'node:path';
-import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
+import { Pipeline, contentKey, toolchainHash } from '../../src/pipeline/pipeline.ts';
 import { readSerializerOutput } from '../../src/pipeline/nodes.ts';
 import { installViewer, passesFor, REF_PASSES, schemaBase64, pyJsonDumps, jsonSorted } from '../../src/pipeline/site.ts';
 
@@ -208,11 +208,18 @@ writeFileSync(join(site, 'data', 'latex_color_maps.json'), jsonSorted(colorMaps)
 if (!blocks.size && !batches.size) { console.log('No {{< latex >}} blocks found.'); process.exit(0); }
 
 // ── Compiling ───────────────────────────────────────────────────────────────
+// Each block's data records the hash of its content and of the toolchain
+// that compiled it (the packages, serializer, template, encoder): a block is
+// up to date only when both match, so a new package version recompiles it.
+const toolchain = toolchainHash();
 const writeBlock = (key: string, bytes: Uint8Array, hash: string) =>
-  writeFileSync(join(dataDir, `${key}.json`), JSON.stringify({ nodelist_b64: Buffer.from(bytes).toString('base64'), content_hash: hash }, null, 2));
+  writeFileSync(join(dataDir, `${key}.json`), JSON.stringify({ nodelist_b64: Buffer.from(bytes).toString('base64'), content_hash: hash, toolchain }, null, 2));
 const storedHash = (key: string): string | undefined => {
   const f = join(dataDir, `${key}.json`);
-  try { return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')).content_hash : undefined; } catch { return undefined; }
+  try {
+    const d = existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null;
+    return d && d.toolchain === toolchain ? d.content_hash : undefined;
+  } catch { return undefined; }
 };
 // An up-to-date block needs no compilation, but its fonts are served all the
 // same: it is declared current to the pipeline, which reads its build output

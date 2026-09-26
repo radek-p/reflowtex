@@ -14,7 +14,7 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { basename, join, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { readSerializerOutput, writeSerializerOutput, type SerializerOutput } from './nodes.ts';
 import { encodeDocument } from './encode.ts';
 import { runLuaLatex } from './lualatex.ts';
@@ -61,6 +61,24 @@ export function contentKey(content: string, preamble = ''): string {
   let normalised = content.trim();
   if (preamble) normalised = `${preamble}\n===REFLOWTEX-PREAMBLE-BOUNDARY===\n${normalised}`;
   return createHash('sha256').update(normalised, 'utf8').digest('hex').slice(0, 16);
+}
+
+/** A 16-hex hash of what turns a snippet into its bundle besides the snippet
+ *  itself: the template, the serializer, the LaTeX packages, the schema and
+ *  this pipeline's own code. A build made with other versions of these is
+ *  stale however unchanged its snippet is – an integration that skips
+ *  unchanged snippets records this beside the content key and compares both. */
+export function toolchainHash(src = SRC): string {
+  const h = createHash('sha256');
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(tex|sty|lua|ts|proto)$/.test(e.name) && !/\.test\.ts$/.test(e.name)) h.update(relative(src, p)).update('\0').update(readFileSync(p)).update('\0');
+    }
+  };
+  for (const d of ['extract', 'latex', 'schema', 'pipeline']) if (existsSync(join(src, d))) walk(join(src, d));
+  return h.digest('hex').slice(0, 16);
 }
 
 // ── The pipeline ────────────────────────────────────────────────────────────
