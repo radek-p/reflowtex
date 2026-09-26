@@ -12,7 +12,7 @@
 \makeatletter
 \NewDocumentCommand\pagetitle{o m}{%
   \noindent\IfValueT{#1}{{\small\scshape #1}\par\smallskip\noindent}%
-  {\LARGE\bfseries #2\par}\@afterindentfalse\@afterheading}
+  {\raggedright\LARGE\bfseries #2\par}\@afterindentfalse\@afterheading}
 \makeatother
 \newcommand\cs[1]{\texttt{\textbackslash #1}}
 

@@ -1,12 +1,13 @@
 % SPDX-License-Identifier: AGPL-3.0-or-later
 % Preamble for the documentation pages (content/docs/): the page title and
 % section headings are typeset by LaTeX like the prose around them.
-% \pagetitle[group]{title}: the group as a small-caps label above the title.
+% \pagetitle[group]{title}: the group as a small-caps label above the title,
+% which is set ragged right, as the section headings are.
 % Like a sectioning command, it leaves the paragraph after it unindented.
 \makeatletter
 \NewDocumentCommand\pagetitle{o m}{%
   \noindent\IfValueT{#1}{{\small\scshape #1}\par\smallskip\noindent}%
-  {\LARGE\bfseries #2\par}\@afterindentfalse\@afterheading}
+  {\raggedright\LARGE\bfseries #2\par}\@afterindentfalse\@afterheading}
 \makeatother
 % Section headings ragged right: at a narrow measure a heading breaks onto
 % several lines, and the standard classes would justify them. Only the
