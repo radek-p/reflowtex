@@ -338,6 +338,7 @@ end
 -- re-breaks the line, so it must make that choice itself; see the viewer.
 local display_notes = {}
 local current_display = nil
+local display_open = false
 -- \addvspace after a display (template.tex): the least space LaTeX asked for
 -- while the display's own below skip was the last thing on the list, by
 -- display number. The viewer takes the larger of that and the skip it sets.
@@ -365,6 +366,12 @@ function Serializer.note_display(id)
         -- the em TeX measures \predisplaysize with: the font current at the $$
         quad        = (font.getparameters(font.current()) or {}).quad or 0,
     }
+    display_open = true
+end
+-- The display's math group has closed (\aftergroup, template.tex): math
+-- converted from here on is the text after it.
+function Serializer.note_display_end()
+    display_open = false
 end
 -- The leading TeX appends the display box with. The box goes onto the
 -- vertical list before the math group closes, so \baselineskip as set
@@ -374,9 +381,15 @@ end
 -- outer list is empty and never converted, so its cells' conversions (text
 -- style, inside the same group, after amsmath opened the leading up) stand
 -- in – the display's own conversion, when it comes, has the last word.
+-- Only the shallowest group's: a cell's math converts its nested lists
+-- first, and an array inside it (a pmatrix in a gather* row) has set
+-- \baselineskip and \lineskip to zero in its own group (LaTeX's \@array).
 local function note_display_leading(head, style, penalties)
-    local rec = current_display and display_notes[current_display]
-    if rec and (style == "display" or rec.bskip == nil) then
+    local rec = display_open and display_notes[current_display]
+    local level = tex.currentgrouplevel
+    if rec and (rec.bskip == nil or level < rec.level
+                or (style == "display" and level <= rec.level)) then
+        rec.level = level
         local function width(name)
             local ok, v = pcall(function() return tex[name] end)
             if not ok or v == nil then return 0 end

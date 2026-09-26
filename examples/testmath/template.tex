@@ -102,7 +102,10 @@
 \AtBeginDocument{\everydisplay\expandafter{\the\everydisplay
   \global\advance\reflowtexDisplayCount by 1
   \attribute912=\reflowtexDisplayCount
-  \directlua{Serializer.note_display(\the\reflowtexDisplayCount)}}}
+  \directlua{Serializer.note_display(\the\reflowtexDisplayCount)}%
+  \aftergroup\reflowtexDisplayEnd}}
+% When the display's math group closes: its leading is read no more.
+\def\reflowtexDisplayEnd{\directlua{Serializer.note_display_end()}}
 % LaTeX's \addvspace (a theorem's, list's or heading's space above) makes the
 % space since the last box at least its argument, judged on \lastskip. After
 % a display that skip is the below-display glue, which the renderer swaps for
