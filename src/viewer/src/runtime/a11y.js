@@ -120,6 +120,7 @@ export function placeAccessibleLayer(data) {
                 const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
                 piece.style.cssText = `${PIECE};top:${top}px;left:${left}px;width:${w}px;height:${hh}px` + LINED;
                 math.dataset.run = 'display';
+                math.style.display = 'inline-block';           // its own size, not the piece's width
                 scaled.push({ el: math, w, h: hh });
                 return;
             }
@@ -285,15 +286,16 @@ function layOutRuns({ piece, p, runs, origin }) {
 }
 
 /** Each element scaled from its natural size onto w × h – all measured first,
- *  then all scaled: one layout. A formula's <math> is scaled inside its run. */
+ *  then all scaled: one layout. The scale a layout before left is taken off
+ *  first: the browser measures an element as transformed. */
 function scaleOnto(items) {
+    for (const { el } of items) el.style.transform = 'none';
     const sizes = items.map(({ el }) => { const r = el.getBoundingClientRect(); return [r.width, r.height]; });
     items.forEach(({ el, w, h }, k) => {
         const [nw, nh] = sizes[k];
         if (!(nw > 0 && nh > 0)) return;
         el.style.transformOrigin = '0 0';
         el.style.transform = `scale(${w / nw}, ${h / nh})`;
-        if (el.localName === 'math') el.style.display = 'inline-block';
     });
 }
 

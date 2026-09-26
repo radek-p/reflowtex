@@ -22,8 +22,8 @@ export const COPY_KEY = IS_MAC ? '⌘C' : 'Ctrl+C';
 export const isOpen = signal(false);
 export const view = signal(recall('view', 'tree', plain) === 'res' ? 'res' : 'tree');   // 'tree' | 'res'
 export const dark = signal(false);
-// the page overlays: { baselines, badness, springs }
-export const guides = signal({ baselines: false, badness: false, springs: false, ...recall('guides', {}) });
+// the page overlays: { baselines, badness, springs, a11y }
+export const guides = signal({ baselines: false, badness: false, springs: false, a11y: false, ...recall('guides', {}) });
 
 // ── What the page's agent says ─────────────────────────────────────────────────
 export const picking = signal(false);

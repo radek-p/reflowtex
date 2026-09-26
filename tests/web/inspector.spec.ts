@@ -202,3 +202,71 @@ test('one panel inspects another window, and follows it to the next page', async
   expect(await page.evaluate(() => document.querySelectorAll('[data-rtx-ui]').length), 'one panel').toBe(1);
   expect(await page.evaluate(() => reflowtex.inspector.isOpen())).toBe(true);
 });
+
+// ── Accessibility ───────────────────────────────────────────────────────────
+// What a screen reader is given for a box: the accessible layer's text for
+// the paragraphs and displays it belongs to (src/pipeline/a11y.ts, laid over
+// the drawing by the viewer), each formula as its MathML and its words.
+
+/** A row of the Boxes tree: the block's, its first segment's, a line's. */
+async function firstLine(page: WebPage, block = 0) {
+  return page.evaluate(b => {
+    const I = window.__rtxInspector as any;
+    const blk = I.blocks()[b], seg = I.children(blk.id)[0], line = I.children(seg.id)[0];
+    return { block: blk.id, seg: seg.id, line: line.id };
+  }, block);
+}
+
+test('the accessible text of a box: its paragraph\'s text, formulas as MathML and words', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  await agent(page);
+  const { line, block } = await firstLine(page);
+  const a = await A(page, 'accessible', line);
+  expect(a.layer).toBe(true);
+  expect(a.pieces.length).toBe(1);
+  const [p] = a.pieces;
+  expect(p.kind).toBe('paragraph');
+  expect(p.parts.find((x: any) => x.type === 'text').text).toMatch(/^Inline/);
+  const math = p.parts.filter((x: any) => x.type === 'math');
+  expect(math.length).toBe(3);
+  expect(math[0].mathml).toMatch(/^<math/);
+  expect(math[0].alttext).toBe('x squared plus y squared equals z squared');
+  // the whole block: every piece, the display's too
+  const all = await A(page, 'accessible', block);
+  expect(all.pieces.map((x: any) => x.kind)).toEqual(['paragraph', 'display', 'display', 'paragraph']);
+});
+
+test('the Accessibility layer overlay outlines the hidden text on the page', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  await agent(page);
+  await A(page, 'setOptions', { a11y: true });
+  await page.waitForTimeout(100);
+  const drawn = await page.evaluate(() => ({
+    runs: document.querySelectorAll('[data-rtx-inspector] [data-a11y="run"]').length,
+    math: document.querySelectorAll('[data-rtx-inspector] [data-a11y="math"]').length,
+    pieces: document.querySelectorAll('[data-rtx-inspector] [data-a11y="piece"]').length,
+  }));
+  expect(drawn.pieces).toBeGreaterThan(3);
+  expect(drawn.runs).toBeGreaterThan(5);
+  expect(drawn.math).toBeGreaterThan(3);
+});
+
+test('the details have an Accessibility tab: a box’s accessible text, with MathML or spelled out', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  await page.evaluate(() => reflowtex.inspector.open(document.querySelector('.latex-block[data-nodelist-b64]'), { scroll: false }));
+  const details = page.locator('[data-rtx-ui] .details');
+  const pane = details.locator('.a11y');
+  await details.locator('[role="tab"][data-dtab="a11y"]').click();
+  await expect(pane).toBeVisible();
+  await expect(pane).toContainText('Inline');
+  await pane.locator('[data-mode="mathml"]').click();
+  await expect(pane.locator('math').first()).toBeAttached();
+  expect(await pane.locator('math').count()).toBeGreaterThanOrEqual(5);
+  await pane.locator('[data-mode="spoken"]').click();
+  await expect(pane).toContainText('x squared plus y squared equals z squared');
+  expect(await pane.locator('math').count()).toBe(0);
+  // back to the node's own details
+  await details.locator('[role="tab"][data-dtab="props"]').click();
+  await expect(pane).toBeHidden();
+  await expect(details.locator('table')).toBeVisible();
+});

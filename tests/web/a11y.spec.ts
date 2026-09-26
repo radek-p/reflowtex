@@ -171,3 +171,23 @@ test('each run of the layer covers exactly the glyphs it stands for', async ({ o
     expect(r.off, `"${r.text}" has its glyphs in its middle`).toBeLessThan(0.3);
   }
 });
+
+// A display's MathML is scaled onto its ink – measured from its natural size,
+// not from a scale left by the layout before (a transform shows in what the
+// browser measures), and again after a reflow.
+test('a display lies on its drawing, and still does after a reflow', async ({ openPage }) => {
+  const page = await openPage('mathml', { width: 1200, height: 900 });
+  const check = () => page.evaluate(() => [...document.querySelectorAll('.latex-a11y [data-run="display"]')].map(m => {
+    const r = m.getBoundingClientRect();
+    const piece = m.closest('.latex-a11y > *')!.getBoundingClientRect();
+    return { w: r.width / piece.width, h: r.height / piece.height };
+  }));
+  for (const at of [1200, 800, 1200]) {
+    await page.setViewportSize({ width: at, height: 900 });
+    await page.waitForTimeout(600);
+    for (const d of await check()) {
+      expect(Math.abs(d.w - 1), `display width at ${at}px`).toBeLessThan(0.05);
+      expect(Math.abs(d.h - 1), `display height at ${at}px`).toBeLessThan(0.05);
+    }
+  }
+});

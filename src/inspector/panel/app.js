@@ -21,6 +21,7 @@ const OVERLAYS = [
     ['baselines', 'Baselines', 'The baseline of every line'],
     ['badness', 'Badness', 'A bar past every line, coloured by its badness: green decent, amber loose or tight, red 100 or more, purple overfull'],
     ['springs', 'Springs', 'Every display glue whose width is recomputed for the reader\'s width, drawn as a spring'],
+    ['a11y', 'Accessibility layer', 'Where the hidden text a screen reader reads lies: each piece dashed, its runs of text orange, its formulas green'],
 ];
 const LEGEND = [['box, glyph', 'box'], ['glue', 'glue'], ['kern', 'kern'], ['math', 'math'], ['penalty', 'penalty'], ['line', 'line-c']];
 
@@ -67,7 +68,7 @@ function Toolbar() {
             <${IconButton} class=${'pick' + (picking.value ? ' on' : '')} title="Pick a box or glue in the page (Esc cancels)" onClick=${togglePick}>
                 <${IconPick}/><//>
             <button type="button" class=${'ib text overlays' + (OVERLAYS.some(([k]) => g[k]) ? ' on' : '')}
-                    title="Page overlays: baselines, badness, springs" aria-haspopup="menu" aria-expanded=${String(menuOpen('overlays'))}
+                    title="Page overlays: baselines, badness, springs, the accessibility layer" aria-haspopup="menu" aria-expanded=${String(menuOpen('overlays'))}
                     onClick=${e => toggleMenu('overlays', e.currentTarget)}><span>Overlays</span><${Caret}/></button>
             <span class="sep"></span>
             <span class="tabs" role="tablist">

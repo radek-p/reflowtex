@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 98c55e21a6bef5881096efb4c7652a413f869c2a38e97c2f3616a4ca095376e0
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 5694dc2299ac908a386423430625d9850e6a5998a0b1fa7439956e68ac6b53bc
 'use strict';
 "use strict";
 (() => {
@@ -2928,6 +2928,7 @@
           const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
           piece.style.cssText = `${PIECE};top:${top2}px;left:${left}px;width:${w}px;height:${hh}px` + LINED;
           math.dataset.run = "display";
+          math.style.display = "inline-block";
           scaled.push({ el: math, w, h: hh });
           return;
         }
@@ -3098,6 +3099,7 @@
     return scale;
   }
   function scaleOnto(items) {
+    for (const { el } of items) el.style.transform = "none";
     const sizes = items.map(({ el }) => {
       const r = el.getBoundingClientRect();
       return [r.width, r.height];
@@ -3107,7 +3109,6 @@
       if (!(nw > 0 && nh > 0)) return;
       el.style.transformOrigin = "0 0";
       el.style.transform = `scale(${w / nw}, ${h / nh})`;
-      if (el.localName === "math") el.style.display = "inline-block";
     });
   }
   function fitText(fits) {

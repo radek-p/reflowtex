@@ -12,7 +12,7 @@
 // The file's value, when evaluated as a script, is the result of installing: 'ok', or 'no-api' when the page has no inspectable viewer yet.
 // window.__rtxInspectorInstall() tries again.
 window.__rtxInspectorInstall = () => {
-const AGENT = 6;
+const AGENT = 7;
 const prev = window.__rtxInspector;
 if (prev && prev.agent === AGENT) return 'ok';
 const I = window.reflowtex && window.reflowtex.inspect;
@@ -940,7 +940,7 @@ function drawBaseline(r, strong) {
 // selection: whether the selected node (and a resource's marked uses) is
 // drawn at all. A panel that outlines only what the pointer is over, as
 // Chrome's does, turns it off and on again for keyboard navigation.
-const options = { baselines: false, badness: false, springs: false, selection: true };
+const options = { baselines: false, badness: false, springs: false, a11y: false, selection: true };
 // A spring across a glue whose width the display model recomputes: a zigzag,
 // one coil per 6px, along the middle of the glue's height.
 function drawSpring(q) {
@@ -1015,6 +1015,7 @@ function redraw() {
     ink = document.createDocumentFragment(); ctms = new Map(); culled = false;
     try {
         if (options.baselines || options.badness || options.springs) { drawGuides(); guidesPaints = I.paints; }
+        if (options.a11y) drawAccessible();
         const sel = options.selection ? selected : null;
         if (options.selection) for (const id of marked) drawMark(id);
         const h = picking ? pickHover : hovered;
@@ -1055,7 +1056,7 @@ function drawPale(id, color = 'rgba(47,44,205,.07)', cull = false) {
 }
 let raf = 0;
 const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0;
-    if (selected != null || hovered != null || pickHover != null || marked.length || options.baselines || options.badness || options.springs) redraw(); }); };
+    if (selected != null || hovered != null || pickHover != null || marked.length || options.baselines || options.badness || options.springs || options.a11y) redraw(); }); };
 // The page's own scrolling carries the layer; a scroll box inside it (a wide
 // display) moves what it holds, and needs a redraw.
 // The page's own scrolling only needs a redraw when something was left undrawn
@@ -1973,6 +1974,100 @@ function colourMaps() {
     return { theme, maps: out, edited: JSON.stringify(maps) !== JSON.stringify(originalMaps ?? maps) };
 }
 
+// ── Accessibility ──────────────────────────────────────────────────────────────
+// A block built with the accessible layer (src/pipeline/a11y.ts) has it right
+// after it: pieces – a paragraph (data-para), a display (data-item) – which
+// the viewer lays over the drawing, a paragraph near the window line by line
+// as runs (data-run: text, math). The inspector says what the layer holds for
+// a box, and draws where it lies.
+const layerOf = el => { const l = el && el.nextElementSibling; return l && l.classList.contains('latex-a11y') ? l : null; };
+// The layer's pieces for a row: a block's, all; a segment's, its paragraphs'
+// or its display's; a line's or a node's, its paragraph's.
+function accessiblePieces(id) {
+    const e = entries.get(id);
+    if (!e) return { el: null, pieces: [] };
+    if (e.kind === 'block') { const l = layerOf(e.el); return { el: e.el, pieces: l ? [...l.children] : [] }; }
+    let sid = e.kind === 'seg' ? id : e.kind === 'line' ? e.seg : e.kind === 'node' ? e.seg : null;
+    if (sid == null) return { el: null, pieces: [] };
+    const { seg, laid, el } = segParts(sid);
+    const layer = layerOf(el);
+    if (!layer || !laid || seg.cachePath.length || seg.root != null) return { el, pieces: [] };
+    const doc = (I.state(el) || {}).doc || {};
+    const byPara = n => layer.querySelector(`:scope > [data-para="${n}"]`);
+    if (laid.seg.kind === 'display') {
+        const k = (doc.content || []).indexOf(laid.seg.rows[0].item) + 1;
+        const p = k > 0 && layer.querySelector(`:scope > [data-item="${k}"]`);
+        return { el, pieces: p ? [p] : [] };
+    }
+    if (laid.seg.kind !== 'text') return { el, pieces: [] };
+    const items = laid.seg.items;
+    if (e.kind === 'seg') return { el, pieces: items.map(it => byPara(it.index)).filter(Boolean) };
+    // a line's paragraph: the item whose lines hold it
+    let j = e.kind === 'line' ? e.j : -1;
+    if (e.kind === 'node') {
+        const g = geometry(sid);
+        let n = e.n;
+        while (g && g.parent.has(n) && !g.lines.some(L => L.line === g.parent.get(n))) n = g.parent.get(n);
+        const L = g && g.lines.find(L => L.line === g.parent.get(n));
+        j = L ? L.j : -1;
+    }
+    const starts = laid.itemStarts || [];
+    let k = -1;
+    for (let q = 0; q < starts.length; q++) if (starts[q] <= j) k = q;
+    const p = k >= 0 && byPara(items[k].index);
+    return { el, pieces: p ? [p] : [] };
+}
+// A piece's content, as a reader gets it: text, and each formula as its
+// MathML and its words (alttext).
+function accessibleParts(piece) {
+    const parts = [];
+    const text = t => { if (!t) return; const last = parts[parts.length - 1];
+        if (last && last.type === 'text') last.text += t; else parts.push({ type: 'text', text: t }); };
+    const walk = n => {
+        if (n.nodeType === 3) { text(n.nodeValue); return; }
+        if (n.nodeType !== 1) return;
+        if (n.localName === 'math') { parts.push({ type: 'math', mathml: n.outerHTML.replace(/ style="[^"]*"/, '').replace(/ data-run="[^"]*"/, ''), alttext: n.getAttribute('alttext') || '' }); return; }
+        for (const c of n.childNodes) walk(c);
+    };
+    walk(piece);
+    for (const p of parts) if (p.type === 'text') p.text = p.text.replace(/\s+/g, ' ');
+    return parts;
+}
+function accessible(id) {
+    const { el, pieces } = accessiblePieces(id);
+    return {
+        layer: !!layerOf(el),
+        pieces: pieces.map(p => ({ kind: p.dataset.para ? 'paragraph' : 'display', lined: !!p.querySelector('[data-run]'), parts: accessibleParts(p) })),
+    };
+}
+// The overlay: every piece near the window dashed, its runs outlined – text
+// orange, formulas green – so a run that misses its glyphs shows.
+function drawAccessible() {
+    const box = (r, css, kind) => {
+        const d = document.createElement('div');
+        d.dataset.a11y = kind;
+        d.style.cssText = `position:absolute;box-sizing:border-box;left:${r.left}px;top:${r.top}px;width:${Math.max(r.width, 1)}px;height:${Math.max(r.height, 1)}px;${css}`;
+        ink.appendChild(d);
+    };
+    for (const el of I.blocks()) {
+        const layer = layerOf(el);
+        if (!layer) continue;
+        for (const piece of layer.children) {
+            const r = piece.getBoundingClientRect();
+            if (!near(r)) continue;
+            box(r, 'border:1px dashed rgba(123,31,162,.7)', 'piece');
+            const runs = piece.querySelectorAll('[data-run]');
+            for (const run of runs) {
+                const m = run.dataset.run !== 'text';
+                box(run.getBoundingClientRect(), m ? 'outline:1px solid rgba(46,125,50,.9);background:rgba(46,125,50,.12)'
+                                                   : 'outline:1px solid rgba(230,81,0,.9);background:rgba(230,81,0,.10)', m ? 'math' : 'run');
+            }
+            // a piece not laid line by line: its formulas, where the browser put them
+            if (!runs.length) for (const m of piece.querySelectorAll('math')) box(m.getBoundingClientRect(), 'outline:1px solid rgba(46,125,50,.9)', 'math');
+        }
+    }
+}
+
 // Open a footnote's popover, as its marker does when clicked: 'ok', or
 // 'wait' while the marker is off screen (scrolled to, it is painted soon).
 function openPopover(key) {
@@ -1991,7 +2086,7 @@ function openPopover(key) {
 
 window.__rtxInspector = {
     agent: AGENT,
-    // Page-wide guides: { baselines, badness, springs }, any of them.
+    // Page-wide guides: { baselines, badness, springs, a11y }, any of them.
     setOptions(o) { Object.assign(options, o); redraw(); },
     // Draw the outlines again, for the layout as it is now (after a reflow).
     redraw() { redraw(); },
@@ -2018,6 +2113,8 @@ window.__rtxInspector = {
     // footnote's popover.
     resources, resource, uses, fontGlyphs, pathTo,
     mark(ids) { marked = ids || []; redraw(); },
+    // Accessibility: what the accessible layer holds for a row.
+    accessible,
     openPopover, colourMaps, setPageTheme, setMapColour, setMapTint, importColourMaps, exportColourMaps, resetColourMaps,
 };
 // Where the page stops being visible: the window's bottom, or the top of an

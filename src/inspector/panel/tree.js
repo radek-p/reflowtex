@@ -5,9 +5,9 @@
 // The rows are keyed by node id, so when the text reflows (a resize, or a
 // width that changes on its own) only the rows whose numbers changed are
 // touched: no flicker, and a press on a row lands on the row it began on.
-import { html, signal, computed, useLayoutEffect, useRef } from '../vendor/preact.js';
+import { html, signal, computed, useLayoutEffect, useRef, useEffect, useState } from '../vendor/preact.js';
 import { call, got, MISSING } from './bridge.js';
-import { refs, menu, COPY_KEY } from './store.js';
+import { refs, menu, COPY_KEY, recall, keep, plain } from './store.js';
 import { Table, Action, Head, Muted, MenuBox, IconPick, closeMenu, copyText } from './ui.js';
 import { showGlyph } from './resources.js';
 
@@ -235,13 +235,50 @@ export function Tree() {
 // ── The details ────────────────────────────────────────────────────────────────
 // The same node again after a reflow: new values in the same table, the same
 // buttons – a click on one is not lost to a refresh between press and release.
+// ── The details ────────────────────────────────────────────────────────────────
+// Two tabs: the selected row's own details, and its accessible text – what a
+// screen reader is given for it (the accessible layer's paragraphs and
+// displays it belongs to), each formula shown as MathML or spelled out as its
+// alttext says. Both choices are remembered.
+const dtab = signal(recall('dtab', 'props', plain) === 'a11y' ? 'a11y' : 'props');
+const a11yMode = signal(recall('a11yMode', 'mathml', plain) === 'spoken' ? 'spoken' : 'mathml');
+const setDtab = t => { dtab.value = t; keep('dtab', t, plain); };
+const DTABS = [['props', 'Details', 'Every field of the node'],
+               ['a11y', 'Accessibility', 'What a screen reader is given for it: its text, and each formula as MathML or spelled out']];
+function DetailTabs() {
+    return html`<div class="dtabs" role="tablist">${DTABS.map(([t, label, title]) => html`<button type="button" role="tab" key=${t}
+        data-dtab=${t} title=${title} aria-selected=${String(dtab.value === t)} onClick=${() => setDtab(t)}>${label}</button>`)}</div>`;
+}
+function AccessibleText({ id }) {
+    const [a, setA] = useState(null);
+    useEffect(() => { let live = true; call('accessible', id).then(r => { if (live) setA(got(r) ? r : null); }); return () => { live = false; }; }, [id]);
+    const mode = a11yMode.value;
+    const setMode = m => { a11yMode.value = m; keep('a11yMode', m, plain); };
+    const body = !a ? html`<${Muted}>…<//>`
+        : !a.layer ? html`<${Muted}>This block has no accessible layer (build it with --a11y).<//>`
+        : !a.pieces.length ? html`<${Muted}>Nothing in the accessible layer stands for this row.<//>`
+        : a.pieces.map((p, k) => html`<section class="piece" key=${k}>
+            <h3>${p.kind}${p.lined ? ' · laid line by line' : ''}</h3>
+            <p class="said">${p.parts.map((x, q) => x.type === 'text' ? html`<span key=${q}>${x.text}</span>`
+                : mode === 'spoken' ? html`<span class="spoken" key=${q} title="alttext">${x.alttext || '(no alttext)'}</span>`
+                : html`<span class="mml" key=${q} title=${x.alttext} dangerouslySetInnerHTML=${{ __html: x.mathml }}></span>`)}</p>
+        </section>`);
+    return html`<div class="a11y">
+        <div class="mode" role="group" aria-label="Formulas as">
+            ${[['mathml', 'MathML'], ['spoken', 'Spoken']].map(([m, label]) => html`<button type="button" key=${m} data-mode=${m}
+                aria-pressed=${String(mode === m)} onClick=${() => setMode(m)}>${label}</button>`)}
+        </div>
+        ${body}
+    </div>`;
+}
 export function Details() {
     const x = details.value;
     if (selected.value == null || !x) return html`<aside class="details">
         <${Muted}>Select a row, or pick a box or glue in the page with <${IconPick}/>.<//></aside>`;
     const { id, d } = x;
     if (!d) return html`<aside class="details"><${Muted}>Gone – the layout changed.<//></aside>`;
-    return html`<aside class="details">
+    if (dtab.value === 'a11y') return html`<aside class="details"><${DetailTabs}/><${AccessibleText} id=${id}/></aside>`;
+    return html`<aside class="details"><${DetailTabs}/>
         <${Head} title=${`${d.summary.label}  ${d.summary.note}`}>
             ${d.glyph && html`<${Action} title=${`Show it in the glyph table of ${d.glyph.font} (Resources)`}
                 onClick=${() => showGlyph(d.glyph.key, d.glyph.cp)}>In its font<//>`}
