@@ -24,7 +24,7 @@ avoid spelling them out.
 | Hook | Purpose |
 |---|---|
 | `\directlua{dofile("serializer.lua")}` | loads the node-list exporter |
-| `\tikzpicture` / `\endtikzpicture` (wrapped) | captures the completed box to a private job-PDF page and leaves a metric-identical picture placeholder; low-level users such as `tikz-cd` work without source externalisation |
+| `\tikzpicture` / `\endtikzpicture` (wrapped) | captures the completed box to a private job-PDF page and leaves a metric-identical picture placeholder; low-level users such as `tikz-cd` work without source externalisation; only the outermost of nested pictures is captured (pgfplots nests one) |
 | `buildpage_filter` → `capture_flow` | copies main-vertical-list contributions before pagination and presents zero-height originals to the page builder, preserving document order without page boundaries |
 
 If you replace the template, preserve the serializer and picture hooks – the

@@ -31,7 +31,9 @@ nodes, plus a font table. A completed TikZ box is copied to a tightly sized
 private page in the job PDF and replaced in the captured flow by a
 metric-identical picture placeholder. This works for ordinary `tikzpicture` and
 front ends such as `tikz-cd`; their PDF drawing operators are opaque to the node
-renderer and are not reproduced individually.
+renderer and are not reproduced individually. Only the outermost picture is
+captured: a picture inside another (a `\tikz` in a node, the one a pgfplots axis
+opens) is drawn as part of the outer one.
 
 The template loads the serializer and TikZ before substituting the caller's
 preamble, so the preamble can add packages and TikZ libraries on top. It installs

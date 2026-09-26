@@ -351,6 +351,12 @@
 %
 % If the caller enabled PGF externalisation, turn it off first: capturing boxes
 % is the single picture path, independent of how the source was configured.
+%
+% Only the outermost picture is captured. A picture inside another – a \tikz in
+% a node's text, or the one pgfplots' axis opens inside the user's – is part of
+% the outer box, and its drawing and labels are captured with it. Captured on
+% its own, it left an empty placeholder in the outer box, which is shipped, not
+% serialized: the inner drawing was lost, and a pgfplots axis came out blank.
 \makeatletter
 \@ifundefined{tikzexternaldisable}{}{\tikzexternaldisable}
 \let\reflowtexOrigTikzpicture\tikzpicture
@@ -360,15 +366,30 @@
 \newdimen\reflowtexTikzWidth
 \newdimen\reflowtexTikzHeight
 \newdimen\reflowtexTikzDepth
+\newcount\reflowtexTikzNesting
 \ExplSyntaxOn
 \cs_new_eq:NN \reflowtexPrimitiveShipout \tex_shipout:D
 \ExplSyntaxOff
 \def\tikzpicture{%
+  \global\advance\reflowtexTikzNesting by 1
+  \ifnum\reflowtexTikzNesting=1
+    \expandafter\reflowtexCaptureTikzpicture
+  \else
+    \expandafter\reflowtexOrigTikzpicture
+  \fi}
+\def\endtikzpicture{%
+  \global\advance\reflowtexTikzNesting by -1
+  \ifnum\reflowtexTikzNesting=0
+    \expandafter\reflowtexCaptureEndtikzpicture
+  \else
+    \expandafter\reflowtexOrigEndtikzpicture
+  \fi}
+\def\reflowtexCaptureTikzpicture{%
   \global\advance\reflowtexPicCount by 1
   \edef\reflowtexThisPic{\the\reflowtexPicCount}%
   \setbox\reflowtexTikzBox=\hbox\bgroup
     \reflowtexOrigTikzpicture}
-\def\endtikzpicture{%
+\def\reflowtexCaptureEndtikzpicture{%
     \reflowtexOrigEndtikzpicture
   \egroup
   \reflowtexTikzWidth=\wd\reflowtexTikzBox

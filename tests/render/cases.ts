@@ -85,4 +85,7 @@ export const cases: Record<string, CaseSettings> = {
   // browser draws it as a path: those are the rules not drawn. Worst attained
   // 2026-09-26.
   'tikz-labels': { tex_pictures: true, tolerance: 0.009, rules_missing: 12 },
+  // A picture inside another, and a pgfplots axis: the inner one used to be
+  // captured on its own and lost. Worst attained 2026-09-26.
+  'tikz-nested': { tex_pictures: true, tolerance: 0.009, rules_missing: 1 },
 };
