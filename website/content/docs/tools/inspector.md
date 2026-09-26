@@ -70,6 +70,15 @@ its words is stretched or shrunk to fit whatever width it is given.
 \item[Pictures and footnotes.] \emph{Resources} also lists the page's
   pictures, its streams (a footnote opens its popover from there, and the
   popover's boxes appear in the tree), and its links and labels.
+\item[Widgets and marks.] \emph{Resources} lists the page's instances --
+  every widget, aside and stream, with its kind, attributes and parts --
+  the kinds a script has defined, and the marks made with \verb|\webid|
+  and \verb|\webclass|. Hover one to outline it on the page.
+\item[Colours.] \emph{Colours} shows every colour map the page uses, one
+  cell per colour and tint. Change a cell with its picker or type any CSS
+  colour, and the page is redrawn at once. \emph{Export} copies the maps as
+  JSON and saves them to a file; \emph{Import} and \emph{Paste} load them
+  back, and \emph{Reset} returns to the page's own.
 \end{description}
 
 \section*{On your own pages}
