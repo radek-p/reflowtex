@@ -68,6 +68,6 @@ export const cases: Record<string, CaseSettings> = {
   rules: { tolerance: 0.010, rule_tolerance: 0.004 },
   // A rule and a box set in vertical mode, and a paragraph holding only a
   // rule: kept as fixed displays (they used to be dropped, with 202 glyphs
-  // after them out of place). Worst attained 2026-09-26 (Python harness).
-  unusual: { tolerance: 0.010, rule_tolerance: 0.005 },
+  // after them out of place). Worst attained 2026-09-26.
+  unusual: { tolerance: 0.009, rule_tolerance: 0.005 },
 };

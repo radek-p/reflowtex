@@ -11,7 +11,7 @@
 //     the PDF's width and matches each glyph the viewer drew with the PDF's.
 //
 // Builds go to tests/render/build/<case>/ (ignored by git).
-import { appendFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';

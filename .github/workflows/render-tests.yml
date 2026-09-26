@@ -42,7 +42,7 @@ jobs:
             reflowtex:ci bash -lc '
               set -e
               npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
-              make test-render-all
+              make test-capture test-render-all
             '
 
       # What failed, for a look: each case's comparison report and logs.
