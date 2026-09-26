@@ -1,0 +1,24 @@
+{
+  // Type checking of the browser's TypeScript: the viewer's host modules
+  // (bundled with its JavaScript into latex-viewer.js) and the companion
+  // package (src/companion, bundled into companion.js). esbuild bundles; this
+  // only checks. The viewer's JavaScript is read for its types, not checked.
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["src/viewer/src/**/*", "src/companion/src/**/*"]
+}

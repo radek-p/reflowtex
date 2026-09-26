@@ -239,6 +239,34 @@ margin by that much; a negative kern at the line's end does the same on the
 right. Dispatch a `resize` event once an asynchronously loaded breaker
 becomes ready, so already-painted blocks re-lay out with it.
 
+## Host API
+
+`window.reflowtex.host` is what pages and packages (the companion) build on;
+its contract, with every type, is [src/host/types.ts](src/host/types.ts). It
+exists once the viewer script has run; a module that may load first waits for
+`reflowtex:host` on `document`.
+
+- **Blocks**: `host.blocks()`, `host.block(el)`, `host.onBlock(fn)` (now for
+  each block already there, then for each new one), `block.on('layout', fn)`.
+- **Instances**: everything the companion package makes, and the footnotes
+  and `\marginpar`s the pipeline makes, one instance each – `{ id, kind,
+  attrs, presentation, placement, parts, parent, children, anchor() }`.
+  `placement` is `block` (a stream in the flow), `inline` (a widget), `text`
+  (a `\webtext`) or `detached` (an aside, a footnote). Ids are stable for the
+  life of the page. Query with `host.instances(q)` / `block.instances(q)`, a
+  kind or `{ kind, placement, …attrs }`; `host.find(id)`.
+- **Parts**: an instance's content by role – a stream's own content is
+  `body`, a Lean block's code the data part `text`. A typeset part is laid
+  out into any element with `part.mount(el, { width })` – a number of px,
+  `'natural'`, or `'container'` (the default: el's width, followed as it
+  changes) – returning a surface: `metrics()`, `setWidth()`, `onChange(fn)`,
+  `dispose()`. A part may be mounted in several places at once; one in a
+  hidden element is painted when shown.
+
+The registries below (`streamKinds`, `widgets`, `marginNotes`, `asides`) are
+the previous API, kept until the companion package's second version
+replaces them.
+
 ## Streams
 
 A block's content can hold *streams*: separately typeset runs of paragraphs

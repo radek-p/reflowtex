@@ -6,14 +6,14 @@
 # `make build-viewer`) after editing a module. Its second line records the
 # SHA-256 of the sources it was built from, and pipeline.viewer_script() warns
 # when that no longer matches (see viewer_sources_sha256 there: both hash
-# every src/**/*.js as "path\n" + contents, in byte order of the paths).
+# every src/**/*.js and *.ts as "path\n" + contents, in byte order of the paths).
 #
 # esbuild drops ordinary comments, so read the modules, not the bundle.
 set -eu
 cd "$(dirname "$0")"
 : "${ESBUILD_VERSION:?set ESBUILD_VERSION (the Makefile pins it)}"
 
-sha=$(find src -name '*.js' | LC_ALL=C sort | while read -r f; do
+sha=$(find src \( -name '*.js' -o -name '*.ts' \) | LC_ALL=C sort | while read -r f; do
         printf '%s\n' "$f"; cat "$f"; done | shasum -a 256 | cut -c1-64)
 
 npx --yes "esbuild@$ESBUILD_VERSION" src/index.js --bundle --format=iife \

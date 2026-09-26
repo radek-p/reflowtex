@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 d25df64fa31c93ad8a2fbf0e59a62e2cde61795c395e5d4dfdcc3c958ac09a94
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 32fce1be8d404d1cc389a71ef7da76befef7c493e0e438693c306c2c2497a20d
 'use strict';
+"use strict";
 (() => {
   // src/engine/core.js
   var ZOOM = 2;
@@ -151,7 +152,7 @@
   // src/engine/layout/lines.js
   function lineProfile(fontInfo, nodes, xStart, ratio, expandRatio) {
     const items = [];
-    function walk(ns, x, r, er) {
+    function walk2(ns, x, r, er) {
       for (let i = 0; i < ns.length; i++) {
         const n = ns[i];
         switch (n.type) {
@@ -174,7 +175,7 @@
             break;
           case "disc":
           case "wdisc":
-            x = walk(n.replace, x, 0, er);
+            x = walk2(n.replace, x, 0, er);
             break;
           case "math":
             x += n.surround * SP_TO_PX;
@@ -197,7 +198,7 @@
       }
       return x;
     }
-    walk(nodes, xStart, ratio, expandRatio);
+    walk2(nodes, xStart, ratio, expandRatio);
     return items;
   }
   function minRequiredAdvance(upper, lower) {
@@ -308,19 +309,19 @@
     return 0;
   }
   function paragraphExpansion(fontInfo, nodes) {
-    const walk = (ns) => {
+    const walk2 = (ns) => {
       for (const n of ns || []) {
         if (n.type === "glyph") {
           const fi = fontInfo && fontInfo[String(n.font)];
           if (fi && fi.expand && fi.expand.step > 0) return fi.expand;
         } else if (n.type === "disc") {
-          const e = walk(n.pre) || walk(n.post) || walk(n.replace);
+          const e = walk2(n.pre) || walk2(n.post) || walk2(n.replace);
           if (e) return e;
         }
       }
       return null;
     };
-    return walk(nodes);
+    return walk2(nodes);
   }
   var PRECEDES_BREAK = /* @__PURE__ */ new Set(["glyph", "hlist", "vlist", "rule", "disc", "wdisc", "picture", "widget", "transform"]);
   function buildBreakCandidates(nodes, fontInfo, para) {
@@ -1512,41 +1513,6 @@
     }
   }
 
-  // src/runtime/params.js
-  function alignFromEl(el) {
-    const css = getComputedStyle(el).getPropertyValue("--latex-align").trim();
-    return css || el.dataset.align || DEFAULT_ALIGN;
-  }
-  function paramsFromEl(el) {
-    const d = el.dataset;
-    const num = (key, def) => key in d ? parseFloat(d[key]) : def;
-    const bool = (key, def) => key in d ? d[key] !== "false" : def;
-    return {
-      linePenalty: num("linePenalty", DEFAULT_LINE_PENALTY),
-      adjDemerits: num("adjDemerits", DEFAULT_ADJ_DEMERITS),
-      doubleHyphenDemerits: num("doubleHyphenDemerits", DEFAULT_DOUBLE_HYPHEN_DEMERITS),
-      finalHyphenDemerits: num("finalHyphenDemerits", DEFAULT_FINAL_HYPHEN_DEMERITS),
-      pretolerance: num("pretolerance", DEFAULT_PRETOLERANCE),
-      tolerance: num("tolerance", DEFAULT_TOLERANCE),
-      tolerance2: num("tolerance2", DEFAULT_TOLERANCE_2),
-      emergencyTolerance: num("emergencyTolerance", DEFAULT_EMERGENCY_TOLERANCE),
-      lastLineMin: num("lastLineMin", DEFAULT_LAST_LINE_MIN),
-      lastLinePenalty: num("lastLinePenalty", DEFAULT_LAST_LINE_PENALTY),
-      maxExpand: num("maxExpand", DEFAULT_MAX_EXPAND),
-      maxShrink: num("maxShrink", DEFAULT_MAX_SHRINK),
-      minGapPt: num("minGap", DEFAULT_MIN_GAP),
-      padPt: num("pad", DEFAULT_PAD),
-      displayMinSpacePt: num("displayMinSpace", DEFAULT_DISPLAY_MIN_SPACE),
-      displayOverflowTolerancePx: num("displayOverflowTolerance", DEFAULT_DISPLAY_OVERFLOW_TOLERANCE),
-      useProtrusion: bool("protrusion", DEFAULT_USE_PROTRUSION),
-      useExpansion: bool("expansion", DEFAULT_USE_EXPANSION),
-      // true: TeX's final pass unless it sets an overfull line; 'strict':
-      // TeX's, overfull lines too; false: the viewer's fallbacks (see kpBreak)
-      texFinalPass: "texFinalPass" in d ? d.texFinalPass === "strict" ? "strict" : d.texFinalPass !== "false" : true,
-      align: alignFromEl(el)
-    };
-  }
-
   // src/runtime/visibility.js
   var observedBlocks = /* @__PURE__ */ new Set();
   var segRef = /* @__PURE__ */ new WeakMap();
@@ -1616,6 +1582,193 @@
       if (data) paintDocument(data.fontInfo, data.cache);
     }
   });
+
+  // src/host/surface.ts
+  var live = /* @__PURE__ */ new WeakMap();
+  var newCache = (blockKey) => ({ bcs: null, dom: null, layout: null, stats: null, blockKey });
+  var TypesetPartImpl = class {
+    constructor(role, instance, data, stream) {
+      this.role = role;
+      this.instance = instance;
+      this.data = data;
+      this.doc = { ...data.doc, content: stream.content || [] };
+    }
+    role;
+    instance;
+    data;
+    type = "typeset";
+    natural = null;
+    doc;
+    /** Lay the part out at `px` into a fresh cache (or the one given). */
+    layout(px, cache = newCache()) {
+      const root = layoutDocument(this.data.fontInfo, this.doc, px / ZOOM, this.data.params, cache);
+      return { cache, root };
+    }
+    naturalWidth() {
+      if (this.natural === null) {
+        const { cache } = this.layout(NATURAL_PROBE_PT * ZOOM);
+        let w = 0;
+        for (const L of cache.layout.laid)
+          (L.lines || []).forEach((ln, j) => {
+            w = Math.max(w, (L.lrp && L.lrp[j] ? L.lrp[j].x0 : 0) + sumWidthSp(ln.nodes) * SP_TO_PX);
+          });
+        this.natural = Math.ceil(w + 0.5);
+      }
+      return this.natural;
+    }
+    mount(el, options = {}) {
+      return new SurfaceImpl(this, el, options.width ?? "container");
+    }
+  };
+  var SurfaceImpl = class {
+    constructor(part, el, width) {
+      this.part = part;
+      this.el = el;
+      this.width = width;
+      this.cache = newCache();
+      this.box.className = "latex-block latex-part";
+      this.box.style.margin = "0";
+      let set = live.get(part.data.el);
+      if (!set) live.set(part.data.el, set = /* @__PURE__ */ new Set());
+      set.add(this);
+      this.apply();
+    }
+    part;
+    el;
+    width;
+    box = document.createElement("div");
+    cache;
+    px = 0;
+    // the measure last laid out at
+    listeners = /* @__PURE__ */ new Set();
+    ro = null;
+    frame = 0;
+    disposed = false;
+    last = { width: 0, height: 0, firstBaseline: 0, lastDepth: 0 };
+    measure() {
+      const w = this.width;
+      if (typeof w === "number") return w;
+      if (w === "natural") return this.part.naturalWidth();
+      const cs = getComputedStyle(this.el);
+      const inner = this.el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      return inner > 0 ? inner : this.px || this.part.data.el.clientWidth || 600;
+    }
+    apply() {
+      if (this.width === "container") {
+        if (!this.ro) {
+          this.ro = new ResizeObserver(() => {
+            if (this.frame) return;
+            this.frame = requestAnimationFrame(() => {
+              this.frame = 0;
+              this.relayout();
+            });
+          });
+          this.ro.observe(this.el);
+        }
+      } else if (this.ro) {
+        this.ro.disconnect();
+        this.ro = null;
+      }
+      this.relayout(true);
+    }
+    relayout(force = false) {
+      if (this.disposed) return;
+      const px = this.measure();
+      if (!force && Math.abs(px - this.px) < 0.5) return;
+      this.px = px;
+      const { root } = this.part.layout(px, this.cache);
+      this.box.style.width = `${px}px`;
+      if (root.parentNode !== this.box) this.box.replaceChildren(root);
+      if (this.box.parentNode !== this.el) this.el.replaceChildren(this.box);
+      markDirty(this.cache);
+      paintVisibleNow(this.part.data.fontInfo, this.cache);
+      const laid = this.cache.layout.laid;
+      const first = laid[0], lastL = laid[laid.length - 1];
+      this.last = {
+        width: px,
+        height: this.box.offsetHeight,
+        firstBaseline: first ? first.firstAscent : 0,
+        lastDepth: lastL ? lastL.lastDepth : 0
+      };
+      this.box.dataset.baseline = String(this.last.firstBaseline);
+      for (const fn of [...this.listeners]) {
+        try {
+          fn(this.last);
+        } catch (e) {
+          console.error("[latex-viewer] surface listener:", e);
+        }
+      }
+    }
+    /** New elements for every glyph (the face that just loaded), same layout. */
+    rerender() {
+      if (this.disposed) return;
+      unobserveAll(this.cache);
+      this.cache.dom = null;
+      this.cache.layout = null;
+      this.relayout(true);
+    }
+    metrics() {
+      return this.last;
+    }
+    setWidth(width) {
+      this.width = width ?? "container";
+      this.apply();
+    }
+    onChange(fn) {
+      this.listeners.add(fn);
+      return () => {
+        this.listeners.delete(fn);
+      };
+    }
+    dispose() {
+      if (this.disposed) return;
+      this.disposed = true;
+      if (this.ro) this.ro.disconnect();
+      if (this.frame) cancelAnimationFrame(this.frame);
+      unobserveAll(this.cache);
+      this.listeners.clear();
+      if (this.box.parentNode === this.el) this.el.removeChild(this.box);
+      live.get(this.part.data.el)?.delete(this);
+    }
+  };
+  function rerenderSurfaces(blockEl) {
+    for (const s of live.get(blockEl) || []) s.rerender();
+  }
+
+  // src/runtime/params.js
+  function alignFromEl(el) {
+    const css = getComputedStyle(el).getPropertyValue("--latex-align").trim();
+    return css || el.dataset.align || DEFAULT_ALIGN;
+  }
+  function paramsFromEl(el) {
+    const d = el.dataset;
+    const num2 = (key, def) => key in d ? parseFloat(d[key]) : def;
+    const bool = (key, def) => key in d ? d[key] !== "false" : def;
+    return {
+      linePenalty: num2("linePenalty", DEFAULT_LINE_PENALTY),
+      adjDemerits: num2("adjDemerits", DEFAULT_ADJ_DEMERITS),
+      doubleHyphenDemerits: num2("doubleHyphenDemerits", DEFAULT_DOUBLE_HYPHEN_DEMERITS),
+      finalHyphenDemerits: num2("finalHyphenDemerits", DEFAULT_FINAL_HYPHEN_DEMERITS),
+      pretolerance: num2("pretolerance", DEFAULT_PRETOLERANCE),
+      tolerance: num2("tolerance", DEFAULT_TOLERANCE),
+      tolerance2: num2("tolerance2", DEFAULT_TOLERANCE_2),
+      emergencyTolerance: num2("emergencyTolerance", DEFAULT_EMERGENCY_TOLERANCE),
+      lastLineMin: num2("lastLineMin", DEFAULT_LAST_LINE_MIN),
+      lastLinePenalty: num2("lastLinePenalty", DEFAULT_LAST_LINE_PENALTY),
+      maxExpand: num2("maxExpand", DEFAULT_MAX_EXPAND),
+      maxShrink: num2("maxShrink", DEFAULT_MAX_SHRINK),
+      minGapPt: num2("minGap", DEFAULT_MIN_GAP),
+      padPt: num2("pad", DEFAULT_PAD),
+      displayMinSpacePt: num2("displayMinSpace", DEFAULT_DISPLAY_MIN_SPACE),
+      displayOverflowTolerancePx: num2("displayOverflowTolerance", DEFAULT_DISPLAY_OVERFLOW_TOLERANCE),
+      useProtrusion: bool("protrusion", DEFAULT_USE_PROTRUSION),
+      useExpansion: bool("expansion", DEFAULT_USE_EXPANSION),
+      // true: TeX's final pass unless it sets an overfull line; 'strict':
+      // TeX's, overfull lines too; false: the viewer's fallbacks (see kpBreak)
+      texFinalPass: "texFinalPass" in d ? d.texFinalPass === "strict" ? "strict" : d.texFinalPass !== "false" : true,
+      align: alignFromEl(el)
+    };
+  }
 
   // src/runtime/settle.js
   var SETTLE_MS = 150;
@@ -1742,6 +1895,7 @@
     el.replaceChildren(layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache));
     remeasureStreams(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
     paintVisibleNow(data.fontInfo, data.cache);
+    rerenderSurfaces(el);
     announceLayout(el);
   }
   function markDirty(cache) {
@@ -1872,13 +2026,13 @@
   }
   function slotNodes(fontInfo, slot, id, run, text) {
     const glyphs = [];
-    const walk = (ns) => {
+    const walk2 = (ns) => {
       for (const n of ns) {
         if (n.type === "glyph") glyphs.push(n);
-        else if (n.type === "disc") walk(n.replace || []);
+        else if (n.type === "disc") walk2(n.replace || []);
       }
     };
-    walk(run);
+    walk2(run);
     const t = glyphs[0];
     if (!t) return run;
     const fi = fontInfo[String(t.font)];
@@ -2194,14 +2348,14 @@
     let ids = anchorIdsCache.get(key);
     if (ids) return ids;
     ids = [];
-    (function walk(ns) {
+    (function walk2(ns) {
       for (const n of ns || []) {
         if (n.anchor) ids.push(n.anchor);
-        walk(n.children);
-        walk(n.pre);
-        walk(n.post);
-        walk(n.replace);
-        if (n.leader) walk([n.leader]);
+        walk2(n.children);
+        walk2(n.pre);
+        walk2(n.post);
+        walk2(n.replace);
+        if (n.leader) walk2([n.leader]);
       }
     })(roots);
     anchorIdsCache.set(key, ids);
@@ -2212,15 +2366,15 @@
     let v = figureParaCache.get(para);
     if (v !== void 0) return v;
     let hasPicture = false, hasGlyph = false;
-    (function walk(ns) {
+    (function walk2(ns) {
       for (const n of ns || []) {
         if (n.type === "picture") hasPicture = true;
         else if (n.type === "glyph") hasGlyph = true;
-        walk(n.children);
-        walk(n.pre);
-        walk(n.post);
-        walk(n.replace);
-        if (n.leader) walk([n.leader]);
+        walk2(n.children);
+        walk2(n.pre);
+        walk2(n.post);
+        walk2(n.replace);
+        if (n.leader) walk2([n.leader]);
       }
     })(para.nodes);
     const top = para.nodes || [];
@@ -2623,7 +2777,7 @@
     const found = () => {
       w = unknown ? MAX : x;
     };
-    const walk = (ns, glueSet) => {
+    const walk2 = (ns, glueSet) => {
       for (let i = 0; i < ns.length; i++) {
         const n = ns[i];
         switch (n.type) {
@@ -2667,12 +2821,12 @@
             mathOn = n.subtype === 0;
             break;
           case "disc":
-            walk(n.replace || [], false);
+            walk2(n.replace || [], false);
             break;
         }
       }
     };
-    walk(ln.nodes, true);
+    walk2(ln.nodes, true);
     const fi = fontInfo[String(font ?? anyFont)];
     return { w: w === null ? -MAX : w === MAX ? MAX : Math.round(w / SP_TO_PX), quad: fi && fi.quad || 0 };
   }
@@ -2727,9 +2881,9 @@
   function placeEquationNumber(item) {
     const b = item.box;
     if (!b || b.subtype !== HL_EQUATION || !b.children || b.children.length !== 4) return item;
-    const [k0, f0, k1, num] = b.children;
-    if (k0.type !== "kern" || f0.type !== "hlist" || k1.type !== "kern" || num.type !== "hlist" || num.subtype !== 7) return item;
-    const z = item.display_width || 0, e = num.width || 0;
+    const [k0, f0, k1, num2] = b.children;
+    if (k0.type !== "kern" || f0.type !== "hlist" || k1.type !== "kern" || num2.type !== "hlist" || num2.subtype !== 7) return item;
+    const z = item.display_width || 0, e = num2.width || 0;
     if (!(z > 0) || !(e > 0)) return item;
     let f = f0, w = 0;
     const shrink = [0, 0, 0, 0];
@@ -2759,7 +2913,7 @@
       const first = f.children && f.children[0];
       if (first && first.type === "glue") d = 0;
     }
-    const children = [{ ...k0, kern: d }, f, { ...k1, kern: z - w - e - d }, num];
+    const children = [{ ...k0, kern: d }, f, { ...k1, kern: z - w - e - d }, num2];
     return { ...item, box: { ...b, children } };
   }
   function displayForm(item, targetSp, sourceWidthSp) {
@@ -3462,6 +3616,288 @@
     return { left: L, top: T, right: R, bottom: B, width: R - L, height: B - T };
   }
 
+  // src/host/instances.ts
+  var InstanceImpl = class {
+    constructor(id, kind, attrs, presentation, placement, parent, block, source, anchorOf) {
+      this.id = id;
+      this.kind = kind;
+      this.attrs = attrs;
+      this.presentation = presentation;
+      this.placement = placement;
+      this.parent = parent;
+      this.block = block;
+      this.source = source;
+      this.anchorOf = anchorOf;
+    }
+    id;
+    kind;
+    attrs;
+    presentation;
+    placement;
+    parent;
+    block;
+    source;
+    anchorOf;
+    children = [];
+    parts = /* @__PURE__ */ new Map();
+    part(role) {
+      return this.parts.get(role);
+    }
+    anchor() {
+      return this.source.type === "none" ? null : this.anchorOf(this.source);
+    }
+  };
+  function splitAttrs(list) {
+    const attrs = {};
+    const classes = [];
+    const properties = {};
+    let aside = false;
+    for (const a of list || []) {
+      const k = a.key || "", v = a.value || "";
+      if (!/^[a-z0-9-]+$/i.test(k)) continue;
+      if (k === "aside") aside = v === "true";
+      else if (k === "class") classes.push(...v.split(/\s+/).filter(Boolean));
+      else if (k.startsWith("--")) properties[k] = v;
+      else attrs[k] = v;
+    }
+    return { attrs, presentation: { classes, properties }, aside };
+  }
+  var NO_PRESENTATION = Object.freeze({ classes: Object.freeze([]), properties: Object.freeze({}) });
+  function normalise(doc, block, key, parts, anchorOf) {
+    const streams = doc.streams || [];
+    const slots = doc.slots || [];
+    const roots = [];
+    const seenStream = /* @__PURE__ */ new Set();
+    const seenSlot = /* @__PURE__ */ new Set();
+    const widgetsByKey = /* @__PURE__ */ new Map();
+    const pendingAsides = [];
+    const adopt = (inst, parent) => {
+      (parent ? parent.children : roots).push(inst);
+    };
+    const streamInstance = (index, placement, parent, source) => {
+      seenStream.add(index);
+      const s = streams[index - 1];
+      const { attrs, presentation } = splitAttrs(s.attrs);
+      const inst = new InstanceImpl(
+        `${key}/s${index}`,
+        s.kind || "",
+        Object.freeze(attrs),
+        presentation,
+        placement,
+        parent,
+        block,
+        source,
+        anchorOf
+      );
+      inst.parts.set("body", parts.typeset(inst, "body", s));
+      if (s.text !== void 0) {
+        const data = { type: "data", role: "text", instance: inst, data: s.text };
+        inst.parts.set("text", data);
+      }
+      adopt(inst, parent);
+      walkContent(s.content || [], inst);
+      return inst;
+    };
+    const slotInstance = (index, parent) => {
+      seenSlot.add(index);
+      const slot = slots[index - 1] || {};
+      const name = slot.name || "";
+      if (slot.kind === "widget") {
+        const colon = name.indexOf(":");
+        const kind = colon >= 0 ? name.slice(0, colon) : name;
+        const attrs = { name };
+        if (colon >= 0) attrs.key = name.slice(colon + 1);
+        const inst = new InstanceImpl(
+          `${key}/w${index}`,
+          kind,
+          Object.freeze(attrs),
+          NO_PRESENTATION,
+          "inline",
+          parent,
+          block,
+          { type: "widget", slot: index },
+          anchorOf
+        );
+        if (attrs.key !== void 0 && !widgetsByKey.has(attrs.key)) widgetsByKey.set(attrs.key, inst);
+        adopt(inst, parent);
+      } else {
+        adopt(new InstanceImpl(
+          `${key}/t${index}`,
+          "text",
+          Object.freeze({ name }),
+          NO_PRESENTATION,
+          "text",
+          parent,
+          block,
+          { type: "none" },
+          anchorOf
+        ), parent);
+      }
+    };
+    const walkNodes = (nodes, parent) => {
+      for (const n of nodes || []) {
+        if (n.slot && !seenSlot.has(n.slot)) slotInstance(n.slot, parent);
+        if (n.aside && !seenStream.has(n.aside)) {
+          pendingAsides.push({ index: n.aside, parent });
+          seenStream.add(n.aside);
+        }
+        if (n.stream && !seenStream.has(n.stream) && streams[n.stream - 1])
+          streamInstance(n.stream, "detached", parent, { type: "glyph", stream: n.stream });
+        walkNodes(n.children, parent);
+        walkNodes(n.replace, parent);
+        walkNodes(n.pre, parent);
+        walkNodes(n.post, parent);
+      }
+    };
+    function walkContent(items, parent) {
+      for (const it of items) {
+        if (it.kind === "stream") {
+          if (it.stream && !seenStream.has(it.stream) && streams[it.stream - 1])
+            streamInstance(it.stream, "block", parent, { type: "none" });
+        } else if (it.kind === "display") {
+          walkNodes(it.box ? [it.box] : [], parent);
+        } else if (!it.kind || it.kind === "paragraph") {
+          if (it.para) walkNodes(doc.paragraphs[it.para - 1]?.nodes, parent);
+        }
+      }
+    }
+    walkContent(doc.content || [], null);
+    streams.forEach((s, i) => {
+      if (!seenStream.has(i + 1) && splitAttrs(s.attrs).aside) pendingAsides.push({ index: i + 1, parent: null });
+    });
+    for (const { index, parent } of pendingAsides) {
+      const s = streams[index - 1];
+      const { attrs } = splitAttrs(s.attrs);
+      const owner = attrs.for !== void 0 ? widgetsByKey.get(attrs.for) : void 0;
+      if (owner && !owner.parts.has(s.kind || "")) {
+        owner.parts.set(s.kind || "", parts.typeset(owner, s.kind || "", s));
+        continue;
+      }
+      seenStream.delete(index);
+      streamInstance(index, "detached", parent, { type: "aside", stream: index });
+    }
+    streams.forEach((_, i) => {
+      if (!seenStream.has(i + 1)) streamInstance(i + 1, "detached", null, { type: "none" });
+    });
+    return roots;
+  }
+  function* walk(list) {
+    for (const i of list) {
+      yield i;
+      yield* walk(i.children);
+    }
+  }
+  function matches(inst, query) {
+    if (query === void 0) return true;
+    if (typeof query === "string") return inst.kind === query;
+    for (const [k, v] of Object.entries(query)) {
+      if (v === void 0) continue;
+      const have = k === "kind" ? inst.kind : k === "placement" ? inst.placement : inst.attrs[k];
+      if (have !== String(v)) return false;
+    }
+    return true;
+  }
+
+  // src/host/host.ts
+  function screenPoint(el, x, y) {
+    const ctm = el && el.getScreenCTM && el.getScreenCTM();
+    if (!ctm) return null;
+    const p = new DOMPoint(x, y).matrixTransform(ctm);
+    return new DOMRect(p.x, p.y, 0, 0);
+  }
+  var num = (el, a) => parseFloat(el.getAttribute(a) || "0") || 0;
+  var BlockImpl = class {
+    constructor(data) {
+      this.data = data;
+    }
+    data;
+    _roots = null;
+    byId = null;
+    get el() {
+      return this.data.el;
+    }
+    get key() {
+      return this.data.cache.blockKey || "";
+    }
+    get roots() {
+      if (!this._roots) {
+        this._roots = normalise(
+          this.data.doc,
+          this,
+          this.key,
+          { typeset: (inst, role, stream) => new TypesetPartImpl(role, inst, this.data, stream) },
+          (src) => this.anchor(src)
+        );
+      }
+      return this._roots;
+    }
+    instances(query) {
+      return [...walk(this.roots)].filter((i) => matches(i, query));
+    }
+    find(id) {
+      if (!this.byId) this.byId = new Map([...walk(this.roots)].map((i) => [i.id, i]));
+      return this.byId.get(id);
+    }
+    on(event, fn) {
+      const h = (e) => {
+        if (e.detail?.block === this.el) fn();
+      };
+      this.el.addEventListener("reflowtex:" + event, h);
+      return () => this.el.removeEventListener("reflowtex:" + event, h);
+    }
+    anchor(src) {
+      const el = this.el;
+      if (src.type === "aside") {
+        const m = el.querySelector(`.latex-aside-mark[data-aside="${src.stream}"]`);
+        return m && screenPoint(m, num(m, "x"), num(m, "y"));
+      }
+      if (src.type === "glyph") {
+        const g = el.querySelector(`[data-footnote="${src.stream}"]`);
+        return g && screenPoint(g, num(g, "x"), num(g, "y"));
+      }
+      if (src.type === "widget") {
+        const w = el.querySelector(`.latex-widget[data-widget="${CSS.escape(`${this.key}:${src.slot}`)}"]`);
+        return w ? w.getBoundingClientRect() : null;
+      }
+      return null;
+    }
+  };
+  var blocks = [];
+  var byEl = /* @__PURE__ */ new WeakMap();
+  var blockListeners = /* @__PURE__ */ new Set();
+  var host = {
+    version: 1,
+    blocks: () => blocks.slice(),
+    block: (el) => byEl.get(el),
+    instances: (query) => blocks.flatMap((b) => b.instances(query)),
+    find: (id) => {
+      const b = blocks.find((b2) => id.startsWith(b2.key + "/"));
+      return b && b.find(id);
+    },
+    onBlock(fn) {
+      blockListeners.add(fn);
+      for (const b of blocks) fn(b);
+      return () => {
+        blockListeners.delete(fn);
+      };
+    }
+  };
+  function registerBlock(data) {
+    if (byEl.has(data.el)) return;
+    const b = new BlockImpl(data);
+    blocks.push(b);
+    byEl.set(data.el, b);
+    for (const fn of [...blockListeners]) {
+      try {
+        fn(b);
+      } catch (e) {
+        console.error("[latex-viewer] onBlock listener:", e);
+      }
+    }
+  }
+  api.host = host;
+  document.dispatchEvent(new CustomEvent("reflowtex:host", { detail: { host } }));
+
   // src/host/inspect.js
   var inspectable = /* @__PURE__ */ new Set();
   api.inspect = {
@@ -3662,18 +4098,18 @@
   function resolvePictures(doc) {
     const pics = doc.pictures;
     if (!pics || !pics.length) return;
-    const walk = (nodes) => {
+    const walk2 = (nodes) => {
       for (const n of nodes) {
         if (n.type === "picture" && n.picture) n.pic = pics[n.picture - 1];
         for (const k of ["children", "replace", "pre", "post"]) {
-          if (n[k]) walk(n[k]);
+          if (n[k]) walk2(n[k]);
         }
       }
     };
-    for (const p of doc.paragraphs) walk(p.nodes);
-    for (const it of doc.content || []) if (it.box) walk(it.box.children || []);
+    for (const p of doc.paragraphs) walk2(p.nodes);
+    for (const it of doc.content || []) if (it.box) walk2(it.box.children || []);
     for (const st of doc.streams || []) {
-      for (const it of st.content || []) if (it.box) walk(it.box.children || []);
+      for (const it of st.content || []) if (it.box) walk2(it.box.children || []);
     }
   }
   async function initBlock(el) {
@@ -3734,6 +4170,7 @@
     paintVisibleNow(fontInfo, cache);
     data.painted = true;
     announceLayout(el);
+    registerBlock(data);
     observedBlocks.add(el);
     const t4 = performance.now();
     ro.observe(el);
@@ -3750,8 +4187,8 @@
     };
   }
   async function init() {
-    const blocks = [...document.querySelectorAll("[data-nodelist-b64]")];
-    if (blocks.length === 0) return;
+    const blocks2 = [...document.querySelectorAll("[data-nodelist-b64]")];
+    if (blocks2.length === 0) return;
     const tStart = performance.now();
     installColorMaps();
     installFootnotes();
@@ -3761,19 +4198,19 @@
     loadSchema();
     loadFontMap();
     let idx = 0, segPainted = 0, segTotal = 0;
-    for (const el of blocks) {
+    for (const el of blocks2) {
       try {
         const t = await initBlock(el);
         segPainted += t.segPainted;
         segTotal += t.segTotal;
-        debugLog(`[latex-viewer] block ${++idx}/${blocks.length}: ${t.total.toFixed(1)} ms (decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) – ${t.segPainted}/${t.segTotal} segments painted`);
+        debugLog(`[latex-viewer] block ${++idx}/${blocks2.length}: ${t.total.toFixed(1)} ms (decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) – ${t.segPainted}/${t.segTotal} segments painted`);
       } catch (e) {
         el.textContent = `Render error: ${e.message}`;
         console.error(e);
       }
     }
     const segDeferred = segTotal - segPainted;
-    debugLog(`[latex-viewer] ${blocks.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms · ${segPainted}/${segTotal} segments painted` + (segDeferred ? `, ${segDeferred} deferred (painted on scroll)` : ""));
+    debugLog(`[latex-viewer] ${blocks2.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms · ${segPainted}/${segTotal} segments painted` + (segDeferred ? `, ${segDeferred} deferred (painted on scroll)` : ""));
     if (fontsPending && document.fonts) {
       if (document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", scheduleFontRepaint);
       if (document.fonts.ready) document.fonts.ready.then(scheduleFontRepaint);
@@ -3798,7 +4235,7 @@
     }
     return out + esc(code.slice(last));
   }
-  function leanSwitches(box, ctx, host, fallback) {
+  function leanSwitches(box, ctx, host2, fallback) {
     if (!ctx.state.show) {
       const init2 = (ctx.attrs.show || fallback).toLowerCase();
       ctx.state.show = { proof: init2 === "proof" || init2 === "both", lean: init2 === "lean" || init2 === "both" };
@@ -3839,7 +4276,7 @@
       buttons[k] = b;
       row.appendChild(b);
     }
-    host.appendChild(row);
+    host2.appendChild(row);
     apply();
     requestAnimationFrame(adjust);
     window.addEventListener("resize", () => requestAnimationFrame(adjust), { passive: true });

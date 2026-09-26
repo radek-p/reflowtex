@@ -8,7 +8,7 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "typecheck": "tsc -p .",
+    "typecheck": "tsc -p . && tsc -p tsconfig.browser.json",
     "test": "node --test \"tests/unit/**/*.test.ts\"",
     "test:web": "playwright test -c tests/web"
   },
@@ -19,10 +19,14 @@
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",
+    "@preact/signals": "2.11.2",
     "@types/node": "^26.6.3",
+    "esbuild": "0.28.2",
+    "htm": "3.1.1",
     "mupdf": "^1.28.1",
     "pdf-lib": "^1.17.1",
     "playwright": "1.58.2",
+    "preact": "10.29.8",
     "sharp": "^0.35.4",
     "typescript": "^7.0.2"
   }

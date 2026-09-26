@@ -1,0 +1,13 @@
+\begin{webaccordion}[initial=collapsed]
+\begin{webpane}[collapsed] A short summary. \webnextpane \end{webpane}
+\begin{webpane}[expanded] The longer pane, with a footnote.\footnote{The footnote's text.} \webprevpane \end{webpane}
+\end{webaccordion}
+The time is \webtext{clock}{twelve o'clock} and here is a
+widget\webwidget{popover:1}\webaside[for=1]{popover-label}{Label}\webaside[for=1]{popover-note}{The
+note behind the button, a little longer than its label.} in the text, and a
+note in the margin.\marginpar{In the margin.}
+\begin{webstream}[class=fancy big, --x-accent=red, tone=warm]{callout}
+A callout paragraph long enough to wrap over several lines in a narrow
+container, so that its height depends on the width it is given, which is what
+a surface that follows its container must show.
+\end{webstream}

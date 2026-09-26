@@ -5,6 +5,7 @@ import { installFootnotes } from '../defaults/footnotes.js';
 import { DEFAULT_WIDTH_PT, ZOOM } from '../engine/core.js';
 import { layoutDocument } from '../engine/layout/document.js';
 import { allData, announceLayout, docData } from '../host/asides.js';
+import { registerBlock } from '../host/host.ts';
 import { inspectable } from '../host/inspect.js';
 import { installLinks, installWidgetStates, pageLabels } from '../host/links.js';
 import { applySlots, slotBlocks } from '../host/slots.js';
@@ -110,6 +111,7 @@ export async function initBlock(el) {
     paintVisibleNow(fontInfo, cache);
     data.painted = true;
     announceLayout(el);
+    registerBlock(data);
     observedBlocks.add(el);
     const t4 = performance.now();
     ro.observe(el);

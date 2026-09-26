@@ -5,6 +5,7 @@ import { DEFAULT_WIDTH_PT, ZOOM } from '../engine/core.js';
 import { layoutDocument } from '../engine/layout/document.js';
 import { paintDocument } from '../engine/paint.js';
 import { announceLayout } from '../host/asides.js';
+import { rerenderSurfaces } from '../host/surface.ts';
 import { debugLog } from './page.js';
 import { alignFromEl } from './params.js';
 import { scheduleSettle } from './settle.js';
@@ -118,6 +119,8 @@ export function rerenderBlock(el) {
     el.replaceChildren(layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache));
     remeasureStreams(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
     paintVisibleNow(data.fontInfo, data.cache);
+    // Parts the page has mounted elsewhere (host API surfaces) redraw too.
+    rerenderSurfaces(el);
     announceLayout(el);
 }
 
