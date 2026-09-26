@@ -15,15 +15,15 @@ const formula = (mathml: string | undefined, ...inside: N[]): N[] =>
 /** The layer's content, without its wrapper. */
 const body = (doc: LayerDocument) => a11yLayer(doc).replace(/^<div class="latex-a11y"[^>]*>/, '').replace(/<\/div>$/, '');
 
-test('a paragraph: its text, and MathML where a formula stands', () => {
+test('a paragraph: its text, and MathML where a formula stands; data-para names it for the viewer', () => {
   const doc: LayerDocument = {
     paragraphs: [{ nodes: [...text('Let '), ...formula(M('<mi>𝑥</mi>'), { type: 'glyph', char: 0x1D465 }), ...text(' be real.')] }],
     content: [{ kind: 'paragraph', para: 1 }],
   };
-  assert.equal(body(doc), `<p>Let ${M('<mi>𝑥</mi>')} be real.</p>`);
+  assert.equal(body(doc), `<p data-para="1">Let ${M('<mi>𝑥</mi>')} be real.</p>`);
 });
 
-test('a display is its block MathML; one without MathML reads as its text', () => {
+test('a display is its block MathML; one without MathML reads as its text; data-item is its content index (1-based)', () => {
   const doc: LayerDocument = {
     paragraphs: [],
     content: [
@@ -33,7 +33,21 @@ test('a display is its block MathML; one without MathML reads as its text', () =
       { kind: 'display', box: { type: 'hlist', children: [] } },
     ],
   };
-  assert.equal(body(doc), `${M('<mn>1</mn>', true)}<p>a table</p>`);
+  assert.equal(body(doc), `<div data-item="1">${M('<mn>1</mn>', true)}</div><p data-item="3">a table</p>`);
+});
+
+test('an alignment is read once: the rows after its first are in the first row’s table', () => {
+  const row = (t: string) => ({ type: 'hlist', subtype: 4, children: text(t) });
+  const doc: LayerDocument = {
+    paragraphs: [],
+    content: [
+      { kind: 'display', mathml: M('<mtable/>', true), box: row('f = 1') },
+      { kind: 'vspace', amount: 100 },
+      { kind: 'display', box: row('g = 2') },
+      { kind: 'display', box: { type: 'hlist', subtype: 6, children: text('table') } },
+    ],
+  };
+  assert.equal(body(doc), `<div data-item="1">${M('<mtable/>', true)}</div><p data-item="4">table</p>`);
 });
 
 test('a formula without MathML (a footnote mark) reads as its text', () => {
@@ -41,7 +55,7 @@ test('a formula without MathML (a footnote mark) reads as its text', () => {
     paragraphs: [{ nodes: [...text('Text.'), ...formula(undefined, { type: 'hlist', children: text('1') })] }],
     content: [{ kind: 'paragraph', para: 1 }],
   };
-  assert.equal(body(doc), '<p>Text.1</p>');
+  assert.equal(body(doc), '<p data-para="1">Text.1</p>');
 });
 
 test('text: ligatures as their letters, private-use glyphs left out, escaped, spaces collapsed', () => {
@@ -49,7 +63,7 @@ test('text: ligatures as their letters, private-use glyphs left out, escaped, sp
     paragraphs: [{ nodes: [{ type: 'glyph', char: 0xFB03 }, ...text('ce  & <b>'), { type: 'glyph', char: 0x100123 }, { type: 'glyph', char: 0xE001 }] }],
     content: [{ kind: 'paragraph', para: 1 }],
   };
-  assert.equal(body(doc), '<p>ffice &amp; &lt;b&gt;</p>');
+  assert.equal(body(doc), '<p data-para="1">ffice &amp; &lt;b&gt;</p>');
 });
 
 test('a hyphenation point reads as the unbroken word', () => {
@@ -57,7 +71,7 @@ test('a hyphenation point reads as the unbroken word', () => {
     paragraphs: [{ nodes: [...text('aug'), { type: 'disc', pre: text('-'), post: [], replace: [] }, ...text('mented')] }],
     content: [{ kind: 'paragraph', para: 1 }],
   };
-  assert.equal(body(doc), '<p>augmented</p>');
+  assert.equal(body(doc), '<p data-para="1">augmented</p>');
 });
 
 test('an empty paragraph is left out; the wrapper hides the layer only visually', () => {
@@ -84,7 +98,7 @@ test('blockHtml({a11y}): the drawn block hidden from assistive technology, the l
   const html = blockHtml(encoded(), {}, { a11y: true });
   const [block, layer] = html.split(/(?=<div class="latex-a11y")/);
   assert.match(block, /^<div class="latex-block" aria-hidden="true" data-nodelist-b64="[^"]+"><\/div>$/);
-  assert.equal(layer.replace(/^<div class="latex-a11y"[^>]*>/, ''), `<p>See ${M('<mi>𝑥</mi>')}</p>${M('<mn>2</mn>', true)}</div>`);
+  assert.equal(layer.replace(/^<div class="latex-a11y"[^>]*>/, ''), `<p data-para="1">See ${M('<mi>𝑥</mi>')}</p><div data-item="2">${M('<mn>2</mn>', true)}</div></div>`);
 });
 
 test('blockHtml without {a11y} is as it was', () => {

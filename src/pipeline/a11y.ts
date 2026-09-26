@@ -13,6 +13,8 @@
 // asides and a language are not in it yet.
 import { messageType } from './schema.ts';
 
+const HL_ALIGNMENT = 4;   // an amsmath alignment row
+
 type LayerNode = { type?: string; char?: number; width?: number; mathml?: string; subtype?: number;
                    children?: LayerNode[]; replace?: LayerNode[] };
 type LayerItem = { kind?: string; para?: number; box?: LayerNode; mathml?: string; [field: string]: unknown };
@@ -62,21 +64,30 @@ function nodesHtml(nodes: LayerNode[]): string {
   return out.replace(/ {2,}/g, ' ').trim();
 }
 
-/** The layer's HTML for a document. */
+/** The layer's HTML for a document. Each piece says what it stands for, so
+ *  the viewer can lay it over that once drawn (runtime/a11y.js):
+ *  data-para = the paragraph's number, data-item = a display's position in
+ *  the content (both 1-based, as the document numbers them). */
 export function a11yLayer(doc: LayerDocument): string {
   const parts: string[] = [];
-  for (const it of doc.content) {
+  // the previous display, if nothing but space came after it
+  let lastDisplay: LayerItem | null = null;
+  doc.content.forEach((it, i) => {
+    const prev = lastDisplay;
+    if (it.kind !== 'vspace') lastDisplay = it.kind === 'display' ? it : null;
     if (it.kind === 'paragraph' && it.para) {
       const html = nodesHtml(doc.paragraphs[it.para - 1]?.nodes ?? []);
-      if (html) parts.push(`<p>${html}</p>`);
+      if (html) parts.push(`<p data-para="${it.para}">${html}</p>`);
     } else if (it.kind === 'display') {
-      if (it.mathml) parts.push(it.mathml);
+      // a row after an alignment's first is read in the first row's table
+      if (!it.mathml && it.box?.subtype === HL_ALIGNMENT && prev?.box?.subtype === HL_ALIGNMENT) return;
+      if (it.mathml) parts.push(`<div data-item="${i + 1}">${it.mathml}</div>`);
       else if (it.box) {
         const html = nodesHtml([it.box]);
-        if (html) parts.push(`<p>${html}</p>`);
+        if (html) parts.push(`<p data-item="${i + 1}">${html}</p>`);
       }
     }
-  }
+  });
   return `<div class="latex-a11y" style="${HIDDEN}">${parts.join('')}</div>`;
 }
 

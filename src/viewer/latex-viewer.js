@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 ccf7648d34f649e2fef1c28a26ca3a3f873e65c25341b8e54e7313cc4301f466
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 4a268712fc06b5f400cd07217316d547b7354f7d56f63e3c1914d685b13a239a
 'use strict';
 "use strict";
 (() => {
@@ -2838,11 +2838,60 @@
     });
   });
 
+  // src/runtime/a11y.js
+  var ANCHOR = "position:relative;height:0;margin:0;padding:0;border:0;overflow:visible";
+  var PIECE = "position:absolute;margin:0;padding:0;overflow:hidden;opacity:0;pointer-events:none;user-select:none;-webkit-user-select:none";
+  var maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
+  function placeAccessibleLayer(data) {
+    const el = data && data.el;
+    const layer = el && el.nextElementSibling;
+    if (!layer || !layer.classList.contains("latex-a11y")) return;
+    const cache = data.cache;
+    const laid = cache.layout && cache.layout.laid;
+    if (!laid || !cache.dom) return;
+    const segs = laid.map((L) => L.seg);
+    const byPara = /* @__PURE__ */ new Map(), byItem = /* @__PURE__ */ new Map();
+    segs.forEach((seg, i) => {
+      if (seg.kind === "text") seg.items.forEach((it, j) => byPara.set(it.index, [i, j]));
+      else if (seg.kind === "display") byItem.set(seg.rows[0].item, i);
+    });
+    const content = data.doc.content || [];
+    if (layer.dataset.placed !== "1") {
+      layer.style.cssText = ANCHOR;
+      layer.dataset.placed = "1";
+    }
+    const origin = layer.getBoundingClientRect();
+    const places = [...layer.children].map((piece) => {
+      let i, j = -1;
+      if (piece.dataset.para) [i, j] = byPara.get(+piece.dataset.para) || [];
+      else if (piece.dataset.item) i = byItem.get(content[+piece.dataset.item - 1]);
+      const s = i === void 0 ? null : cache.dom.segs[i];
+      if (!s || !s.box) return null;
+      const r = s.box.getBoundingClientRect();
+      let y0 = 0, y1 = r.height;
+      const L = laid[i];
+      if (j >= 0 && L.itemStarts && L.lines && L.lines.length) {
+        const a = L.itemStarts[j];
+        const b = (j + 1 < L.itemStarts.length ? L.itemStarts[j + 1] : L.lines.length) - 1;
+        if (a <= b) {
+          y0 = L.baselineYs[a] - maxOf(L.profiles[a], "h");
+          y1 = L.baselineYs[b] + maxOf(L.profiles[b], "d");
+        }
+      }
+      return { top: r.top - origin.top + y0, left: r.left - origin.left, width: r.width, height: Math.max(1, y1 - y0) };
+    });
+    [...layer.children].forEach((piece, k) => {
+      const p = places[k] || { top: 0, left: 0, width: 1, height: 1 };
+      piece.style.cssText = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px`;
+    });
+  }
+
   // src/runtime/block-data.js
   var docData = /* @__PURE__ */ new WeakMap();
   var allData = [];
   function announceLayout(el) {
     placeMarginNotes(blockData.get(el));
+    placeAccessibleLayer(blockData.get(el));
     el.dispatchEvent(new CustomEvent("reflowtex:layout", { bubbles: true, detail: { block: el } }));
   }
 
