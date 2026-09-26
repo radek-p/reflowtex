@@ -16,7 +16,9 @@ export interface DomGlyph { x: number; y: number; w: number; text: string; font:
 export interface DomRect { x: number; y: number; w: number; h: number; pts: [number, number][] }
 export interface Dom { height: number; glyphs: DomGlyph[]; rects: DomRect[] }
 
-export async function dumpDom(url: string, o: { hsize?: number; margin?: number; waitLog?: string } = {}): Promise<Dom> {
+/** `screenshot`: a PNG path for the page as dumped, in the same frame – the
+ *  block and a margin either side, 2 px per pt, its top at the block's. */
+export async function dumpDom(url: string, o: { hsize?: number; margin?: number; waitLog?: string; screenshot?: string } = {}): Promise<Dom> {
   const colPx = Math.round((o.hsize ?? 345) * 2), marginPx = Math.round((o.margin ?? 36) * 2);
   const browser = await chromium.launch();
   try {
@@ -54,7 +56,7 @@ export async function dumpDom(url: string, o: { hsize?: number; margin?: number;
       }
       window.scrollTo(0, 0); await frame();
     });
-    return await page.evaluate(([marginPx]) => {
+    const dom = await page.evaluate(([marginPx]) => {
       const root = document.querySelector('.latex-block')!;
       const blockTop = root.getBoundingClientRect().top + window.scrollY;
       const blockLeft = root.getBoundingClientRect().left + window.scrollX;
@@ -103,6 +105,11 @@ export async function dumpDom(url: string, o: { hsize?: number; margin?: number;
       }
       return { height: root.getBoundingClientRect().height / 2, glyphs, rects };
     }, [marginPx]);
+    if (o.screenshot) {
+      const r = await page.evaluate(() => { const b = document.querySelector('.latex-block')!.getBoundingClientRect(); return { x: b.left + window.scrollX, y: b.top + window.scrollY, h: b.height }; });
+      await page.screenshot({ path: o.screenshot, fullPage: true, clip: { x: r.x - marginPx, y: r.y, width: colPx + 2 * marginPx, height: Math.ceil(r.h) } });
+    }
+    return dom;
   } finally {
     await browser.close();
   }

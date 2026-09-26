@@ -5,6 +5,7 @@
 # Node deps: installed into node_modules/ on first use – see the `node-deps` target.
 
 PORT ?= 8000
+REPORT_PORT ?= 8010
 DEMO_OUT := build/demo-site
 # Pinned version of the vendored browser runtime (src/viewer/protobuf.min.js).
 # Bump this and run `make vendor-protobuf` to update it.
@@ -16,7 +17,7 @@ HTM_VERSION        = 3.1.1
 SIGNALS_VERSION    = 2.11.2
 ESBUILD_VERSION    = 0.28.2
 
-.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all test-capture test-web typecheck build-companion clean vendor-protobuf vendor-inspector build-viewer minify-viewer
+.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all render-report test-capture test-web typecheck build-companion clean vendor-protobuf vendor-inspector build-viewer minify-viewer
 
 help:
 	@echo "Reflow TeX targets:"
@@ -35,6 +36,7 @@ help:
 	@echo "  make minify-viewer    regenerate src/viewer/latex-viewer.min.js only"
 	@echo "  make test-render      the render tests: every glyph in the browser against TeX (tests/render)"
 	@echo "  make test-render-all  the same, with the whole-document cases (testmath)"
+	@echo "  make render-report    the render tests' results side by side, served locally (after test-render)"
 	@echo "  make test-capture     the capture tests: what the serializer records of small documents (tests/capture)"
 	@echo "  make typecheck        type-check all the TypeScript: the Node side and the browser's (viewer host API, companion)"
 	@echo "  make build-companion  bundle src/companion/src/ (TypeScript) into src/companion/companion.js (maintainers)"
@@ -95,6 +97,9 @@ test-render: test-render-deps
 
 test-render-all: test-render-deps
 	REFLOWTEX_RENDER_ALL=1 node --test tests/render/render.test.ts
+
+render-report: node-deps
+	node tests/render/report/serve.ts $(REPORT_PORT)
 
 # The capture tests (tests/capture/README.md): node:test; TeX only, no browser.
 test-capture: node-deps

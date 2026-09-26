@@ -68,6 +68,38 @@ with where and by how much), rules off. Each case's build is kept in
 `tools/pageless-pdf/compare.ts` compares the same two pixel by pixel, for a
 picture of the difference.
 
+## The report
+
+```sh
+make render-report      # after a run; http://localhost:8010/
+```
+
+A page for your own machine (it is not published): for each test, TeX's
+pageless PDF on the left and the page the browser reflowed on the right,
+each glyph or rule that does not match boxed in red on both sides. A glyph
+is boxed when it is further off than the **Glyph** threshold, and a rule
+when it is further off than **Rule**. Both start at the case's ceilings;
+set them to 0 to see every offset. Also boxed: glyphs and rules on one side
+only. TeX's rules the browser did not draw are dashed amber while they are
+within the case's `rules_missing`. The list on the right has every
+mismatch, top to bottom; click one, or press n and p, to bring it to the
+middle of both sides. ← and → (or the menu) go through the tests, and the
+bar says each one's status: pass, fail, known failure, passes with a known
+mark, or error, with the test's own message.
+
+The right side is the **live page** – the site the test built, laid out
+as `dom-dump.ts` laid it out – and **Inspect** opens the inspector on it,
+docked beside the list: its tree, hover outlines and pick work on the
+reflowed page, glyph by glyph. **Snapshot** shows instead the screenshot
+the test took of it. The two sides scroll together, at any zoom.
+
+What it reads is written by every run: `result.json` in each width's
+folder, and `vector/strip.png` and `vector/viewer.png` beside
+`vector.json` – the strip and the page at 2 px per pt, in the frame
+`vector-compare.ts` measures in (so the PDF side is soft at 4×).
+`build/report.json` lists them; the server writes it again as it starts,
+so results from single-case runs show too.
+
 ## Adding a case
 
 Put a short, complete document in `cases/<name>.tex`: a comment on its

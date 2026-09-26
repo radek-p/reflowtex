@@ -5,7 +5,9 @@
 //     make test-render-all        # testmath too (REFLOWTEX_RENDER_ALL=1)
 //     node --test --test-name-pattern displays tests/render/render.test.ts   # one case
 import { test, after } from 'node:test';
-import { allCases, buildDir, compare, problems, serve, worst, type Case } from './render.ts';
+import { mkdirSync } from 'node:fs';
+import { allCases, BUILD, buildDir, compare, problems, serve, worst, type Case } from './render.ts';
+import { writeIndex, writeResult, type Status } from './report/results.ts';
 
 const ALL = process.env.REFLOWTEX_RENDER_ALL === '1';
 const cases = allCases();
@@ -17,9 +19,21 @@ for (const c of cases.values()) {
   for (const extra of c.widths) {
     const id = `${c.name}@${extra ? `${extra > 0 ? '+' : ''}${extra}pt` : 'own'}`;
     test(id, { skip: c.slow && !ALL ? 'slow (make test-render-all)' : false }, async () => {
-      const v = await compare(c, extra, url);
+      // result.json beside the build, for the report page (make render-report)
+      const dir = buildDir(c, extra);
+      const settings = { id, case: c.name, extra, tolerance: c.tolerance, rule_tolerance: c.rule_tolerance,
+                         rules_missing: c.rules_missing, target: c.target, known: c.known };
+      let compared;
+      try { compared = await compare(c, extra, url); } catch (e) {
+        mkdirSync(dir, { recursive: true });
+        writeResult(dir, { ...settings, status: 'error', problems: [String((e as Error).message ?? e)] }, BUILD);
+        throw e;
+      }
+      const { v, page } = compared;
       rows.push([id, c, worst(v), v.rules_missing.length]);
       const found = problems(v, c.tolerance, c.rule_tolerance, c.rules_missing ?? 0);
+      const status: Status = c.known ? (found.length ? 'known' : 'fixed') : found.length ? 'fail' : 'pass';
+      writeResult(dir, { ...settings, status, problems: found, worst: worst(v), hsize_pt: v.hsize_pt, page }, BUILD);
       const report = `${buildDir(c, extra)}/vector/vector.json`;
       if (c.known) {
         // strict: once it passes, the suite fails until the mark is taken off
@@ -36,6 +50,7 @@ for (const c of cases.values()) {
 // lower them.
 after(() => {
   server.close();
+  writeIndex(BUILD, [...cases.keys()]);
   if (!rows.length) return;
   const lines = ['render: worst offsets (pt)',
     `${'test'.padEnd(28)} ${'glyph'.padStart(7)} ${'ceiling'.padStart(8)} ${'rule'.padStart(7)} ${'ceiling'.padStart(8)}   target ${rows[0][1].target}`];

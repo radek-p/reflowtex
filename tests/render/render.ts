@@ -83,12 +83,15 @@ export interface Vector {
   rules_missing: { y: number }[];
 }
 
-/** The PDF at this width against the case's page: vector.json. */
-export async function compare(c: Case, extra: number, urlRoot: string): Promise<Vector> {
-  const page = await site(c);
+/** The PDF at this width against the case's page: vector.json, with strip.png and
+ *  viewer.png beside it for the report (report/). `page` is the page's folder,
+ *  relative to build/. */
+export async function compare(c: Case, extra: number, urlRoot: string): Promise<{ v: Vector; page: string }> {
+  const dir = await site(c);
   const strip = extra || c.tex_pictures ? await pagelessRun(c, extra) : buildDir(c, 0);
-  const rel = relative(BUILD, page).split(sep).join('/');
-  return await vectorCompare(strip, `${urlRoot}/${rel}/index.html`, { out: join(strip, 'vector'), lineTol: c.tolerance, log: logTo(join(strip, 'compare.log')) }) as unknown as Vector;
+  const page = relative(BUILD, dir).split(sep).join('/');
+  const v = await vectorCompare(strip, `${urlRoot}/${page}/index.html`, { out: join(strip, 'vector'), lineTol: c.tolerance, images: true, log: logTo(join(strip, 'compare.log')) }) as unknown as Vector;
+  return { v, page };
 }
 
 /** build/ over HTTP on a free port, for the run. */

@@ -29,6 +29,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { dirname, join } from 'node:path';
 import * as mupdf from 'mupdf';
 import { dumpDom, type Dom } from './dom-dump.ts';
+import { rasterBand } from './raster.ts';
 
 const PT_PER_BP = 72.27 / 72;
 type Pt = [number, number];
@@ -85,7 +86,9 @@ const searchsorted = (s: number[], v: number) => { let lo = 0, hi = s.length; wh
 const slopeOf = (x: number[], y: number[]) => { const mx = mean(x), my = mean(y); let n = 0, d = 0; x.forEach((xi, i) => { n += (xi - mx) * (y[i] - my); d += (xi - mx) ** 2; }); return n / d; };
 const round = (x: number, k: number) => Math.round(x * 10 ** k) / 10 ** k;
 
-export interface CompareOptions { out?: string; margin?: number; window?: number; lineTol?: number; waitLog?: string; log?: (s: string) => void }
+/** `images`: also strip.png (the PDF) and viewer.png (the page), both 2 px per pt in the
+ *  one frame, for tests/render/report. */
+export interface CompareOptions { out?: string; margin?: number; window?: number; lineTol?: number; waitLog?: string; images?: boolean; log?: (s: string) => void }
 
 export async function vectorCompare(build: string, url: string, o: CompareOptions = {}): Promise<Record<string, unknown>> {
   const log = o.log ?? (s => console.log(s));
@@ -98,7 +101,11 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
   mkdirSync(out, { recursive: true });
 
   const { glyphs: P, rules } = traceStrip(pdf);
-  const dom: Dom = await dumpDom(url, { hsize, margin, waitLog: o.waitLog });
+  const dom: Dom = await dumpDom(url, { hsize, margin, waitLog: o.waitLog, screenshot: o.images ? join(out, 'viewer.png') : undefined });
+  if (o.images) {
+    const [, y0, , y1] = mupdf.Document.openDocument(readFileSync(pdf), 'application/pdf').loadPage(0).getBounds();
+    writeFileSync(join(out, 'strip.png'), rasterBand(pdf, 0, (y1 - y0) * PT_PER_BP).png);
+  }
   writeFileSync(join(out, 'dom.json'), JSON.stringify(dom));
   const G = dom.glyphs;
   log(`strip: ${P.length} glyphs, ${rules.length} rules; viewer: ${G.length} glyphs, ${dom.rects.length} rects`);
@@ -179,12 +186,13 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
     if (k >= 0 && bestD < 2) {
       const d = bestD;
       drawn.add(k);
-      ruleRows.push({ y: round(r.y, 2), x: round(r.x + shift, 2), off: round(d, 3), dx: round(centres[k][0] - c[0], 3), dy: round(centres[k][1] - c[1], 3) });
-    } else ruleRows.push({ y: round(r.y, 2), unmatched: true, w: round(r.w, 2), h: round(r.h, 2) });
+      ruleRows.push({ y: round(r.y, 2), x: round(r.x + shift, 2), w: round(r.w, 2), h: round(r.h, 2), off: round(d, 3), dx: round(centres[k][0] - c[0], 3), dy: round(centres[k][1] - c[1], 3) });
+    } else ruleRows.push({ y: round(r.y, 2), x: round(r.x + shift, 2), unmatched: true, w: round(r.w, 2), h: round(r.h, 2) });
   }
   // and the rules TeX drew that the browser did not
   const missing = rules.map((q, k) => [q, k] as const).filter(([, k]) => !drawn.has(k))
-    .map(([q]) => ({ y: round(Math.min(...q.map(p => p[1])), 2), x: round(Math.min(...q.map(p => p[0])), 2) }));
+    .map(([q]) => ({ y: round(Math.min(...q.map(p => p[1])), 2), x: round(Math.min(...q.map(p => p[0])), 2),
+      w: round(Math.max(...q.map(p => p[0])) - Math.min(...q.map(p => p[0])), 2), h: round(Math.max(...q.map(p => p[1])) - Math.min(...q.map(p => p[1])), 2) }));
   const rm = ruleRows.filter(r => 'dx' in r) as { dx: number; dy: number; off: number; y: number }[];
   if (rm.length) {
     log(`rules: ${rm.length} matched of ${ruleRows.length} drawn, ${missing.length} of TeX's not drawn; strip − viewer x sd ${std(rm.map(r => r.dx)).toFixed(3)}, ` +
@@ -192,12 +200,17 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
     for (const r of rm.filter(r => r.off > lineTol).sort((a, b) => b.off - a.off).slice(0, 10))
       log(`  rule at y ${r.y.toFixed(2).padStart(9)}: corners ${r.off.toFixed(2)} pt off, centre dx ${r.dx.toFixed(2)} dy ${r.dy.toFixed(2)} pt`);
   }
+  const takenViewer = new Set(matched.map(m => m[0])), takenStrip = new Set(matched.map(m => m[1]));
   const result = {
     hsize_pt: hsize, margin_pt: margin, window_pt: win,
     glyphs: { strip: P.length, viewer: nInk, matched: matched.length },
     vertical: { mean: round(mean(dys), 4), sd: round(std(dys), 4), max_abs: round(Math.max(...dys.map(Math.abs)), 4), drift_per_250pt: drift },
     lines: table, lines_off: off, rules: ruleRows, rules_missing: missing,
-    matched: matched.map(([j, , dx, dy]) => ({ y: round(G[j].y, 2), x: round(D[j][0], 2), text: G[j].text, font: G[j].font, dx: round(dx, 3), dy: round(dy, 3) })),
+    matched: matched.map(([j, , dx, dy]) => ({ y: round(G[j].y, 2), x: round(D[j][0], 2), text: G[j].text, font: G[j].font, w: round(G[j].w, 2), size: round(G[j].size, 2), dx: round(dx, 3), dy: round(dy, 3) })),
+    // what has no partner: the browser's glyphs with no glyph of TeX's near, and TeX's no browser glyph took
+    viewer_unmatched: G.map((g, j) => [g, j] as const).filter(([g, j]) => g.text.trim() && !takenViewer.has(j))
+      .map(([g, j]) => ({ y: round(g.y, 2), x: round(D[j][0], 2), text: g.text, w: round(g.w, 2), size: round(g.size, 2) })),
+    strip_unmatched: P.map((p, i) => [p, i] as const).filter(([, i]) => !takenStrip.has(i)).map(([p]) => ({ x: round(p[0], 2), y: round(p[1], 2) })),
   };
   writeFileSync(join(out, 'vector.json'), JSON.stringify(result, null, 1));
   log(`→ ${join(out, 'vector.json')}`);
