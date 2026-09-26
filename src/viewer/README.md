@@ -278,7 +278,8 @@ everything a page draws:
   there anew. `render` is called once per host, never again on relayout,
   resize or font load, and may return what undoes it, called when the host
   goes for good. State belongs to the instance, never to a host. A render
-  that throws leaves its instance drawn by default.
+  that throws leaves its instance drawn by default. `host.kinds()` lists
+  the kinds defined now.
   - *block* (`host.type === 'block'`): `host.el` is the stream's element in
     the flow (below). The flow still spaces it as TeX would, from its
     *edges* – the first and last lines of the body's surface inside it by
@@ -302,6 +303,9 @@ everything a page draws:
   `data-rtx-id`, transparent until a page styles it (a highlighter:
   `rect.latex-mark[data-mark~="key"] { fill: #fff176 }`; a stroke of the
   same colour pads it).
+- **Colour maps**: `host.colorMaps()` gives the maps in force (the page's
+  island, or what was set last), `host.setColorMaps(maps)` replaces them;
+  the page's colours follow at once, with no layout (see Theming).
 
 ## Streams
 
