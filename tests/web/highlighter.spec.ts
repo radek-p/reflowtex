@@ -158,3 +158,22 @@ test('a selection made by dragging the mouse', async ({ openPage }) => {
   const text = await page.evaluate(() => reflowtex.host.liveMarks()[0]?.ranges[0].text);
   expect(text.startsWith('Every')).toBe(true);
 });
+
+// A selection over part of a highlight of another colour takes only what
+// is selected: the rest keeps its colour. (It used to merge the two, and
+// the unselected part took the new colour.) One of the same colour merges.
+test('a new colour over part of a highlight leaves the rest as it was', async ({ openPage }) => {
+  const page = await openPage('highlighter');
+  await selectKey(page, { glyphs: [0, 10] });        // "Every number"
+  await page.getByRole('button', { name: 'Highlight: yellow' }).click();
+  await selectKey(page, { glyphs: [5, 20] });        // "number above one is"
+  await page.getByRole('button', { name: 'Highlight: green' }).click();
+  const two = await page.evaluate(() => reflowtex.host.liveMarks()
+    .map((m: any) => [m.classes.split(' ')[1], m.ranges.map((x: any) => x.text).join('|')]));
+  expect(two).toEqual([['rtx-highlight-yellow', 'Every'], ['rtx-highlight-green', 'numberaboveoneis']]);
+  await selectKey(page, { glyphs: [0, 7] });         // "Every num" (with the hyphen's place), yellow again
+  await page.getByRole('button', { name: 'Highlight: yellow' }).click();
+  const three = await page.evaluate(() => reflowtex.host.liveMarks()
+    .map((m: any) => [m.classes.split(' ')[1], m.ranges.map((x: any) => x.text).join('|')]));
+  expect(three).toEqual([['rtx-highlight-green', 'beraboveoneis'], ['rtx-highlight-yellow', 'Everynum']]);
+});
