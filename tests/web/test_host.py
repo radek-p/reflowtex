@@ -260,19 +260,34 @@ def test_frame_keeps_glue_without_explicit_space(open_page):
 
 
 def test_defined_before_the_viewer(open_page):
+    """Kinds defined before the viewer runs draw their instances; an action
+    pressed in a page-drawn pane goes up the instance tree to a handler on
+    the accordion around it (instance.onAction), with no companion."""
     page = open_page('host-defined')
     r = page.evaluate("""() => ({ renders: __renders,
-      marks: [...document.querySelectorAll('.latex-stream[data-kind="pane"] > .mine')].map(m => m.textContent),
-      shown: [...document.querySelectorAll('.latex-stream[data-kind="pane"]')].map(p => p.getClientRects().length > 0) })""")
+      marks: [...document.querySelectorAll('.latex-stream[data-kind="pane"] > .mine')].map(m => m.textContent) })""")
     assert r['renders'] == 2 and r['marks'] == ['collapsed', 'expanded']
-    assert r['shown'] == [True, False], 'the (legacy) accordion still shows one pane'
-    # Its action link is drawn in the page's surface, and still reaches the accordion.
-    page.locator('.latex-stream[data-kind="pane"] .latex-action').first.click()
-    page.wait_for_function("""() => [...document.querySelectorAll('.latex-stream[data-kind="pane"]')]
-      .map(p => p.getClientRects().length > 0).join() === 'false,true'""")
-    page.wait_for_function("""() => document.querySelectorAll('.latex-stream[data-kind="pane"]')[1]
-      .querySelectorAll('tspan').length > 0""")
+    page.evaluate("""() => { window.__got = [];
+      const acc = reflowtex.host.instances('accordion')[0];
+      acc.onAction('pane', a => { __got.push([a.arg, a.instance && a.instance.kind]); });
+      document.addEventListener('reflowtex:action', e => __got.push(['dom', e.detail.handled])); }""")
+    page.locator('.latex-stream[data-kind="pane"] rect.latex-link-hit[data-link-action="pane:next"]').first.click(force=True)
+    page.wait_for_timeout(100)
+    assert page.evaluate('__got') == [['next', 'pane'], ['dom', True]]
     assert page.evaluate('__renders') == 2
+
+
+def test_action_passed_outward_and_unhandled(open_page):
+    page = open_page('host-defined')
+    page.evaluate("""() => { window.__got = [];
+      const acc = reflowtex.host.instances('accordion')[0], pane = reflowtex.host.instances('pane')[0];
+      pane.onAction('pane', a => { __got.push('pane'); return false; });     // passes it on
+      acc.onAction('pane', a => { __got.push('accordion'); });
+      acc.onAction('other', a => { __got.push('never'); });
+      document.addEventListener('reflowtex:action', e => __got.push(e.detail.verb + ':' + e.detail.handled)); }""")
+    page.locator('.latex-stream[data-kind="pane"] rect.latex-link-hit[data-link-action="pane:next"]').first.click(force=True)
+    page.wait_for_timeout(100)
+    assert page.evaluate('__got') == ['pane', 'accordion', 'pane:true']
 
 
 # ── Boxed theorems: nested frames ────────────────────────────────────────────

@@ -23,8 +23,12 @@
 // kind (\mypopover's popover-label and popover-note).
 
 import type {
-    Block, DataPart, Instance, InstanceQuery, Part, Placement, Presentation, TypesetPart,
+    Action, Block, DataPart, Instance, InstanceQuery, Part, Placement, Presentation, TypesetPart,
 } from './types.ts';
+import { onAction } from './actions.ts';
+
+/** Set by the viewer's slots (slots.js): a text instance's own text. */
+export const textHooks = { set: (_id: string, _text: string | null) => {} };
 
 // The decoded document, as far as the normaliser reads it (protobuf.js
 // objects: unset fields absent, enums as lowercase names).
@@ -59,6 +63,9 @@ export class InstanceImpl implements Instance {
     readonly children: InstanceImpl[] = [];
     readonly parts = new Map<string, Part>();
     spaceBefore = 0;
+    /** Internal: the stream (1-based) or slot index it was made from. */
+    stream = 0;
+    slot = 0;
     constructor(
         readonly id: string,
         readonly kind: string,
@@ -71,6 +78,11 @@ export class InstanceImpl implements Instance {
         private readonly anchorOf: AnchorOf,
     ) {}
     part(role: string) { return this.parts.get(role); }
+    onAction(verb: string, fn: (a: Action) => boolean | void) { return onAction(this, verb, fn); }
+    setText(text: string | null) {
+        if (this.placement !== 'text') throw new TypeError(`setText: ${this.id} is not a \\webtext`);
+        textHooks.set(this.id, text === null || text === undefined ? null : String(text));
+    }
     anchor() { return this.source.type === 'none' ? null : this.anchorOf(this.source); }
 }
 
@@ -116,6 +128,7 @@ export function normalise(doc: Doc, block: Block, key: string, parts: PartFactor
         const { attrs, presentation } = splitAttrs(s.attrs);
         const inst = new InstanceImpl(`${key}/s${index}`, s.kind || '', Object.freeze(attrs), presentation,
                                       placement, parent, block, source, anchorOf);
+        inst.stream = index;
         inst.parts.set('body', parts.typeset(inst, 'body', s));
         if (s.text !== undefined) {
             const data: DataPart = { type: 'data', role: 'text', instance: inst, data: s.text };
@@ -137,11 +150,14 @@ export function normalise(doc: Doc, block: Block, key: string, parts: PartFactor
             if (colon >= 0) attrs.key = name.slice(colon + 1);
             const inst = new InstanceImpl(`${key}/w${index}`, kind, Object.freeze(attrs), NO_PRESENTATION,
                                           'inline', parent, block, { type: 'widget', slot: index }, anchorOf);
+            inst.slot = index;
             if (attrs.key !== undefined && !widgetsByKey.has(attrs.key)) widgetsByKey.set(attrs.key, inst);
             adopt(inst, parent);
         } else {
-            adopt(new InstanceImpl(`${key}/t${index}`, 'text', Object.freeze({ name }), NO_PRESENTATION,
-                                   'text', parent, block, { type: 'none' }, anchorOf), parent);
+            const inst = new InstanceImpl(`${key}/t${index}`, 'text', Object.freeze({ name }), NO_PRESENTATION,
+                                          'text', parent, block, { type: 'none' }, anchorOf);
+            inst.slot = index;
+            adopt(inst, parent);
         }
     };
 

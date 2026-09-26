@@ -14,6 +14,7 @@ import { layoutDocument } from '../engine/layout/document.js';
 import { NATURAL_PROBE_PT, markDirty, unobserveAll } from '../runtime/blocks.js';
 import { paintVisibleNow } from '../runtime/visibility.js';
 import { paintDocument } from '../engine/paint.js';
+import { disposePieces } from './inline.ts';
 import type { Doc, DocStream } from './instances.ts';
 import type { Instance, MountOptions, Surface, SurfaceMetrics, TypesetPart } from './types.ts';
 
@@ -110,6 +111,9 @@ export class SurfaceImpl implements Surface {
         // the same link drawn in the text.
         this.cache = part.newCache(() => this.relayout(true));
         this.box.className = 'latex-block latex-part';
+        // Whose text this is: a control pressed in it acts for this instance
+        // (actions.ts), wherever the page shows it.
+        this.box.dataset.instance = part.instance.id;
         // Its own size and nothing else: no margin a page gives its blocks.
         this.box.style.margin = '0';
         let set = live.get(part.data.el);
@@ -182,6 +186,7 @@ export class SurfaceImpl implements Surface {
     rerender() {
         if (this.disposed) return;
         unobserveAll(this.cache);
+        disposePieces(this.cache);
         this.cache.dom = null; this.cache.layout = null;
         this.relayout(true);
     }
@@ -198,6 +203,7 @@ export class SurfaceImpl implements Surface {
         if (this.ro) this.ro.disconnect();
         if (this.frame) cancelAnimationFrame(this.frame);
         unobserveAll(this.cache);
+        disposePieces(this.cache);
         surfaceHooks.disposeHosts(this.cache);
         this.listeners.clear();
         if (this.box.parentNode === this.el) this.el.removeChild(this.box);

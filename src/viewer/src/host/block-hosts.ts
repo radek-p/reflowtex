@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Block kinds (types.ts: BlockKind, BlockHost): a `block` instance of a
+// Block kinds (types.ts: KindDef, BlockHost): a `block` instance of a
 // kind the page defined is drawn by the page. The viewer places its element
 // in the flow – the stream's box, `.latex-stream[data-kind]`, which it
 // already makes – and hands it over once; what goes inside is the page's,
@@ -26,14 +26,15 @@ import { ZOOM } from '../engine/core.js';
 import { blockData, rerenderBlock } from '../runtime/blocks.js';
 import { blockOf } from './host.ts';
 import { surfaceHooks, surfacesOf, type Cache, type Edges, type SurfaceImpl } from './surface.ts';
-import type { BlockHost, BlockKind, Instance, Surface } from './types.ts';
+import type { BlockHost, KindDef, Instance, Surface } from './types.ts';
+import { kindDef, onKindChange } from './kinds.ts';
 
 interface HostRecord {
     box: HTMLElement;
     index: number;               // the stream's, the key in owner.hosts
     instance: Instance;
     kind: string;
-    def: BlockKind;
+    def: KindDef;
     owner: Cache;
     host: BlockHost;
     undo: (() => void) | null;
@@ -43,11 +44,9 @@ interface HostRecord {
     failed: boolean;
 }
 
-const kinds = new Map<string, BlockKind>();
 const records = new Set<HostRecord>();
 const byBox = new WeakMap<HTMLElement, HostRecord>();
 
-export function blockKind(kind: string) { return kinds.get(kind); }
 
 // ── Relayout, coalesced per owning layout ────────────────────────────────
 const pending = new Set<() => void>();
@@ -107,11 +106,11 @@ function dispose(rec: HostRecord) {
     rec.undo = null;
 }
 
-function makeRecord(box: HTMLElement, index: number, instance: Instance, def: BlockKind, owner: Cache): HostRecord {
+function makeRecord(box: HTMLElement, index: number, instance: Instance, def: KindDef, owner: Cache): HostRecord {
     const rec = { box, index, instance, kind: instance.kind, def, owner, undo: null, laid: null, failed: false,
                   frame: { top: false, bottom: false }, edges: null } as unknown as HostRecord;
     rec.host = {
-        el: box, instance,
+        type: 'block', el: box, instance,
         setFrame(f) {
             const next = { top: !!f.top, bottom: !!f.bottom };
             if (next.top === rec.frame.top && next.bottom === rec.frame.bottom) return;
@@ -143,7 +142,7 @@ export function keptHostBox(cache: Cache, index: number): HTMLElement | null {
 /** For layoutStreamSegment: lay out a stream segment whose kind the page
  *  defined, or return null to have it laid out by default. */
 export function layoutHostedSegment(s: any, seg: any, widthPt: number, cache: Cache): object | null {
-    const def = kinds.get(seg.stream.kind || '');
+    const def = kindDef(seg.stream.kind || '');
     if (!def || !cache.blockEl) return null;
     const hosts = cache.hosts || (cache.hosts = new Map());
     let rec = hosts.get(seg.index) as HostRecord | undefined;
@@ -188,13 +187,4 @@ function redraw(kind: string) {
     }
 }
 
-export function defineBlockKind(kind: string, def: BlockKind): () => void {
-    if (!def || typeof def.render !== 'function') throw new TypeError(`host.define("${kind}"): render(instance, host) is required`);
-    kinds.set(kind, def);
-    redraw(kind);
-    return () => {
-        if (kinds.get(kind) !== def) return;
-        kinds.delete(kind);
-        redraw(kind);
-    };
-}
+onKindChange(redraw);

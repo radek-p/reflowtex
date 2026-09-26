@@ -66,6 +66,98 @@
   border-start-start-radius: 0; border-end-start-radius: 0;
 }
 
+/* ── Frames: notes, boxed theorems and proofs ───────────────────────────── */
+/* webnote, \DeclareWebBox and the [boxed] option make streams of kinds note,
+   theorem and proof; the viewer lays each out inside its element, and these
+   are their looks. Each colour is a custom property a page (or a theme
+   class) can set; the tints are mixed with transparent, so they sit on any
+   page background.
+   A frame grows outward: a top-level one reaches into the margin by its
+   padding and bar (--latex-outset-start/-end), so its text keeps the
+   column's full measure and lines up with the text around it. Inside
+   another frame a box is set in by the enclosing frame's padding at the
+   start of the line only (left, or right in right-to-left text): start
+   edges step in per level while end edges all stand flush – each frame
+   hands its end padding to what it holds (--latex-enclosing-end) and a frame
+   inside takes it back as a negative margin; a stream with no padding (a
+   pane) passes it on. The outsets do not inherit. A page's own framed kind
+   can set the same variables. All sides are logical. */
+:where(.latex-stream) { --latex-outset-start: initial; --latex-outset-end: initial; }
+.latex-stream {
+  margin-inline-start: calc(-1 * var(--latex-outset-start, 0px));
+  margin-inline-end: calc(-1 * var(--latex-outset-end, 0px)); }
+:is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
+    .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"]) .latex-stream {
+  margin-inline-start: 0; margin-inline-end: 0; }
+:is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
+    .latex-stream[data-kind="note"]) > * {
+  --latex-enclosing-end: var(--latex-pad-end, 0px); }
+:is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
+    .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"])
+  :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
+      .latex-stream[data-kind="note"]) {
+  margin-inline-end: calc(-1 * var(--latex-enclosing-end, 0px)); }
+
+.latex-stream[data-kind="note"] {
+  --latex-outset-start: calc(1rem + 3px); --latex-outset-end: 1rem; --latex-pad-end: 1rem;
+  padding-block: .6rem; padding-inline: 1rem var(--latex-pad-end);
+  border-inline-start: 3px solid var(--latex-note-accent, #2f6fb3);
+  background: color-mix(in srgb, var(--latex-note-accent, #2f6fb3) 8%, transparent); }
+
+/* Boxed theorems and proofs. Vertical padding from the content's own edges:
+   --latex-box-space (default one x-height of 10pt Latin Modern, 4.31pt)
+   between the box and the top of a capital on the first line (cap height
+   6.83pt), and the same between the last baseline and the box; the viewer
+   sets --latex-first-ascent / --latex-last-depth on every stream's element.
+   A box's colours are its own, not inherited from an enclosing box's (zero
+   specificity: a page's rule or the box's own inline value wins). */
+:where(.latex-stream) { --latex-box-accent: initial; --latex-box-background: initial; }
+.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"] {
+  --latex-outset-start: calc(.85rem + 3px); --latex-outset-end: .7rem; --latex-pad-end: .7rem;
+  --latex-box-space: calc(4.31 * var(--latex-pt, 1.333px));
+  --latex-cap-height: calc(6.83 * var(--latex-pt, 1.333px));
+  padding-block: max(2px, calc(var(--latex-box-space) + var(--latex-cap-height) - var(--latex-first-ascent, 0px)))
+                 max(2px, calc(var(--latex-box-space) - var(--latex-last-depth, 0px)));
+  padding-inline: .85rem var(--latex-pad-end);
+  /* --latex-box-accent / --latex-box-background: set per box (\DeclareWebBox
+     accent=, background=) or by a page; else the kind's defaults – a page
+     may give theorems a background of their own (--latex-theorem-background),
+     else a tint of their accent. */
+  border-inline-start: 3px solid var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
+  background: var(--latex-box-background, var(--latex-theorem-background,
+    color-mix(in srgb, var(--latex-theorem-accent, #2f6fb3) 7%, transparent))); }
+/* A box with an accent of its own and no background: a tint of that accent. */
+.latex-stream[data-kind="theorem"][style*="--latex-box-accent"] {
+  background: var(--latex-box-background, color-mix(in srgb, var(--latex-box-accent) 7%, transparent)); }
+.latex-stream[data-kind="proof"] {
+  border-inline-start-color: var(--latex-box-accent, var(--latex-proof-accent, #8a8f98));
+  background: var(--latex-box-background,
+    color-mix(in srgb, var(--latex-box-accent, var(--latex-proof-accent, #8a8f98)) 6%, transparent)); }
+
+/* ── Hint ──────────────────────────────────────────────────────────────── */
+/* webhint: blurred until the reader presses it (kinds/hint.tsx). The
+   content is blurred, not the box, so a label sits sharp over it
+   (--latex-hint-label, a string; --rtx-hint-blur). The blur eases with
+   --rtx-hint-duration / -easing (default the global motion tokens).
+   State: [data-revealed] on the element. */
+.latex-stream[data-kind="hint"] { position: relative; cursor: pointer; border-radius: 4px; }
+.latex-stream[data-kind="hint"] > * {
+  filter: blur(var(--rtx-hint-blur, 5px));
+  transition: filter var(--rtx-hint-duration, var(--rtx-duration)) var(--rtx-hint-easing, var(--rtx-easing)); }
+.latex-stream[data-kind="hint"][data-revealed] > * { filter: none; }
+.latex-stream[data-kind="hint"]::after {
+  content: var(--latex-hint-label, "Click to reveal");
+  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+  font: 600 .8rem/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: .01em;
+  transition: opacity var(--rtx-hint-duration, var(--rtx-duration)) var(--rtx-hint-easing, var(--rtx-easing)); }
+.latex-stream[data-kind="hint"][data-revealed]::after { opacity: 0; }
+.latex-stream[data-kind="hint"]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .latex-stream[data-kind="hint"] > *, .latex-stream[data-kind="hint"]::after { transition: none; } }
+@media print {
+  .latex-stream[data-kind="hint"] > * { filter: none; }
+  .latex-stream[data-kind="hint"]::after { content: none; } }
+
 /* ── <Typeset> ─────────────────────────────────────────────────────────── */
 .rtx-typeset > .latex-block { margin: 0; }
 

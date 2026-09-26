@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The accordion drawn by the companion (v2, src/companion/src/kinds/
-accordion.tsx): the same text as the viewer's own (pages/accordion), animated
-switching, reduced motion, the keyboard, styling from LaTeX, print, nesting."""
+accordion.tsx): animated switching,
+reduced motion, the keyboard, styling from LaTeX, print, nesting."""
 
 ACC = '.latex-stream[data-kind="accordion"]'
 
@@ -40,15 +40,6 @@ def test_drawn_by_the_companion(open_page):
     assert s['pane'] == 'collapsed' and s['states'] == ['open', 'closed']
     assert page.locator(f'{ACC} > .rtx-accordion').count() == 4, 'every accordion (one nested) is the companion\'s'
     assert page.locator('.latex-stream[data-kind="pane"]').count() == 0, 'no pane drawn the old way'
-
-
-def test_same_lines_as_the_viewers_own(open_page):
-    old = open_page('accordion', width=900)
-    new = open_page('accordion-v2', width=900)
-    a, b = baselines(old), baselines(new)
-    assert len(a) == len(b)
-    worst = max(abs(x - y) for x, y in zip(a, b))
-    assert worst < 0.5, f'a line is {worst:.2f} px from where the viewer\'s own accordion put it'
 
 
 def test_switch_animates_then_settles(open_page):
@@ -164,8 +155,8 @@ def test_print_shows_the_print_pane(open_page):
 def test_a_throwing_component_draws_the_body(open_page):
     page = open_page('accordion-v2')
     page.evaluate("""async () => {
-      const { defineBlock } = await import('reflowtex/companion');
-      defineBlock('accordion', () => { throw new Error('boom'); });
+      const { define } = await import('reflowtex/companion');
+      define('accordion', () => { throw new Error('boom'); });
     }""")
     page.wait_for_timeout(400)
     r = page.evaluate("""() => { const h = document.querySelector('.latex-stream[data-kind="accordion"]');

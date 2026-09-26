@@ -57,8 +57,32 @@ export interface Instance {
     readonly block: Block;
     /** Where the instance stood in the text, when that is a point in a line
      *  that is drawn: a zero-size rect on the baseline, in window
-     *  coordinates. Else null (not drawn yet, not in a line, no mark). */
+     *  coordinates (an inline instance: its first piece's box). Else null
+     *  (not drawn yet, not in a line, no mark). */
     anchor(): DOMRect | null;
+    /** Handle the reader's actions of one verb (\webaction{verb:arg}{…})
+     *  pressed in this instance's text or in any instance inside it. The
+     *  innermost instance with a handler for the verb gets it first; a
+     *  handler returning false passes it on outward. Returns what removes
+     *  the handler. */
+    onAction(verb: string, fn: (action: Action) => boolean | void): () => void;
+    /** A text instance (\webtext): show `text` instead of the default, set
+     *  the way a browser sets text, the paragraph broken again around it;
+     *  null brings the default back. Wins over Host.setText for its name. */
+    setText(text: string | null): void;
+}
+
+/** A \webaction the reader pressed: \webaction{pane:next}{…} is verb
+ *  "pane", arg "next". */
+export interface Action {
+    readonly verb: string;
+    readonly arg: string;
+    /** As written. */
+    readonly action: string;
+    /** The instance whose text holds the control (null: the block's own). */
+    readonly instance: Instance | null;
+    /** The glyph pressed (its element). */
+    readonly source: Element;
 }
 
 export type Part = TypesetPart | DataPart;
@@ -144,23 +168,78 @@ export interface Block {
     on<E extends keyof BlockEvents>(event: E, fn: BlockEvents[E]): () => void;
 }
 
-/** How a kind of `block` instance is drawn: the page's code, not the
- *  viewer's. Kinds without one are drawn by default: the stream's own
- *  element (`.latex-stream[data-kind]`, with its data-* parameters, classes
- *  and custom properties) holding the body laid out at its width. */
-export interface BlockKind {
-    /** Draw `instance` in `host.el`, an element the viewer placed in the flow
-     *  and sized across; its height is whatever the content makes it. Called
-     *  once per host, which lives as long as the text around it: not again
-     *  on relayout, resize or font load. Returns what undoes it, if anything
-     *  (called when the kind is redefined, or the layout holding the host
-     *  goes away). If it throws, the instance is drawn by default. */
-    render(instance: Instance, host: BlockHost): void | (() => void);
+/** How a kind is drawn: the page's code, not the viewer's. One definition
+ *  serves every placement of the kind.
+ *
+ *  - block instances: render(instance, BlockHost) in the element the viewer
+ *    places in the flow. Undefined kinds are drawn by default: the stream's
+ *    own element (.latex-stream[data-kind], with its data-* parameters,
+ *    classes and custom properties) holding the body at its width.
+ *  - detached instances shown in the margin (place=margin): render(instance,
+ *    BlockHost of type 'margin'). Default: the body, at the margin's width.
+ *  - inline instances (\webwidget): measure(instance, env) sizes it and
+ *    says where it may break; render(instance, PieceHost) draws each piece
+ *    (the whole widget, or its part on one line). Undefined: nothing drawn.
+ *
+ *  render is called once per host: not again on relayout, resize or font
+ *  load. It returns what undoes it, if anything, which is called when the
+ *  host goes for good (a piece no line uses any more, the kind redefined).
+ *  If it throws, the instance is drawn by default. State belongs to the
+ *  instance (instance.id), never to a host: an inline widget has as many
+ *  hosts as lines it is broken across. */
+export interface KindDef {
+    render(instance: Instance, host: BlockHost | PieceHost): void | (() => void);
+    measure?(instance: Instance, env: InlineEnv): InlineMetrics;
+}
+
+/** An inline instance's surroundings, for measuring and drawing. */
+export interface InlineEnv {
+    /** The text's font size and colour where the widget stands. */
+    readonly fontSize: number;
+    readonly color: string | null;
+    /** The width, height and depth (px, against the baseline) of some HTML
+     *  set at that size: a string, a node, or a function that fills an
+     *  element (a component rendered into it). */
+    measure(content: string | Node | ((el: HTMLElement) => void)): { width: number; height: number; depth: number };
+    /** The content changed: measure again, break the paragraph again. */
+    invalidate(): void;
+}
+
+export interface Box { width: number; height: number; depth: number }
+/** An inline instance's size, px: whole (unbreakable); with splits, each a
+ *  way to break it once between two lines (penalty default 100, overhang:
+ *  how far a piece reaches past the margin); or as segments with a break
+ *  point (gap) between each two and its ends measured closed ('cap') and
+ *  cut ('cut'), breakable at any number of its points. */
+export type InlineMetrics =
+    | (Box & { splits?: { first: Box & { overhang?: number }; second: Box & { overhang?: number }; penalty?: number }[] })
+    | { segments: Box[]; gaps?: { width?: number; penalty?: number }[];
+        ends?: { left?: { cap?: number; cut?: number; overhang?: number }; right?: { cap?: number; cut?: number; overhang?: number } } };
+
+/** Which part of an inline instance a piece shows. */
+export type Piece =
+    | 'whole'
+    | { split: number; piece: 'first' | 'second' }
+    | { from: number; to: number; left: 'cap' | 'cut'; right: 'cap' | 'cut' };
+
+/** One piece of an inline instance, in the line: el is sized to it, its
+ *  content on the text's baseline. */
+export interface PieceHost {
+    readonly type: 'piece';
+    readonly el: HTMLElement;
+    readonly instance: Instance;
+    readonly piece: Piece;
+    readonly env: InlineEnv;
 }
 
 /** Where a block instance stands in the flow, and what the flow needs to
  *  know about it to space it as TeX would. */
 export interface BlockHost {
+    /** 'block': in the flow. 'margin': a detached instance the viewer shows
+     *  in the margin (place=margin): el is the note, as wide as the margin;
+     *  the first line of its edge surface is set on the line of its mark.
+     *  setFrame and spacing mean nothing there. */
+    readonly type: 'block' | 'margin';
     readonly el: HTMLElement;
     readonly instance: Instance;
     /** A framed edge (a border, padding: the instance draws a box) stops
@@ -182,10 +261,13 @@ export interface BlockHost {
 export interface Host {
     /** Bumped on incompatible changes. */
     readonly version: 1;
-    /** Draw every `block` instance of a kind with `def`, from now on and,
-     *  by drawing them again, those already drawn. Returns what undefines
-     *  it (the kind is then drawn by default again). */
-    define(kind: string, def: BlockKind): () => void;
+    /** Draw every instance of a kind with `def`, from now on and, by
+     *  drawing them again, those already drawn. Returns what undefines it
+     *  (the kind is then drawn by default again). */
+    define(kind: string, def: KindDef): () => void;
+    /** Show `text` in every \webtext{name}{…}, in every block (null: the
+     *  defaults again). */
+    setText(name: string, text: string | null): void;
     /** Blocks initialised so far, in page order. */
     blocks(): Block[];
     block(el: Element): Block | undefined;

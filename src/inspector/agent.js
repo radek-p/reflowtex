@@ -358,7 +358,7 @@ function summary(id) {
             case 'rule': out.label = 'rule';
                 out.note = [n.width, n.height, n.depth].map(v => v === RUNNING ? '*' : pt(v || 0)).join(' × '); break;
             case 'picture': out.label = 'picture'; out.note = `${pt(n.width || 0)} × ${pt(n.height || 0)} + ${pt(n.depth || 0)}`; break;
-            case 'widget': out.label = 'widget'; out.note = n.ctx ? n.ctx.name : ''; break;
+            case 'widget': out.label = 'widget'; out.note = n.inline ? (n.inline.instance.attrs.name || n.inline.instance.kind) : ''; break;
             case 'transform': out.label = 'transform'; out.note = `[${[n.m_a ?? 1, n.m_b ?? 0, n.m_c ?? 0, n.m_d ?? 1].map(v => +(+v).toFixed(3)).join(' ')}]`; break;
             default: out.label = n.type || 'node';
         }
@@ -707,7 +707,7 @@ function xmlNode(n, at, ind, out) {
         case 'rule': out.push(`${ind}<rule${attrs([['w', n.width === RUNNING ? '*' : num(n.width || 0)],
             ['h', n.height === RUNNING ? '*' : num(n.height || 0)], ['d', n.depth === RUNNING ? '*' : num(n.depth || 0)], ['color', n.color], ...R])}/>`); return;
         case 'picture': out.push(`${ind}<picture${attrs([['w', num(n.width || 0)], ['h', num(n.height || 0)], ['d', num(n.depth || 0)], ...R])}/>`); return;
-        case 'widget': out.push(`${ind}<widget${attrs([['name', n.ctx && n.ctx.name], ['w', num(n.width || 0)]])}/>`); return;
+        case 'widget': out.push(`${ind}<widget${attrs([['name', n.inline && (n.inline.instance.attrs.name || n.inline.instance.kind)], ['w', num(n.width || 0)]])}/>`); return;
         case 'disc': case 'wdisc': {
             const pre = n.pre || [], post = n.post || [], rep = n.replace || [];
             const plain = l => l.every(c => c.type === 'glyph');

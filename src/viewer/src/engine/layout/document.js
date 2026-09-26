@@ -8,6 +8,7 @@ import {
 import { lineProfile, minRequiredAdvance, texInterlineAdvance, texInterlineGlue } from './lines.js';
 import { layoutStreamSegment } from './stream.js';
 import { keptHostBox } from '../../host/block-hosts.ts';
+import { blockKeyOf } from '../../host/host.ts';
 import { layoutTextSegment, segmentsOf } from './text.js';
 import { svgEl } from '../paint.js';
 import { held, linkTargets } from '../../host/links.js';
@@ -35,36 +36,6 @@ export function onGridCarried(px, carry) {
     return { r, carry: exact - r };
 }
 
-// A group of alternatives (L.alts, see layoutStreamSegment) is spaced at this
-// level by its first member. Each other member, when it is the one showing,
-// must sit where TeX would have put *it*: its first line's interline glue
-// from the line above the group, its last line's to the line below. Applied
-// as margins on the member's own box, relative to the first member's glue.
-export function applyAlternativeOffsets(prev, L) {
-    if (L.alts) {                                        // above the group
-        const ref = L.alts[0].L;
-        for (const a of L.alts) {
-            let d = 0;
-            if (prev && isTextLike(prev.seg.kind) && a.L.firstMeta && ref.firstMeta) {
-                d = texInterlineGlue(prev.lastDepth, a.L.firstAscent, a.L.firstMeta)
-                  - texInterlineGlue(prev.lastDepth, ref.firstAscent, ref.firstMeta);
-            }
-            setStyle(a.box, 'marginTop', d ? `${d}px` : '');
-        }
-    }
-    if (prev && prev.alts) {                             // below the group
-        const ref = prev.alts[0].L;
-        for (const a of prev.alts) {
-            let d = 0;
-            if (isTextLike(L.seg.kind) && L.firstMeta) {
-                d = texInterlineGlue(a.L.lastDepth, L.firstAscent, L.firstMeta)
-                  - texInterlineGlue(ref.lastDepth, L.firstAscent, L.firstMeta);
-            }
-            setStyle(a.box, 'marginBottom', d ? `${d}px` : '');
-        }
-    }
-}
-
 // Between two text segments TeX inserts interline (baselineskip) glue on
 // top of any explicit \vspace, exactly as it does between the lines of a
 // paragraph. Reproduce it so a heading sits the LaTeX distance above its
@@ -80,7 +51,6 @@ export function spaceAbove(L, prev) {
 }
 
 export function sizeSegment(s, L, prev, columnPx, p) {
-    applyAlternativeOffsets(prev, L);
     if (L.seg.kind === 'stream') {
         // The box already holds the nested layout, which sized itself. Only
         // the spacer above is this level's: the explicit gap plus, after
@@ -197,6 +167,10 @@ export function sizeSegment(s, L, prev, columnPx, p) {
     return { mount, overflows };
 }
 
+/** A new block key, unique on the page (a layout's links and widgets are
+ *  keyed by it, and a block's instance ids start with it). */
+export const newBlockKey = () => `b${++blockSeq}`;
+
 export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // Point the glyph-metrics reader at this document's table, and stash it on the
     // cache so paintDocument (which is handed only the cache) reads the same one.
@@ -217,14 +191,10 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     cache.slotNames = (doc.slots || []).map(x => x.name);   // Node.slot → its name, for data-slot
     cache.anchors = doc.anchors || [];
     cache.streams = doc.streams || [];
-    // Per-stream state a kind's behaviour keeps (an accordion's pane), keyed
-    // by stream index. Lives on the top-level cache and is shared down into
-    // the nested ones, so it survives a rebuild of the DOM (rerenderBlock).
-    cache.streamState = cache.streamState || new Map();
     // The hosts of block instances a page draws (host/block-hosts.ts), by
-    // stream index; shared down like streamState, and kept across rebuilds.
+    // stream index; shared down into nested layouts, kept across rebuilds.
     cache.hosts = cache.hosts || new Map();
-    cache.blockKey = cache.blockKey || `b${++blockSeq}`;
+    cache.blockKey = cache.blockKey || newBlockKey();
     const minGapPx = p.minGapPt * ZOOM;
     const padPx    = p.padPt    * ZOOM;
 
@@ -324,6 +294,9 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
             const box = document.createElement('div');
             box.className = 'latex-stream';
             box.dataset.kind = seg.stream.kind || '';
+            // Its instance (host API): whose text a control pressed in it is.
+            const bk = blockKeyOf(cache.blockEl);
+            if (bk) box.dataset.instance = `${bk}/s${seg.index}`;
             // The author's parameters (\begin{webstream}[key=value]),
             // for CSS and the kind's behaviour alike.
             // Two keys are special: class adds CSS classes, and a key
@@ -416,8 +389,7 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     const want = [];
     laid.forEach((L, i) => {
         const s = dom.segs[i];
-        const { mount, overflows } = sizeSegment(s, L, cache.alternatives ? null : laid[i-1], columnPx, p);
-        if (cache.alternatives) setStyle(s.gap, 'height', '0px');
+        const { mount, overflows } = sizeSegment(s, L, laid[i-1], columnPx, p);
         s.mount = mount;
         for (const id of L.seg.anchors || []) {
             const label = cache.anchors[id - 1];

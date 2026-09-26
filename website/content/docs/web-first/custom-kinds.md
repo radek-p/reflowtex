@@ -66,29 +66,35 @@ ordinary paragraph.
 {{< /latex >}}
 
 {{< latex preamble="webfirst" >}}
-\textbf{Step 3: the behaviour}, when a kind needs one. Register it under the
-kind's name in a script on the page, before or after the viewer. The viewer
-calls \texttt{mount} once for every box of that kind, with the box and a
-\texttt{ctx}; \texttt{ctx.state} outlives the box -- the viewer rebuilds
-boxes when web fonts arrive -- so a kind keeps what it must remember there.
-The built-in hint is this code plus keyboard handling:
+\textbf{Step 3: the behaviour}, when a kind needs one. The companion
+package draws a kind with a component, in the element the stream has in the
+flow. \verb|<Typeset/>| is the stream's text, laid out at the width it is
+given and spaced from the text around it as \TeX{} spaced it; the element
+grows and shrinks with what the component draws, and the text after it
+follows. State kept with \verb|useInstanceState| outlives redrawing. The
+built-in hint is this, plus keyboard handling and the look:
 {{< /latex >}}
 
 ```js
-window.reflowtex ??= { streamKinds: {} };
-reflowtex.streamKinds.hint = {
-  mount(box, ctx) {
-    const reveal = () => { ctx.state.revealed = true; box.classList.add('latex-revealed'); };
-    if (ctx.state.revealed) reveal();
-    box.addEventListener('click', reveal);
-  },
-};
+import { define, Typeset, useInstanceState, useBlockHost, useLayoutEffect, html }
+  from 'reflowtex/companion';
+
+define('hint', () => {
+  const revealed = useInstanceState('revealed', false), host = useBlockHost();
+  useLayoutEffect(() => {
+    const flip = () => { revealed.value = !revealed.value; };
+    host.el.addEventListener('click', flip);
+    return () => host.el.removeEventListener('click', flip);
+  }, []);
+  useLayoutEffect(() => { host.el.toggleAttribute('data-revealed', revealed.value); });
+  return html`<${Typeset} />`;
+});
 ```
 
 {{< latex preamble="webfirst" >}}
 \section*{How the accordion is built}
-The same way. Its environments open streams, with the options passed on as parameters, and
-its links are actions:
+The same way. Its environments open streams, with the options passed on as
+parameters, and its links are actions:
 {{< /latex >}}
 
 ```latex
@@ -103,33 +109,29 @@ its links are actions:
 ```
 
 {{< latex preamble="webfirst" >}}
-(The real definitions add defaults and the print forms.) Its look is one CSS
-rule, hiding every pane but the active one. Its behaviour listens for the
-actions; \texttt{alternatives: true} tells the viewer that the panes replace
-one another, so each is spaced as if it alone stood in its place.
+(The real definitions add defaults and the print forms.) Its component draws
+each pane's text, showing one, and handles the actions of verb
+\texttt{pane} pressed in them: \verb|useAction| gets them however deep in
+the panes the link stands, and one accordion inside another handles its own.
 {{< /latex >}}
 
 ```js
-accordion: {
-  alternatives: true,                   // panes replace one another
-  mount(box, ctx) {
-    const panes = [...box.firstElementChild.children]
-      .filter(e => e.dataset.kind === 'pane');
-    const show = i => {
-      ctx.state.pane = i;
-      panes.forEach((p, k) => p.classList.toggle('latex-pane-active', k === i));
-      ctx.paint();                      // draw the pane now showing
-    };
-    show(ctx.state.pane ?? find(ctx.attrs.initial));
-    box.addEventListener('reflowtex:action', e => {
-      const m = /^pane:(.+)$/.exec(e.detail.action);
-      if (!m) return;                   // not ours: let it bubble on
-      e.stopPropagation();              // an outer accordion must not act too
-      show(find(m[1]));                 // find: next, prev, a name, a number…
-    });
-  },
-},
+define('accordion', ({ instance, attrs }) => {
+  const panes = instance.children.filter(c => c.kind === 'pane');
+  // find: a pane by name, number, next, prev, first or last
+  const open = useInstanceState('pane', () => find(panes, attrs.initial || '1'));
+  useAction('pane', ({ arg }) => { open.value = find(panes, arg, open.value); });
+  return html`${panes.map((p, i) => html`
+    <div class="rtx-pane" data-state=${i === open.value ? 'open' : 'closed'}>
+      <${Typeset} of=${p} edge=${i === open.value ? 'both' : undefined} />
+    </div>`)}`;
+});
 ```
+
+{{< latex preamble="webfirst" >}}
+The package's own adds the animation, the keyboard and print
+(\texttt{src/companion/src/kinds/accordion.tsx}).
+{{< /latex >}}
 
 <style>
   .latex-stream[data-kind="warning"] {

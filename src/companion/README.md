@@ -2,8 +2,9 @@
 
 The browser side of the companion package ([reflowtex.sty](../latex/reflowtex.sty)).
 It is one ES module with its stylesheet. Load it on a page and the package's
-kinds (the accordion and the Lean widgets) are drawn by it. Import from it to draw kinds
-of your own.
+kinds are drawn by it: the accordion, the hint, the Lean widgets, and the
+looks of notes and boxed theorems. Import from it to draw kinds of your own –
+blocks, margin notes and widgets in a line of text, all the same way.
 
 ```html
 <script type="importmap">{ "imports": { "reflowtex/companion": "/companion/companion.js" } }</script>
@@ -28,15 +29,18 @@ Dividing by $x$ assumes $x \neq 0$.
 In the page, draw it with a component:
 
 ```js
-import { defineBlock, Typeset, html } from 'reflowtex/companion';
+import { define, Typeset, html } from 'reflowtex/companion';
 
-defineBlock('warning', ({ attrs }) => html`
+define('warning', ({ attrs }) => html`
   <p class="warning-title">${attrs.title || 'Warning'}</p>
   <${Typeset} />`);
 ```
 
-`<Typeset />` is the environment's body, typeset by TeX and laid out by the
-viewer at the width of the element it stands in. That width is followed as
+`define` draws a kind wherever it stands: in the flow, or in the margin
+when it is a `\webaside[place=margin]{kind}` (props.host.type is `'margin'`;
+the viewer puts its first line on the line of its mark). `<Typeset />` is
+the instance's body, typeset by TeX and laid out by the viewer at the width
+of the element it stands in. That width is followed as
 it changes, and the text is broken again. The viewer still spaces the block
 as TeX would, from the body's first and last lines. The block's height is
 whatever your component makes it, and the text below moves when it changes.
@@ -48,8 +52,9 @@ whatever your component makes it, and the text below moves when it changes.
 | `props.instance`, `useInstance()` | the instance: `id`, `kind`, `attrs`, `parts`, `children`, `parent` |
 | `props.attrs`, `useAttrs()` | the author's parameters |
 | `useInstanceState(key, initial)` | a signal belonging to the instance. It outlives redraws, so a choice the reader made (the pane they opened) stands |
-| `useAction(verb, fn)` | the reader pressed a `\webaction{verb:arg}{…}` inside. `fn({ verb, arg, source })`; return `false` to leave it to an enclosing instance |
-| `useBlockHost()` | the element in the flow (`host.el`), `setFrame`, `setEdges` |
+| `useAction(verb, fn)` | the reader pressed a `\webaction{verb:arg}{…}` in this instance's text or an instance inside it, wherever shown. `fn({ verb, arg, source, instance })`; return `false` to leave it to an enclosing instance |
+| `useBlockHost()` | the element in the flow or the margin (`host.el`), `setFrame`, `setEdges`, `spacing()` |
+| `usePiece()` | in a widget's piece: `host.piece`, `host.env` |
 | `<Typeset part of width edge onMetrics />` | a part (`'body'` by default) of this instance or of a child (`of`), at `'container'` width (default), `'natural'` or px. `edge` makes its lines the block's edges for TeX's spacing |
 | `readMotion(el, name, fallback, attr)` | duration, easing and style from CSS (`--rtx-NAME-*`), honouring reduced motion |
 
@@ -57,7 +62,7 @@ Preact, htm and Preact Signals are re-exported (`h`, `render`, `useState`,
 `signal`, `html`, …), so your components use the same copy as the package's.
 
 A component that throws is replaced by the plain body, with the error on the
-console. `defineBlock` returns a function that undoes it. Defining a kind
+console. `define` returns a function that undoes it. Defining a kind
 again, including one of the package's own, redraws what is already on the
 page.
 
@@ -65,7 +70,7 @@ page.
 
 A block with a border or padding is *framed*. Across a framed edge, TeX's
 interline glue gives way to the author's explicit space, as a box in print
-would. `defineBlock` reads this from the element's CSS (`frame: 'auto'`) and
+would. `define` reads this from the element's CSS (`frame: 'auto'`) and
 follows it as it changes. Pass `frame: true` or `false` to decide yourself.
 
 ## Styling
@@ -132,11 +137,39 @@ The building blocks it uses are exported for kinds of your own:
 `animateHeight(el, fromPx, motion)`, `fadeIn(el, motion)` and
 `fadeOut(el, motion)`.
 
-## The first version's API
+## A widget in a line of text
 
-`widget`, `Aside`, `InlineButton`, `Popover` and `marginNote` still work, as
-before ([src/legacy.ts](src/legacy.ts)). They move onto the host API with
-inline kinds; new code should not start there.
+`\webwidget{kind:key}` is an inline instance: the line breaker needs its
+size first, so `defineInline` takes a `size` beside the component, which is
+drawn once for each piece – the whole widget, or its part on each line it is
+broken across (props.piece). State the pieces share belongs to the instance.
+
+```js
+import { defineInline, InlineButton, Popover, Typeset, useState, html } from 'reflowtex/companion';
+
+defineInline('popover', {                   // \webwidget{popover:1}, asides for=1 its parts
+  size: (instance, env) => InlineButton.size(env, instance.part('popover-label').naturalWidth()),
+  View: ({ env }) => {
+    const [button, setButton] = useState(null);
+    return html`
+      <${InlineButton} env=${env} pressed=${!!button} onPress=${e => setButton(button ? null : e.currentTarget)}>
+        <${Typeset} part="popover-label" width="natural" />
+      </${InlineButton}>
+      ${button && html`<${Popover} anchor=${button} onClose=${() => setButton(null)}>
+        <${Typeset} part="popover-note" /></${Popover}>`}`;
+  },
+});
+```
+
+`size` returns `{ width, height, depth }` in px, or where it may break
+(`splits`, or `segments` with gaps between them: the viewer's README,
+Widgets). `env.measure(html)` measures HTML at the text's size;
+`env.invalidate()` measures again when the content changes.
+`<InlineButton>` is a pill in the line around anything; `<Popover>` a panel
+below an element.
+
+The same through the viewer alone, without Preact: `reflowtex.host.define(kind,
+{ measure, render })` ([src/viewer/src/host/types.ts](../viewer/src/host/types.ts)).
 
 ## Building
 

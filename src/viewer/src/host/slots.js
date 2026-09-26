@@ -7,6 +7,9 @@ import { widgetNodes } from './widgets.js';
 import { blockData } from '../runtime/blocks.js';
 import { api } from '../runtime/page.js';
 import { paintVisibleNow } from '../runtime/visibility.js';
+import { docData } from './asides.js';
+import { disposePiece } from './inline.ts';
+import { textHooks } from './instances.ts';
 // ── end of imports
 
 // ── Slots (\webtext) ──────────────────────────────────────────────────────────
@@ -82,7 +85,7 @@ export function applySlots(fontInfo, doc) {
         for (let i = 0; i < orig.length; i++) {
             const id = orig[i].slot, slot = id && slots[id - 1];
             const isWidget = slot && slot.kind === 'widget';
-            const text = slot && !isWidget ? slotValues.get(slot.name) : undefined;
+            const text = slot && !isWidget ? textOf(doc, id, slot) : undefined;
             if (!slot || (!isWidget && text === undefined)) { out.push(orig[i]); continue; }
             // The run: from here to the last node of this slot (a disc or a
             // font kern between its glyphs carries no id of its own).
@@ -115,7 +118,8 @@ export function applySlots(fontInfo, doc) {
 export function invalidateParagraphs(cache, changed, stale) {
     if (!cache || !cache.dom || !cache.layoutCtx) return;
     for (const i of changed) cache.bcs && cache.bcs.delete(i);
-    for (const n of stale) cache.dom.byNode.delete(n);
+    // A replaced widget piece is gone for good: its drawing ends.
+    for (const n of stale) { disposePiece(cache.dom.byNode.get(n)); cache.dom.byNode.delete(n); }
     cache.layoutCtx.segs.forEach((seg, i) => {
         const s = cache.dom.segs[i];
         if (!s) return;
@@ -153,12 +157,22 @@ export function scheduleSlots() {
     });
 }
 
-// The page's side: give a slot a text (any value; it is shown as a string),
-// or null/undefined to show the default again. Every \webtext of that name,
-// in every block, follows. Updates within one frame are applied together.
-api.setText = function (name, text) {
+// The page's side (host API): host.setText(name, text) gives every \webtext
+// of that name, in every block, a text (null: the default again);
+// instance.setText(text) gives one, and wins over its name's. Updates within
+// one frame are applied together.
+const instanceTexts = new Map();       // instance id → string
+export function setSlotText(name, text) {
     if (text === null || text === undefined) slotValues.delete(String(name));
     else slotValues.set(String(name), String(text));
     scheduleSlots();
+}
+textHooks.set = (id, text) => {
+    if (text === null) instanceTexts.delete(id); else instanceTexts.set(id, text);
+    scheduleSlots();
 };
-api.getText = name => slotValues.get(String(name));
+function textOf(doc, id, slot) {
+    const key = ((docData.get(doc) || {}).cache || {}).blockKey;
+    const own = key && instanceTexts.get(`${key}/t${id}`);
+    return own !== undefined && own !== null ? own : slotValues.get(slot.name);
+}

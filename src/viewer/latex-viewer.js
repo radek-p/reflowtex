@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 6c8aaf1826807d30565d43c34ca78135e36c4ed57a7c473741ab0cfd88a8b60c
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 0912f87d54b409c689e7d22663614012ed939dcbd88d871a74ec64ecd58fd698
 'use strict';
 "use strict";
 (() => {
@@ -675,89 +675,260 @@
   var SCRIPT_URL = document.currentScript?.src;
   var BUILD = (SCRIPT_URL?.match(/v=([a-f0-9]+)/) || [])[1] || "unversioned";
   var api = window.reflowtex = window.reflowtex || {};
-  api.streamKinds = api.streamKinds || {};
   if (/[?&]reflowtex-debug\b/.test(location.search)) api.debug = true;
   var debugLog = (...a) => {
     if (api.debug) console.debug(...a);
   };
   debugLog(`[latex-viewer] build ${BUILD}`);
 
-  // src/defaults/margin-notes.js
-  var MARGIN = { gap: 28, min: 150, max: 260 };
-  api.marginNotes = api.marginNotes || {};
-  function placeMarginNotes(data) {
-    const el = data && data.el;
-    if (!el || !el.isConnected) return;
-    const notes = asideHandles(data, { place: "margin" });
-    if (!notes.length) return;
-    const M = data.margin = data.margin || { layer: document.createElement("div"), items: /* @__PURE__ */ new Map() };
-    M.layer.className = "latex-margin";
-    if (M.layer.parentNode !== el) el.appendChild(M.layer);
-    if (getComputedStyle(el).position === "static") el.style.position = "relative";
-    const br = el.getBoundingClientRect(), k = br.width / el.offsetWidth || 1;
-    const cs = getComputedStyle(el), px = (v, d) => {
-      const n = parseFloat(v);
-      return isFinite(n) ? n : d;
+  // src/host/actions.ts
+  var handlers = /* @__PURE__ */ new WeakMap();
+  function onAction(instance, verb, fn) {
+    let byVerb = handlers.get(instance);
+    if (!byVerb) handlers.set(instance, byVerb = /* @__PURE__ */ new Map());
+    let set = byVerb.get(verb);
+    if (!set) byVerb.set(verb, set = /* @__PURE__ */ new Set());
+    set.add(fn);
+    return () => {
+      set.delete(fn);
     };
-    const gap = px(cs.getPropertyValue("--latex-margin-gap"), MARGIN.gap);
-    const set = px(cs.getPropertyValue("--latex-margin-width"), null);
-    const room = set !== null ? set : (document.documentElement.clientWidth - br.right) / k - gap;
-    const width = Math.floor(Math.min(set !== null ? set : MARGIN.max, room));
-    const wide = set !== null ? width > 0 : room >= MARGIN.min;
-    const placed = [];
-    for (const a of notes) {
-      let it = M.items.get(a.index);
-      if (!it) {
-        const note = document.createElement("div");
-        note.className = "latex-margin-note";
-        note.dataset.kind = a.kind;
-        const mark = document.createElement("button");
-        mark.type = "button";
-        mark.className = "latex-margin-mark";
-        mark.textContent = "*";
-        mark.setAttribute("aria-label", "Note");
-        registerFootnoteSource(mark, a.index);
-        it = { note, mark, width: 0 };
-        M.items.set(a.index, it);
-        M.layer.append(note, mark);
+  }
+  function parseAction(text) {
+    const i = text.indexOf(":");
+    return { verb: i < 0 ? text : text.slice(0, i), arg: i < 0 ? "" : text.slice(i + 1) };
+  }
+  function dispatchAction(source, text) {
+    const { verb, arg } = parseAction(text);
+    const marked = source.closest("[data-instance]");
+    const origin = marked && host.find(marked.dataset.instance || "") || null;
+    const action = { verb, arg, action: text, instance: origin, source };
+    let handled = false;
+    for (let i = origin; i && !handled; i = i.parent) {
+      for (const fn of handlers.get(i)?.get(verb) || []) {
+        let r;
+        try {
+          r = fn(action);
+        } catch (e) {
+          console.error(`[latex-viewer] action "${text}":`, e);
+          r = void 0;
+        }
+        if (r !== false) {
+          handled = true;
+          break;
+        }
       }
-      const at = a.anchor();
-      it.note.hidden = !(wide && at);
-      it.mark.hidden = !(!wide && at);
-      if (!at) continue;
-      const x = (at.left - br.left) / k, y = (at.top - br.top) / k;
-      if (!wide) {
-        it.mark.style.left = x + "px";
-        it.mark.style.top = y + "px";
+    }
+    source.dispatchEvent(new CustomEvent("reflowtex:action", {
+      bubbles: true,
+      detail: { ...action, handled }
+    }));
+  }
+
+  // src/host/instances.ts
+  var textHooks = { set: (_id, _text) => {
+  } };
+  var InstanceImpl = class {
+    constructor(id, kind, attrs, presentation, placement, parent, block, source, anchorOf) {
+      this.id = id;
+      this.kind = kind;
+      this.attrs = attrs;
+      this.presentation = presentation;
+      this.placement = placement;
+      this.parent = parent;
+      this.block = block;
+      this.source = source;
+      this.anchorOf = anchorOf;
+    }
+    id;
+    kind;
+    attrs;
+    presentation;
+    placement;
+    parent;
+    block;
+    source;
+    anchorOf;
+    children = [];
+    parts = /* @__PURE__ */ new Map();
+    spaceBefore = 0;
+    /** Internal: the stream (1-based) or slot index it was made from. */
+    stream = 0;
+    slot = 0;
+    part(role) {
+      return this.parts.get(role);
+    }
+    onAction(verb, fn) {
+      return onAction(this, verb, fn);
+    }
+    setText(text) {
+      if (this.placement !== "text") throw new TypeError(`setText: ${this.id} is not a \\webtext`);
+      textHooks.set(this.id, text === null || text === void 0 ? null : String(text));
+    }
+    anchor() {
+      return this.source.type === "none" ? null : this.anchorOf(this.source);
+    }
+  };
+  function splitAttrs(list) {
+    const attrs = {};
+    const classes = [];
+    const properties = {};
+    let aside = false;
+    for (const a of list || []) {
+      const k = a.key || "", v = a.value || "";
+      if (!/^[a-z0-9-]+$/i.test(k)) continue;
+      if (k === "aside") aside = v === "true";
+      else if (k === "class") classes.push(...v.split(/\s+/).filter(Boolean));
+      else if (k.startsWith("--")) properties[k] = v;
+      else attrs[k] = v;
+    }
+    return { attrs, presentation: { classes, properties }, aside };
+  }
+  var NO_PRESENTATION = Object.freeze({ classes: Object.freeze([]), properties: Object.freeze({}) });
+  function normalise(doc, block, key, parts, anchorOf, spToPx = 0) {
+    const streams = doc.streams || [];
+    const slots = doc.slots || [];
+    const roots = [];
+    const seenStream = /* @__PURE__ */ new Set();
+    const seenSlot = /* @__PURE__ */ new Set();
+    const widgetsByKey = /* @__PURE__ */ new Map();
+    const pendingAsides = [];
+    const adopt = (inst, parent) => {
+      (parent ? parent.children : roots).push(inst);
+    };
+    const streamInstance = (index, placement, parent, source) => {
+      seenStream.add(index);
+      const s = streams[index - 1];
+      const { attrs, presentation } = splitAttrs(s.attrs);
+      const inst = new InstanceImpl(
+        `${key}/s${index}`,
+        s.kind || "",
+        Object.freeze(attrs),
+        presentation,
+        placement,
+        parent,
+        block,
+        source,
+        anchorOf
+      );
+      inst.stream = index;
+      inst.parts.set("body", parts.typeset(inst, "body", s));
+      if (s.text !== void 0) {
+        const data = { type: "data", role: "text", instance: inst, data: s.text };
+        inst.parts.set("text", data);
+      }
+      adopt(inst, parent);
+      walkContent(s.content || [], inst);
+      return inst;
+    };
+    const slotInstance = (index, parent) => {
+      seenSlot.add(index);
+      const slot = slots[index - 1] || {};
+      const name = slot.name || "";
+      if (slot.kind === "widget") {
+        const colon = name.indexOf(":");
+        const kind = colon >= 0 ? name.slice(0, colon) : name;
+        const attrs = { name };
+        if (colon >= 0) attrs.key = name.slice(colon + 1);
+        const inst = new InstanceImpl(
+          `${key}/w${index}`,
+          kind,
+          Object.freeze(attrs),
+          NO_PRESENTATION,
+          "inline",
+          parent,
+          block,
+          { type: "widget", slot: index },
+          anchorOf
+        );
+        inst.slot = index;
+        if (attrs.key !== void 0 && !widgetsByKey.has(attrs.key)) widgetsByKey.set(attrs.key, inst);
+        adopt(inst, parent);
+      } else {
+        const inst = new InstanceImpl(
+          `${key}/t${index}`,
+          "text",
+          Object.freeze({ name }),
+          NO_PRESENTATION,
+          "text",
+          parent,
+          block,
+          { type: "none" },
+          anchorOf
+        );
+        inst.slot = index;
+        adopt(inst, parent);
+      }
+    };
+    const walkNodes = (nodes, parent) => {
+      for (const n of nodes || []) {
+        if (n.slot && !seenSlot.has(n.slot)) slotInstance(n.slot, parent);
+        if (n.aside && !seenStream.has(n.aside)) {
+          pendingAsides.push({ index: n.aside, parent });
+          seenStream.add(n.aside);
+        }
+        if (n.stream && !seenStream.has(n.stream) && streams[n.stream - 1])
+          streamInstance(n.stream, "detached", parent, { type: "glyph", stream: n.stream });
+        walkNodes(n.children, parent);
+        walkNodes(n.replace, parent);
+        walkNodes(n.pre, parent);
+        walkNodes(n.post, parent);
+      }
+    };
+    function walkContent(items, parent) {
+      let space = 0;
+      for (const it of items) {
+        if (it.kind === "vspace") {
+          space += it.amount || 0;
+          continue;
+        }
+        const before = space;
+        space = 0;
+        if (it.kind === "stream") {
+          if (it.stream && !seenStream.has(it.stream) && streams[it.stream - 1])
+            streamInstance(it.stream, "block", parent, { type: "none" }).spaceBefore = before * spToPx;
+        } else if (it.kind === "display") {
+          walkNodes(it.box ? [it.box] : [], parent);
+        } else if (!it.kind || it.kind === "paragraph") {
+          if (it.para) walkNodes(doc.paragraphs[it.para - 1]?.nodes, parent);
+        }
+      }
+    }
+    walkContent(doc.content || [], null);
+    streams.forEach((s, i) => {
+      if (!seenStream.has(i + 1) && splitAttrs(s.attrs).aside) pendingAsides.push({ index: i + 1, parent: null });
+    });
+    for (const { index, parent } of pendingAsides) {
+      const s = streams[index - 1];
+      const { attrs } = splitAttrs(s.attrs);
+      const owner = attrs.for !== void 0 ? widgetsByKey.get(attrs.for) : void 0;
+      if (owner && !owner.parts.has(s.kind || "")) {
+        owner.parts.set(s.kind || "", parts.typeset(owner, s.kind || "", s));
         continue;
       }
-      if (it.width !== width) {
-        const draw = api.marginNotes[a.kind];
-        if (draw) draw(it.note, a, width);
-        else a.render(it.note, width);
-        it.width = width;
-      }
-      it.note.style.left = el.offsetWidth + gap + "px";
-      it.note.style.width = width + "px";
-      const box = it.note.querySelector(".latex-aside");
-      const baseline = box ? (box.getBoundingClientRect().top - it.note.getBoundingClientRect().top) / k + parseFloat(box.dataset.baseline || 0) : 0;
-      placed.push({ note: it.note, top: y - baseline });
+      seenStream.delete(index);
+      streamInstance(index, "detached", parent, { type: "aside", stream: index });
     }
-    placed.sort((p, q) => p.top - q.top);
-    let bottom = -Infinity, reach = 0;
-    for (const p of placed) {
-      const top = Math.max(p.top, bottom);
-      p.note.style.top = top + "px";
-      bottom = top + p.note.offsetHeight + 8;
-      reach = Math.max(reach, top + p.note.offsetHeight);
-    }
-    el.style.paddingBottom = "";
-    const over = reach - el.offsetHeight;
-    el.style.paddingBottom = over > 0 ? Math.ceil(over) + "px" : "";
+    streams.forEach((_, i) => {
+      if (!seenStream.has(i + 1)) streamInstance(i + 1, "detached", null, { type: "none" });
+    });
+    return roots;
   }
-  window.addEventListener("resize", () => {
-    for (const d of allData) if (d.margin) placeMarginNotes(d);
-  });
+  function* walk(list) {
+    for (const i of list) {
+      yield i;
+      yield* walk(i.children);
+    }
+  }
+  function matches(inst, query) {
+    if (query === void 0) return true;
+    if (typeof query === "string") return inst.kind === query;
+    for (const [k, v] of Object.entries(query)) {
+      if (v === void 0) continue;
+      const have = k === "kind" ? inst.kind : k === "placement" ? inst.placement : inst.attrs[k];
+      if (have !== String(v)) return false;
+    }
+    return true;
+  }
 
   // src/host/links.js
   var linkMap = {};
@@ -899,10 +1070,7 @@
       const el = linkAt(e.target);
       if (el && el.dataset.linkAction) {
         e.preventDefault();
-        el.dispatchEvent(new CustomEvent("reflowtex:action", {
-          bubbles: true,
-          detail: { action: el.dataset.linkAction, source: el }
-        }));
+        dispatchAction(el, el.dataset.linkAction);
         return;
       }
       const href = el && el.dataset.linkHref;
@@ -988,6 +1156,329 @@
     document.head.appendChild(s);
     document.documentElement.setAttribute("data-latex-viewer", BUILD);
   }
+
+  // src/runtime/visibility.js
+  var observedBlocks = /* @__PURE__ */ new Set();
+  var segRef = /* @__PURE__ */ new WeakMap();
+  var segIO = new IntersectionObserver((entries) => {
+    const painted = /* @__PURE__ */ new Set();
+    for (const e of entries) {
+      const ref = segRef.get(e.target);
+      const s = ref && ref.cache.dom && ref.cache.dom.segs[ref.i];
+      if (!s) continue;
+      s.intersecting = e.isIntersecting;
+      if (e.isIntersecting && (!s.painted || s.dirty)) {
+        paintSegment(ref.cache.fontInfo, ref.cache, ref.i);
+        const block = ref.cache.dom.root.closest("[data-nodelist-b64]");
+        if (block) painted.add(block);
+      }
+    }
+    for (const block of painted) announceLayout(block);
+  }, { rootMargin: "100% 0px" });
+  function observeSegments(cache) {
+    const segs = cache.dom.segs;
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      if (s.observed || !s.svg) continue;
+      segRef.set(s.svg, { cache, i });
+      segIO.observe(s.svg);
+      s.observed = true;
+    }
+  }
+  function paintVisibleNow(fontInfo, cache) {
+    if (!cache.dom) return 0;
+    cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 };
+    const segs = cache.dom.segs;
+    const vh = window.innerHeight || 800, M = vh;
+    const todo = [], nested = [];
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      if (!s.svg) {
+        if (s.sub) nested.push(s.sub);
+        continue;
+      }
+      if (s.painted && !s.dirty) continue;
+      if (!s.svg.getClientRects().length) continue;
+      const r = s.svg.getBoundingClientRect();
+      if (r.bottom > -M && r.top < vh + M) todo.push(i);
+    }
+    for (const i of todo) paintSegment(fontInfo, cache, i);
+    let n = todo.length;
+    for (const c of nested) n += paintVisibleNow(fontInfo, c);
+    return n;
+  }
+  var vpScheduled = false;
+  function scheduleViewportPaint() {
+    if (vpScheduled) return;
+    vpScheduled = true;
+    requestAnimationFrame(() => {
+      vpScheduled = false;
+      for (const el of observedBlocks) {
+        const data = blockData.get(el);
+        if (data) paintVisibleNow(data.fontInfo, data.cache);
+      }
+    });
+  }
+  window.addEventListener("resize", scheduleViewportPaint, { passive: true });
+  window.addEventListener("beforeprint", () => {
+    for (const el of observedBlocks) {
+      const data = blockData.get(el);
+      if (data) paintDocument(data.fontInfo, data.cache);
+    }
+  });
+
+  // src/host/slots.js
+  var slotValues = /* @__PURE__ */ new Map();
+  var slotBlocks = /* @__PURE__ */ new Set();
+  var slotMeasure = null;
+  var slotScheduled = false;
+  function measureSlotText(fi, text) {
+    slotMeasure = slotMeasure || document.createElement("canvas").getContext("2d");
+    slotMeasure.font = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
+    return Math.round(slotMeasure.measureText(text).width / SP_TO_PX);
+  }
+  function slotNodes(fontInfo, slot, id, run, text) {
+    const glyphs = [];
+    const walk2 = (ns) => {
+      for (const n of ns) {
+        if (n.type === "glyph") glyphs.push(n);
+        else if (n.type === "disc") walk2(n.replace || []);
+      }
+    };
+    walk2(run);
+    const t = glyphs[0];
+    if (!t) return run;
+    const fi = fontInfo[String(t.font)];
+    if (!fi || fi.unresolved) return run;
+    const height = Math.max(...glyphs.map(gH)), depth = Math.max(...glyphs.map(gD));
+    const spec = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
+    if (document.fonts && !document.fonts.check(spec, text)) {
+      document.fonts.load(spec, text).then(() => scheduleSlots(), () => {
+      });
+    }
+    const out = [];
+    for (const part of String(text).split(/([^\S\u00A0\u202F]+)/)) {
+      if (!part) continue;
+      if (/^[^\S\u00A0\u202F]+$/.test(part)) {
+        out.push({
+          type: "glue",
+          subtype: 13,
+          width: slot.space || 0,
+          stretch: slot.stretch || 0,
+          shrink: slot.shrink || 0,
+          slot: id
+        });
+      } else {
+        out.push({
+          type: "glyph",
+          text: part,
+          font: t.font,
+          color: t.color,
+          slot: id,
+          width: measureSlotText(fi, part),
+          height,
+          depth
+        });
+      }
+    }
+    return out;
+  }
+  function applySlots(fontInfo, doc) {
+    const slots = doc.slots || [];
+    if (!doc.slotParas) {
+      doc.slotParas = [];
+      (doc.paragraphs || []).forEach((para, i) => {
+        if ((para.nodes || []).some((n) => n.slot)) doc.slotParas.push({ index: i + 1, para, orig: para.nodes, made: [] });
+      });
+    }
+    useGlyphMetrics(doc.glyph_metrics);
+    const changed2 = /* @__PURE__ */ new Set();
+    for (const sp of doc.slotParas) {
+      const orig = sp.orig, out = [], made = [];
+      for (let i = 0; i < orig.length; i++) {
+        const id = orig[i].slot, slot = id && slots[id - 1];
+        const isWidget = slot && slot.kind === "widget";
+        const text = slot && !isWidget ? textOf(doc, id, slot) : void 0;
+        if (!slot || !isWidget && text === void 0) {
+          out.push(orig[i]);
+          continue;
+        }
+        let j = i;
+        for (let k = i + 1; k < orig.length; k++) if (orig[k].slot === id) j = k;
+        const run = orig.slice(i, j + 1);
+        const nodes = isWidget ? widgetNodes(fontInfo, slot, id, run, orig.slice(0, i), orig.slice(j + 1), doc) : slotNodes(fontInfo, slot, id, run, text);
+        if (!nodes) {
+          out.push(orig[i]);
+          continue;
+        }
+        out.push(...nodes);
+        made.push(...nodes);
+        i = j;
+      }
+      const key = made.map((n) => n.text !== void 0 ? n.text + "" + n.width : n.type === "wdisc" || n.type === "widget" ? "w" + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace[0].version, n.width ?? n.replace[0].width, n.options && n.options.map((o) => [o.pre[0].width, o.post[0].width])]) : n.type === "disc" && n.slot ? "d" + JSON.stringify([n.slot, n.penalty, n.pre.map((x) => x.width), n.post.map((x) => x.width), n.replace.map((x) => x.width)]) : " ").join("");
+      if (key === sp.key && sp.made.length === made.length) continue;
+      sp.key = key;
+      sp.stale = sp.made;
+      sp.made = made;
+      sp.para.nodes = made.length ? out : orig;
+      changed2.add(sp.index);
+    }
+    return changed2;
+  }
+  function invalidateParagraphs(cache, changed2, stale) {
+    if (!cache || !cache.dom || !cache.layoutCtx) return;
+    for (const i of changed2) cache.bcs && cache.bcs.delete(i);
+    for (const n of stale) {
+      disposePiece(cache.dom.byNode.get(n));
+      cache.dom.byNode.delete(n);
+    }
+    cache.layoutCtx.segs.forEach((seg, i) => {
+      const s = cache.dom.segs[i];
+      if (!s) return;
+      if (s.sub) invalidateParagraphs(s.sub, changed2, stale);
+      if (seg.items && seg.items.some((it) => changed2.has(it.index))) {
+        s.hc = null;
+        if (s.painted) s.dirty = true;
+      }
+    });
+  }
+  function refreshSlots(el) {
+    const data = blockData.get(el);
+    if (!data || !data.cache.dom) return;
+    const changed2 = applySlots(data.fontInfo, data.doc);
+    if (!changed2.size) return;
+    const parts = (n) => n.type === "wdisc" ? [...n.replace, ...n.options.flatMap((o) => [...o.pre, ...o.post])] : n.run ? [...n.run.merged.values()] : [n];
+    const stale = data.doc.slotParas.flatMap((sp) => (sp.stale || []).flatMap(parts));
+    data.doc.slotParas.forEach((sp) => {
+      sp.stale = null;
+    });
+    invalidateParagraphs(data.cache, changed2, stale);
+    const params = { ...data.params, align: data.lastAlign };
+    layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
+    paintVisibleNow(data.fontInfo, data.cache);
+  }
+  function scheduleSlots() {
+    if (slotScheduled) return;
+    slotScheduled = true;
+    requestAnimationFrame(() => {
+      slotScheduled = false;
+      for (const el of slotBlocks) refreshSlots(el);
+    });
+  }
+  var instanceTexts = /* @__PURE__ */ new Map();
+  function setSlotText(name, text) {
+    if (text === null || text === void 0) slotValues.delete(String(name));
+    else slotValues.set(String(name), String(text));
+    scheduleSlots();
+  }
+  textHooks.set = (id, text) => {
+    if (text === null) instanceTexts.delete(id);
+    else instanceTexts.set(id, text);
+    scheduleSlots();
+  };
+  function textOf(doc, id, slot) {
+    const key = ((docData.get(doc) || {}).cache || {}).blockKey;
+    const own = key && instanceTexts.get(`${key}/t${id}`);
+    return own !== void 0 && own !== null ? own : slotValues.get(slot.name);
+  }
+
+  // src/host/kinds.ts
+  var kinds = /* @__PURE__ */ new Map();
+  var listeners = /* @__PURE__ */ new Set();
+  var kindDef = (kind) => kinds.get(kind);
+  function onKindChange(fn) {
+    listeners.add(fn);
+  }
+  function changed(kind) {
+    for (const fn of listeners) {
+      try {
+        fn(kind);
+      } catch (e) {
+        console.error(`[latex-viewer] redrawing kind "${kind}":`, e);
+      }
+    }
+  }
+  function defineKind(kind, def) {
+    if (!def || typeof def.render !== "function")
+      throw new TypeError(`host.define("${kind}"): render(instance, host) is required`);
+    kinds.set(kind, def);
+    changed(kind);
+    return () => {
+      if (kinds.get(kind) !== def) return;
+      kinds.delete(kind);
+      changed(kind);
+    };
+  }
+
+  // src/host/inline.ts
+  var versions = /* @__PURE__ */ new Map();
+  var inlineVersion = (instance) => versions.get(instance.id) || 0;
+  function inlineOf(blockEl, index) {
+    const block = blockEl && blockOf(blockEl);
+    const instance = block && block.find(`${block.key}/w${index}`);
+    const def = instance && kindDef(instance.kind);
+    return instance && def && typeof def.measure === "function" ? { instance, def } : null;
+  }
+  function inlineEnv(instance, fontSize, color) {
+    return {
+      fontSize,
+      color,
+      measure(content) {
+        if (typeof content !== "function") return measureHTML(content, fontSize);
+        const el = document.createElement("span");
+        content(el);
+        return measureHTML(el, fontSize);
+      },
+      invalidate() {
+        versions.set(instance.id, inlineVersion(instance) + 1);
+        scheduleSlots();
+      }
+    };
+  }
+  var undo = /* @__PURE__ */ new WeakMap();
+  var byCache = /* @__PURE__ */ new WeakMap();
+  function renderPiece(n, el, box, cache) {
+    const { instance, def, env } = n.inline;
+    const host2 = { type: "piece", el: box, instance, piece: n.part, env };
+    try {
+      const u = def.render(instance, host2);
+      if (typeof u === "function") {
+        undo.set(el, u);
+        let set = byCache.get(cache);
+        if (!set) byCache.set(cache, set = /* @__PURE__ */ new Set());
+        set.add(el);
+      }
+    } catch (e) {
+      console.error(`[latex-viewer] kind "${instance.kind}": drawing a piece failed:`, e);
+    }
+  }
+  function disposePiece(el) {
+    const u = el && undo.get(el);
+    if (!u) return;
+    undo.delete(el);
+    try {
+      u();
+    } catch (e) {
+      console.error("[latex-viewer] ending a piece failed:", e);
+    }
+  }
+  function disposePieces(cache) {
+    if (!cache) return;
+    for (const el of byCache.get(cache) || []) disposePiece(el);
+    byCache.delete(cache);
+    for (const s of cache.dom && cache.dom.segs || []) if (s.sub) disposePieces(s.sub);
+  }
+  onKindChange((kind) => {
+    let any = false;
+    for (const el of document.querySelectorAll("[data-nodelist-b64]")) {
+      const block = blockOf(el);
+      for (const i of block ? block.instances({ kind, placement: "inline" }) : []) {
+        versions.set(i.id, inlineVersion(i) + 1);
+        any = true;
+      }
+    }
+    if (any) scheduleSlots();
+  });
 
   // src/engine/paint.js
   function svgEl(tag, attrs) {
@@ -1223,11 +1714,7 @@
           const box = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
           box.style.cssText = `width:${w}px;height:${h + d}px;font-size:${n.fontPx}px;line-height:normal;color:${n.color ? colorFill(n.color) : "currentColor"};display:flex;align-items:baseline;user-select:none;-webkit-user-select:none`;
           el.appendChild(box);
-          try {
-            n.widget.render(box, n.part, n.ctx);
-          } catch (e) {
-            console.warn(`[latex-viewer] widget ${n.ctx.name}:`, e);
-          }
+          renderPiece(n, el, box, cache);
           byNode.set(n, el);
           stats.created++;
         } else {
@@ -1513,270 +2000,6 @@
     }
   }
 
-  // src/runtime/visibility.js
-  var observedBlocks = /* @__PURE__ */ new Set();
-  var segRef = /* @__PURE__ */ new WeakMap();
-  var segIO = new IntersectionObserver((entries) => {
-    const painted = /* @__PURE__ */ new Set();
-    for (const e of entries) {
-      const ref = segRef.get(e.target);
-      const s = ref && ref.cache.dom && ref.cache.dom.segs[ref.i];
-      if (!s) continue;
-      s.intersecting = e.isIntersecting;
-      if (e.isIntersecting && (!s.painted || s.dirty)) {
-        paintSegment(ref.cache.fontInfo, ref.cache, ref.i);
-        const block = ref.cache.dom.root.closest("[data-nodelist-b64]");
-        if (block) painted.add(block);
-      }
-    }
-    for (const block of painted) announceLayout(block);
-  }, { rootMargin: "100% 0px" });
-  function observeSegments(cache) {
-    const segs = cache.dom.segs;
-    for (let i = 0; i < segs.length; i++) {
-      const s = segs[i];
-      if (s.observed || !s.svg) continue;
-      segRef.set(s.svg, { cache, i });
-      segIO.observe(s.svg);
-      s.observed = true;
-    }
-  }
-  function paintVisibleNow(fontInfo, cache) {
-    if (!cache.dom) return 0;
-    cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 };
-    const segs = cache.dom.segs;
-    const vh = window.innerHeight || 800, M = vh;
-    const todo = [], nested = [];
-    for (let i = 0; i < segs.length; i++) {
-      const s = segs[i];
-      if (!s.svg) {
-        if (s.sub) nested.push(s.sub);
-        continue;
-      }
-      if (s.painted && !s.dirty) continue;
-      if (!s.svg.getClientRects().length) continue;
-      const r = s.svg.getBoundingClientRect();
-      if (r.bottom > -M && r.top < vh + M) todo.push(i);
-    }
-    for (const i of todo) paintSegment(fontInfo, cache, i);
-    let n = todo.length;
-    for (const c of nested) n += paintVisibleNow(fontInfo, c);
-    return n;
-  }
-  var vpScheduled = false;
-  function scheduleViewportPaint() {
-    if (vpScheduled) return;
-    vpScheduled = true;
-    requestAnimationFrame(() => {
-      vpScheduled = false;
-      for (const el of observedBlocks) {
-        const data = blockData.get(el);
-        if (data) paintVisibleNow(data.fontInfo, data.cache);
-      }
-    });
-  }
-  window.addEventListener("resize", scheduleViewportPaint, { passive: true });
-  window.addEventListener("beforeprint", () => {
-    for (const el of observedBlocks) {
-      const data = blockData.get(el);
-      if (data) paintDocument(data.fontInfo, data.cache);
-    }
-  });
-
-  // src/host/surface.ts
-  var live = /* @__PURE__ */ new WeakMap();
-  var all = /* @__PURE__ */ new Set();
-  function edgesOf(cache) {
-    const laid = cache.layout && cache.layout.laid || [];
-    const first = laid[0], last = laid[laid.length - 1];
-    const textAt = (L) => !!(L && L.seg && L.seg.kind === "text");
-    return {
-      firstAscent: first ? first.firstAscent : 0,
-      firstMeta: first ? first.firstMeta : null,
-      textFirst: textAt(first),
-      lastDepth: last ? last.lastDepth : 0,
-      textLast: textAt(last)
-    };
-  }
-  var surfaceHooks = {
-    changed: (_s) => {
-    },
-    disposeHosts: (_cache) => {
-    }
-  };
-  function surfacesOf(blockEl) {
-    return live.get(blockEl) || [];
-  }
-  var TypesetPartImpl = class {
-    constructor(role, instance, data, stream) {
-      this.role = role;
-      this.instance = instance;
-      this.data = data;
-      this.doc = { ...data.doc, content: stream.content || [] };
-    }
-    role;
-    instance;
-    data;
-    type = "typeset";
-    natural = null;
-    doc;
-    /** Lay the part out at `px` into a fresh cache (or the one given). */
-    layout(px, cache = this.newCache()) {
-      const root = layoutDocument(this.data.fontInfo, this.doc, px / ZOOM, this.data.params, cache);
-      return { cache, root };
-    }
-    newCache(relayout) {
-      return { bcs: null, dom: null, layout: null, stats: null, blockEl: this.data.el, relayout };
-    }
-    naturalWidth() {
-      if (this.natural === null) {
-        const { cache } = this.layout(NATURAL_PROBE_PT * ZOOM);
-        let w = 0;
-        for (const L of cache.layout.laid)
-          (L.lines || []).forEach((ln, j) => {
-            w = Math.max(w, (L.lrp && L.lrp[j] ? L.lrp[j].x0 : 0) + sumWidthSp(ln.nodes) * SP_TO_PX);
-          });
-        this.natural = Math.ceil(w + 0.5);
-      }
-      return this.natural;
-    }
-    mount(el, options = {}) {
-      return new SurfaceImpl(this, el, options.width ?? "container");
-    }
-  };
-  var SurfaceImpl = class {
-    constructor(part, el, width) {
-      this.part = part;
-      this.el = el;
-      this.width = width;
-      this.cache = part.newCache(() => this.relayout(true));
-      this.box.className = "latex-block latex-part";
-      this.box.style.margin = "0";
-      let set = live.get(part.data.el);
-      if (!set) live.set(part.data.el, set = /* @__PURE__ */ new Set());
-      set.add(this);
-      all.add(this);
-      this.apply();
-    }
-    part;
-    el;
-    width;
-    box = document.createElement("div");
-    cache;
-    px = 0;
-    // the measure last laid out at
-    listeners = /* @__PURE__ */ new Set();
-    ro = null;
-    frame = 0;
-    disposed = false;
-    last = { width: 0, height: 0, firstBaseline: 0, lastDepth: 0 };
-    measure() {
-      const w = this.width;
-      if (typeof w === "number") return w;
-      if (w === "natural") return this.part.naturalWidth();
-      const cs = getComputedStyle(this.el);
-      const inner = this.el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-      return inner > 0 ? inner : this.px || this.part.data.el.clientWidth || 600;
-    }
-    apply() {
-      if (this.width === "container") {
-        if (!this.ro) {
-          this.ro = new ResizeObserver(() => {
-            if (this.frame) return;
-            this.frame = requestAnimationFrame(() => {
-              this.frame = 0;
-              this.relayout();
-            });
-          });
-          this.ro.observe(this.el);
-        }
-      } else if (this.ro) {
-        this.ro.disconnect();
-        this.ro = null;
-      }
-      this.relayout(true);
-    }
-    relayout(force = false) {
-      if (this.disposed) return;
-      const px = this.measure();
-      if (!force && Math.abs(px - this.px) < 0.5) return;
-      this.px = px;
-      const { root } = this.part.layout(px, this.cache);
-      this.box.style.width = `${px}px`;
-      if (root.parentNode !== this.box) this.box.replaceChildren(root);
-      if (this.box.parentNode !== this.el) this.el.replaceChildren(this.box);
-      markDirty(this.cache);
-      paintVisibleNow(this.part.data.fontInfo, this.cache);
-      const laid = this.cache.layout.laid;
-      const first = laid[0], lastL = laid[laid.length - 1];
-      this.last = {
-        width: px,
-        height: this.box.offsetHeight,
-        firstBaseline: first ? first.firstAscent : 0,
-        lastDepth: lastL ? lastL.lastDepth : 0
-      };
-      this.box.dataset.baseline = String(this.last.firstBaseline);
-      for (const fn of [...this.listeners]) {
-        try {
-          fn(this.last);
-        } catch (e) {
-          console.error("[latex-viewer] surface listener:", e);
-        }
-      }
-      surfaceHooks.changed(this);
-    }
-    edges() {
-      return edgesOf(this.cache);
-    }
-    /** Every segment, on screen or not (print). */
-    paintAll() {
-      if (!this.disposed) paintDocument(this.part.data.fontInfo, this.cache);
-    }
-    get isDisposed() {
-      return this.disposed;
-    }
-    /** New elements for every glyph (the face that just loaded), same layout. */
-    rerender() {
-      if (this.disposed) return;
-      unobserveAll(this.cache);
-      this.cache.dom = null;
-      this.cache.layout = null;
-      this.relayout(true);
-    }
-    metrics() {
-      return this.last;
-    }
-    setWidth(width) {
-      this.width = width ?? "container";
-      this.apply();
-    }
-    onChange(fn) {
-      this.listeners.add(fn);
-      return () => {
-        this.listeners.delete(fn);
-      };
-    }
-    dispose() {
-      if (this.disposed) return;
-      this.disposed = true;
-      if (this.ro) this.ro.disconnect();
-      if (this.frame) cancelAnimationFrame(this.frame);
-      unobserveAll(this.cache);
-      surfaceHooks.disposeHosts(this.cache);
-      this.listeners.clear();
-      if (this.box.parentNode === this.el) this.el.removeChild(this.box);
-      live.get(this.part.data.el)?.delete(this);
-      all.delete(this);
-      surfaceHooks.changed(this);
-    }
-  };
-  function rerenderSurfaces(blockEl) {
-    for (const s of live.get(blockEl) || []) s.rerender();
-  }
-  window.addEventListener("beforeprint", () => {
-    for (const s of all) s.paintAll();
-  });
-
   // src/runtime/params.js
   function alignFromEl(el) {
     const css = getComputedStyle(el).getPropertyValue("--latex-align").trim();
@@ -1931,6 +2154,7 @@
     const data = blockData.get(el);
     if (!data) return;
     unobserveAll(data.cache);
+    disposePieces(data.cache);
     data.cache.dom = null;
     data.cache.layout = null;
     const params = { ...data.params, align: data.lastAlign };
@@ -1985,232 +2209,620 @@
     });
   });
 
-  // src/host/asides.js
-  var docData = /* @__PURE__ */ new WeakMap();
-  var allData = [];
-  function asideMatch(query, kind, attrs) {
-    if (!query) return true;
-    if (typeof query === "string") return kind === query;
-    return Object.entries(query).every(([k, v]) => (k === "kind" ? kind : attrs[k]) === String(v));
-  }
-  function asideHandles(data, query) {
-    if (!data) return [];
-    const out = [];
-    (data.doc.streams || []).forEach((s, i) => {
-      const attrs = Object.fromEntries((s.attrs || []).map((a) => [a.key, a.value]));
-      if (attrs.aside === "true" && asideMatch(query, s.kind, attrs)) out.push(asideHandle(data, s, attrs, i + 1));
-    });
-    return out;
-  }
-  function asideHandle(data, stream, attrs, index) {
-    const doc = { ...data.doc, content: stream.content };
-    const lay = (widthPx) => {
-      const cache = { bcs: null, dom: null, layout: null, stats: null };
-      const root = layoutDocument(data.fontInfo, doc, widthPx / ZOOM, data.params, cache);
-      return { cache, root };
+  // src/host/surface.ts
+  var live = /* @__PURE__ */ new WeakMap();
+  var all = /* @__PURE__ */ new Set();
+  function edgesOf(cache) {
+    const laid = cache.layout && cache.layout.laid || [];
+    const first = laid[0], last = laid[laid.length - 1];
+    const textAt = (L) => !!(L && L.seg && L.seg.kind === "text");
+    return {
+      firstAscent: first ? first.firstAscent : 0,
+      firstMeta: first ? first.firstMeta : null,
+      textFirst: textAt(first),
+      lastDepth: last ? last.lastDepth : 0,
+      textLast: textAt(last)
     };
-    let natural = null;
-    const width = () => {
-      if (natural === null) {
-        const { cache } = lay(NATURAL_PROBE_PT * ZOOM);
+  }
+  var surfaceHooks = {
+    changed: (_s) => {
+    },
+    disposeHosts: (_cache) => {
+    }
+  };
+  function surfacesOf(blockEl) {
+    return live.get(blockEl) || [];
+  }
+  var TypesetPartImpl = class {
+    constructor(role, instance, data, stream) {
+      this.role = role;
+      this.instance = instance;
+      this.data = data;
+      this.doc = { ...data.doc, content: stream.content || [] };
+    }
+    role;
+    instance;
+    data;
+    type = "typeset";
+    natural = null;
+    doc;
+    /** Lay the part out at `px` into a fresh cache (or the one given). */
+    layout(px, cache = this.newCache()) {
+      const root = layoutDocument(this.data.fontInfo, this.doc, px / ZOOM, this.data.params, cache);
+      return { cache, root };
+    }
+    newCache(relayout) {
+      return { bcs: null, dom: null, layout: null, stats: null, blockEl: this.data.el, relayout };
+    }
+    naturalWidth() {
+      if (this.natural === null) {
+        const { cache } = this.layout(NATURAL_PROBE_PT * ZOOM);
         let w = 0;
         for (const L of cache.layout.laid)
           (L.lines || []).forEach((ln, j) => {
             w = Math.max(w, (L.lrp && L.lrp[j] ? L.lrp[j].x0 : 0) + sumWidthSp(ln.nodes) * SP_TO_PX);
           });
-        natural = Math.ceil(w + 0.5);
+        this.natural = Math.ceil(w + 0.5);
       }
-      return natural;
-    };
+      return this.natural;
+    }
+    mount(el, options = {}) {
+      return new SurfaceImpl(this, el, options.width ?? "container");
+    }
+  };
+  var SurfaceImpl = class {
+    constructor(part, el, width) {
+      this.part = part;
+      this.el = el;
+      this.width = width;
+      this.cache = part.newCache(() => this.relayout(true));
+      this.box.className = "latex-block latex-part";
+      this.box.dataset.instance = part.instance.id;
+      this.box.style.margin = "0";
+      let set = live.get(part.data.el);
+      if (!set) live.set(part.data.el, set = /* @__PURE__ */ new Set());
+      set.add(this);
+      all.add(this);
+      this.apply();
+    }
+    part;
+    el;
+    width;
+    box = document.createElement("div");
+    cache;
+    px = 0;
+    // the measure last laid out at
+    listeners = /* @__PURE__ */ new Set();
+    ro = null;
+    frame = 0;
+    disposed = false;
+    last = { width: 0, height: 0, firstBaseline: 0, lastDepth: 0 };
+    measure() {
+      const w = this.width;
+      if (typeof w === "number") return w;
+      if (w === "natural") return this.part.naturalWidth();
+      const cs = getComputedStyle(this.el);
+      const inner = this.el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      return inner > 0 ? inner : this.px || this.part.data.el.clientWidth || 600;
+    }
+    apply() {
+      if (this.width === "container") {
+        if (!this.ro) {
+          this.ro = new ResizeObserver(() => {
+            if (this.frame) return;
+            this.frame = requestAnimationFrame(() => {
+              this.frame = 0;
+              this.relayout();
+            });
+          });
+          this.ro.observe(this.el);
+        }
+      } else if (this.ro) {
+        this.ro.disconnect();
+        this.ro = null;
+      }
+      this.relayout(true);
+    }
+    relayout(force = false) {
+      if (this.disposed) return;
+      const px = this.measure();
+      if (!force && Math.abs(px - this.px) < 0.5) return;
+      this.px = px;
+      const { root } = this.part.layout(px, this.cache);
+      this.box.style.width = `${px}px`;
+      if (root.parentNode !== this.box) this.box.replaceChildren(root);
+      if (this.box.parentNode !== this.el) this.el.replaceChildren(this.box);
+      markDirty(this.cache);
+      paintVisibleNow(this.part.data.fontInfo, this.cache);
+      const laid = this.cache.layout.laid;
+      const first = laid[0], lastL = laid[laid.length - 1];
+      this.last = {
+        width: px,
+        height: this.box.offsetHeight,
+        firstBaseline: first ? first.firstAscent : 0,
+        lastDepth: lastL ? lastL.lastDepth : 0
+      };
+      this.box.dataset.baseline = String(this.last.firstBaseline);
+      for (const fn of [...this.listeners]) {
+        try {
+          fn(this.last);
+        } catch (e) {
+          console.error("[latex-viewer] surface listener:", e);
+        }
+      }
+      surfaceHooks.changed(this);
+    }
+    edges() {
+      return edgesOf(this.cache);
+    }
+    /** Every segment, on screen or not (print). */
+    paintAll() {
+      if (!this.disposed) paintDocument(this.part.data.fontInfo, this.cache);
+    }
+    get isDisposed() {
+      return this.disposed;
+    }
+    /** New elements for every glyph (the face that just loaded), same layout. */
+    rerender() {
+      if (this.disposed) return;
+      unobserveAll(this.cache);
+      disposePieces(this.cache);
+      this.cache.dom = null;
+      this.cache.layout = null;
+      this.relayout(true);
+    }
+    metrics() {
+      return this.last;
+    }
+    setWidth(width) {
+      this.width = width ?? "container";
+      this.apply();
+    }
+    onChange(fn) {
+      this.listeners.add(fn);
+      return () => {
+        this.listeners.delete(fn);
+      };
+    }
+    dispose() {
+      if (this.disposed) return;
+      this.disposed = true;
+      if (this.ro) this.ro.disconnect();
+      if (this.frame) cancelAnimationFrame(this.frame);
+      unobserveAll(this.cache);
+      disposePieces(this.cache);
+      surfaceHooks.disposeHosts(this.cache);
+      this.listeners.clear();
+      if (this.box.parentNode === this.el) this.el.removeChild(this.box);
+      live.get(this.part.data.el)?.delete(this);
+      all.delete(this);
+      surfaceHooks.changed(this);
+    }
+  };
+  function rerenderSurfaces(blockEl) {
+    for (const s of live.get(blockEl) || []) s.rerender();
+  }
+  window.addEventListener("beforeprint", () => {
+    for (const s of all) s.paintAll();
+  });
+
+  // src/host/block-hosts.ts
+  var records = /* @__PURE__ */ new Set();
+  var byBox = /* @__PURE__ */ new WeakMap();
+  var pending = /* @__PURE__ */ new Set();
+  var frame = 0;
+  function relayoutSoon(owner) {
+    if (!owner.relayout) return;
+    pending.add(owner.relayout);
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const fns = [...pending];
+      pending.clear();
+      for (const fn of fns) fn();
+    });
+  }
+  function currentEdges(rec) {
+    if (rec.edges) return { top: rec.edges.top ?? null, bottom: rec.edges.bottom ?? null };
+    const body = rec.instance.part("body");
+    let found = null;
+    for (const s of surfacesOf(rec.instance.block.el)) {
+      if (s.part === body && !s.isDisposed && rec.box.contains(s.el)) {
+        found = s;
+        break;
+      }
+    }
+    return { top: found, bottom: found };
+  }
+  function edgeValues(rec) {
+    const { top, bottom } = currentEdges(rec);
+    const t = top && !top.isDisposed ? top.edges() : null;
+    const b = bottom && !bottom.isDisposed ? bottom.edges() : null;
     return {
-      kind: stream.kind,
-      attrs,
-      width,
-      block: data.el,
+      firstAscent: t ? t.firstAscent : 0,
+      firstMeta: t ? t.firstMeta : null,
+      textFirst: !!(t && t.textFirst),
+      lastDepth: b ? b.lastDepth : 0,
+      textLast: !!(b && b.textLast)
+    };
+  }
+  var sameEdges = (a, b) => !!a && a.firstAscent === b.firstAscent && a.lastDepth === b.lastDepth && a.firstMeta === b.firstMeta && a.textFirst === b.textFirst && a.textLast === b.textLast;
+  surfaceHooks.changed = (s) => {
+    for (let el = s.el; el; el = el.parentElement) {
+      const rec = byBox.get(el);
+      if (!rec) continue;
+      if (rec.laid && !sameEdges(rec.laid, edgeValues(rec))) relayoutSoon(rec.owner);
+      return;
+    }
+  };
+  surfaceHooks.disposeHosts = (cache) => {
+    for (const rec of [...records]) if (rec.owner.hosts === cache.hosts) dispose(rec);
+  };
+  function dispose(rec) {
+    records.delete(rec);
+    rec.owner.hosts?.delete(rec.index);
+    if (rec.undo) {
+      try {
+        rec.undo();
+      } catch (e) {
+        console.error(`[latex-viewer] kind "${rec.kind}": undoing render failed:`, e);
+      }
+    }
+    rec.undo = null;
+  }
+  function makeRecord(box, index, instance, def, owner) {
+    const rec = {
+      box,
       index,
-      anchor() {
-        const m = data.el && data.el.querySelector(`.latex-aside-mark[data-aside="${index}"]`);
-        const ctm = m && m.getScreenCTM();
-        if (!ctm) return null;
-        const p = new DOMPoint(+m.getAttribute("x"), +m.getAttribute("y")).matrixTransform(ctm);
-        return new DOMRect(p.x, p.y, 0, 0);
+      instance,
+      kind: instance.kind,
+      def,
+      owner,
+      undo: null,
+      laid: null,
+      failed: false,
+      frame: { top: false, bottom: false },
+      edges: null
+    };
+    rec.host = {
+      type: "block",
+      el: box,
+      instance,
+      setFrame(f) {
+        const next = { top: !!f.top, bottom: !!f.bottom };
+        if (next.top === rec.frame.top && next.bottom === rec.frame.bottom) return;
+        rec.frame = next;
+        if (rec.laid) relayoutSoon(owner);
       },
-      render(el, widthPx) {
-        const w = widthPx || width();
-        const { cache, root } = lay(w);
-        const box = document.createElement("div");
-        box.className = "latex-block latex-aside";
-        box.style.cssText = `width:${w}px;margin:0`;
-        box.appendChild(root);
-        el.replaceChildren(box);
-        paintDocument(data.fontInfo, cache);
-        const first = cache.layout.laid[0], baseline = first ? first.firstAscent : 0;
-        box.dataset.baseline = baseline;
-        return { width: w, baseline };
+      spacing() {
+        const segs = owner.dom && owner.dom.segs || [];
+        const i = segs.findIndex((sg) => sg.box === box);
+        const px = (el) => el && parseFloat(el.style.height) || 0;
+        return { before: i >= 0 ? px(segs[i].gap) : 0, after: i >= 0 && i + 1 < segs.length ? px(segs[i + 1].gap) : 0 };
+      },
+      setEdges(e) {
+        rec.edges = { ...rec.edges || {}, ...e };
+        if (rec.laid && !sameEdges(rec.laid, edgeValues(rec))) relayoutSoon(owner);
+      }
+    };
+    return rec;
+  }
+  function keptHostBox(cache, index) {
+    const rec = cache.hosts && cache.hosts.get(index);
+    return rec && !rec.failed ? rec.box : null;
+  }
+  function layoutHostedSegment(s, seg, widthPt, cache) {
+    const def = kindDef(seg.stream.kind || "");
+    if (!def || !cache.blockEl) return null;
+    const hosts = cache.hosts || (cache.hosts = /* @__PURE__ */ new Map());
+    let rec = hosts.get(seg.index);
+    if (rec && rec.failed) return null;
+    if (!rec) {
+      const block = blockOf(cache.blockEl);
+      const instance = block && block.find(`${block.key}/s${seg.index}`);
+      if (!instance) return null;
+      rec = makeRecord(s.box, seg.index, instance, def, cache);
+      hosts.set(seg.index, rec);
+      records.add(rec);
+      byBox.set(s.box, rec);
+      try {
+        const undo2 = def.render(instance, rec.host);
+        rec.undo = typeof undo2 === "function" ? undo2 : null;
+      } catch (e) {
+        console.error(`[latex-viewer] kind "${rec.kind}": render failed, drawn by default:`, e);
+        rec.failed = true;
+        records.delete(rec);
+        s.box.replaceChildren();
+        return null;
+      }
+    }
+    const E = rec.laid = edgeValues(rec);
+    const fa = E.textFirst ? `${E.firstAscent}px` : "var(--latex-cap-height, 0px)";
+    const ld = E.textLast ? `${E.lastDepth}px` : "0px";
+    if (s.box.style.getPropertyValue("--latex-first-ascent") !== fa) s.box.style.setProperty("--latex-first-ascent", fa);
+    if (s.box.style.getPropertyValue("--latex-last-depth") !== ld) s.box.style.setProperty("--latex-last-depth", ld);
+    return {
+      seg,
+      lines: [],
+      H: s.box.offsetHeight,
+      W: widthPt * ZOOM,
+      firstAscent: E.firstAscent,
+      lastDepth: E.lastDepth,
+      firstMeta: E.firstMeta,
+      alts: null,
+      frameTop: rec.frame.top,
+      frameBottom: rec.frame.bottom,
+      gapBefore: seg.gapBefore || 0
+    };
+  }
+  function redraw(kind) {
+    for (const rec of [...records]) if (rec.kind === kind) dispose(rec);
+    for (const el of document.querySelectorAll("[data-nodelist-b64]")) {
+      const block = blockOf(el);
+      if (block && blockData.get(el) && block.instances({ kind, placement: "block" }).length) rerenderBlock(el);
+    }
+  }
+  onKindChange(redraw);
+
+  // src/host/host.ts
+  function screenPoint(el, x, y) {
+    const ctm = el && el.getScreenCTM && el.getScreenCTM();
+    if (!ctm) return null;
+    const p = new DOMPoint(x, y).matrixTransform(ctm);
+    return new DOMRect(p.x, p.y, 0, 0);
+  }
+  var num = (el, a) => parseFloat(el.getAttribute(a) || "0") || 0;
+  var BlockImpl = class {
+    constructor(data) {
+      this.data = data;
+    }
+    data;
+    _roots = null;
+    byId = null;
+    get el() {
+      return this.data.el;
+    }
+    get key() {
+      return this.data.cache.blockKey || "";
+    }
+    get roots() {
+      if (!this._roots) {
+        this._roots = normalise(
+          this.data.doc,
+          this,
+          this.key,
+          { typeset: (inst, role, stream) => new TypesetPartImpl(role, inst, this.data, stream) },
+          (src) => this.anchor(src),
+          SP_TO_PX
+        );
+      }
+      return this._roots;
+    }
+    instances(query) {
+      return [...walk(this.roots)].filter((i) => matches(i, query));
+    }
+    find(id) {
+      if (!this.byId) this.byId = new Map([...walk(this.roots)].map((i) => [i.id, i]));
+      return this.byId.get(id);
+    }
+    on(event, fn) {
+      const h = (e) => {
+        if (e.detail?.block === this.el) fn();
+      };
+      this.el.addEventListener("reflowtex:" + event, h);
+      return () => this.el.removeEventListener("reflowtex:" + event, h);
+    }
+    anchor(src) {
+      const el = this.el;
+      if (src.type === "aside") {
+        const m = el.querySelector(`.latex-aside-mark[data-aside="${src.stream}"]`);
+        return m && screenPoint(m, num(m, "x"), num(m, "y"));
+      }
+      if (src.type === "glyph") {
+        const g = el.querySelector(`[data-footnote="${src.stream}"]`);
+        return g && screenPoint(g, num(g, "x"), num(g, "y"));
+      }
+      if (src.type === "widget") {
+        const w = el.querySelector(`.latex-widget[data-widget="${CSS.escape(`${this.key}:${src.slot}`)}"]`);
+        return w ? w.getBoundingClientRect() : null;
+      }
+      return null;
+    }
+  };
+  var blockKeyOf = (el) => el && blockOf(el)?.key || "";
+  var blocks = [];
+  var byEl = /* @__PURE__ */ new WeakMap();
+  function blockOf(el) {
+    let b = byEl.get(el);
+    if (!b) {
+      const data = blockData.get(el);
+      if (!data) return void 0;
+      byEl.set(el, b = new BlockImpl(data));
+    }
+    return b;
+  }
+  var blockListeners = /* @__PURE__ */ new Set();
+  var host = {
+    version: 1,
+    define: defineKind,
+    setText: (name, text) => setSlotText(name, text),
+    blocks: () => blocks.slice(),
+    block: (el) => blocks.includes(byEl.get(el)) ? byEl.get(el) : void 0,
+    instances: (query) => blocks.flatMap((b) => b.instances(query)),
+    find: (id) => {
+      const b = blocks.find((b2) => id.startsWith(b2.key + "/"));
+      return b && b.find(id);
+    },
+    onBlock(fn) {
+      blockListeners.add(fn);
+      for (const b of blocks) fn(b);
+      return () => {
+        blockListeners.delete(fn);
+      };
+    }
+  };
+  function registerBlock(data) {
+    const b = blockOf(data.el);
+    if (!b || blocks.includes(b)) return;
+    blocks.push(b);
+    for (const fn of [...blockListeners]) {
+      try {
+        fn(b);
+      } catch (e) {
+        console.error("[latex-viewer] onBlock listener:", e);
+      }
+    }
+  }
+  function installHost() {
+    api.host = host;
+    document.dispatchEvent(new CustomEvent("reflowtex:host", { detail: { host } }));
+  }
+
+  // src/defaults/margin-notes.ts
+  var MARGIN = { gap: 28, min: 150, max: 260 };
+  function marginHost(it, instance, again) {
+    return {
+      type: "margin",
+      el: it.note,
+      instance,
+      setFrame() {
+      },
+      spacing: () => ({ before: 0, after: 0 }),
+      setEdges(e) {
+        it.edges = { ...it.edges, ...e };
+        again();
       }
     };
   }
-  api.asides = (block, query) => block instanceof Element ? asideHandles(blockData.get(block), query) : allData.flatMap((d) => asideHandles(d, block));
+  function undraw(it) {
+    if (it.undo) {
+      try {
+        it.undo();
+      } catch (e) {
+        console.error("[latex-viewer] margin note:", e);
+      }
+    }
+    it.surface?.dispose();
+    it.undo = null;
+    it.surface = null;
+    it.edges = {};
+    it.note.replaceChildren();
+    it.def = null;
+  }
+  function draw(it, instance, width, again) {
+    const def = kindDef(instance.kind);
+    if (it.def !== null && it.def !== def) undraw(it);
+    if (it.def === null) {
+      it.def = def;
+      if (def) {
+        try {
+          const u = def.render(instance, marginHost(it, instance, again));
+          it.undo = typeof u === "function" ? u : null;
+          return;
+        } catch (e) {
+          console.error(`[latex-viewer] kind "${instance.kind}": render failed, drawn by default:`, e);
+          it.note.replaceChildren();
+        }
+      }
+      const body = instance.part("body");
+      if (body && body.type === "typeset") it.surface = body.mount(it.note, { width });
+    } else if (it.surface && it.width !== width) {
+      it.surface.setWidth(width);
+    }
+  }
+  function edgeOf(it, instance, blockEl) {
+    if (it.edges.top !== void 0) return it.edges.top;
+    if (it.surface) return it.surface;
+    const body = instance.part("body");
+    for (const s of surfacesOf(blockEl))
+      if (s.part === body && it.note.contains(s.el)) return s;
+    return null;
+  }
+  function placeMarginNotes(data) {
+    const el = data && data.el;
+    if (!el || !el.isConnected) return;
+    const block = blockOf(el);
+    const notes = block ? block.instances({ placement: "detached", place: "margin" }) : [];
+    if (!notes.length) return;
+    const again = () => requestAnimationFrame(() => placeMarginNotes(data));
+    const M = data.margin = data.margin || { layer: document.createElement("div"), items: /* @__PURE__ */ new Map() };
+    M.layer.className = "latex-margin";
+    if (M.layer.parentNode !== el) el.appendChild(M.layer);
+    if (getComputedStyle(el).position === "static") el.style.position = "relative";
+    const br = el.getBoundingClientRect(), k = br.width / el.offsetWidth || 1;
+    const cs = getComputedStyle(el), px = (v, d) => {
+      const n = parseFloat(v);
+      return isFinite(n) ? n : d;
+    };
+    const gap = px(cs.getPropertyValue("--latex-margin-gap"), MARGIN.gap);
+    const set = px(cs.getPropertyValue("--latex-margin-width"), null);
+    const room = set !== null ? set : (document.documentElement.clientWidth - br.right) / k - gap;
+    const width = Math.floor(Math.min(set !== null ? set : MARGIN.max, room));
+    const wide = set !== null ? width > 0 : room >= MARGIN.min;
+    const placed = [];
+    for (const a of notes) {
+      let it = M.items.get(a.id);
+      if (!it) {
+        const note = document.createElement("div");
+        note.className = "latex-margin-note";
+        note.dataset.kind = a.kind;
+        const mark = document.createElement("button");
+        mark.type = "button";
+        mark.className = "latex-margin-mark";
+        mark.textContent = "*";
+        mark.setAttribute("aria-label", "Note");
+        registerFootnoteSource(mark, a.stream);
+        it = { note, mark, width: 0, def: null, undo: null, surface: null, edges: {} };
+        M.items.set(a.id, it);
+        M.layer.append(note, mark);
+      }
+      const at = a.anchor();
+      it.note.hidden = !(wide && at);
+      it.mark.hidden = !(!wide && at);
+      if (!at) continue;
+      const x = (at.left - br.left) / k, y = (at.top - br.top) / k;
+      if (!wide) {
+        it.mark.style.left = x + "px";
+        it.mark.style.top = y + "px";
+        continue;
+      }
+      it.note.style.left = el.offsetWidth + gap + "px";
+      it.note.style.width = width + "px";
+      draw(it, a, width, again);
+      it.width = width;
+      const edge = edgeOf(it, a, el);
+      const baseline = edge && edge.el.isConnected ? (edge.el.getBoundingClientRect().top - it.note.getBoundingClientRect().top) / k + edge.metrics().firstBaseline : 0;
+      placed.push({ note: it.note, top: y - baseline });
+    }
+    placed.sort((p, q) => p.top - q.top);
+    let bottom = -Infinity, reach = 0;
+    for (const p of placed) {
+      const top = Math.max(p.top, bottom);
+      p.note.style.top = top + "px";
+      bottom = top + p.note.offsetHeight + 8;
+      reach = Math.max(reach, top + p.note.offsetHeight);
+    }
+    el.style.paddingBottom = "";
+    const over = reach - el.offsetHeight;
+    el.style.paddingBottom = over > 0 ? Math.ceil(over) + "px" : "";
+  }
+  window.addEventListener("resize", () => {
+    for (const d of allData) if (d.margin) placeMarginNotes(d);
+  });
+  onKindChange(() => {
+    for (const d of allData) if (d.margin) placeMarginNotes(d);
+  });
+
+  // src/host/asides.js
+  var docData = /* @__PURE__ */ new WeakMap();
+  var allData = [];
   function announceLayout(el) {
     placeMarginNotes(blockData.get(el));
     el.dispatchEvent(new CustomEvent("reflowtex:layout", { bubbles: true, detail: { block: el } }));
   }
 
-  // src/host/slots.js
-  var slotValues = /* @__PURE__ */ new Map();
-  var slotBlocks = /* @__PURE__ */ new Set();
-  var slotMeasure = null;
-  var slotScheduled = false;
-  function measureSlotText(fi, text) {
-    slotMeasure = slotMeasure || document.createElement("canvas").getContext("2d");
-    slotMeasure.font = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
-    return Math.round(slotMeasure.measureText(text).width / SP_TO_PX);
-  }
-  function slotNodes(fontInfo, slot, id, run, text) {
-    const glyphs = [];
-    const walk2 = (ns) => {
-      for (const n of ns) {
-        if (n.type === "glyph") glyphs.push(n);
-        else if (n.type === "disc") walk2(n.replace || []);
-      }
-    };
-    walk2(run);
-    const t = glyphs[0];
-    if (!t) return run;
-    const fi = fontInfo[String(t.font)];
-    if (!fi || fi.unresolved) return run;
-    const height = Math.max(...glyphs.map(gH)), depth = Math.max(...glyphs.map(gD));
-    const spec = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
-    if (document.fonts && !document.fonts.check(spec, text)) {
-      document.fonts.load(spec, text).then(() => scheduleSlots(), () => {
-      });
-    }
-    const out = [];
-    for (const part of String(text).split(/([^\S\u00A0\u202F]+)/)) {
-      if (!part) continue;
-      if (/^[^\S\u00A0\u202F]+$/.test(part)) {
-        out.push({
-          type: "glue",
-          subtype: 13,
-          width: slot.space || 0,
-          stretch: slot.stretch || 0,
-          shrink: slot.shrink || 0,
-          slot: id
-        });
-      } else {
-        out.push({
-          type: "glyph",
-          text: part,
-          font: t.font,
-          color: t.color,
-          slot: id,
-          width: measureSlotText(fi, part),
-          height,
-          depth
-        });
-      }
-    }
-    return out;
-  }
-  function applySlots(fontInfo, doc) {
-    const slots = doc.slots || [];
-    if (!doc.slotParas) {
-      doc.slotParas = [];
-      (doc.paragraphs || []).forEach((para, i) => {
-        if ((para.nodes || []).some((n) => n.slot)) doc.slotParas.push({ index: i + 1, para, orig: para.nodes, made: [] });
-      });
-    }
-    useGlyphMetrics(doc.glyph_metrics);
-    const changed = /* @__PURE__ */ new Set();
-    for (const sp of doc.slotParas) {
-      const orig = sp.orig, out = [], made = [];
-      for (let i = 0; i < orig.length; i++) {
-        const id = orig[i].slot, slot = id && slots[id - 1];
-        const isWidget = slot && slot.kind === "widget";
-        const text = slot && !isWidget ? slotValues.get(slot.name) : void 0;
-        if (!slot || !isWidget && text === void 0) {
-          out.push(orig[i]);
-          continue;
-        }
-        let j = i;
-        for (let k = i + 1; k < orig.length; k++) if (orig[k].slot === id) j = k;
-        const run = orig.slice(i, j + 1);
-        const nodes = isWidget ? widgetNodes(fontInfo, slot, id, run, orig.slice(0, i), orig.slice(j + 1), doc) : slotNodes(fontInfo, slot, id, run, text);
-        if (!nodes) {
-          out.push(orig[i]);
-          continue;
-        }
-        out.push(...nodes);
-        made.push(...nodes);
-        i = j;
-      }
-      const key = made.map((n) => n.text !== void 0 ? n.text + "" + n.width : n.type === "wdisc" || n.type === "widget" ? "w" + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace[0].version, n.width ?? n.replace[0].width, n.options && n.options.map((o) => [o.pre[0].width, o.post[0].width])]) : n.type === "disc" && n.slot ? "d" + JSON.stringify([n.slot, n.penalty, n.pre.map((x) => x.width), n.post.map((x) => x.width), n.replace.map((x) => x.width)]) : " ").join("");
-      if (key === sp.key && sp.made.length === made.length) continue;
-      sp.key = key;
-      sp.stale = sp.made;
-      sp.made = made;
-      sp.para.nodes = made.length ? out : orig;
-      changed.add(sp.index);
-    }
-    return changed;
-  }
-  function invalidateParagraphs(cache, changed, stale) {
-    if (!cache || !cache.dom || !cache.layoutCtx) return;
-    for (const i of changed) cache.bcs && cache.bcs.delete(i);
-    for (const n of stale) cache.dom.byNode.delete(n);
-    cache.layoutCtx.segs.forEach((seg, i) => {
-      const s = cache.dom.segs[i];
-      if (!s) return;
-      if (s.sub) invalidateParagraphs(s.sub, changed, stale);
-      if (seg.items && seg.items.some((it) => changed.has(it.index))) {
-        s.hc = null;
-        if (s.painted) s.dirty = true;
-      }
-    });
-  }
-  function refreshSlots(el) {
-    const data = blockData.get(el);
-    if (!data || !data.cache.dom) return;
-    const changed = applySlots(data.fontInfo, data.doc);
-    if (!changed.size) return;
-    const parts = (n) => n.type === "wdisc" ? [...n.replace, ...n.options.flatMap((o) => [...o.pre, ...o.post])] : n.run ? [...n.run.merged.values()] : [n];
-    const stale = data.doc.slotParas.flatMap((sp) => (sp.stale || []).flatMap(parts));
-    data.doc.slotParas.forEach((sp) => {
-      sp.stale = null;
-    });
-    invalidateParagraphs(data.cache, changed, stale);
-    const params = { ...data.params, align: data.lastAlign };
-    layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
-    paintVisibleNow(data.fontInfo, data.cache);
-  }
-  function scheduleSlots() {
-    if (slotScheduled) return;
-    slotScheduled = true;
-    requestAnimationFrame(() => {
-      slotScheduled = false;
-      for (const el of slotBlocks) refreshSlots(el);
-    });
-  }
-  api.setText = function(name, text) {
-    if (text === null || text === void 0) slotValues.delete(String(name));
-    else slotValues.set(String(name), String(text));
-    scheduleSlots();
-  };
-  api.getText = (name) => slotValues.get(String(name));
-
   // src/host/widgets.js
-  api.widgets = api.widgets || {};
-  var widgetVersion = /* @__PURE__ */ new Map();
-  var widgetState = /* @__PURE__ */ new Map();
   var widgetMeasure = /* @__PURE__ */ new Map();
-  function widgetFor(name) {
-    const w = api.widgets || {};
-    if (w[name]) return w[name];
-    let best = null;
-    for (const k of Object.keys(w))
-      if (k.endsWith("*") && name.startsWith(k.slice(0, -1)) && (!best || k.length > best.length)) best = k;
-    return best ? w[best] : null;
-  }
   function measureHTML(html, fontPx) {
     const probe = document.createElement("div");
     probe.style.cssText = `position:absolute;left:-10000px;top:0;visibility:hidden;white-space:nowrap;font-size:${fontPx}px;line-height:normal`;
@@ -2233,10 +2845,10 @@
     probe.remove();
     return { width: r.right - r.left, height: Math.max(0, base - r.top), depth: Math.max(0, r.bottom - base) };
   }
-  api.refreshWidgets = () => scheduleSlots();
   function widgetNodes(fontInfo, slot, id, run, before, after, doc) {
-    const widget = widgetFor(slot.name);
-    if (!widget || typeof widget.measure !== "function") return null;
+    const found = inlineOf((docData.get(doc) || {}).el, id);
+    if (!found) return null;
+    const { instance, def } = found;
     const glyph = (ns) => {
       for (const n of ns) {
         if (n.type === "glyph") return n;
@@ -2250,28 +2862,16 @@
     const t = glyph(run) || glyph([...before].reverse()) || glyph(after);
     const fi = t && fontInfo[String(t.font)];
     const fontPx = fi ? fi.size_px : 20;
-    const version = widgetVersion.get(slot.name) || 0;
-    if (!widgetState.has(slot.name)) widgetState.set(slot.name, {});
-    const ctx = {
-      name: slot.name,
-      fontSize: fontPx,
-      color: t && t.color ? colorFill(t.color) : null,
-      state: widgetState.get(slot.name),
-      measure: (html) => measureHTML(html, fontPx),
-      // The asides of this widget's block (\webaside) that match a query.
-      asides: (query) => asideHandles(docData.get(doc), query),
-      invalidate: () => {
-        widgetVersion.set(slot.name, (widgetVersion.get(slot.name) || 0) + 1);
-        scheduleSlots();
-      }
-    };
-    const key = `${(docData.get(doc) || {}).seq}|${slot.name}|${fontPx}|${version}`;
+    const version = inlineVersion(instance);
+    const env = inlineEnv(instance, fontPx, t && t.color ? colorFill(t.color) : null);
+    const inline = { instance, def, env };
+    const key = `${instance.id}|${fontPx}|${version}`;
     let m = widgetMeasure.get(key);
     if (!m) {
       try {
-        m = widget.measure(ctx);
+        m = def.measure(instance, env);
       } catch (e) {
-        console.warn(`[latex-viewer] widget ${slot.name}:`, e);
+        console.error(`[latex-viewer] kind "${instance.kind}": measure failed:`, e);
         return null;
       }
       if (!m) return null;
@@ -2282,8 +2882,7 @@
       type: "widget",
       slot: id,
       part: which,
-      widget,
-      ctx,
+      inline,
       fontPx,
       color: t && t.color,
       width: sp(dims.width),
@@ -2291,7 +2890,7 @@
       depth: sp(dims.depth),
       version
     });
-    if (m.segments && m.segments.length) return widgetSegmentNodes(m, slot, id, widget, ctx, fontPx, t, version, sp);
+    if (m.segments && m.segments.length) return widgetSegmentNodes(m, slot, id, inline, fontPx, t, version, sp);
     const whole = part(m, "whole");
     if (!m.splits || !m.splits.length) return [whole];
     const hang = (o) => o && +o.overhang ? [{ type: "kern", subtype: 1, kern: -sp(o.overhang) }] : [];
@@ -2306,10 +2905,10 @@
       }))
     }];
   }
-  function widgetSegmentNodes(m, slot, id, widget, ctx, fontPx, t, version, sp) {
+  function widgetSegmentNodes(m, slot, id, inline, fontPx, t, version, sp) {
     const segs = m.segments, gaps = m.gaps || [];
     const H = Math.max(...segs.map((g) => sp(g.height))), D = Math.max(...segs.map((g) => sp(g.depth)));
-    const run = { slot: id, widget, ctx, fontPx, color: t && t.color, version, merged: /* @__PURE__ */ new Map(), height: H, depth: D };
+    const run = { slot: id, inline, fontPx, color: t && t.color, version, merged: /* @__PURE__ */ new Map(), height: H, depth: D };
     const piece = (role, w, seg) => ({ type: "widget", run, role, seg, width: sp(w), height: H, depth: D });
     const ends = m.ends || {};
     const L = ends.left || {}, R = ends.right || {};
@@ -2361,8 +2960,7 @@
           type: "widget",
           slot: n.run.slot,
           part,
-          widget: n.run.widget,
-          ctx: n.run.ctx,
+          inline: n.run.inline,
           fontPx: n.run.fontPx,
           color: n.run.color,
           version: n.run.version,
@@ -2689,12 +3287,12 @@
   ];
   var AFFINE_CHILD_LISTS = ["children", "pre", "post", "replace"];
   function affineDisplayNode(n, deltaSp) {
-    let out = n, changed = false;
+    let out = n, changed2 = false;
     const edit = () => {
-      if (!changed) {
+      if (!changed2) {
         out = { ...n };
         Object.defineProperty(out, "affineSource", { value: n.affineSource || n });
-        changed = true;
+        changed2 = true;
       }
     };
     for (const field of AFFINE_NODE_FIELDS) {
@@ -3015,475 +3613,6 @@
     );
   }
 
-  // src/host/instances.ts
-  var InstanceImpl = class {
-    constructor(id, kind, attrs, presentation, placement, parent, block, source, anchorOf) {
-      this.id = id;
-      this.kind = kind;
-      this.attrs = attrs;
-      this.presentation = presentation;
-      this.placement = placement;
-      this.parent = parent;
-      this.block = block;
-      this.source = source;
-      this.anchorOf = anchorOf;
-    }
-    id;
-    kind;
-    attrs;
-    presentation;
-    placement;
-    parent;
-    block;
-    source;
-    anchorOf;
-    children = [];
-    parts = /* @__PURE__ */ new Map();
-    spaceBefore = 0;
-    part(role) {
-      return this.parts.get(role);
-    }
-    anchor() {
-      return this.source.type === "none" ? null : this.anchorOf(this.source);
-    }
-  };
-  function splitAttrs(list) {
-    const attrs = {};
-    const classes = [];
-    const properties = {};
-    let aside = false;
-    for (const a of list || []) {
-      const k = a.key || "", v = a.value || "";
-      if (!/^[a-z0-9-]+$/i.test(k)) continue;
-      if (k === "aside") aside = v === "true";
-      else if (k === "class") classes.push(...v.split(/\s+/).filter(Boolean));
-      else if (k.startsWith("--")) properties[k] = v;
-      else attrs[k] = v;
-    }
-    return { attrs, presentation: { classes, properties }, aside };
-  }
-  var NO_PRESENTATION = Object.freeze({ classes: Object.freeze([]), properties: Object.freeze({}) });
-  function normalise(doc, block, key, parts, anchorOf, spToPx = 0) {
-    const streams = doc.streams || [];
-    const slots = doc.slots || [];
-    const roots = [];
-    const seenStream = /* @__PURE__ */ new Set();
-    const seenSlot = /* @__PURE__ */ new Set();
-    const widgetsByKey = /* @__PURE__ */ new Map();
-    const pendingAsides = [];
-    const adopt = (inst, parent) => {
-      (parent ? parent.children : roots).push(inst);
-    };
-    const streamInstance = (index, placement, parent, source) => {
-      seenStream.add(index);
-      const s = streams[index - 1];
-      const { attrs, presentation } = splitAttrs(s.attrs);
-      const inst = new InstanceImpl(
-        `${key}/s${index}`,
-        s.kind || "",
-        Object.freeze(attrs),
-        presentation,
-        placement,
-        parent,
-        block,
-        source,
-        anchorOf
-      );
-      inst.parts.set("body", parts.typeset(inst, "body", s));
-      if (s.text !== void 0) {
-        const data = { type: "data", role: "text", instance: inst, data: s.text };
-        inst.parts.set("text", data);
-      }
-      adopt(inst, parent);
-      walkContent(s.content || [], inst);
-      return inst;
-    };
-    const slotInstance = (index, parent) => {
-      seenSlot.add(index);
-      const slot = slots[index - 1] || {};
-      const name = slot.name || "";
-      if (slot.kind === "widget") {
-        const colon = name.indexOf(":");
-        const kind = colon >= 0 ? name.slice(0, colon) : name;
-        const attrs = { name };
-        if (colon >= 0) attrs.key = name.slice(colon + 1);
-        const inst = new InstanceImpl(
-          `${key}/w${index}`,
-          kind,
-          Object.freeze(attrs),
-          NO_PRESENTATION,
-          "inline",
-          parent,
-          block,
-          { type: "widget", slot: index },
-          anchorOf
-        );
-        if (attrs.key !== void 0 && !widgetsByKey.has(attrs.key)) widgetsByKey.set(attrs.key, inst);
-        adopt(inst, parent);
-      } else {
-        adopt(new InstanceImpl(
-          `${key}/t${index}`,
-          "text",
-          Object.freeze({ name }),
-          NO_PRESENTATION,
-          "text",
-          parent,
-          block,
-          { type: "none" },
-          anchorOf
-        ), parent);
-      }
-    };
-    const walkNodes = (nodes, parent) => {
-      for (const n of nodes || []) {
-        if (n.slot && !seenSlot.has(n.slot)) slotInstance(n.slot, parent);
-        if (n.aside && !seenStream.has(n.aside)) {
-          pendingAsides.push({ index: n.aside, parent });
-          seenStream.add(n.aside);
-        }
-        if (n.stream && !seenStream.has(n.stream) && streams[n.stream - 1])
-          streamInstance(n.stream, "detached", parent, { type: "glyph", stream: n.stream });
-        walkNodes(n.children, parent);
-        walkNodes(n.replace, parent);
-        walkNodes(n.pre, parent);
-        walkNodes(n.post, parent);
-      }
-    };
-    function walkContent(items, parent) {
-      let space = 0;
-      for (const it of items) {
-        if (it.kind === "vspace") {
-          space += it.amount || 0;
-          continue;
-        }
-        const before = space;
-        space = 0;
-        if (it.kind === "stream") {
-          if (it.stream && !seenStream.has(it.stream) && streams[it.stream - 1])
-            streamInstance(it.stream, "block", parent, { type: "none" }).spaceBefore = before * spToPx;
-        } else if (it.kind === "display") {
-          walkNodes(it.box ? [it.box] : [], parent);
-        } else if (!it.kind || it.kind === "paragraph") {
-          if (it.para) walkNodes(doc.paragraphs[it.para - 1]?.nodes, parent);
-        }
-      }
-    }
-    walkContent(doc.content || [], null);
-    streams.forEach((s, i) => {
-      if (!seenStream.has(i + 1) && splitAttrs(s.attrs).aside) pendingAsides.push({ index: i + 1, parent: null });
-    });
-    for (const { index, parent } of pendingAsides) {
-      const s = streams[index - 1];
-      const { attrs } = splitAttrs(s.attrs);
-      const owner = attrs.for !== void 0 ? widgetsByKey.get(attrs.for) : void 0;
-      if (owner && !owner.parts.has(s.kind || "")) {
-        owner.parts.set(s.kind || "", parts.typeset(owner, s.kind || "", s));
-        continue;
-      }
-      seenStream.delete(index);
-      streamInstance(index, "detached", parent, { type: "aside", stream: index });
-    }
-    streams.forEach((_, i) => {
-      if (!seenStream.has(i + 1)) streamInstance(i + 1, "detached", null, { type: "none" });
-    });
-    return roots;
-  }
-  function* walk(list) {
-    for (const i of list) {
-      yield i;
-      yield* walk(i.children);
-    }
-  }
-  function matches(inst, query) {
-    if (query === void 0) return true;
-    if (typeof query === "string") return inst.kind === query;
-    for (const [k, v] of Object.entries(query)) {
-      if (v === void 0) continue;
-      const have = k === "kind" ? inst.kind : k === "placement" ? inst.placement : inst.attrs[k];
-      if (have !== String(v)) return false;
-    }
-    return true;
-  }
-
-  // src/host/host.ts
-  function screenPoint(el, x, y) {
-    const ctm = el && el.getScreenCTM && el.getScreenCTM();
-    if (!ctm) return null;
-    const p = new DOMPoint(x, y).matrixTransform(ctm);
-    return new DOMRect(p.x, p.y, 0, 0);
-  }
-  var num = (el, a) => parseFloat(el.getAttribute(a) || "0") || 0;
-  var BlockImpl = class {
-    constructor(data) {
-      this.data = data;
-    }
-    data;
-    _roots = null;
-    byId = null;
-    get el() {
-      return this.data.el;
-    }
-    get key() {
-      return this.data.cache.blockKey || "";
-    }
-    get roots() {
-      if (!this._roots) {
-        this._roots = normalise(
-          this.data.doc,
-          this,
-          this.key,
-          { typeset: (inst, role, stream) => new TypesetPartImpl(role, inst, this.data, stream) },
-          (src) => this.anchor(src),
-          SP_TO_PX
-        );
-      }
-      return this._roots;
-    }
-    instances(query) {
-      return [...walk(this.roots)].filter((i) => matches(i, query));
-    }
-    find(id) {
-      if (!this.byId) this.byId = new Map([...walk(this.roots)].map((i) => [i.id, i]));
-      return this.byId.get(id);
-    }
-    on(event, fn) {
-      const h = (e) => {
-        if (e.detail?.block === this.el) fn();
-      };
-      this.el.addEventListener("reflowtex:" + event, h);
-      return () => this.el.removeEventListener("reflowtex:" + event, h);
-    }
-    anchor(src) {
-      const el = this.el;
-      if (src.type === "aside") {
-        const m = el.querySelector(`.latex-aside-mark[data-aside="${src.stream}"]`);
-        return m && screenPoint(m, num(m, "x"), num(m, "y"));
-      }
-      if (src.type === "glyph") {
-        const g = el.querySelector(`[data-footnote="${src.stream}"]`);
-        return g && screenPoint(g, num(g, "x"), num(g, "y"));
-      }
-      if (src.type === "widget") {
-        const w = el.querySelector(`.latex-widget[data-widget="${CSS.escape(`${this.key}:${src.slot}`)}"]`);
-        return w ? w.getBoundingClientRect() : null;
-      }
-      return null;
-    }
-  };
-  var blocks = [];
-  var byEl = /* @__PURE__ */ new WeakMap();
-  function blockOf(el) {
-    let b = byEl.get(el);
-    if (!b) {
-      const data = blockData.get(el);
-      if (!data) return void 0;
-      byEl.set(el, b = new BlockImpl(data));
-    }
-    return b;
-  }
-  var blockListeners = /* @__PURE__ */ new Set();
-  var host = {
-    version: 1,
-    define: defineBlockKind,
-    blocks: () => blocks.slice(),
-    block: (el) => blocks.includes(byEl.get(el)) ? byEl.get(el) : void 0,
-    instances: (query) => blocks.flatMap((b) => b.instances(query)),
-    find: (id) => {
-      const b = blocks.find((b2) => id.startsWith(b2.key + "/"));
-      return b && b.find(id);
-    },
-    onBlock(fn) {
-      blockListeners.add(fn);
-      for (const b of blocks) fn(b);
-      return () => {
-        blockListeners.delete(fn);
-      };
-    }
-  };
-  function registerBlock(data) {
-    const b = blockOf(data.el);
-    if (!b || blocks.includes(b)) return;
-    blocks.push(b);
-    for (const fn of [...blockListeners]) {
-      try {
-        fn(b);
-      } catch (e) {
-        console.error("[latex-viewer] onBlock listener:", e);
-      }
-    }
-  }
-  function installHost() {
-    api.host = host;
-    document.dispatchEvent(new CustomEvent("reflowtex:host", { detail: { host } }));
-  }
-
-  // src/host/block-hosts.ts
-  var kinds = /* @__PURE__ */ new Map();
-  var records = /* @__PURE__ */ new Set();
-  var byBox = /* @__PURE__ */ new WeakMap();
-  var pending = /* @__PURE__ */ new Set();
-  var frame = 0;
-  function relayoutSoon(owner) {
-    if (!owner.relayout) return;
-    pending.add(owner.relayout);
-    if (frame) return;
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      const fns = [...pending];
-      pending.clear();
-      for (const fn of fns) fn();
-    });
-  }
-  function currentEdges(rec) {
-    if (rec.edges) return { top: rec.edges.top ?? null, bottom: rec.edges.bottom ?? null };
-    const body = rec.instance.part("body");
-    let found = null;
-    for (const s of surfacesOf(rec.instance.block.el)) {
-      if (s.part === body && !s.isDisposed && rec.box.contains(s.el)) {
-        found = s;
-        break;
-      }
-    }
-    return { top: found, bottom: found };
-  }
-  function edgeValues(rec) {
-    const { top, bottom } = currentEdges(rec);
-    const t = top && !top.isDisposed ? top.edges() : null;
-    const b = bottom && !bottom.isDisposed ? bottom.edges() : null;
-    return {
-      firstAscent: t ? t.firstAscent : 0,
-      firstMeta: t ? t.firstMeta : null,
-      textFirst: !!(t && t.textFirst),
-      lastDepth: b ? b.lastDepth : 0,
-      textLast: !!(b && b.textLast)
-    };
-  }
-  var sameEdges = (a, b) => !!a && a.firstAscent === b.firstAscent && a.lastDepth === b.lastDepth && a.firstMeta === b.firstMeta && a.textFirst === b.textFirst && a.textLast === b.textLast;
-  surfaceHooks.changed = (s) => {
-    for (let el = s.el; el; el = el.parentElement) {
-      const rec = byBox.get(el);
-      if (!rec) continue;
-      if (rec.laid && !sameEdges(rec.laid, edgeValues(rec))) relayoutSoon(rec.owner);
-      return;
-    }
-  };
-  surfaceHooks.disposeHosts = (cache) => {
-    for (const rec of [...records]) if (rec.owner.hosts === cache.hosts) dispose(rec);
-  };
-  function dispose(rec) {
-    records.delete(rec);
-    rec.owner.hosts?.delete(rec.index);
-    if (rec.undo) {
-      try {
-        rec.undo();
-      } catch (e) {
-        console.error(`[latex-viewer] kind "${rec.kind}": undoing render failed:`, e);
-      }
-    }
-    rec.undo = null;
-  }
-  function makeRecord(box, index, instance, def, owner) {
-    const rec = {
-      box,
-      index,
-      instance,
-      kind: instance.kind,
-      def,
-      owner,
-      undo: null,
-      laid: null,
-      failed: false,
-      frame: { top: false, bottom: false },
-      edges: null
-    };
-    rec.host = {
-      el: box,
-      instance,
-      setFrame(f) {
-        const next = { top: !!f.top, bottom: !!f.bottom };
-        if (next.top === rec.frame.top && next.bottom === rec.frame.bottom) return;
-        rec.frame = next;
-        if (rec.laid) relayoutSoon(owner);
-      },
-      spacing() {
-        const segs = owner.dom && owner.dom.segs || [];
-        const i = segs.findIndex((sg) => sg.box === box);
-        const px = (el) => el && parseFloat(el.style.height) || 0;
-        return { before: i >= 0 ? px(segs[i].gap) : 0, after: i >= 0 && i + 1 < segs.length ? px(segs[i + 1].gap) : 0 };
-      },
-      setEdges(e) {
-        rec.edges = { ...rec.edges || {}, ...e };
-        if (rec.laid && !sameEdges(rec.laid, edgeValues(rec))) relayoutSoon(owner);
-      }
-    };
-    return rec;
-  }
-  function keptHostBox(cache, index) {
-    const rec = cache.hosts && cache.hosts.get(index);
-    return rec && !rec.failed ? rec.box : null;
-  }
-  function layoutHostedSegment(s, seg, widthPt, cache) {
-    const def = kinds.get(seg.stream.kind || "");
-    if (!def || !cache.blockEl) return null;
-    const hosts = cache.hosts || (cache.hosts = /* @__PURE__ */ new Map());
-    let rec = hosts.get(seg.index);
-    if (rec && rec.failed) return null;
-    if (!rec) {
-      const block = blockOf(cache.blockEl);
-      const instance = block && block.find(`${block.key}/s${seg.index}`);
-      if (!instance) return null;
-      rec = makeRecord(s.box, seg.index, instance, def, cache);
-      hosts.set(seg.index, rec);
-      records.add(rec);
-      byBox.set(s.box, rec);
-      try {
-        const undo = def.render(instance, rec.host);
-        rec.undo = typeof undo === "function" ? undo : null;
-      } catch (e) {
-        console.error(`[latex-viewer] kind "${rec.kind}": render failed, drawn by default:`, e);
-        rec.failed = true;
-        records.delete(rec);
-        s.box.replaceChildren();
-        return null;
-      }
-    }
-    const E = rec.laid = edgeValues(rec);
-    const fa = E.textFirst ? `${E.firstAscent}px` : "var(--latex-cap-height, 0px)";
-    const ld = E.textLast ? `${E.lastDepth}px` : "0px";
-    if (s.box.style.getPropertyValue("--latex-first-ascent") !== fa) s.box.style.setProperty("--latex-first-ascent", fa);
-    if (s.box.style.getPropertyValue("--latex-last-depth") !== ld) s.box.style.setProperty("--latex-last-depth", ld);
-    return {
-      seg,
-      lines: [],
-      H: s.box.offsetHeight,
-      W: widthPt * ZOOM,
-      firstAscent: E.firstAscent,
-      lastDepth: E.lastDepth,
-      firstMeta: E.firstMeta,
-      alts: null,
-      frameTop: rec.frame.top,
-      frameBottom: rec.frame.bottom,
-      gapBefore: seg.gapBefore || 0
-    };
-  }
-  function redraw(kind) {
-    for (const rec of [...records]) if (rec.kind === kind) dispose(rec);
-    for (const el of document.querySelectorAll("[data-nodelist-b64]")) {
-      const block = blockOf(el);
-      if (block && blockData.get(el) && block.instances({ kind, placement: "block" }).length) rerenderBlock(el);
-    }
-  }
-  function defineBlockKind(kind, def) {
-    if (!def || typeof def.render !== "function") throw new TypeError(`host.define("${kind}"): render(instance, host) is required`);
-    kinds.set(kind, def);
-    redraw(kind);
-    return () => {
-      if (kinds.get(kind) !== def) return;
-      kinds.delete(kind);
-      redraw(kind);
-    };
-  }
-
   // src/engine/layout/stream.js
   function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
     const hosted = layoutHostedSegment(s, seg, widthPt, cache);
@@ -3494,7 +3623,6 @@
         dom: null,
         layout: null,
         stats: null,
-        streamState: cache.streamState,
         hosts: cache.hosts,
         blockEl: cache.blockEl,
         relayout: cache.relayout
@@ -3510,49 +3638,16 @@
     let w = widthPt;
     if (innerPx > 0) w = innerPx / ZOOM;
     else cache.streamsUnmeasured = true;
-    const hooks0 = api.streamKinds[seg.stream.kind] || STREAM_KINDS[seg.stream.kind];
-    s.sub.alternatives = !!(hooks0 && hooks0.alternatives);
     const root = layoutDocument(fontInfo, { ...doc, content: seg.stream.content }, w, p, s.sub);
     if (root.parentNode !== s.box) s.box.replaceChildren(root);
-    if (!s.mounted) {
-      s.mounted = true;
-      const kind = seg.stream.kind;
-      const hooks = api.streamKinds[kind] || STREAM_KINDS[kind];
-      if (hooks && hooks.mount) {
-        let state = cache.streamState.get(seg.index);
-        if (!state) {
-          state = {};
-          cache.streamState.set(seg.index, state);
-        }
-        const attrs = Object.fromEntries((seg.stream.attrs || []).map((a) => [a.key, a.value || ""]));
-        const sub = s.sub;
-        const paint = () => paintVisibleNow(fontInfo, sub);
-        const relayout = () => {
-          const el = s.box.closest("[data-nodelist-b64]");
-          const d = el && blockData.get(el);
-          if (!d) return;
-          d.lastWidth = -1;
-          reflowBlock(el);
-        };
-        try {
-          hooks.mount(s.box, { kind, index: seg.index, stream: seg.stream, attrs, state, paint, relayout });
-        } catch (e) {
-          console.error(`[latex-viewer] stream kind "${kind}" mount failed:`, e);
-        }
-      }
-    }
     const laid = s.sub.layout.laid;
     const first = laid[0];
-    let last = laid[laid.length - 1], alts = null;
+    const last = laid[laid.length - 1];
     const textAt = (L) => L && L.seg && L.seg.kind === "text";
     const fa = textAt(first) ? `${first.firstAscent}px` : "var(--latex-cap-height, 0px)";
     const ld = textAt(last) ? `${last.lastDepth}px` : "0px";
     if (s.box.style.getPropertyValue("--latex-first-ascent") !== fa) s.box.style.setProperty("--latex-first-ascent", fa);
     if (s.box.style.getPropertyValue("--latex-last-depth") !== ld) s.box.style.setProperty("--latex-last-depth", ld);
-    if (s.sub.alternatives) {
-      alts = laid.map((Lj, j) => ({ L: Lj, box: s.sub.dom.segs[j].box })).filter((a) => a.L.seg.kind === "stream");
-      last = first;
-    }
     return {
       seg,
       lines: [],
@@ -3561,7 +3656,6 @@
       firstAscent: first ? first.firstAscent : 0,
       lastDepth: last ? last.lastDepth : 0,
       firstMeta: first ? first.firstMeta : null,
-      alts,
       frameTop,
       frameBottom,
       gapBefore: seg.gapBefore || 0
@@ -3577,28 +3671,6 @@
     const r = onLayoutGrid(exact);
     return { r, carry: exact - r };
   }
-  function applyAlternativeOffsets(prev, L) {
-    if (L.alts) {
-      const ref = L.alts[0].L;
-      for (const a of L.alts) {
-        let d = 0;
-        if (prev && isTextLike(prev.seg.kind) && a.L.firstMeta && ref.firstMeta) {
-          d = texInterlineGlue(prev.lastDepth, a.L.firstAscent, a.L.firstMeta) - texInterlineGlue(prev.lastDepth, ref.firstAscent, ref.firstMeta);
-        }
-        setStyle(a.box, "marginTop", d ? `${d}px` : "");
-      }
-    }
-    if (prev && prev.alts) {
-      const ref = prev.alts[0].L;
-      for (const a of prev.alts) {
-        let d = 0;
-        if (isTextLike(L.seg.kind) && L.firstMeta) {
-          d = texInterlineGlue(a.L.lastDepth, L.firstAscent, L.firstMeta) - texInterlineGlue(ref.lastDepth, L.firstAscent, L.firstMeta);
-        }
-        setStyle(a.box, "marginBottom", d ? `${d}px` : "");
-      }
-    }
-  }
   function spaceAbove(L, prev) {
     let margin = L.gapBefore || 0;
     if (prev && L.seg.kind === "text" && isTextLike(prev.seg.kind) && L.firstMeta && !(prev.frameBottom && L.gapBefore)) {
@@ -3607,7 +3679,6 @@
     return margin + displaySkipAdjust(L, prev);
   }
   function sizeSegment(s, L, prev, columnPx, p) {
-    applyAlternativeOffsets(prev, L);
     if (L.seg.kind === "stream") {
       let margin2 = L.gapBefore || 0;
       const framed = L.frameTop || prev?.frameBottom;
@@ -3670,6 +3741,7 @@
     }
     return { mount, overflows };
   }
+  var newBlockKey = () => `b${++blockSeq}`;
   function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     useGlyphMetrics(doc.glyph_metrics);
     cache.metrics = doc.glyph_metrics;
@@ -3684,9 +3756,8 @@
     cache.slotNames = (doc.slots || []).map((x) => x.name);
     cache.anchors = doc.anchors || [];
     cache.streams = doc.streams || [];
-    cache.streamState = cache.streamState || /* @__PURE__ */ new Map();
     cache.hosts = cache.hosts || /* @__PURE__ */ new Map();
-    cache.blockKey = cache.blockKey || `b${++blockSeq}`;
+    cache.blockKey = cache.blockKey || newBlockKey();
     const minGapPx = p.minGapPt * ZOOM;
     const padPx = p.padPt * ZOOM;
     cache.bcs = cache.bcs || /* @__PURE__ */ new Map();
@@ -3757,6 +3828,8 @@
         const box2 = document.createElement("div");
         box2.className = "latex-stream";
         box2.dataset.kind = seg.stream.kind || "";
+        const bk = blockKeyOf(cache.blockEl);
+        if (bk) box2.dataset.instance = `${bk}/s${seg.index}`;
         for (const a of seg.stream.attrs || []) {
           if (!a.key || !/^[a-z0-9-]+$/.test(a.key)) continue;
           if (a.key === "class") box2.classList.add(...(a.value || "").split(/\s+/).filter(Boolean));
@@ -3822,8 +3895,7 @@
     const want = [];
     laid.forEach((L, i) => {
       const s = dom.segs[i];
-      const { mount, overflows } = sizeSegment(s, L, cache.alternatives ? null : laid[i - 1], columnPx, p);
-      if (cache.alternatives) setStyle(s.gap, "height", "0px");
+      const { mount, overflows } = sizeSegment(s, L, laid[i - 1], columnPx, p);
       s.mount = mount;
       for (const id of L.seg.anchors || []) {
         const label = cache.anchors[id - 1];
@@ -4373,6 +4445,7 @@
       layout: null,
       stats: null,
       blockEl: el,
+      blockKey: newBlockKey(),
       relayout: () => {
         if (blockData.get(el)) {
           blockData.get(el).lastWidth = -1;
@@ -4471,166 +4544,11 @@
   }
 
   // src/index.js
-  var STREAM_KINDS = {
-    // reflowtex.sty's webhint: blurred (CSS) until the reader clicks it or
-    // presses Enter/Space on it, and blurred again by the next click. Clicks
-    // on a link inside, or that end a text selection, leave it as it is. The
-    // state survives re-renders.
-    hint: {
-      mount(box, ctx) {
-        const show = (on) => {
-          ctx.state.revealed = on;
-          box.classList.toggle("latex-revealed", on);
-          box.setAttribute("aria-pressed", String(on));
-          box.setAttribute("aria-label", on ? "Hint, shown: press to hide" : "Hint, hidden: press to reveal");
-        };
-        box.setAttribute("role", "button");
-        box.setAttribute("tabindex", "0");
-        show(!!ctx.state.revealed);
-        box.addEventListener("click", (e) => {
-          if (e.target.closest && e.target.closest("[data-link]")) return;
-          if (ctx.state.revealed && String(getSelection()).trim()) return;
-          show(!ctx.state.revealed);
-        });
-        box.addEventListener("keydown", (e) => {
-          if (e.target !== box || e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          show(!ctx.state.revealed);
-        });
-      }
-    },
-    // One of several panes (reflowtex.sty's accordion): the child streams of
-    // kind "pane", of which exactly one shows. The reader switches with
-    // action links inside the panes – "pane:next", "pane:prev", "pane:first",
-    // "pane:last", "pane:NAME" or "pane:NUMBER" (from 1). The hiding itself
-    // is CSS (installStreamStyles); this keeps the current pane on the box as
-    // data-pane and the pane's class latex-pane-active.
-    accordion: {
-      alternatives: true,
-      // panes replace one another (see layoutStreamSegment)
-      mount(box, ctx) {
-        const root = box.firstElementChild;
-        const panes = root ? [...root.children].filter((e) => e.matches('.latex-stream[data-kind="pane"]')) : [];
-        if (!panes.length) return;
-        const find = (t) => {
-          if (t === "first") return 0;
-          if (t === "last") return panes.length - 1;
-          if (t === "next") return Math.min(ctx.state.pane + 1, panes.length - 1);
-          if (t === "prev") return Math.max(ctx.state.pane - 1, 0);
-          const byName = panes.findIndex((p) => p.dataset.name && p.dataset.name === t);
-          if (byName >= 0) return byName;
-          const n = parseInt(t, 10);
-          return n >= 1 && n <= panes.length ? n - 1 : -1;
-        };
-        const show = (i) => {
-          ctx.state.pane = i;
-          panes.forEach((p, k) => p.classList.toggle("latex-pane-active", k === i));
-          box.dataset.pane = panes[i].dataset.name || String(i + 1);
-        };
-        const printAt = find(ctx.attrs.print || "last");
-        panes.forEach((p, k) => p.classList.toggle("latex-pane-print", k === printAt));
-        if (ctx.state.pane === void 0) {
-          const first = find(ctx.attrs.initial || "1");
-          ctx.state.pane = first >= 0 ? first : 0;
-        }
-        show(ctx.state.pane);
-        box.addEventListener("reflowtex:action", (e) => {
-          const m = /^pane:(.+)$/.exec(e.detail.action);
-          if (!m) return;
-          const i = find(m[1]);
-          if (i < 0) return;
-          e.stopPropagation();
-          const active = document.activeElement;
-          const hadFocus = !!(active && active.dataset && e.detail.source && active.dataset.link === e.detail.source.dataset.link && active.matches(":focus-visible"));
-          show(i);
-          ctx.paint();
-          if (box.getBoundingClientRect().top < 0) box.scrollIntoView({ block: "start" });
-          if (hadFocus) {
-            const next = panes[i].querySelector(".latex-action[tabindex]");
-            if (next) next.focus({ preventScroll: true });
-          }
-        });
-      }
-    }
-  };
   function installStreamStyles() {
     const st = document.createElement("style");
     st.textContent = `
-      /* Frames (note, hint, theorem, proof) grow outward: a top-level one
-         reaches into the margin by its padding and border
-         (--latex-outset-start/-end), so its text keeps the column's full
-         measure and lines up with the text around it. Inside another frame
-         a box is set in by the enclosing frame's padding at the start of
-         the line only (left, or right in right-to-left text), so the start
-         edges step in per level while the end edges all stand flush: each
-         frame hands its end padding to what it holds (--latex-enclosing-end)
-         and a frame inside takes it back as a negative margin. A stream
-         with no padding (a pane) passes it on unchanged. The outsets do not
-         inherit, so a stream inside a frame has none. A page's own framed
-         kind can set the same variables (--latex-outset-l/-r, the earlier
-         names, still work). All sides are logical, for right-to-left text. */
-      :where(.latex-stream) { --latex-outset-start: initial; --latex-outset-end: initial;
-                              --latex-outset-l: initial; --latex-outset-r: initial; }
-      .latex-stream {
-        margin-inline-start: calc(-1 * var(--latex-outset-start, var(--latex-outset-l, 0px)));
-        margin-inline-end: calc(-1 * var(--latex-outset-end, var(--latex-outset-r, 0px))); }
-      :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"]) .latex-stream {
-        margin-inline-start: 0; margin-inline-end: 0; }
-      :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-          .latex-stream[data-kind="note"]) > * {
-        --latex-enclosing-end: var(--latex-pad-end, 0px); }
-      :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"])
-        :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-            .latex-stream[data-kind="note"]) {
-        margin-inline-end: calc(-1 * var(--latex-enclosing-end, 0px)); }
-      .latex-stream[data-kind="note"] {
-        --latex-outset-start: calc(1rem + 3px); --latex-outset-end: 1rem; --latex-pad-end: 1rem;
-        padding-block: .6rem; padding-inline: 1rem var(--latex-pad-end);
-        border-inline-start: 3px solid var(--latex-note-accent, #2f6fb3);
-        background: color-mix(in srgb, var(--latex-note-accent, #2f6fb3) 8%, transparent); }
-      /* The hint's content is blurred, not the box, so a label can sit
-         sharp over it while it is hidden (--latex-hint-label, a string). */
-      .latex-stream[data-kind="hint"] { position: relative; cursor: pointer; }
-      .latex-stream[data-kind="hint"] > * { filter: blur(5px); transition: filter .2s; }
-      .latex-stream[data-kind="hint"].latex-revealed > * { filter: none; }
-      .latex-stream[data-kind="hint"]:not(.latex-revealed)::after {
-        content: var(--latex-hint-label, "Click to reveal");
-        position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
-        font: 600 .8rem/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: .01em; }
-      .latex-stream[data-kind="hint"]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-      /* Vertical padding from the content's own edges: --latex-box-space
-         (default one x-height of 10pt Latin Modern, 4.31pt) between the box
-         and the top of a capital on the first line (cap height 6.83pt), and
-         the same between the last baseline and the box. The viewer sets
-         --latex-first-ascent / --latex-last-depth on every stream box. */
+      /* One TeX point in CSS px, for styles that size by TeX's measures. */
       :root { --latex-pt: ${ZOOM}px; }
-      /* A box's colours are its own: do not inherit an enclosing box's
-         (zero specificity, so a page's rule or the box's own inline value wins). */
-      :where(.latex-stream) { --latex-box-accent: initial; --latex-box-background: initial; }
-      .latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"] {
-        --latex-outset-start: calc(.85rem + 3px); --latex-outset-end: .7rem; --latex-pad-end: .7rem;
-        --latex-box-space: calc(4.31 * var(--latex-pt));
-        --latex-cap-height: calc(6.83 * var(--latex-pt));
-        padding-block: max(2px, calc(var(--latex-box-space) + var(--latex-cap-height) - var(--latex-first-ascent, 0px)))
-                       max(2px, calc(var(--latex-box-space) - var(--latex-last-depth, 0px)));
-        padding-inline: .85rem var(--latex-pad-end);
-        /* --latex-box-accent / --latex-box-background: set per box (DeclareWebBox
-           accent=, background=) or by a page; else the kind's defaults – a
-           page may give theorems a background of their own
-           (--latex-theorem-background), else a tint of their accent. */
-        border-inline-start: 3px solid var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
-        background: var(--latex-box-background, var(--latex-theorem-background,
-          color-mix(in srgb, var(--latex-theorem-accent, #2f6fb3) 7%, transparent))); }
-      /* A box with an accent of its own and no background: a tint of that accent. */
-      .latex-stream[data-kind="theorem"][style*="--latex-box-accent"] {
-        background: var(--latex-box-background,
-          color-mix(in srgb, var(--latex-box-accent) 7%, transparent)); }
-      .latex-stream[data-kind="proof"] {
-        border-inline-start-color: var(--latex-box-accent, var(--latex-proof-accent, #8a8f98));
-        background: var(--latex-box-background,
-          color-mix(in srgb, var(--latex-box-accent, var(--latex-proof-accent, #8a8f98)) 6%, transparent)); }
       /* Margin notes (placeMarginNotes): the layer is the block's, the notes
          beside it; where there is no room, a mark in the text opens one. */
       .latex-margin { position: absolute; left: 0; top: 0; width: 0; height: 0; }
@@ -4643,15 +4561,6 @@
       .latex-margin-mark[hidden], .latex-margin-note[hidden] { display: none; }
       @media print {
         .latex-margin { display: none; }
-        .latex-stream[data-kind="hint"] > * { filter: none; }
-        .latex-stream[data-kind="hint"]::after { content: none; }
-      }
-      .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"]:not(.latex-pane-active) {
-        display: none; }
-      @media print {
-        .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"] { display: none; }
-        .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"].latex-pane-print {
-          display: block; }
         /* Controls do nothing on paper. More specific than the page's
            .latex-block svg .latex-link colour rule, which is also !important. */
         .latex-block svg .latex-link.latex-action { fill: transparent !important; }

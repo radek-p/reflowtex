@@ -3,18 +3,19 @@
 import { createContext } from 'preact';
 import { useContext, useLayoutEffect, useRef } from 'preact/hooks';
 import { signal, type Signal } from '@preact/signals';
-import type { BlockHost, Instance } from './host.ts';
+import type { Action, BlockHost, Instance, PieceHost } from './host.ts';
 
 export interface InstanceScope {
     instance: Instance;
-    /** Present when the instance is a block drawn in the flow (defineBlock). */
-    host?: BlockHost;
+    /** Where it is drawn: a block in the flow or a margin note (define), or
+     *  one piece of an inline widget (defineInline). */
+    host?: BlockHost | PieceHost;
 }
 export const InstanceContext = createContext<InstanceScope | null>(null);
 
 function scope(hook: string): InstanceScope {
     const s = useContext(InstanceContext);
-    if (!s) throw new Error(`${hook}: only inside a component drawn by defineBlock`);
+    if (!s) throw new Error(`${hook}: only inside a component drawn by define or defineInline`);
     return s;
 }
 
@@ -24,11 +25,20 @@ export const useInstance = (): Instance => scope('useInstance').instance;
 /** The author's parameters: \begin{…}[key=value]. */
 export const useAttrs = (): Readonly<Record<string, string>> => scope('useAttrs').instance.attrs;
 
-/** Where a block instance stands in the flow (its element: host.el). */
+/** Where a block instance stands in the flow, or a margin note in the
+ *  margin (its element: host.el). */
 export function useBlockHost(): BlockHost {
-    const s = scope('useBlockHost');
-    if (!s.host) throw new Error('useBlockHost: the instance is not a block in the flow');
-    return s.host;
+    const h = scope('useBlockHost').host;
+    if (!h || h.type === 'piece') throw new Error('useBlockHost: not a block or margin note');
+    return h;
+}
+
+/** The piece of an inline widget being drawn: which part (host.piece), its
+ *  element, and the text's environment (host.env). */
+export function usePiece(): PieceHost {
+    const h = scope('usePiece').host;
+    if (!h || h.type !== 'piece') throw new Error('usePiece: not a piece of an inline widget');
+    return h;
 }
 
 // State outlives the component: the viewer may draw an instance again (a
@@ -49,28 +59,14 @@ export function useInstanceState<T>(key: string, initial: T | (() => T)): Signal
     return s;
 }
 
-/** What an action carries: \webaction{verb:argument}{text} – the verb and
- *  the rest, and the glyph the reader pressed. */
-export interface Action { verb: string; arg: string; source: Element | null }
+export type { Action };
 
-/** Handle the reader's actions of one verb from inside the instance's
- *  element (\webaction links in its typeset parts). Return false to leave
- *  one to an enclosing instance; anything else stops it here. */
+/** Handle the reader's actions of one verb (\webaction{verb:arg}{…}) pressed
+ *  in this instance's text, or in any instance inside it, wherever its parts
+ *  are shown. Return false to leave one to an enclosing instance. */
 export function useAction(verb: string, handler: (action: Action) => boolean | void): void {
-    const { host } = scope('useAction');
+    const { instance } = scope('useAction');
     const h = useRef(handler);
     h.current = handler;
-    useLayoutEffect(() => {
-        const el = host?.el;
-        if (!el) return;
-        const on = (e: Event) => {
-            const d = (e as CustomEvent).detail || {};
-            const text = String(d.action || ''), i = text.indexOf(':');
-            const action = { verb: i < 0 ? text : text.slice(0, i), arg: i < 0 ? '' : text.slice(i + 1), source: d.source || null };
-            if (action.verb !== verb) return;
-            if (h.current(action) !== false) e.stopPropagation();
-        };
-        el.addEventListener('reflowtex:action', on);
-        return () => el.removeEventListener('reflowtex:action', on);
-    }, [host, verb]);
+    useLayoutEffect(() => instance.onAction(verb, a => h.current(a)), [instance, verb]);
 }

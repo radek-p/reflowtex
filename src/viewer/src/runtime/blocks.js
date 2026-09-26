@@ -6,6 +6,7 @@ import { layoutDocument } from '../engine/layout/document.js';
 import { paintDocument } from '../engine/paint.js';
 import { announceLayout } from '../host/asides.js';
 import { rerenderSurfaces } from '../host/surface.ts';
+import { disposePieces } from '../host/inline.ts';
 import { debugLog } from './page.js';
 import { alignFromEl } from './params.js';
 import { scheduleSettle } from './settle.js';
@@ -113,6 +114,7 @@ export function rerenderBlock(el) {
     // Rebuilding makes fresh <svg>s, so stop observing the old ones (segIO would
     // otherwise hold detached elements). layoutDocument observes the new ones.
     unobserveAll(data.cache);
+    disposePieces(data.cache);
     data.cache.dom = null;
     data.cache.layout = null;
     const params = { ...data.params, align: data.lastAlign };

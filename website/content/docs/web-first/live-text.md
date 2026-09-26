@@ -37,7 +37,7 @@ const words = ['no apples at all', 'a single apple', 'two apples', 'three apples
 let n = 0;
 function show() {
   field.value = n;
-  reflowtex.setText('apples', n === 0 ? null : words[n] ?? `${n} apples`);   // null: TeX's own default
+  reflowtex.host.setText('apples', n === 0 ? null : words[n] ?? `${n} apples`);   // null: TeX's own default
 }
 stepper.addEventListener('click', e => { n = Math.max(0, n + Number(e.target.dataset.step || 0)); show(); });
 field.addEventListener('input', () => { n = Math.max(0, parseInt(field.value, 10) || 0); show(); });
@@ -95,7 +95,7 @@ field.addEventListener('input', () => { n = Math.max(0, parseInt(field.value, 10
       if (document.activeElement !== field) field.value = n;
       label.textContent = n === 1 ? 'apple' : 'apples';
       minus.disabled = n === 0;
-      if (window.reflowtex && reflowtex.setText) reflowtex.setText('apples', n === 0 ? null : (WORDS[n] || n + ' apples'));
+      if (window.reflowtex && reflowtex.host) reflowtex.host.setText('apples', n === 0 ? null : (WORDS[n] || n + ' apples'));
     }
     stepper.addEventListener('click', function (e) {
       var b = e.target.closest('[data-step]'); if (!b) return;
@@ -160,12 +160,14 @@ keeps two words together), and between its words stands the interword glue
 of that font, with the stretch and shrink \TeX{} would give it, so the line
 it lands on is justified with the rest.
 \begin{description}
-\item[\texttt{reflowtex.setText(name, text)}] shows \emph{text} in every
+\item[\texttt{reflowtex.host.setText(name, text)}] shows \emph{text} in every
   \cs{webtext} of that name, in every block of the page; several changes
   within one frame are laid out together, and only the lines around them are
-  drawn again.
-\item[\texttt{reflowtex.setText(name, null)}] brings back \TeX's default.
-\item[\texttt{reflowtex.getText(name)}] the text last given, if any.
+  drawn again. \texttt{null} brings back \TeX's default.
+\item[\texttt{instance.setText(text)}] the same for one \cs{webtext}: each
+  is an instance of kind \texttt{text}, found with
+  \texttt{reflowtex.host.instances(\{kind:~'text', name:~'apples'\})}. Its
+  own text wins over its name's.
 \end{description}
 A \cs{webtext} belongs in running text: inside a box, such as \cs{mbox}, its
 default cannot be replaced. In print it is its default, typeset as usual.

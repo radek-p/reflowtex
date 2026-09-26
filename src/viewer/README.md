@@ -244,17 +244,19 @@ becomes ready, so already-painted blocks re-lay out with it.
 `window.reflowtex.host` is what pages and packages (the companion) build on;
 its contract, with every type, is [src/host/types.ts](src/host/types.ts). It
 exists once the viewer script has run; a module that may load first waits for
-`reflowtex:host` on `document`.
+`reflowtex:host` on `document`. There is one model and one registry for
+everything a page draws:
 
 - **Blocks**: `host.blocks()`, `host.block(el)`, `host.onBlock(fn)` (now for
   each block already there, then for each new one), `block.on('layout', fn)`.
 - **Instances**: everything the companion package makes, and the footnotes
   and `\marginpar`s the pipeline makes, one instance each – `{ id, kind,
-  attrs, presentation, placement, parts, parent, children, anchor() }`.
-  `placement` is `block` (a stream in the flow), `inline` (a widget), `text`
-  (a `\webtext`) or `detached` (an aside, a footnote). Ids are stable for the
-  life of the page. Query with `host.instances(q)` / `block.instances(q)`, a
-  kind or `{ kind, placement, …attrs }`; `host.find(id)`.
+  attrs, presentation, placement, parts, parent, children, spaceBefore,
+  anchor(), onAction(), setText() }`. `placement` is `block` (a stream in the
+  flow), `inline` (a widget), `text` (a `\webtext`) or `detached` (an aside,
+  a footnote). Ids are stable for the life of the page. Query with
+  `host.instances(q)` / `block.instances(q)`, a kind or `{ kind, placement,
+  …attrs }`; `host.find(id)`.
 - **Parts**: an instance's content by role – a stream's own content is
   `body`, a Lean block's code the data part `text`. A typeset part is laid
   out into any element with `part.mount(el, { width })` – a number of px,
@@ -262,131 +264,85 @@ exists once the viewer script has run; a module that may load first waits for
   changes) – returning a surface: `metrics()`, `setWidth()`, `onChange(fn)`,
   `dispose()`. A part may be mounted in several places at once; one in a
   hidden element is painted when shown.
-- **Spacing data**: `instance.spaceBefore`, the vertical space TeX put
-  before an instance in its parent's text (px), and, for a block drawn by
-  the page, `host.spacing()`, the space the flow put above and below it as
-  last laid out.
-- **Block kinds**: `host.define(kind, { render(instance, host) })` draws
-  every block instance of a kind with the page's own code, in `host.el` – the
-  stream's element, placed in the flow with its data-* parameters, classes and
-  custom properties – typically by mounting its parts there. Called once per
-  host (not again on resize or font load); returns what undoes it. The flow
-  still spaces the element as TeX would: from its *edges*, the first and last
-  lines of the body's surface inside it by default (`host.setEdges({ top,
-  bottom })` names others, or `null` for no line of text), with no glue
-  across a framed edge where the author left explicit space
-  (`host.setFrame({ top, bottom })`). Its height is its content's: open or
-  close something and what follows moves. A kind defined late draws the
-  instances already there anew; the function `define` returns undefines it.
-  A renderer that throws leaves its instance drawn by default.
-
-The registries below (`streamKinds`, `widgets`, `marginNotes`, `asides`) are
-the previous API, kept until the companion package's second version
-replaces them.
+- **Kinds**: `host.define(kind, { render(instance, host), measure? })` says
+  how every instance of a kind is drawn, whatever its placement; it returns
+  what undefines it, and a kind defined late draws the instances already
+  there anew. `render` is called once per host, never again on relayout,
+  resize or font load, and may return what undoes it, called when the host
+  goes for good. State belongs to the instance, never to a host. A render
+  that throws leaves its instance drawn by default.
+  - *block* (`host.type === 'block'`): `host.el` is the stream's element in
+    the flow (below). The flow still spaces it as TeX would, from its
+    *edges* – the first and last lines of the body's surface inside it by
+    default; `host.setEdges({ top, bottom })` names others, or `null` for no
+    line of text – with no glue across a framed edge where the author left
+    explicit space (`host.setFrame({ top, bottom })`). Its height is its
+    content's: open or close something and what follows moves.
+    `host.spacing()` is the space the flow put above and below it.
+  - *margin* (`'margin'`): a detached instance with `place=margin`, in the
+    margin (below); `host.el` is the note.
+  - *inline* (`'piece'`): a widget; see Widgets.
+- **Actions** and **text**: see below.
 
 ## Streams
 
 A block's content can hold *streams*: separately typeset runs of paragraphs
 and displays, each with a `kind` (`Document.streams` in the schema). A
 footnote's body is one, pointed at by its marker glyph and shown in the
-footnote popover. The companion package's
-`\begin{webstream}{kind}` (see [src/latex/](../latex/)) makes one at the
-point where it stands in the flow, and the viewer mounts it as
+footnote popover. The companion package's `\begin{webstream}[key=value]{kind}`
+(see [src/latex/](../latex/)) makes one at the point where it stands in the
+flow, a block instance. Its element is
 
 ```html
-<div class="latex-stream" data-kind="KIND">
-  <div>…the stream's own segments, laid out like a block…</div>
-</div>
+<div class="latex-stream" data-kind="KIND" data-instance="ID" data-KEY="value">…</div>
 ```
 
-The stream is laid out at the box's inner width (its width minus its CSS
-padding) and re-broken whenever the block reflows. Streams nest. Segments a
-kind hides (`display: none`) are laid out but painted only once they are shown.
+with every parameter as `data-KEY`, except `class` (classes) and `--name` (a
+CSS custom property). A kind the page defines draws in it; any other kind is
+drawn by default: the stream laid out inside, like a block, at the element's
+inner width (its width minus its CSS padding), re-broken whenever the block
+reflows. Padding or a border on a side makes that side a frame, which TeX's
+interline glue does not cross where there is explicit space. Streams nest.
+The viewer sets `--latex-first-ascent` and `--latex-last-depth` on the
+element, for CSS that sizes a frame around the ink. What a kind looks like is
+CSS on `.latex-stream[data-kind=…]`; the companion package's kinds' looks are
+its stylesheet.
 
-What a kind looks like is CSS on `.latex-stream[data-kind=…]`. What it does is
-a behaviour a page registers, in a script that runs before or after the viewer:
+## Actions
 
-```js
-window.reflowtex ??= { streamKinds: {} };
-reflowtex.streamKinds.hint = {
-  mount(box, ctx) { … },   // once per box, after its first layout
-};
-```
-
-`ctx` carries `kind`, `index` (1-based, into `Document.streams`), `stream` and
-`state`. `state` is an object kept per stream for the life of the page. Boxes are
-rebuilt when web fonts arrive, so a behaviour stores what it must remember
-there and restores it in `mount`. A page's entry replaces a built-in one of the
-same name. A kind with no behaviour is still rendered, as a plain box.
-
-### Stream parameters and actions
-
-`\begin{webstream}[key=value, …]{kind}` gives a stream parameters. Each
-one is set on the box as `data-KEY="value"` and passed to `mount` as
-`ctx.attrs`. For example, an accordion's box carries `data-initial` and
-`data-print`.
-
-`\webaction{action}{text}` makes text inside a paragraph a *control*. Its
+`\webaction{verb:arg}{text}` makes text inside a paragraph a *control*. Its
 glyphs are grouped like a `\ref` and coloured with the same `.latex-link`
 rules, plus `.latex-action`. They take `role="button"` and one tab stop. A
-click, Enter or Space sends a bubbling DOM event from the glyph:
+click, Enter or Space goes to the instance whose text holds the control –
+the nearest `[data-instance]` around it, a stream's element or a surface's –
+and then outward through its parents, the tree the TeX made rather than the
+DOM, so a control in a part shown in a popover still reaches its owner. The
+first handler for the verb that does not return `false` takes it:
 
 ```js
-new CustomEvent('reflowtex:action', { bubbles: true, detail: { action, source } })
+instance.onAction('pane', ({ verb, arg, action, instance, source }) => { … });
 ```
 
-A kind listens for it on its box. It handles the actions it understands and
-calls `stopPropagation()`, so that an enclosing stream of another (or the
-same) kind does not act as well. Actions nobody handles do nothing.
-
-A kind may also declare `alternatives: true` next to `mount`. Its child
-streams then replace one another rather than follow each other, as an
-accordion's panes do. The viewer lays them out with no space between them.
-Each one gets the spacing TeX would give it if it alone stood there: the
-interline glue from the line above to its own first line, and from its own
-last line to the line below. So switching panes never moves the first
-baseline.
-
-`ctx.paint()` paints the stream's visible segments at once. Call it after
-revealing hidden content, instead of waiting for the IntersectionObserver.
-
-Built in:
-
-- **`accordion`**: shows one of its child streams of kind `pane` at a time.
-  It understands the actions `pane:next`, `pane:prev`, `pane:first`,
-  `pane:last`, `pane:NAME` (a pane's `data-name`) and `pane:N` (from 1).
-  - The current pane gets `latex-pane-active`, and the box gets
-    `data-pane` (its name or number).
-  - `data-initial` picks the first pane shown.
-  - In print only the `data-print` pane shows (default: the last), and
-    action text is transparent.
-  - When the reader switches with the keyboard, focus moves to the first
-    control of the new pane.
-  - If a switch leaves the box's top above the viewport, it is scrolled back
-    into view.
-- **`leantheorem`** / **`leanproof`** (parts `leanstatement`, `leantex`,
-  `leancode`): drawn by the companion package, not the viewer
-  ([src/companion/src/kinds/lean.tsx](../companion/src/kinds/lean.tsx)).
-  Without it, their TeX parts show as plain streams and the code does not.
-- **`footnote`**: shown in the popover from its marker, never in the flow.
+Then, handled or not, the glyph sends a bubbling DOM event for page scripts:
+`reflowtex:action`, `detail: { action, verb, arg, source, instance, handled }`.
+In print, control text is transparent.
 
 ## Live text (optional)
 
 `\webtext{name}{default}` (the companion package, `src/latex/reflowtex.sty`)
-marks a run of running text a page may replace. Every glyph and space of the
-default carries the slot's index (`Node.slot` → `Document.slots`, which also
-records the name and the interword glue of the font the default was set in).
+marks a run of running text a page may replace: a text instance. Every glyph
+and space of the default carries the slot's index (`Node.slot` →
+`Document.slots`, which also records the name and the interword glue of the
+font the default was set in).
 
 ```js
-reflowtex.setText('clock', '12:04');   // every \webtext{clock}, in every block
-reflowtex.setText('clock', null);      // TeX's default again
-reflowtex.getText('clock');            // the text last given, or undefined
+reflowtex.host.setText('clock', '12:04');   // every \webtext{clock}, in every block
+reflowtex.host.setText('clock', null);      // TeX's default again
+instance.setText('12:05');                  // one of them; wins over its name's
 ```
 
 Every glyph of a slot, TeX's default or a given text, is drawn with
-`data-slot="name"`, so a page can find where it stands
-(`document.querySelectorAll('[data-slot="clock"]')`) or style it
-(`[data-slot="clock"] { fill: … }`).
+`data-slot="name"`, so a page can find where it stands or style it.
 
 A given text is set as a browser sets it: split at breakable white space
 (not at a no-break space), each word one node measured with the canvas in the
@@ -400,28 +356,29 @@ inside a box (`\mbox`) is left as its default.
 
 ## Widgets (optional)
 
-`\webwidget[default]{name}` marks a place in running text where the page
-draws HTML. The page registers a widget under the name, or under a prefix
-ending in `*`, before or after the viewer runs:
+`\webwidget[default]{kind:key}` marks a place in running text where the page
+draws HTML: an inline instance of `kind` (with `attrs.key`). Its kind says how
+big it is and where it may break, as a word has hyphenation points, and draws
+each piece:
 
 ```js
-reflowtex.widgets['lean:*'] = {
-  measure(ctx) {           // px, at the text's size and baseline
+reflowtex.host.define('lean', {
+  measure(instance, env) {        // px, at the text's size and baseline
     return { width, height, depth,
              splits: [{ first: {width, height, depth, overhang}, second: {…}, penalty: 100 }] };
   },
-  render(el, part, ctx) {  // part: 'whole' or { split: i, piece: 'first' | 'second' }
-    el.innerHTML = …;
+  render(instance, host) {        // host.piece: 'whole' or { split: i, piece: 'first' | 'second' }
+    host.el.innerHTML = …;
+    return () => { … };           // when this piece goes for good
   },
-};
-reflowtex.refreshWidgets();  // only if registered after the viewer has run
+});
 ```
 
 For a widget that should break across any number of lines, `measure`
-describes it as segments instead, as a word with hyphenation points:
+describes it as segments instead:
 
 ```js
-measure(ctx) {
+measure(instance, env) {
   return {
     segments: [{ width, height, depth }, …],          // the content, in order
     gaps: [{ width, penalty }, …],                      // between each two: the space
@@ -430,50 +387,48 @@ measure(ctx) {
             right: { cap, cut, overhang } },
   };
 },
-render(el, part, ctx) {  // part: { from, to, left: 'cap' | 'cut', right: 'cap' | 'cut' }
-  …
-},
+render(instance, host) { … },     // host.piece: { from, to, left: 'cap' | 'cut', right: 'cap' | 'cut' }
 ```
 
 Each break point becomes a discretionary: the line before it ends with the
 right cut end, the line after starts with the left one, and unbroken it shows
-the gap. Each line's run of segments is drawn as one part.
+the gap. A split is one way to break the widget between two lines, as a hyphen
+breaks a word (a piece's optional `overhang`, in px, lets it reach past the
+margin by that much, as hanging punctuation does): the line breaker weighs
+every break (penalty 100 unless given) against the rest of the paragraph, and
+`render` is then asked for the piece on each line. `env` carries `fontSize`
+and `color` of the text around it, `measure(content)` – the width, height and
+depth of some HTML (a string, a node, or a function filling an element) set
+at that size against the baseline – and `invalidate()`, which measures again
+and re-breaks the paragraph when the widget's content changes; the pieces it
+replaces then go (their undo is called). State belongs to the instance: a
+widget broken over three lines has three hosts. Each piece is drawn in a
+`foreignObject`, its elements aligned by baseline on the line's, so it moves
+with the text on every reflow. Pointing at or pressing any piece marks every
+piece – `latex-widget-hover` and `latex-widget-active` on each
+`foreignObject` – so a split widget can be styled as one. Keep menus and
+popovers out of it: open them in the page, where nothing of the text can
+cover them.
 
-A split is one way to break the widget between two lines, as a hyphen breaks
-a word (a piece's optional `overhang`, in px, lets it reach past the margin by
-that much, as hanging punctuation does): the line breaker weighs every split (penalty 100 unless given) against
-the rest of the paragraph, and `render` is then asked for the part on each
-line. `ctx` carries `name`, `fontSize` and `color` of the text around it, a
-per-name `state` object, `measure(html)` – the width, height and depth of
-some HTML set at that size against the baseline (its elements' boxes, not
-the text around them) – and `invalidate()`, which measures again and
-re-breaks the paragraph when the widget's content changes. Each part is drawn
-in a `foreignObject`, its elements aligned by baseline on the line's, so it
-moves with the text on every reflow. Pointing at or pressing any part of a
-widget marks every part of it – `latex-widget-hover` and `latex-widget-active`
-on each part's `foreignObject` – so a split widget can be styled as one
-(`.latex-widget-hover .my-badge { … }`). Keep menus and popovers out of it: open
-them in the page (a fixed panel), where nothing of the text can cover them.
-
-## Asides (optional)
+## Asides and margin notes (optional)
 
 `\webaside[key=value]{kind}{text}` (reflowtex.sty) typesets `text` where it
-stands, in running text too, but out of the flow: the serializer files it as
-a stream of `kind`, marked `aside=true`, that nothing in the text shows. A
-page shows it where it likes. A widget gets its own block's asides as
-`ctx.asides(kind?)`, a script any block's as `reflowtex.asides(block, kind?)`:
+stands, in running text too, but out of the flow: a detached instance of
+`kind`, with a mark where it stood (`instance.anchor()`). A page shows its
+body where it likes (`part('body').mount(el)`), in several places at once if
+it likes. An aside with `for=KEY` is a part of the widget `kind:KEY` of its
+block, under its own kind as role (`\mypopover` on the website: a widget, a
+label and a note).
 
-```js
-{ kind, attrs,          // its kind and parameters (attrs.for, …)
-  width(),              // natural width in px: each paragraph on one line
-  render(el, widthPx?)  // lay out and paint in el, at widthPx or the natural
-}                       // width; returns { width, baseline } (px from el's top)
-```
-
-Every `render` is a layout of its own, so one aside may be shown in several
-places, at any width. The page Footnotes on the website builds a popover
-from a widget and two asides (`website/latex-preambles/popover.tex`,
-`website/examples/popover.js`).
+With `place=margin` (and every `\marginpar`) the viewer sets it in the right
+margin, its first baseline on the line of its mark, one pushed below another
+that would overlap; where the window leaves too little room, the note hides
+and its mark becomes a small button opening it in the footnote popover. A
+kind the page defines draws it (`host.type === 'margin'`, `host.el` the note
+at the margin's width); else its body is laid out there. A page styles notes
+by `.latex-margin-note[data-kind=…]`, and may set the margin itself, on the
+block, in px: `--latex-margin-width` (0 for marks only) and
+`--latex-margin-gap`.
 
 ## Theming (optional)
 

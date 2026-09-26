@@ -14,196 +14,15 @@ import { init } from './runtime/init.js';
 import { installHost } from './host/host.ts';
 // ── end of imports
 
-// Built-in stream kinds. What a kind *looks* like is CSS on its selector; what
-// it *does* is `mount(box, ctx)`, called once per box after its first nested
-// layout. `ctx.state` is an object that outlives the box (a font re-render
-// rebuilds the DOM), so a kind keeps anything it must remember there and
-// restores it in mount. A page adds or overrides kinds before or after this
-// script loads:
-//
-//     window.reflowtex = { streamKinds: { callout: { mount(box, ctx) { … } } } };
-//
-// A kind with no entry here is still rendered – as a plain box the page can
-// style – it just has no behaviour. (leanproof and leantheorem are drawn by the
-// companion, src/companion/src/kinds/lean.tsx.)
-export const STREAM_KINDS = {
-    // reflowtex.sty's webhint: blurred (CSS) until the reader clicks it or
-    // presses Enter/Space on it, and blurred again by the next click. Clicks
-    // on a link inside, or that end a text selection, leave it as it is. The
-    // state survives re-renders.
-    hint: {
-        mount(box, ctx) {
-            const show = on => {
-                ctx.state.revealed = on;
-                box.classList.toggle('latex-revealed', on);
-                box.setAttribute('aria-pressed', String(on));
-                box.setAttribute('aria-label', on ? 'Hint, shown: press to hide' : 'Hint, hidden: press to reveal');
-            };
-            box.setAttribute('role', 'button');
-            box.setAttribute('tabindex', '0');
-            show(!!ctx.state.revealed);
-            box.addEventListener('click', e => {
-                if (e.target.closest && e.target.closest('[data-link]')) return;
-                if (ctx.state.revealed && String(getSelection()).trim()) return;
-                show(!ctx.state.revealed);
-            });
-            box.addEventListener('keydown', e => {
-                if (e.target !== box || (e.key !== 'Enter' && e.key !== ' ')) return;
-                e.preventDefault(); show(!ctx.state.revealed);
-            });
-        },
-    },
-    // One of several panes (reflowtex.sty's accordion): the child streams of
-    // kind "pane", of which exactly one shows. The reader switches with
-    // action links inside the panes – "pane:next", "pane:prev", "pane:first",
-    // "pane:last", "pane:NAME" or "pane:NUMBER" (from 1). The hiding itself
-    // is CSS (installStreamStyles); this keeps the current pane on the box as
-    // data-pane and the pane's class latex-pane-active.
-    accordion: {
-        alternatives: true,          // panes replace one another (see layoutStreamSegment)
-        mount(box, ctx) {
-            const root = box.firstElementChild;
-            const panes = root ? [...root.children].filter(e => e.matches('.latex-stream[data-kind="pane"]')) : [];
-            if (!panes.length) return;
-            const find = t => {
-                if (t === 'first') return 0;
-                if (t === 'last')  return panes.length - 1;
-                if (t === 'next')  return Math.min(ctx.state.pane + 1, panes.length - 1);
-                if (t === 'prev')  return Math.max(ctx.state.pane - 1, 0);
-                const byName = panes.findIndex(p => p.dataset.name && p.dataset.name === t);
-                if (byName >= 0) return byName;
-                const n = parseInt(t, 10);
-                return n >= 1 && n <= panes.length ? n - 1 : -1;
-            };
-            const show = i => {
-                ctx.state.pane = i;
-                panes.forEach((p, k) => p.classList.toggle('latex-pane-active', k === i));
-                box.dataset.pane = panes[i].dataset.name || String(i + 1);
-            };
-            // What printing the page shows: the pane a PDF would (print=).
-            const printAt = find(ctx.attrs.print || 'last');
-            panes.forEach((p, k) => p.classList.toggle('latex-pane-print', k === printAt));
-            if (ctx.state.pane === undefined) {
-                const first = find(ctx.attrs.initial || '1');
-                ctx.state.pane = first >= 0 ? first : 0;
-            }
-            show(ctx.state.pane);
-            box.addEventListener('reflowtex:action', e => {
-                const m = /^pane:(.+)$/.exec(e.detail.action);
-                if (!m) return;                       // not ours: let it bubble on
-                const i = find(m[1]);
-                if (i < 0) return;
-                e.stopPropagation();                  // an outer accordion must not act too
-                // The tab stop is one glyph of the control's group, not
-                // necessarily the one that sent the event: compare groups.
-                const active = document.activeElement;
-                // Only for keyboard focus: a mouse click focuses the glyph
-                // too, and moving that would draw a focus ring nobody asked for.
-                const hadFocus = !!(active && active.dataset && e.detail.source
-                                    && active.dataset.link === e.detail.source.dataset.link
-                                    && active.matches(':focus-visible'));
-                show(i);
-                ctx.paint();
-                // Collapsing a long pane from its end would leave the reader
-                // below the accordion; bring its top back into view.
-                if (box.getBoundingClientRect().top < 0) box.scrollIntoView({ block: 'start' });
-                // Keyboard: the control just pressed is now hidden, so move
-                // focus to the first control of the pane now showing.
-                if (hadFocus) {
-                    const next = panes[i].querySelector('.latex-action[tabindex]');
-                    if (next) next.focus({ preventScroll: true });
-                }
-            });
-        },
-    },
-};
-
-// The structural CSS the built-in kinds need (hidden or shown, a pointer, a
-// disclosure marker). Appearance beyond that is the page's, on the same
-// selectors; the marker glyphs are overridable through custom properties.
+// The viewer's own styles: what it draws itself (margin notes, the unit
+// TeX's sizes are given in) and what is true of every control on paper. The
+// looks of the companion package's kinds – notes, hints, boxed theorems,
+// accordions, Lean – are the companion's (src/companion/companion.css).
 export function installStreamStyles() {
     const st = document.createElement('style');
-    // Built-in looks for reflowtex.sty's note, hint and boxed theorems. Each
-    // colour is a custom property a page (or a theme class) can set; the
-    // tints are mixed with transparent, so they sit on any page background.
-    // Boxes keep their padding small: a nested box (a claim in a proof) is
-    // narrower by exactly that much per level.
     st.textContent = `
-      /* Frames (note, hint, theorem, proof) grow outward: a top-level one
-         reaches into the margin by its padding and border
-         (--latex-outset-start/-end), so its text keeps the column's full
-         measure and lines up with the text around it. Inside another frame
-         a box is set in by the enclosing frame's padding at the start of
-         the line only (left, or right in right-to-left text), so the start
-         edges step in per level while the end edges all stand flush: each
-         frame hands its end padding to what it holds (--latex-enclosing-end)
-         and a frame inside takes it back as a negative margin. A stream
-         with no padding (a pane) passes it on unchanged. The outsets do not
-         inherit, so a stream inside a frame has none. A page's own framed
-         kind can set the same variables (--latex-outset-l/-r, the earlier
-         names, still work). All sides are logical, for right-to-left text. */
-      :where(.latex-stream) { --latex-outset-start: initial; --latex-outset-end: initial;
-                              --latex-outset-l: initial; --latex-outset-r: initial; }
-      .latex-stream {
-        margin-inline-start: calc(-1 * var(--latex-outset-start, var(--latex-outset-l, 0px)));
-        margin-inline-end: calc(-1 * var(--latex-outset-end, var(--latex-outset-r, 0px))); }
-      :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"]) .latex-stream {
-        margin-inline-start: 0; margin-inline-end: 0; }
-      :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-          .latex-stream[data-kind="note"]) > * {
-        --latex-enclosing-end: var(--latex-pad-end, 0px); }
-      :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-          .latex-stream[data-kind="note"], .latex-stream[data-kind="hint"])
-        :is(.latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"],
-            .latex-stream[data-kind="note"]) {
-        margin-inline-end: calc(-1 * var(--latex-enclosing-end, 0px)); }
-      .latex-stream[data-kind="note"] {
-        --latex-outset-start: calc(1rem + 3px); --latex-outset-end: 1rem; --latex-pad-end: 1rem;
-        padding-block: .6rem; padding-inline: 1rem var(--latex-pad-end);
-        border-inline-start: 3px solid var(--latex-note-accent, #2f6fb3);
-        background: color-mix(in srgb, var(--latex-note-accent, #2f6fb3) 8%, transparent); }
-      /* The hint's content is blurred, not the box, so a label can sit
-         sharp over it while it is hidden (--latex-hint-label, a string). */
-      .latex-stream[data-kind="hint"] { position: relative; cursor: pointer; }
-      .latex-stream[data-kind="hint"] > * { filter: blur(5px); transition: filter .2s; }
-      .latex-stream[data-kind="hint"].latex-revealed > * { filter: none; }
-      .latex-stream[data-kind="hint"]:not(.latex-revealed)::after {
-        content: var(--latex-hint-label, "Click to reveal");
-        position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
-        font: 600 .8rem/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: .01em; }
-      .latex-stream[data-kind="hint"]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-      /* Vertical padding from the content's own edges: --latex-box-space
-         (default one x-height of 10pt Latin Modern, 4.31pt) between the box
-         and the top of a capital on the first line (cap height 6.83pt), and
-         the same between the last baseline and the box. The viewer sets
-         --latex-first-ascent / --latex-last-depth on every stream box. */
+      /* One TeX point in CSS px, for styles that size by TeX's measures. */
       :root { --latex-pt: ${ZOOM}px; }
-      /* A box's colours are its own: do not inherit an enclosing box's
-         (zero specificity, so a page's rule or the box's own inline value wins). */
-      :where(.latex-stream) { --latex-box-accent: initial; --latex-box-background: initial; }
-      .latex-stream[data-kind="theorem"], .latex-stream[data-kind="proof"] {
-        --latex-outset-start: calc(.85rem + 3px); --latex-outset-end: .7rem; --latex-pad-end: .7rem;
-        --latex-box-space: calc(4.31 * var(--latex-pt));
-        --latex-cap-height: calc(6.83 * var(--latex-pt));
-        padding-block: max(2px, calc(var(--latex-box-space) + var(--latex-cap-height) - var(--latex-first-ascent, 0px)))
-                       max(2px, calc(var(--latex-box-space) - var(--latex-last-depth, 0px)));
-        padding-inline: .85rem var(--latex-pad-end);
-        /* --latex-box-accent / --latex-box-background: set per box (\DeclareWebBox
-           accent=, background=) or by a page; else the kind's defaults – a
-           page may give theorems a background of their own
-           (--latex-theorem-background), else a tint of their accent. */
-        border-inline-start: 3px solid var(--latex-box-accent, var(--latex-theorem-accent, #2f6fb3));
-        background: var(--latex-box-background, var(--latex-theorem-background,
-          color-mix(in srgb, var(--latex-theorem-accent, #2f6fb3) 7%, transparent))); }
-      /* A box with an accent of its own and no background: a tint of that accent. */
-      .latex-stream[data-kind="theorem"][style*="--latex-box-accent"] {
-        background: var(--latex-box-background,
-          color-mix(in srgb, var(--latex-box-accent) 7%, transparent)); }
-      .latex-stream[data-kind="proof"] {
-        border-inline-start-color: var(--latex-box-accent, var(--latex-proof-accent, #8a8f98));
-        background: var(--latex-box-background,
-          color-mix(in srgb, var(--latex-box-accent, var(--latex-proof-accent, #8a8f98)) 6%, transparent)); }
       /* Margin notes (placeMarginNotes): the layer is the block's, the notes
          beside it; where there is no room, a mark in the text opens one. */
       .latex-margin { position: absolute; left: 0; top: 0; width: 0; height: 0; }
@@ -216,15 +35,6 @@ export function installStreamStyles() {
       .latex-margin-mark[hidden], .latex-margin-note[hidden] { display: none; }
       @media print {
         .latex-margin { display: none; }
-        .latex-stream[data-kind="hint"] > * { filter: none; }
-        .latex-stream[data-kind="hint"]::after { content: none; }
-      }
-      .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"]:not(.latex-pane-active) {
-        display: none; }
-      @media print {
-        .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"] { display: none; }
-        .latex-stream[data-kind="accordion"] > div > .latex-stream[data-kind="pane"].latex-pane-print {
-          display: block; }
         /* Controls do nothing on paper. More specific than the page's
            .latex-block svg .latex-link colour rule, which is also !important. */
         .latex-block svg .latex-link.latex-action { fill: transparent !important; }

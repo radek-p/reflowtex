@@ -44,7 +44,7 @@ export function Typeset({ part = 'body', of, width = 'container', edge, onMetric
 
     useLayoutEffect(() => {
         const s = surface.current, host = scope?.host;
-        if (!s || !host || !edge) return;
+        if (!s || !host || host.type === 'piece' || !edge) return;
         host.setEdges(edge === 'top' ? { top: s } : edge === 'bottom' ? { bottom: s } : { top: s, bottom: s });
     }, [edge, p, width]);
 

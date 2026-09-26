@@ -14,23 +14,28 @@ latexTitle: true
   stream of that kind; parameters become \texttt{data-}\emph{key}, except
   \texttt{class} (CSS classes) and \texttt{--}\emph{name} (a CSS custom
   property); transparent in print.
-\item[\cs{webaction}\texttt{\{action\}\{text\}}] a control sending
-  \emph{action} as a \texttt{reflowtex:action} event; nothing in print.
-  (\cs{webaction}, its first name, still works.)
-\item[\cs{webwidget}\texttt{[default]\{name\}}] a place for a page's HTML
-  widget (\texttt{reflowtex.widgets[name]}), which reports its size and
-  where it may break; the line breaker may break it across lines. Nothing
-  in print, unless given a default.
+\item[\cs{webaction}\texttt{\{verb:arg\}\{text\}}] a control; pressed, it
+  goes to the innermost instance around it handling \emph{verb}
+  (\texttt{instance.onAction}, \texttt{useAction}), then outward, and
+  bubbles as a \texttt{reflowtex:action} event; nothing in print.
+\item[\cs{webwidget}\texttt{[default]\{kind:key\}}] an inline instance of
+  \emph{kind}, drawn by the kind the page defines (\texttt{defineInline},
+  or the host API's \texttt{define} with \texttt{measure}), which reports
+  its size and where it may break; the line breaker may break it across
+  lines. Nothing in print, unless given a default.
 \item[\cs{webaside}\texttt{[key=value]\{kind\}\{text\}}] text typeset
   out of the flow, in running text too, for a page to show where it likes
-  (a popover, a margin note); left out in print. A widget gets its block's
-  asides as \texttt{ctx.asides(kind)}, a script any block's as
-  \texttt{reflowtex.asides(block, kind)}: each \texttt{\{kind, attrs,
-  width(), render(el, width?)\}}, drawn at a width or on one line at its
-  natural width. Example: \cs{mypopover} on the page Footnotes.
+  (a popover, a margin note); left out in print. A detached instance:
+  \texttt{reflowtex.host.instances(\{kind, \dots\})}, its text
+  \texttt{part('body')}, drawn with \verb|<Typeset>| or
+  \texttt{part.mount(el, \{width\})}; with \texttt{place=margin} the
+  viewer sets it in the margin, drawn by its kind if the page defines one.
+  An aside with \texttt{for=}\emph{key} is a part of the widget
+  \emph{kind:key}. Example: \cs{mypopover} on the page Inline buttons.
 \item[\cs{webtext}\texttt{\{name\}\{default\}}] text a page may replace:
-  \texttt{reflowtex.setText(name, text)}, or \texttt{null} for the default
-  again; the default in print.
+  \texttt{reflowtex.host.setText(name, text)}, or one instance's
+  \texttt{setText(text)}; \texttt{null} for the default again; the
+  default in print.
 \item[\texttt{webaccordion[initial=,print=]}] one \texttt{webpane[name]}
   shown at a time.
 \item[\cs{webpanelink}, \cs{webnextpane}, \cs{webprevpane}] switch pane: a name,
@@ -49,10 +54,11 @@ latexTitle: true
   environment and \texttt{proof} boxed.
 \item[\texttt{.latex-stream[data-kind=\dots]}] a stream's element; its first
   child holds the laid-out content.
-\item[\texttt{window.reflowtex.streamKinds}] kinds a page defines:
-  \texttt{\{alternatives?, mount(box, ctx)\}}, with \texttt{ctx} holding
-  \texttt{kind}, \texttt{index}, \texttt{stream}, \texttt{attrs},
-  \texttt{state} and \texttt{paint()}.
+\item[\texttt{reflowtex.host.define(kind, \{render, measure?\})}] how a
+  kind is drawn, for every placement: a block in the flow, a note in the
+  margin, a widget's pieces. The companion package's \texttt{define} and
+  \texttt{defineInline} do it with a Preact component. The contract, with
+  every type: \texttt{src/viewer/src/host/types.ts}.
 \end{description}
 A \texttt{webstream} is block-level: it starts and ends a paragraph. A
 \cs{webaside} is not: it may stand in a sentence. The DOM contract is in \texttt{src/viewer/README.md}, section

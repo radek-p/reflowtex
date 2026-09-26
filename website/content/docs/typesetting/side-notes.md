@@ -30,8 +30,9 @@ width and its distance from the text, as this example does, with
 With the companion package, \verb|\usepackage{reflowtex}|, a side note can
 be a command of its own, drawn as the page likes. Any \cs{webaside} with the
 parameter \verb|place=margin| goes in the margin like a \verb|\marginpar|;
-the companion package's \verb|marginNote| then draws its kind with a
-component. Here \cs{mysidenote} numbers its notes, puts the number in the
+the page draws its kind with a component, as it would any other kind
+(\verb|define| in the companion package): the viewer places the note on
+its line. Here \cs{mysidenote} numbers its notes, puts the number in the
 text, and the page draws the note with the number beside it.
 {{< /latex >}}
 

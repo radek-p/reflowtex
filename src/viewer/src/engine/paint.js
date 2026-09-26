@@ -10,6 +10,7 @@ import { updateDisplayOverflowCue } from './layout/display.js';
 import { materializeSegment } from './layout/document.js';
 import { registerLinkGlyph, restoreLinkStates } from '../host/links.js';
 import { colorFill } from '../runtime/colour.js';
+import { renderPiece } from '../host/inline.ts';
 // ── end of imports
 
 // ── SVG renderer ──────────────────────────────────────────────────────────────
@@ -257,8 +258,7 @@ export function reconcileSink(byNode, used, stats, cache) {
                     // shared baseline lands on the line's
                     'display:flex;align-items:baseline;user-select:none;-webkit-user-select:none';
                 el.appendChild(box);
-                try { n.widget.render(box, n.part, n.ctx); }
-                catch (e) { console.warn(`[latex-viewer] widget ${n.ctx.name}:`, e); }
+                renderPiece(n, el, box, cache);
                 byNode.set(n, el); stats.created++;
             } else {
                 stats.repositioned++;

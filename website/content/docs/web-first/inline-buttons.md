@@ -36,9 +36,10 @@ The preamble:
 {{< source preamble="popover" >}}
 
 {{< latex preamble="webfirst" >}}
-The page's script. The widget finds the label and the note among its
-block's asides by their \verb|for=|, and draws them with the parts the
-companion package provides, written with Preact.
+The page's script. The widget is an inline instance of kind
+\texttt{popover}; its label and note, the asides with the same
+\verb|for=|, are its parts. It draws them with the parts the companion
+package provides, written with Preact.
 {{< /latex >}}
 
 {{< include file="examples/popover.js" >}}

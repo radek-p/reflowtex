@@ -19,8 +19,8 @@ PDF.
 | `\begin{webstream}{kind}` | body becomes a stream of that kind | transparent |
 | `\begin{webstream}[key=value]{kind}` | parameters become `data-key` on the stream's element | ignored |
 | `\webaction{action}{text}` | `text` is a control sending `action` to the page | nothing typeset |
-| `\webtext{name}{default}` | `default`, which a page may replace: `reflowtex.setText(name, text)` | `default` |
-| `\webwidget[default]{name}` | a page's HTML widget (`reflowtex.widgets[name]`), breakable across lines | `default`, or nothing (and no extra space) |
+| `\webtext{name}{default}` | `default`, which a page may replace: `reflowtex.host.setText(name, text)` | `default` |
+| `\webwidget[default]{kind:key}` | an inline instance the page draws (`defineInline(kind, …)` in the companion), breakable across lines | `default`, or nothing (and no extra space) |
 | `webaccordion[initial=…, print=…]` with `webpane[name]` | one pane shown at a time | only the `print=` pane (default: the last) |
 | `\webpanelink{target}{text}`, `\webnextpane[text]`, `\webprevpane[text]` | switch the enclosing accordion (target: name, number, `next`, `prev`, `first`, `last`) | nothing typeset |
 | `webnote`, `webhint` | a framed note; a hint blurred until clicked | ordinary paragraphs |

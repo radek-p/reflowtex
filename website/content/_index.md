@@ -378,7 +378,7 @@ AMS sample paper \texttt{testmath.tex}.
         var b = e.target.closest('[data-step]'); if (!b) return;
         n = Math.max(0, Math.min(99, n + Number(b.dataset.step)));
         out.textContent = n; minus.disabled = n === 0;
-        if (window.reflowtex && reflowtex.setText) reflowtex.setText('apples', n === 0 ? null : (WORDS[n] || n + ' apples'));
+        withHost(function (host) { host.setText('apples', n === 0 ? null : (WORDS[n] || n + ' apples')); });
       });
     }
     // An HTML widget: the unit, a pill with a menu. A new unit sets the
@@ -389,14 +389,19 @@ AMS sample paper \texttt{testmath.tex}.
     var CHEV = '<svg class="home-chev" style="display:inline-block" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg>';
     var esc = function (t) { return t.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); };
     var menu = null, opener = null;
+    var unit = {};                       // the widget's state: instance id → the unit chosen
+    function withHost(fn) {              // the viewer's host API, now or once it is there
+      var h = window.reflowtex && reflowtex.host;
+      if (h) fn(h); else document.addEventListener('reflowtex:host', function (e) { fn(e.detail.host); }, { once: true });
+    }
     function closeMenu() {
       if (menu) { menu.remove(); menu = null; }
       if (opener) { opener.setAttribute('aria-expanded', 'false'); opener = null; }
     }
-    function openMenu(btn, ctx) {
+    function openMenu(btn, instance, env) {
       if (menu) { var same = opener === btn; closeMenu(); if (same) return; }
       opener = btn; btn.setAttribute('aria-expanded', 'true');
-      var cur = ctx.state.unit || 0;
+      var cur = unit[instance.id] || 0;
       menu = document.createElement('div');
       menu.className = 'home-menu'; menu.setAttribute('role', 'menu');
       menu.innerHTML = UNITS.map(function (u, i) {
@@ -409,8 +414,8 @@ AMS sample paper \texttt{testmath.tex}.
       menu.style.top = (r.bottom + 6) + 'px';
       menu.addEventListener('click', function (e) {
         var b = e.target.closest('[data-i]'); if (!b) return;
-        ctx.state.unit = Number(b.dataset.i); closeMenu(); ctx.invalidate();
-        if (reflowtex.setText) reflowtex.setText('distance', UNITS[ctx.state.unit][2]);
+        unit[instance.id] = Number(b.dataset.i); closeMenu(); env.invalidate();
+        withHost(function (host) { host.setText('distance', UNITS[unit[instance.id]][2]); });
       });
       menu.addEventListener('keydown', function (e) {
         var items = [].slice.call(menu.querySelectorAll('button')), k = items.indexOf(document.activeElement);
@@ -425,30 +430,29 @@ AMS sample paper \texttt{testmath.tex}.
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && menu) { var o = opener; closeMenu(); if (o) o.focus(); } });
     window.addEventListener('scroll', closeMenu, { passive: true });
-    window.reflowtex = window.reflowtex || {};
-    reflowtex.widgets = reflowtex.widgets || {};
-    reflowtex.widgets['home:unit'] = {
-      measure: function (ctx) {
-        var words = UNITS[ctx.state.unit || 0][1].split(' ');
-        var m = function (html) { return ctx.measure('<span class="home-badge" style="padding:0">' + html + '</span>'); };
-        var space = m('a b').width - m('ab').width, pad = 0.55 * 0.72 * ctx.fontSize;
+    // \webwidget{home:unit}: an inline instance of kind "home".
+    withHost(function (host) { host.define('home', {
+      measure: function (instance, env) {
+        var words = UNITS[unit[instance.id] || 0][1].split(' ');
+        var m = function (html) { return env.measure('<span class="home-badge" style="padding:0">' + html + '</span>'); };
+        var space = m('a b').width - m('ab').width, pad = 0.55 * 0.72 * env.fontSize;
         return {
-          segments: words.map(function (w) { var r = m('<span style="white-space:pre">' + esc(w) + '</span>'); return { width: r.width, height: r.height, depth: r.depth }; }),
+          segments: words.map(function (w) { return m('<span style="white-space:pre">' + esc(w) + '</span>'); }),
           gaps: words.slice(1).map(function () { return { width: space, penalty: 100 }; }),
           // a cut end: more padding, for the perforation, which hangs past
           // the margin by 3.75px (its middle on the margin)
-          ends: { left: { cap: pad, cut: 0.75 * 0.72 * ctx.fontSize, overhang: 3.75 },
-                  right: { cap: pad + m(CHEV).width, cut: 0.75 * 0.72 * ctx.fontSize, overhang: 3.75 } },
+          ends: { left: { cap: pad, cut: 0.75 * 0.72 * env.fontSize, overhang: 3.75 },
+                  right: { cap: pad + m(CHEV).width, cut: 0.75 * 0.72 * env.fontSize, overhang: 3.75 } },
         };
       },
-      render: function (el, part, ctx) {
-        var words = UNITS[ctx.state.unit || 0][1].split(' ');
-        el.innerHTML = '<button type="button" class="home-badge' + (part.left === 'cut' ? ' cut-left' : '')
+      render: function (instance, host) {
+        var part = host.piece, u = unit[instance.id] || 0, words = UNITS[u][1].split(' ');
+        host.el.innerHTML = '<button type="button" class="home-badge' + (part.left === 'cut' ? ' cut-left' : '')
           + (part.right === 'cut' ? ' cut-right' : '') + '" aria-haspopup="menu" aria-expanded="false" aria-label="Unit: '
-          + esc(UNITS[ctx.state.unit || 0][0]) + '. Choose another">'
+          + esc(UNITS[u][0]) + '. Choose another">'
           + esc(words.slice(part.from, part.to + 1).join(' ')) + (part.right === 'cap' ? CHEV : '') + '</button>';
-        el.firstChild.addEventListener('click', function (e) { openMenu(e.currentTarget, ctx); });
+        host.el.firstChild.addEventListener('click', function (e) { openMenu(e.currentTarget, instance, host.env); });
       },
-    };
+    }); });
   })();
 </script>

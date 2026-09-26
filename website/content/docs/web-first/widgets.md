@@ -28,22 +28,23 @@ The page registers the widget. In outline (the page's source has the full
 menu):
 
 ```js
-reflowtex.widgets['lean:*'] = {
-  measure(ctx) {           // the badge as segments, with a break point between each two
+reflowtex.host.define('lean', {           // \webwidget{lean:sum_odd}: kind lean, key sum_odd
+  measure(instance, env) {  // the badge as segments, with a break point between each two
     const { segs, gaps } = segment(label());       // at spaces, and after . and _
     return {
-      segments: segs.map(t => ctx.measure(text(t))),
+      segments: segs.map(t => env.measure(text(t))),
       gaps: gaps.map(g => ({ width: g.space ? space : 0, penalty: g.space ? 100 : 300 })),
       ends: { left:  { cap: pad, cut: cutPad, overhang: 3.75 },    // closed and cut ends
               right: { cap: pad + chevron, cut: cutPad, overhang: 3.75 } },
     };
   },
-  render(el, part, ctx) {  // part: { from, to, left: 'cap' | 'cut', right: 'cap' | 'cut' }
-    el.innerHTML = badge(textOf(part.from, part.to), part.left, part.right);
-    el.querySelector('button')?.addEventListener('click', e => openMenu(e.currentTarget, ctx));
+  render(instance, host) {  // host.piece: { from, to, left: 'cap' | 'cut', right: 'cap' | 'cut' }
+    const { from, to, left, right } = host.piece;
+    host.el.innerHTML = badge(textOf(from, to), left, right);
+    host.el.querySelector('button')?.addEventListener('click', e => openMenu(e.currentTarget, host.env));
   },
-};
-// The menu's "Show the declaration" changes the label, then ctx.invalidate():
+});
+// The menu's "Show the declaration" changes the label, then env.invalidate():
 // the badge is measured again and the paragraph broken again around it.
 ```
 
@@ -155,7 +156,7 @@ reflowtex.widgets['lean:*'] = {
       if (menu) { menu.remove(); menu = null; }
       if (opener) { opener.setAttribute('aria-expanded', 'false'); opener = null; }
     }
-    function openMenu(btn, ctx) {
+    function openMenu(btn, env) {
       if (menu) { closeMenu(); return; }
       opener = btn; btn.setAttribute('aria-expanded', 'true');
       menu = document.createElement('div');
@@ -171,7 +172,7 @@ reflowtex.widgets['lean:*'] = {
       menu.style.top = (r.bottom + 6) + 'px';
       menu.addEventListener('click', function (e) {
         var b = e.target.closest('[data-act]'); if (!b) return;
-        if (b.dataset.act === 'decl') { showDecl = !showDecl; closeMenu(); ctx.invalidate(); }
+        if (b.dataset.act === 'decl') { showDecl = !showDecl; closeMenu(); env.invalidate(); }
         if (b.dataset.act === 'copy') { if (navigator.clipboard) navigator.clipboard.writeText(DECL); closeMenu(); }
       });
       menu.querySelector('button').focus();
@@ -182,15 +183,15 @@ reflowtex.widgets['lean:*'] = {
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
     window.addEventListener('scroll', closeMenu, { passive: true });
 
-    window.reflowtex = window.reflowtex || {};
-    reflowtex.widgets = reflowtex.widgets || {};
-    reflowtex.widgets['lean:*'] = {
-      measure: function (ctx) {
-        if (!ctx.state.timer) ctx.state.timer = setTimeout(function () { status = 'done'; ctx.invalidate(); }, 2500);
-        var sg = segment(label()), em = 0.6 * ctx.fontSize;       // the badge's own font size
-        var text = function (t) { return ctx.measure('<span class="lean-badge"><span style="white-space:pre">' + esc(t) + '</span></span>'); };
-        var whole = ctx.measure(badge(textOf(sg, 0, sg.segs.length - 1), 'cap', 'cap'));
-        var chevron = status === 'checking' ? 0 : ctx.measure('<span class="lean-badge">' + CHEVRON + '</span>').width;
+    // \webwidget{lean:sum_odd}: an inline instance of kind "lean".
+    var timer = null;
+    function define(host) { host.define('lean', {
+      measure: function (instance, env) {
+        if (!timer) timer = setTimeout(function () { status = 'done'; env.invalidate(); }, 2500);
+        var sg = segment(label()), em = 0.6 * env.fontSize;       // the badge's own font size
+        var text = function (t) { return env.measure('<span class="lean-badge"><span style="white-space:pre">' + esc(t) + '</span></span>'); };
+        var whole = env.measure(badge(textOf(sg, 0, sg.segs.length - 1), 'cap', 'cap'));
+        var chevron = status === 'checking' ? 0 : env.measure('<span class="lean-badge">' + CHEVRON + '</span>').width;
         var space = text('a b').width - text('ab').width;
         return {
           segments: sg.segs.map(function (t) { var m = text(t); return { width: m.width, height: whole.height, depth: whole.depth }; }),
@@ -203,14 +204,16 @@ reflowtex.widgets['lean:*'] = {
                   right: { cap: 0.6 * em + chevron, cut: 0.75 * em, overhang: 3.75 } },
         };
       },
-      render: function (el, part, ctx) {
+      render: function (instance, host) {
+        var part = host.piece;
         closeMenu();
-        el.innerHTML = badge(textOf(segment(label()), part.from, part.to), part.left, part.right);
+        host.el.innerHTML = badge(textOf(segment(label()), part.from, part.to), part.left, part.right);
         // Only the chevron opens the menu.
-        var btn = el.querySelector('button');
-        if (btn) btn.addEventListener('click', function (e) { openMenu(e.currentTarget, ctx); });
+        var btn = host.el.querySelector('button');
+        if (btn) btn.addEventListener('click', function (e) { openMenu(e.currentTarget, host.env); });
       },
-    };
-    if (reflowtex.refreshWidgets) reflowtex.refreshWidgets();
+    }); }
+    if (window.reflowtex && reflowtex.host) define(reflowtex.host);
+    else document.addEventListener('reflowtex:host', function (e) { define(e.detail.host); }, { once: true });
   })();
 </script>
