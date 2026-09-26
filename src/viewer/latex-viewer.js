@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 5943a4a776aeacefd174f9c1d92fab7afaef661c10bab5c4dbc0b00dc8dcfa16
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 fa2c29e005795b2011ad23646695f73263533430d6f92566ed6944d556c81ff9
 'use strict';
 "use strict";
 (() => {
@@ -1585,6 +1585,7 @@
 
   // src/host/surface.ts
   var live = /* @__PURE__ */ new WeakMap();
+  var all = /* @__PURE__ */ new Set();
   function edgesOf(cache) {
     const laid = cache.layout && cache.layout.laid || [];
     const first = laid[0], last = laid[laid.length - 1];
@@ -1654,6 +1655,7 @@
       let set = live.get(part.data.el);
       if (!set) live.set(part.data.el, set = /* @__PURE__ */ new Set());
       set.add(this);
+      all.add(this);
       this.apply();
     }
     part;
@@ -1726,6 +1728,10 @@
     edges() {
       return edgesOf(this.cache);
     }
+    /** Every segment, on screen or not (print). */
+    paintAll() {
+      if (!this.disposed) paintDocument(this.part.data.fontInfo, this.cache);
+    }
     get isDisposed() {
       return this.disposed;
     }
@@ -1760,12 +1766,16 @@
       this.listeners.clear();
       if (this.box.parentNode === this.el) this.el.removeChild(this.box);
       live.get(this.part.data.el)?.delete(this);
+      all.delete(this);
       surfaceHooks.changed(this);
     }
   };
   function rerenderSurfaces(blockEl) {
     for (const s of live.get(blockEl) || []) s.rerender();
   }
+  window.addEventListener("beforeprint", () => {
+    for (const s of all) s.paintAll();
+  });
 
   // src/runtime/params.js
   function alignFromEl(el) {

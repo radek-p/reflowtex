@@ -13,6 +13,7 @@ import { SP_TO_PX, ZOOM, sumWidthSp } from '../engine/core.js';
 import { layoutDocument } from '../engine/layout/document.js';
 import { NATURAL_PROBE_PT, markDirty, unobserveAll } from '../runtime/blocks.js';
 import { paintVisibleNow } from '../runtime/visibility.js';
+import { paintDocument } from '../engine/paint.js';
 import type { Doc, DocStream } from './instances.ts';
 import type { Instance, MountOptions, Surface, SurfaceMetrics, TypesetPart } from './types.ts';
 
@@ -24,8 +25,10 @@ export interface BlockData {
     params: Record<string, unknown>;
 }
 
-// Live surfaces per block element, for the font re-render (rerenderSurfaces).
+// Live surfaces per block element, for the font re-render (rerenderSurfaces),
+// and all of them, for print.
 const live = new WeakMap<HTMLElement, Set<SurfaceImpl>>();
+const all = new Set<SurfaceImpl>();
 
 /** A layout's cache, as far as the host modules use it. `blockEl` and
  *  `relayout` travel down into nested caches: the block whose instances the
@@ -112,6 +115,7 @@ export class SurfaceImpl implements Surface {
         let set = live.get(part.data.el);
         if (!set) live.set(part.data.el, set = new Set());
         set.add(this);
+        all.add(this);
         this.apply();
     }
 
@@ -170,6 +174,8 @@ export class SurfaceImpl implements Surface {
     }
 
     edges(): Edges { return edgesOf(this.cache); }
+    /** Every segment, on screen or not (print). */
+    paintAll() { if (!this.disposed) paintDocument(this.part.data.fontInfo, this.cache); }
     get isDisposed() { return this.disposed; }
 
     /** New elements for every glyph (the face that just loaded), same layout. */
@@ -196,6 +202,7 @@ export class SurfaceImpl implements Surface {
         this.listeners.clear();
         if (this.box.parentNode === this.el) this.el.removeChild(this.box);
         live.get(this.part.data.el)?.delete(this);
+        all.delete(this);
         surfaceHooks.changed(this);
     }
 }
@@ -204,3 +211,7 @@ export class SurfaceImpl implements Surface {
 export function rerenderSurfaces(blockEl: HTMLElement) {
     for (const s of live.get(blockEl) || []) s.rerender();
 }
+
+// Print needs every line of every surface (a pane not shown on screen may be
+// the one print shows), as it does the blocks' (see visibility.js).
+window.addEventListener('beforeprint', () => { for (const s of all) s.paintAll(); });

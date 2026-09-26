@@ -17,7 +17,7 @@ HTM_VERSION        = 3.1.1
 SIGNALS_VERSION    = 2.11.2
 ESBUILD_VERSION    = 0.28.2
 
-.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all test-capture test-web typecheck clean vendor-protobuf vendor-inspector build-viewer minify-viewer
+.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all test-capture test-web typecheck build-companion clean vendor-protobuf vendor-inspector build-viewer minify-viewer
 
 help:
 	@echo "Reflow TeX targets:"
@@ -38,6 +38,7 @@ help:
 	@echo "  make test-render-all  the same, with the whole-document cases (testmath)"
 	@echo "  make test-capture     the capture tests: what the serializer records of small documents (tests/capture)"
 	@echo "  make typecheck        type-check all the TypeScript: the Node side and the browser's (viewer host API, companion)"
+	@echo "  make build-companion  bundle src/companion/src/ (TypeScript) into src/companion/companion.js (maintainers)"
 	@echo "  make test-web         the web tests: the viewer, companion and Hugo integration in Chromium and WebKit (tests/web)"
 	@echo "  make vendor-inspector refresh src/inspector/vendor/preact.js (preact@$(PREACT_VERSION), htm, signals)"
 
@@ -150,6 +151,11 @@ vendor-inspector:
 # browser's (tsconfig.browser.json: the viewer's host modules, the companion).
 typecheck: node-deps
 	@npm run -s typecheck
+
+# Maintainer-only: bundle the companion's TypeScript into the committed ES
+# module src/companion/companion.js (src/companion/build.sh). Needs npm.
+build-companion:
+	@sh src/companion/build.sh
 
 # Maintainer-only: bundle the viewer's modules (src/viewer/src/) into the
 # committed classic script src/viewer/latex-viewer.js (src/viewer/build.sh),

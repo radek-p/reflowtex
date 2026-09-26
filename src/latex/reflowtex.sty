@@ -243,19 +243,29 @@
 % print= the pane a PDF shows instead (name, number, first or last; default
 % last, the fullest). On the web, printing the page also shows that pane.
 % Any content fits in a pane – a proof, displays, lists, another accordion.
+% Any other key=value goes to the stream as it is, for the page: the
+% companion's variant= (card, outline, accent), motion= (slide, fade, none),
+% class=, and CSS custom properties (--rtx-accent=#c2410c). Values are taken
+% as written (detokenized), so a colour may be #hex; none may hold a comma.
 \DeclareKeys[reflowtex/accordion]{
   initial .store = \reflowtex@acc@initial,
   print   .store = \reflowtex@acc@print,
+  unknown .code  = \reflowtex@acc@extra@add{#1},
 }
+\ExplSyntaxOn
+\cs_new_protected:Npn \reflowtex@acc@extra@add #1
+  { \tl_put_right:Ne \reflowtex@acc@extra { , \l_keys_key_str = \tl_to_str:n {#1} } }
+\ExplSyntaxOff
 \NewDocumentCommand\webpanelink{m m}{\webaction{pane:#1}{#2}}
 \NewDocumentCommand\webnextpane{O{See more}}{\webpanelink{next}{#1}}
 \NewDocumentCommand\webprevpane{O{See less}}{\webpanelink{prev}{#1}}
 \ifreflowtex
   \NewDocumentEnvironment{webaccordion}{O{}}{%
     \def\reflowtex@acc@initial{1}\def\reflowtex@acc@print{last}%
+    \let\reflowtex@acc@extra\@empty
     \SetKeys[reflowtex/accordion]{#1}%
     \begin{webstream}%
-      [initial=\reflowtex@acc@initial, print=\reflowtex@acc@print]{accordion}}%
+      [initial=\reflowtex@acc@initial, print=\reflowtex@acc@print\reflowtex@acc@extra]{accordion}}%
    {\end{webstream}}
   \NewDocumentEnvironment{webpane}{O{}}%
    {\begin{webstream}[name=#1]{pane}}%
@@ -305,6 +315,7 @@
   \NewDocumentEnvironment{webaccordion}{O{}}{%
     \par
     \def\reflowtex@acc@initial{1}\def\reflowtex@acc@print{last}%
+    \let\reflowtex@acc@extra\@empty
     \SetKeys[reflowtex/accordion]{#1}%
     \reflowtex@acc@begin}%
    {\reflowtex@acc@end\par}

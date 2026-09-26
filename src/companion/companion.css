@@ -1,13 +1,101 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
-/* reflowtex-companion (companion.js): the looks of its parts. Colours come
-   from the page's theme: --latex-page-bg, and optionally --rtx-surface (a
-   button's face) and --latex-popover-background (a panel's). */
+/* reflowtex/companion – the looks of the companion package's parts.
+
+   Three layers, each overriding the one before:
+
+   1. Tokens, on :root: the few values everything else is made of. Set them
+      on :root for the whole site, or on any element for what is inside it.
+        --rtx-accent      the colour of emphasis (an accent bar)
+        --rtx-surface     a box's fill
+        --rtx-border      a box's edge
+        --rtx-radius      corners
+        --rtx-padding     a box's inner space
+        --rtx-shadow      a card's lift
+        --rtx-duration    how long a movement takes
+        --rtx-easing      how it moves
+
+   2. Variants, from the author's LaTeX: any stream takes variant=…, and the
+      viewer puts it on the element as data-variant.
+        \begin{webaccordion}[variant=card]     a filled, lifted box
+                                  outline      a box with an edge only
+                                  accent       a bar in --rtx-accent, tinted
+      A variant reads --rtx-box-background, --rtx-box-border,
+      --rtx-box-radius, --rtx-box-padding, --rtx-box-shadow (each defaulting
+      to a token), so one kind can be restyled without touching the rest:
+        .latex-stream[data-kind="accordion"] { --rtx-box-radius: 4px; }
+      The author can do the same from LaTeX: [variant=card,
+      --rtx-accent=#c2410c, class=faq].
+
+   3. Each kind's own parts and states, below: classes rtx-…, and data-*
+      attributes for state, for CSS of one's own. */
+
+:root {
+  --rtx-accent: #3160d8;
+  --rtx-surface: color-mix(in srgb, currentColor 3.5%, transparent);
+  --rtx-border: color-mix(in srgb, currentColor 15%, transparent);
+  --rtx-radius: 12px;
+  --rtx-padding: .9em 1.15em;
+  --rtx-shadow: 0 1px 2px rgb(0 0 0 / .05), 0 8px 24px -10px rgb(0 0 0 / .16);
+  --rtx-duration: 280ms;
+  --rtx-easing: cubic-bezier(.22, .8, .26, 1);
+}
+
+/* ── Variants (any stream) ─────────────────────────────────────────────── */
+/* A variant's padding and border make the block framed: the text inside is
+   set to the narrower measure, and TeX's interline glue to the text around
+   gives way to the author's space (defineBlock's frame: 'auto'). */
+.latex-stream:is([data-variant="card"], [data-variant="outline"], [data-variant="accent"]) {
+  padding: var(--rtx-box-padding, var(--rtx-padding));
+  border-radius: var(--rtx-box-radius, var(--rtx-radius));
+  transition: background-color var(--rtx-duration) var(--rtx-easing),
+              border-color var(--rtx-duration) var(--rtx-easing),
+              box-shadow var(--rtx-duration) var(--rtx-easing);
+}
+.latex-stream[data-variant="card"] {
+  background: var(--rtx-box-background, var(--rtx-surface));
+  border: 1px solid var(--rtx-box-border, var(--rtx-border));
+  box-shadow: var(--rtx-box-shadow, var(--rtx-shadow));
+}
+.latex-stream[data-variant="outline"] {
+  border: 1px solid var(--rtx-box-border, var(--rtx-border));
+}
+.latex-stream[data-variant="accent"] {
+  background: var(--rtx-box-background, color-mix(in srgb, var(--rtx-accent) 7%, transparent));
+  border-left: 3px solid var(--rtx-accent);
+  border-radius: 0 var(--rtx-box-radius, var(--rtx-radius)) var(--rtx-box-radius, var(--rtx-radius)) 0;
+}
+
+/* ── <Typeset> ─────────────────────────────────────────────────────────── */
+.rtx-typeset > .latex-block { margin: 0; }
+
+/* ── Accordion ─────────────────────────────────────────────────────────── */
+/* .rtx-accordion[data-pane=NAME]: the pane showing.
+   .rtx-pane[data-state=open|closed|leaving][data-name=NAME]: each pane.
+   Motion: --rtx-accordion-motion (slide · fade · none), -duration, -easing;
+   or the author's motion=…. */
+.rtx-accordion { position: relative; }
+.rtx-accordion[data-animating] { overflow: clip; overflow-clip-margin: 4px; }
+/* A closed pane keeps its width (its text stays laid out, ready) but takes
+   no height and cannot be reached. */
+.rtx-pane[data-state="closed"] { height: 0; overflow: hidden; visibility: hidden; }
+/* The pane going, over the one coming, while they cross-fade. */
+.rtx-pane[data-state="leaving"] { position: absolute; inset: 0 0 auto 0; pointer-events: none; }
+
+@media print {
+  /* The pane a PDF shows (print=…), whatever is open on screen. */
+  .rtx-pane { display: none !important; }
+  .rtx-pane[data-print] { display: block !important; position: static !important; height: auto !important;
+    overflow: visible !important; visibility: visible !important; opacity: 1 !important; transform: none !important; }
+  .latex-stream[data-variant] { box-shadow: none !important; }
+}
+
+/* ── The first version's parts (legacy.ts) ─────────────────────────────── */
 .rtx-aside .latex-block { margin: 0; }
 
 /* A pill in a line of text (InlineButton). Restyle it with these, on the
    button or anything around it, or with a class of your own. */
 .rtx-button {
-  --rtx-button-face: var(--rtx-surface, var(--latex-page-bg, Canvas));
+  --rtx-button-face: var(--rtx-surface-solid, var(--latex-page-bg, Canvas));
   --rtx-button-face-on: color-mix(in srgb, currentColor 7%, var(--rtx-button-face));
   --rtx-button-edge: color-mix(in srgb, currentColor 16%, transparent);
   --rtx-button-radius: 999px;

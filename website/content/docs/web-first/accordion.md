@@ -68,6 +68,53 @@ share no factor. \webpanelink{first}{Back to the short answer}
 {{< /latex >}}
 
 {{< latex preamble="webfirst" >}}
+\section*{Looks and motion}
+Switching panes is animated: the accordion's height eases from one pane to
+the next, the old pane fades out and the new one slides in. The text after
+the accordion moves with it. Readers who ask their system for less motion
+get a plain switch.
+The look is chosen in the source. \texttt{variant=card} draws a filled box,
+\texttt{outline} a box with an edge only, and \texttt{accent} a coloured bar
+with a tint. \texttt{motion=} is \texttt{slide} (the default),
+\texttt{fade} or \texttt{none}. A CSS custom property can be set in the same
+place, such as the accent colour.
+{{< /latex >}}
+
+{{< latex preamble="webfirst" show-source="true" >}}
+\begin{webaccordion}[variant=accent, motion=fade, --rtx-accent=#c2410c]
+\begin{webpane}[question]
+\noindent\textbf{Is every even number above 2 a sum of two primes?}
+Nobody knows. \webnextpane[What is known]
+\end{webpane}
+\begin{webpane}[answer]
+\noindent\textbf{Is every even number above 2 a sum of two primes?}
+This is Goldbach's conjecture, checked by computer up to $4 \cdot 10^{18}$.
+Every odd number above 5 is a sum of three primes (Helfgott, 2013).
+\webprevpane[Less]
+\end{webpane}
+\end{webaccordion}
+{{< /latex >}}
+
+The same settings work from a stylesheet, for a whole site or one kind of
+block. The companion's stylesheet defines a few tokens that everything else
+is made of:
+
+```css
+:root {
+  --rtx-accent: #2f6fdb;          /* the accent bar */
+  --rtx-radius: 6px;              /* corners of every box */
+  --rtx-duration: 200ms;          /* every movement */
+}
+.latex-stream[data-kind="accordion"] {
+  --rtx-accordion-motion: fade;   /* slide · fade · none */
+  --rtx-box-padding: .6em 1em;    /* this kind's boxes only */
+}
+/* The pane showing, and each pane's state, are on the elements: */
+.rtx-accordion[data-pane="answer"] { … }
+.rtx-pane[data-state="open"] { … }
+```
+
+{{< latex preamble="webfirst" >}}
 \section*{In print}
 A PDF prints one pane: the last, the fullest, unless \texttt{print=} names
 another. The links are left out, but line breaks around them stay:
