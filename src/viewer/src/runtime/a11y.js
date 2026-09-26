@@ -13,12 +13,20 @@
 //   * each piece – a paragraph (data-para), a display (data-item) – is placed
 //     over its drawn lines, invisible (opacity 0), letting the pointer through;
 //   * inside a paragraph near the window, the text is rebuilt from the drawn
-//     lines: for every stretch of a line between formulas, a run of its text
-//     placed on that stretch and stretched to its drawn width; for every
-//     formula, its MathML placed and scaled onto the formula's drawn box. So
-//     each outline VoiceOver draws lies on the glyphs it stands for. (A
-//     formula broken over two lines has its MathML on its first part.)
+//     lines, as one flow of text – as an ordinary paragraph's, so VoiceOver
+//     reads it through rather than stopping, with its click, at every
+//     element: each drawn line one line of the flow (a line break after it,
+//     a line height that sets it on the drawn line, a spacer for its indent);
+//     each stretch of text a run set at the size whose text box – what
+//     VoiceOver frames – is the drawn line's height, its letters spaced to
+//     the stretch's drawn width; each formula its MathML, in a box of no
+//     height of its own, scaled onto the formula's drawn glyphs. (A formula
+//     broken over two lines has its MathML on its first part.)
 //   * a display's MathML is scaled onto the display's drawing.
+//
+// The reader chooses how formulas are read (reflowtex.setAccessibleMath,
+// remembered): as MathML – explorable; VoiceOver stops at each part – or as
+// their spoken form (the alttext the build wrote), read on with the sentence.
 //
 // Pieces far from the window keep the shipped text, sized roughly, until they
 // come near (the viewer places the layer again whenever it draws lines
@@ -28,6 +36,8 @@
 
 import { SP_TO_PX, useGlyphMetrics } from '../engine/core.js';
 import { renderNodes } from '../engine/paint.js';
+import { api } from './page.js';
+import { allData } from './block-data.js';
 
 // The layer turns into a zero-height anchor the pieces hang from; a piece is
 // placed relative to it, so the page may move the block and its layer freely.
@@ -38,11 +48,50 @@ const LINE_HEIGHT = 1.15;          // the pieces' line-height, as in PIECE
 const MIN_PX = 1;
 const FITTED   = ';overflow:hidden';
 const UNFITTED = ';overflow-x:clip;overflow-y:visible';   // no sideways page scroll from wide maths
-const LINED    = ';overflow:visible';                     // runs lie on the lines, inside the piece
+const LINED    = ';overflow:visible;font-size:0;line-height:0;white-space:nowrap';   // the runs' flow sets the lines
 // A run: placed at its stretch of a line, scaled from its natural size to it.
 const RUN = 'position:absolute;margin:0;padding:0;white-space:pre;transform-origin:0 0;display:block';
 /** Near the window: within this many window heights above or below it. */
 const NEAR = 2;
+
+// ── How formulas are read ────────────────────────────────────────────────────
+const MODE_KEY = 'reflowtex-a11y-math';
+let mode = 'mathml';
+try { if (localStorage.getItem(MODE_KEY) === 'spoken') mode = 'spoken'; } catch { /* no storage: the default */ }
+/** 'mathml' or 'spoken'. */
+export const accessibleMath = () => mode;
+/** The reader's choice, remembered; every block's layer is laid again. */
+export function setAccessibleMath(m) {
+    mode = m === 'spoken' ? 'spoken' : 'mathml';
+    try { localStorage.setItem(MODE_KEY, mode); } catch { /* not remembered */ }
+    for (const data of allData) {
+        const layer = data.el && data.el.nextElementSibling;
+        if (!layer || !layer.classList.contains('latex-a11y')) continue;
+        for (const piece of layer.children) { restore(piece); delete piece.dataset.lines; delete piece.dataset.size; }
+        placeAccessibleLayer(data);
+    }
+}
+api.accessibleMath = accessibleMath;
+api.setAccessibleMath = setAccessibleMath;
+
+const unescape = s => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+/** A formula's words: its alttext. */
+const wordsOf = mathml => { const m = /\balttext="([^"]*)"/.exec(mathml); return m ? unescape(m[1]) : ''; };
+/** A piece as shipped, before any of this changed it: kept, to lay again. */
+const shipped = new WeakMap();
+function remember(piece) { if (!shipped.has(piece)) shipped.set(piece, piece.innerHTML); }
+function restore(piece) { if (shipped.has(piece)) piece.innerHTML = shipped.get(piece); }
+/** A shipped piece in the reader's mode: spoken, each formula becomes its words. */
+function inMode(piece) {
+    remember(piece);
+    if (mode !== 'spoken') return;
+    for (const m of piece.querySelectorAll('math')) {
+        const span = document.createElement('span');
+        span.dataset.spoken = '';
+        span.textContent = m.getAttribute('alttext') || m.textContent;
+        m.replaceWith(span);
+    }
+}
 
 const maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
 
@@ -94,6 +143,7 @@ export function placeAccessibleLayer(data) {
                  lines, seg: i, a, b, ctm, display: !!piece.dataset.item };
     });
     const pieces = [...layer.children];
+    for (const piece of pieces) if (!piece.dataset.lines) inMode(piece);
     const refit = [], lined = [], scaled = [];
     const h = window.innerHeight;
     pieces.forEach((piece, k) => {
@@ -103,7 +153,7 @@ export function placeAccessibleLayer(data) {
         const box = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px`;
         // A paragraph near the window whose lines are laid out: line by line.
         if (near && p.a >= 0 && p.ctm) {
-            const key = `${Math.round(p.width)}x${Math.round(p.height)}@${p.a}-${p.b}`;
+            const key = `${Math.round(p.width)}x${Math.round(p.height)}@${p.a}-${p.b}/${mode}`;
             piece.style.cssText = box + LINED;
             if (piece.dataset.lines !== key) {
                 const runs = runsOf(data, p.seg, p.a, p.b);
@@ -113,13 +163,13 @@ export function placeAccessibleLayer(data) {
         // A display near the window: its MathML scaled onto the drawing's ink
         // (the piece spans the display's whole band; the formula is narrower).
         if (near && p.display && p.ctm) {
-            const math = piece.querySelector('math');
+            const math = piece.querySelector('math, [data-spoken]');
             const ink = math && inkOf(data, p.seg);
             if (ink) {
                 const m = p.ctm, left = m.a * ink.x0 + m.e - origin.left, top = m.d * ink.y0 + m.f - origin.top;
                 const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
-                piece.style.cssText = `${PIECE};top:${top}px;left:${left}px;width:${w}px;height:${hh}px` + LINED;
-                math.dataset.run = 'display';
+                piece.style.cssText = `${PIECE};top:${top}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
+                math.dataset.run = math.localName === 'math' ? 'display' : 'spoken';
                 math.style.display = 'inline-block';           // its own size, not the piece's width
                 scaled.push({ el: math, w, h: hh });
                 return;
@@ -135,8 +185,10 @@ export function placeAccessibleLayer(data) {
             else delete piece.dataset.size;
         }
     });
-    for (const l of lined) scaled.push(...layOutRuns(l));
+    const runs = [];
+    for (const l of lined) runs.push(...layOutRuns(l));
     fitText(refit);
+    fitRuns(runs);
     scaleOnto(scaled);
 }
 
@@ -203,7 +255,7 @@ function runsOf(data, i, a, b) {
             if (!text) {
                 if (!s.trim()) { owed = runs.length > 0 && !!runs[runs.length - 1].mathml; return; }
                 // a run starts with a space only where one is owed after a formula
-                text = { text: owed ? ' ' : '', lead: owed, x0: Infinity, x1: -Infinity, y0, y1 };
+                text = { text: owed ? ' ' : '', lead: owed, x0: Infinity, x1: -Infinity, y0, y1, line: j, ly0: y0, ly1: y1 };
             }
             owed = false;
             text.text += s;
@@ -230,7 +282,7 @@ function runsOf(data, i, a, b) {
                 // and fractions reach past the line
                 const my0 = Math.min(y0, ...mine.map(g => g.top));
                 const my1 = Math.max(y1, ...mine.map(g => g.bottom));
-                runs.push({ mathml: n.mathml, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1 });
+                runs.push({ mathml: n.mathml, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1, line: j, ly0: y0, ly1: y1 });
                 if (e >= nodes.length) inFormula = depth;    // it goes on on the next line
                 k = e;
                 continue;
@@ -273,26 +325,99 @@ function inkOf(data, i) {
     return { x0, x1, y0: L.baselineYs[0] - maxOf(L.profiles[0], 'h'), y1: L.baselineYs[last] + maxOf(L.profiles[last], 'd') };
 }
 
-/** The runs as elements in the piece, placed on their stretches of the lines
- *  (svg units → the piece's own px, through the segment's screen matrix).
- *  Returns what is to be scaled onto those stretches. */
+/** The runs as one flow of text in the piece (svg units → the piece's own
+ *  px, through the segment's screen matrix): line by line, each line set on
+ *  its drawn line by its line height (its text box's top on the drawn
+ *  line's top, the box as tall as the line), a spacer before each run that
+ *  does not start where the one before ended. Returns what is still to be
+ *  fitted: the runs' letter spacing, the formulas' scale. */
 function layOutRuns({ piece, p, runs, origin }) {
     const m = p.ctm, pieceLeft = origin.left + p.left, pieceTop = origin.top + p.top;
-    const frag = document.createDocumentFragment(), scale = [];
+    const ratio = textBoxRatio(piece.parentElement);
+    const byLine = new Map();
     for (const r of runs) {
-        const left = m.a * r.x0 + m.e - pieceLeft, top = m.d * r.y0 + m.f - pieceTop;
-        const w = Math.max(1, m.a * (r.x1 - r.x0)), h = Math.max(1, m.d * (r.y1 - r.y0));
-        const span = document.createElement('span');
-        span.dataset.run = r.mathml ? 'math' : 'text';
-        // the natural size is measured at a size near the drawn one, then scaled
-        span.style.cssText = `${RUN};left:${left}px;top:${top}px;font-size:${h / LINE_HEIGHT}px;line-height:${h}px`;
-        if (r.mathml) span.innerHTML = r.mathml;
-        else span.textContent = r.text;
-        frag.appendChild(span);
-        scale.push({ el: span, w, h });
+        if (!byLine.has(r.line)) byLine.set(r.line, { y0: r.ly0, y1: r.ly1, runs: [] });
+        byLine.get(r.line).runs.push(r);
+    }
+    const frag = document.createDocumentFragment(), fit = [];
+    const spacer = d => {
+        const sp = document.createElement('span');
+        sp.setAttribute('aria-hidden', 'true');
+        sp.style.cssText = d >= 0 ? `display:inline-block;width:${d}px;height:0` : `display:inline-block;width:0;height:0;margin-right:${d}px`;
+        frag.appendChild(sp);
+    };
+    let flowTop = 0, first = true;
+    for (const ln of byLine.values()) {
+        if (!first) frag.appendChild(document.createElement('br'));
+        first = false;
+        const top = m.d * ln.y0 + m.f - pieceTop, c = Math.max(1, m.d * (ln.y1 - ln.y0));
+        // the line box's height: its text box (c, centred in it) lands on top
+        const lh = Math.max(0, 2 * (top - flowTop) + c), lineTop = flowTop;
+        flowTop += lh;
+        let x = 0;
+        for (const r of ln.runs) {
+            const left = m.a * r.x0 + m.e - pieceLeft, w = Math.max(1, m.a * (r.x1 - r.x0));
+            if (Math.abs(left - x) > 0.25) spacer(left - x);
+            if (r.mathml && mode === 'mathml') {
+                // a box as wide as the formula and of no height (so no line
+                // grows), the MathML in it on the formula's own glyphs
+                const box = document.createElement('span');
+                box.style.cssText = `display:inline-block;position:relative;width:${w}px;height:0;vertical-align:top`;
+                box.innerHTML = r.mathml;
+                const math = box.firstElementChild;
+                math.dataset.run = 'math';
+                // (its own size: the flow around it has none)
+                math.style.cssText = `position:absolute;left:0;top:${m.d * r.y0 + m.f - pieceTop - lineTop}px;display:inline-block;transform-origin:0 0;font-size:${c / ratio}px;line-height:normal;white-space:nowrap`;
+                frag.appendChild(box);
+                fit.push({ el: math, w, h: Math.max(1, m.d * (r.y1 - r.y0)), scale: true });
+            } else {
+                const span = document.createElement('span');
+                span.dataset.run = r.mathml ? 'spoken' : 'text';
+                span.textContent = r.mathml ? ` ${wordsOf(r.mathml)} `.replace(/^ /, r.lead === false ? '' : ' ') : r.text;
+                span.style.cssText = `white-space:pre;font-size:${c / ratio}px;line-height:${lh}px`;
+                frag.appendChild(span);
+                fit.push({ el: span, w });
+            }
+            x = left + w;
+        }
     }
     piece.replaceChildren(frag);
-    return scale;
+    return fit;
+}
+
+/** The text box's height for a font size of 1px, in the layer's font:
+ *  measured once per layer. */
+const ratios = new WeakMap();
+function textBoxRatio(layer) {
+    if (ratios.has(layer)) return ratios.get(layer);
+    const probe = document.createElement('span');
+    probe.textContent = 'Hxgy';
+    probe.style.cssText = 'position:absolute;font-size:100px;line-height:normal;white-space:pre;opacity:0';
+    layer.appendChild(probe);
+    const range = document.createRange();
+    range.selectNodeContents(probe);
+    const r = range.getBoundingClientRect().height / 100 || 1.2;
+    probe.remove();
+    ratios.set(layer, r);
+    return r;
+}
+
+/** The runs fitted to their stretches: a run's letters spaced so its text is
+ *  as wide as its stretch; a formula scaled onto its glyphs. All measured
+ *  first, then all set: one layout. */
+function fitRuns(items) {
+    for (const it of items) if (it.scale) it.el.style.transform = 'none'; else it.el.style.letterSpacing = '0px';
+    const sizes = items.map(({ el }) => {
+        const r = el.localName === 'math' ? el.getBoundingClientRect()
+            : (() => { const g = document.createRange(); g.selectNodeContents(el); return g.getBoundingClientRect(); })();
+        return [r.width, r.height];
+    });
+    items.forEach((it, k) => {
+        const [nw, nh] = sizes[k];
+        if (it.scale) { if (nw > 0 && nh > 0) it.el.style.transform = `scale(${it.w / nw}, ${it.h / nh})`; return; }
+        const n = [...(it.el.textContent || '')].length;
+        if (n && nw > 0) it.el.style.letterSpacing = `${(it.w - nw) / n}px`;
+    });
 }
 
 /** Each element scaled from its natural size onto w × h – all measured first,

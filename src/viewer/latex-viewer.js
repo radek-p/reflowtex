@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 73ebde6ddf4e8d02ee675d9c4b6f2cc030d4194d2b217e2da07c5cb4bbf6ba31
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 1046632d4a52e32b0bff1bec4ddae251c2f3ad5c201030b9fb2feaa89f74b3f3
 'use strict';
 "use strict";
 (() => {
@@ -2687,13 +2687,13 @@
       const a = data && firstSegmentOnScreen(data.cache, viewTop);
       if (a && (!anchor || a.top < anchor.top)) anchor = a;
     }
-    const restore = holdScrollAnchoring(scroller);
+    const restore2 = holdScrollAnchoring(scroller);
     for (const el of els) settleBlock(el);
     if (anchor) {
       const d = anchor.el.getBoundingClientRect().top - anchor.top;
       if (d) scroller.scrollTop += d;
     }
-    requestAnimationFrame(restore);
+    requestAnimationFrame(restore2);
     debugLog(`[latex-viewer] settled ${els.length} block(s) in ${(performance.now() - t0).toFixed(1)} ms`);
   }
   function settleBlock(el) {
@@ -2845,9 +2845,56 @@
   var MIN_PX = 1;
   var FITTED = ";overflow:hidden";
   var UNFITTED = ";overflow-x:clip;overflow-y:visible";
-  var LINED = ";overflow:visible";
-  var RUN = "position:absolute;margin:0;padding:0;white-space:pre;transform-origin:0 0;display:block";
+  var LINED = ";overflow:visible;font-size:0;line-height:0;white-space:nowrap";
   var NEAR = 2;
+  var MODE_KEY = "reflowtex-a11y-math";
+  var mode = "mathml";
+  try {
+    if (localStorage.getItem(MODE_KEY) === "spoken") mode = "spoken";
+  } catch {
+  }
+  var accessibleMath = () => mode;
+  function setAccessibleMath(m) {
+    mode = m === "spoken" ? "spoken" : "mathml";
+    try {
+      localStorage.setItem(MODE_KEY, mode);
+    } catch {
+    }
+    for (const data of allData) {
+      const layer = data.el && data.el.nextElementSibling;
+      if (!layer || !layer.classList.contains("latex-a11y")) continue;
+      for (const piece of layer.children) {
+        restore(piece);
+        delete piece.dataset.lines;
+        delete piece.dataset.size;
+      }
+      placeAccessibleLayer(data);
+    }
+  }
+  api.accessibleMath = accessibleMath;
+  api.setAccessibleMath = setAccessibleMath;
+  var unescape = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  var wordsOf = (mathml) => {
+    const m = /\balttext="([^"]*)"/.exec(mathml);
+    return m ? unescape(m[1]) : "";
+  };
+  var shipped = /* @__PURE__ */ new WeakMap();
+  function remember(piece) {
+    if (!shipped.has(piece)) shipped.set(piece, piece.innerHTML);
+  }
+  function restore(piece) {
+    if (shipped.has(piece)) piece.innerHTML = shipped.get(piece);
+  }
+  function inMode(piece) {
+    remember(piece);
+    if (mode !== "spoken") return;
+    for (const m of piece.querySelectorAll("math")) {
+      const span = document.createElement("span");
+      span.dataset.spoken = "";
+      span.textContent = m.getAttribute("alttext") || m.textContent;
+      m.replaceWith(span);
+    }
+  }
   var maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
   function placeAccessibleLayer(data) {
     const el = data && data.el;
@@ -2901,6 +2948,7 @@
       };
     });
     const pieces = [...layer.children];
+    for (const piece of pieces) if (!piece.dataset.lines) inMode(piece);
     const refit = [], lined = [], scaled = [];
     const h = window.innerHeight;
     pieces.forEach((piece, k) => {
@@ -2909,25 +2957,25 @@
       const near = top + p.height > -NEAR * h && top < (NEAR + 1) * h;
       const box = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px`;
       if (near && p.a >= 0 && p.ctm) {
-        const key = `${Math.round(p.width)}x${Math.round(p.height)}@${p.a}-${p.b}`;
+        const key = `${Math.round(p.width)}x${Math.round(p.height)}@${p.a}-${p.b}/${mode}`;
         piece.style.cssText = box + LINED;
         if (piece.dataset.lines !== key) {
-          const runs = runsOf(data, p.seg, p.a, p.b);
-          if (runs) {
+          const runs2 = runsOf(data, p.seg, p.a, p.b);
+          if (runs2) {
             piece.dataset.lines = key;
-            lined.push({ piece, p, runs, origin });
+            lined.push({ piece, p, runs: runs2, origin });
             return;
           }
         } else return;
       }
       if (near && p.display && p.ctm) {
-        const math = piece.querySelector("math");
+        const math = piece.querySelector("math, [data-spoken]");
         const ink = math && inkOf(data, p.seg);
         if (ink) {
           const m = p.ctm, left = m.a * ink.x0 + m.e - origin.left, top2 = m.d * ink.y0 + m.f - origin.top;
           const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
-          piece.style.cssText = `${PIECE};top:${top2}px;left:${left}px;width:${w}px;height:${hh}px` + LINED;
-          math.dataset.run = "display";
+          piece.style.cssText = `${PIECE};top:${top2}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
+          math.dataset.run = math.localName === "math" ? "display" : "spoken";
           math.style.display = "inline-block";
           scaled.push({ el: math, w, h: hh });
           return;
@@ -2945,8 +2993,10 @@
         } else delete piece.dataset.size;
       }
     });
-    for (const l of lined) scaled.push(...layOutRuns(l));
+    const runs = [];
+    for (const l of lined) runs.push(...layOutRuns(l));
     fitText(refit);
+    fitRuns(runs);
     scaleOnto(scaled);
   }
   function glyphText(cp) {
@@ -3009,7 +3059,7 @@
             owed = runs.length > 0 && !!runs[runs.length - 1].mathml;
             return;
           }
-          text = { text: owed ? " " : "", lead: owed, x0: Infinity, x1: -Infinity, y0, y1 };
+          text = { text: owed ? " " : "", lead: owed, x0: Infinity, x1: -Infinity, y0, y1, line: j, ly0: y0, ly1: y1 };
         }
         owed = false;
         text.text += s;
@@ -3037,7 +3087,7 @@
           const mine = ink.filter((g) => g.x >= start.x - 0.5 && g.x1 <= x1 + 0.5);
           const my0 = Math.min(y0, ...mine.map((g) => g.top));
           const my1 = Math.max(y1, ...mine.map((g) => g.bottom));
-          runs.push({ mathml: n.mathml, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1 });
+          runs.push({ mathml: n.mathml, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1, line: j, ly0: y0, ly1: y1 });
           if (e >= nodes.length) inFormula = depth;
           k = e;
           continue;
@@ -3089,20 +3139,87 @@
   }
   function layOutRuns({ piece, p, runs, origin }) {
     const m = p.ctm, pieceLeft = origin.left + p.left, pieceTop = origin.top + p.top;
-    const frag = document.createDocumentFragment(), scale = [];
+    const ratio = textBoxRatio(piece.parentElement);
+    const byLine = /* @__PURE__ */ new Map();
     for (const r of runs) {
-      const left = m.a * r.x0 + m.e - pieceLeft, top = m.d * r.y0 + m.f - pieceTop;
-      const w = Math.max(1, m.a * (r.x1 - r.x0)), h = Math.max(1, m.d * (r.y1 - r.y0));
-      const span = document.createElement("span");
-      span.dataset.run = r.mathml ? "math" : "text";
-      span.style.cssText = `${RUN};left:${left}px;top:${top}px;font-size:${h / LINE_HEIGHT}px;line-height:${h}px`;
-      if (r.mathml) span.innerHTML = r.mathml;
-      else span.textContent = r.text;
-      frag.appendChild(span);
-      scale.push({ el: span, w, h });
+      if (!byLine.has(r.line)) byLine.set(r.line, { y0: r.ly0, y1: r.ly1, runs: [] });
+      byLine.get(r.line).runs.push(r);
+    }
+    const frag = document.createDocumentFragment(), fit = [];
+    const spacer = (d) => {
+      const sp = document.createElement("span");
+      sp.setAttribute("aria-hidden", "true");
+      sp.style.cssText = d >= 0 ? `display:inline-block;width:${d}px;height:0` : `display:inline-block;width:0;height:0;margin-right:${d}px`;
+      frag.appendChild(sp);
+    };
+    let flowTop = 0, first = true;
+    for (const ln of byLine.values()) {
+      if (!first) frag.appendChild(document.createElement("br"));
+      first = false;
+      const top = m.d * ln.y0 + m.f - pieceTop, c = Math.max(1, m.d * (ln.y1 - ln.y0));
+      const lh = Math.max(0, 2 * (top - flowTop) + c), lineTop = flowTop;
+      flowTop += lh;
+      let x = 0;
+      for (const r of ln.runs) {
+        const left = m.a * r.x0 + m.e - pieceLeft, w = Math.max(1, m.a * (r.x1 - r.x0));
+        if (Math.abs(left - x) > 0.25) spacer(left - x);
+        if (r.mathml && mode === "mathml") {
+          const box = document.createElement("span");
+          box.style.cssText = `display:inline-block;position:relative;width:${w}px;height:0;vertical-align:top`;
+          box.innerHTML = r.mathml;
+          const math = box.firstElementChild;
+          math.dataset.run = "math";
+          math.style.cssText = `position:absolute;left:0;top:${m.d * r.y0 + m.f - pieceTop - lineTop}px;display:inline-block;transform-origin:0 0;font-size:${c / ratio}px;line-height:normal;white-space:nowrap`;
+          frag.appendChild(box);
+          fit.push({ el: math, w, h: Math.max(1, m.d * (r.y1 - r.y0)), scale: true });
+        } else {
+          const span = document.createElement("span");
+          span.dataset.run = r.mathml ? "spoken" : "text";
+          span.textContent = r.mathml ? ` ${wordsOf(r.mathml)} `.replace(/^ /, r.lead === false ? "" : " ") : r.text;
+          span.style.cssText = `white-space:pre;font-size:${c / ratio}px;line-height:${lh}px`;
+          frag.appendChild(span);
+          fit.push({ el: span, w });
+        }
+        x = left + w;
+      }
     }
     piece.replaceChildren(frag);
-    return scale;
+    return fit;
+  }
+  var ratios = /* @__PURE__ */ new WeakMap();
+  function textBoxRatio(layer) {
+    if (ratios.has(layer)) return ratios.get(layer);
+    const probe = document.createElement("span");
+    probe.textContent = "Hxgy";
+    probe.style.cssText = "position:absolute;font-size:100px;line-height:normal;white-space:pre;opacity:0";
+    layer.appendChild(probe);
+    const range = document.createRange();
+    range.selectNodeContents(probe);
+    const r = range.getBoundingClientRect().height / 100 || 1.2;
+    probe.remove();
+    ratios.set(layer, r);
+    return r;
+  }
+  function fitRuns(items) {
+    for (const it of items) if (it.scale) it.el.style.transform = "none";
+    else it.el.style.letterSpacing = "0px";
+    const sizes = items.map(({ el }) => {
+      const r = el.localName === "math" ? el.getBoundingClientRect() : (() => {
+        const g = document.createRange();
+        g.selectNodeContents(el);
+        return g.getBoundingClientRect();
+      })();
+      return [r.width, r.height];
+    });
+    items.forEach((it, k) => {
+      const [nw, nh] = sizes[k];
+      if (it.scale) {
+        if (nw > 0 && nh > 0) it.el.style.transform = `scale(${it.w / nw}, ${it.h / nh})`;
+        return;
+      }
+      const n = [...it.el.textContent || ""].length;
+      if (n && nw > 0) it.el.style.letterSpacing = `${(it.w - nw) / n}px`;
+    });
   }
   function scaleOnto(items) {
     for (const { el } of items) el.style.transform = "none";

@@ -356,6 +356,15 @@
         <button type="button" role="radio" data-w="wide" aria-checked="false">Wide</button>
       </div>
     </div>
+    <!-- Shown when the page has an accessible layer (--a11y): how a screen
+         reader is given formulas – the viewer's reflowtex.setAccessibleMath. -->
+    <div class="lt-row" id="lt-math-row" hidden>
+      <p class="lt-caption" id="lt-math-label">Formulas for screen readers</p>
+      <div class="lt-seg" role="radiogroup" aria-labelledby="lt-math-label">
+        <button type="button" role="radio" data-m="mathml" aria-checked="false" title="Explore each formula, part by part">MathML</button>
+        <button type="button" role="radio" data-m="spoken" aria-checked="false" title="Read each formula with the sentence">Spoken text</button>
+      </div>
+    </div>
     <div class="lt-row">
       <button type="button" class="lt-inspect-row" data-inspect title="The boxes and glue behind the page">
         <span>Inspect boxes and glue</span><kbd class="lt-inspect-key"></kbd>
@@ -378,6 +387,9 @@
       b.setAttribute('aria-checked', String(html.getAttribute('data-theme') === b.dataset.t)); });
     root.querySelectorAll('[data-w]').forEach(function (b) {
       b.setAttribute('aria-checked', String((html.getAttribute('data-width') || 'auto') === b.dataset.w)); });
+    var rt = window.reflowtex, math = rt && rt.accessibleMath && rt.accessibleMath();
+    document.getElementById('lt-math-row').hidden = !(math && document.querySelector('.latex-a11y'));
+    root.querySelectorAll('[data-m]').forEach(function (b) { b.setAttribute('aria-checked', String(math === b.dataset.m)); });
   }
   function open(on) {
     panel.hidden = !on;
@@ -394,6 +406,7 @@
     if (b.dataset.t) window.__setTheme(b.dataset.t);
     if (b.dataset.w) window.__setWidth(b.dataset.w);
     if (b.dataset.z) window.__zoom(b.dataset.z === 'out' ? -1 : b.dataset.z === 'in' ? 1 : 0);
+    if (b.dataset.m && window.reflowtex && window.reflowtex.setAccessibleMath) window.reflowtex.setAccessibleMath(b.dataset.m);
     sync();
   });
   sync();

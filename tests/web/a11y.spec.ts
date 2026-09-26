@@ -209,3 +209,87 @@ test('the words after a formula keep their space, and punctuation none', async (
   const last = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y [data-para]')].map(p => p.textContent).find(t => t!.startsWith('Short')));
   expect(last).toMatch(/𝑎 ends\./);
 });
+
+// VoiceOver frames the text itself – the font's box at the run's size – not
+// the run's element: so that box is what must lie on the drawn line, as tall
+// as its ink. Checked against the drawn glyphs' own font boxes (median top
+// and bottom), which reach past the ink: the run's box lies within them and
+// fills most of them.
+test('each run\'s text box lies on the drawn line, top and bottom', async ({ openPage }) => {
+  const page = await openPage('mathml', { height: 900 });
+  const off = await page.evaluate(() => {
+    const out: { text: string; above: number; below: number; fills: number }[] = [];
+    const box = (n: Node) => { const r = document.createRange(); r.selectNodeContents(n); return r.getBoundingClientRect(); };
+    for (const block of document.querySelectorAll('.latex-block[data-nodelist-b64]')) {
+      const glyphs = [...block.querySelectorAll('svg text, svg tspan')].filter(g => !g.querySelector('tspan')).map(box).filter(r => r.height > 0);
+      for (const run of block.nextElementSibling!.querySelectorAll('[data-run="text"]')) {
+        const t = box(run);
+        const mine = glyphs.filter(g => { const cx = g.left + g.width / 2, cy = g.top + g.height / 2; return cx >= t.left && cx <= t.right && cy >= t.top - 4 && cy <= t.bottom + 4; });
+        if (mine.length < 3) continue;
+        const med = (xs: number[]) => xs.sort((a, b) => a - b)[xs.length >> 1];
+        const top = med(mine.map(g => g.top)), bottom = med(mine.map(g => g.bottom));
+        out.push({ text: (run.textContent ?? '').slice(0, 25), above: top - t.top, below: t.bottom - bottom, fills: t.height / (bottom - top) });
+      }
+    }
+    return out;
+  });
+  expect(off.length).toBeGreaterThan(5);
+  for (const o of off) {
+    expect(o.above, `"${o.text}": not above the glyphs`).toBeLessThanOrEqual(1.5);
+    expect(o.below, `"${o.text}": not below the glyphs`).toBeLessThanOrEqual(1.5);
+    // (a line with no descenders, "The end.", has ink half its font box tall)
+    expect(o.fills, `"${o.text}": as tall as the ink`).toBeGreaterThan(0.45);
+  }
+});
+
+// The reader's choice (reflowtex.setAccessibleMath): formulas as MathML –
+// explorable, VoiceOver stops at each part – or as their spoken form, read on
+// with the sentence. Remembered.
+test('formulas as MathML or as spoken text, as the reader chooses', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  expect(await page.evaluate(() => (window as any).reflowtex.accessibleMath())).toBe('mathml');
+  expect(await page.locator('.latex-a11y math').count()).toBeGreaterThan(5);
+  await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('spoken'));
+  await page.waitForTimeout(200);
+  expect(await page.locator('.latex-a11y math').count()).toBe(0);
+  const tree = await page.locator('body').ariaSnapshot();
+  expect(tree).toContain('x squared plus y squared equals z squared');
+  expect(tree).not.toMatch(/- math\b/);
+  // the spoken runs lie where the formulas are drawn
+  expect(await page.locator('.latex-a11y [data-run="spoken"]').count()).toBeGreaterThan(3);
+  await page.reload();
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => (window as any).reflowtex.accessibleMath())).toBe('spoken');
+  expect(await page.locator('.latex-a11y math').count()).toBe(0);
+  await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('mathml'));
+  await page.waitForTimeout(200);
+  expect(await page.locator('.latex-a11y math').count()).toBeGreaterThan(5);
+});
+
+test('the reading options offer the choice', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  await page.locator('#lt-reader-button').click();
+  const spoken = page.locator('#lt-reader-panel [data-m="spoken"]');
+  await expect(spoken).toBeVisible();
+  await spoken.click();
+  await expect(spoken).toHaveAttribute('aria-checked', 'true');
+  expect(await page.evaluate(() => (window as any).reflowtex.accessibleMath())).toBe('spoken');
+  await page.locator('#lt-reader-panel [data-m="mathml"]').click();
+  expect(await page.evaluate(() => (window as any).reflowtex.accessibleMath())).toBe('mathml');
+});
+
+// A paragraph's text is one flow, as an ordinary paragraph's is: VoiceOver
+// reads it through, instead of stopping (with its click) at every element –
+// which a line placed on its own (position: absolute) would be.
+test('a paragraph\'s runs are one flow of text, lines broken, none placed alone', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  const r = await page.evaluate(() => {
+    const piece = document.querySelector('.latex-a11y [data-para]')!;
+    const runs = [...piece.querySelectorAll('[data-run="text"]')];
+    return { runs: runs.length, placed: runs.filter(x => getComputedStyle(x).position !== 'static').length,
+             blocks: runs.filter(x => getComputedStyle(x).display !== 'inline').length };
+  });
+  expect(r.runs).toBeGreaterThan(2);
+  expect(r.placed, 'runs placed on their own').toBe(0);
+  expect(r.blocks, 'runs that are not inline text').toBe(0);
+});
