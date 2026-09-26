@@ -319,7 +319,7 @@ input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(
 .details .a11y .mode { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; margin-bottom: 6px; }
 .details .a11y .mode button { font: inherit; font-size: 11px; background: none; border: 0; padding: 2px 8px; cursor: pointer; color: var(--muted); }
 .details .a11y .mode button[aria-pressed="true"] { background: var(--accent, #2f2ccd); color: #fff; }
-.details .a11y .piece h3 { margin: 8px 0 3px; }
+.details .a11y .piece hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
 .details .a11y .said { margin: 0; font-family: system-ui, sans-serif; font-size: 12.5px; line-height: 1.6; }
 .details .a11y .spoken { background: rgba(46,125,50,.12); border-radius: 3px; padding: 0 3px; }
 .details .a11y .mml { background: rgba(46,125,50,.08); border-radius: 3px; padding: 0 2px; }

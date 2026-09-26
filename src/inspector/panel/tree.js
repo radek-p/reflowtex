@@ -257,8 +257,8 @@ function AccessibleText({ id }) {
     const body = !a ? html`<${Muted}>…<//>`
         : !a.layer ? html`<${Muted}>This block has no accessible layer (build it with --a11y).<//>`
         : !a.pieces.length ? html`<${Muted}>Nothing in the accessible layer stands for this row.<//>`
-        : a.pieces.map((p, k) => html`<section class="piece" key=${k}>
-            <h3>${p.kind}${p.lined ? ' · laid line by line' : ''}</h3>
+        : a.pieces.map((p, k) => html`<section class="piece" key=${k} data-kind=${p.kind}>
+            ${k > 0 && html`<hr/>`}
             <p class="said">${p.parts.map((x, q) => x.type === 'text' ? html`<span key=${q}>${x.text}</span>`
                 : mode === 'spoken' ? html`<span class="spoken" key=${q} title="alttext">${x.alttext || '(no alttext)'}</span>`
                 : html`<span class="mml" key=${q} title=${x.alttext} dangerouslySetInnerHTML=${{ __html: x.mathml }}></span>`)}</p>

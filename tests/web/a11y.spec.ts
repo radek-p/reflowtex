@@ -9,8 +9,8 @@ test('every formula reaches assistive technology as MathML; the drawing does not
   const tree = await page.locator('body').ariaSnapshot();
   const maths = tree.split('\n').filter(l => /^\s*- math\b/.test(l));
   // first block: three inline formulas, the integral, the alignment (one
-  // table for its rows); second block: two inline formulas
-  expect(maths.length).toBe(7);
+  // table for its rows); second block: two inline formulas; third: one
+  expect(maths.length).toBe(8);
   expect(tree).toContain('Inline');
   expect(tree).toContain('The end.');
   expect(tree).not.toMatch(/- img\b/);            // the drawn block, glyph by glyph, is hidden
@@ -190,4 +190,22 @@ test('a display lies on its drawing, and still does after a reflow', async ({ op
       expect(Math.abs(d.h - 1), `display height at ${at}px`).toBeLessThan(0.05);
     }
   }
+});
+
+// After a formula, the text goes on as the source has it: a space where there
+// was one (" and"), none before punctuation (","). Run by run, a reader hears
+// the words joined to the formula otherwise.
+test('the words after a formula keep their space, and punctuation none', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  const after = await page.evaluate(() => {
+    const piece = document.querySelector('.latex-a11y [data-para]')!;
+    const runs = [...piece.querySelectorAll('[data-run]')];
+    return runs.map((r, k) => (k > 0 && runs[k - 1].getAttribute('data-run') === 'math' && r.getAttribute('data-run') === 'text') ? r.textContent : null)
+      .filter(t => t !== null);
+  });
+  expect(after[0], 'x²+y²=z² then " and"').toMatch(/^ and/);
+  expect(after[1], 'f:ℝ→ℝ then ","').toMatch(/^,/);
+  // the words after a formula that end their line keep it too ("Short: a ends.")
+  const last = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y [data-para]')].map(p => p.textContent).find(t => t!.startsWith('Short')));
+  expect(last).toMatch(/𝑎 ends\./);
 });

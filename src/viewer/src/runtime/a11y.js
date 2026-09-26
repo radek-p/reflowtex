@@ -173,6 +173,10 @@ function runsOf(data, i, a, b) {
     const noop = () => {};
     const runs = [];
     let inFormula = 0;                    // depth of a formula carried over from the line before
+    // A space is owed after a formula when the source had one before the next
+    // words (a glue, or a line break), and not before punctuation, which has
+    // none: a run after a formula then starts with it.
+    let owed = false;
     for (let j = a; j <= b; j++) {
         // every node's pen position and advance; every glyph's ink, up and down
         // (a formula's run spans its own glyphs: limits and fractions reach
@@ -197,9 +201,11 @@ function runsOf(data, i, a, b) {
             const p = pos.get(n);
             if (!s) return;
             if (!text) {
-                if (!s.trim()) return;                       // no run starts with a space
-                text = { text: '', x0: Infinity, x1: -Infinity, y0, y1 };
+                if (!s.trim()) { owed = runs.length > 0 && !!runs[runs.length - 1].mathml; return; }
+                // a run starts with a space only where one is owed after a formula
+                text = { text: owed ? ' ' : '', lead: owed, x0: Infinity, x1: -Infinity, y0, y1 };
             }
+            owed = false;
             text.text += s;
             if (p && s.trim()) { text.x0 = Math.min(text.x0, p.x); text.x1 = Math.max(text.x1, p.x + p.w); }
         };
@@ -220,8 +226,10 @@ function runsOf(data, i, a, b) {
                 const last = pos.get(nodes[nodes.length - 1]);
                 const x1 = end ? end.x : (last ? last.x + last.w : start.x);
                 const mine = ink.filter(g => g.x >= start.x - 0.5 && g.x1 <= x1 + 0.5);
-                const my0 = mine.length ? Math.min(...mine.map(g => g.top)) : y0;
-                const my1 = mine.length ? Math.max(...mine.map(g => g.bottom)) : y1;
+                // the line's height, as a text run has, and more where its limits
+                // and fractions reach past the line
+                const my0 = Math.min(y0, ...mine.map(g => g.top));
+                const my1 = Math.max(y1, ...mine.map(g => g.bottom));
                 runs.push({ mathml: n.mathml, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1 });
                 if (e >= nodes.length) inFormula = depth;    // it goes on on the next line
                 k = e;
@@ -237,7 +245,9 @@ function runsOf(data, i, a, b) {
             else if (n.type === 'hlist' || n.type === 'vlist') addText(textOf(n.children), n);
         }
         if (text && !text.hyphen) text.text = text.text.replace(/\s*$/, ' ');   // the line break reads as a space
-        if (text) text.text = text.text.replace(/^\s+/, '');
+        if (text) text.text = text.text.replace(/^\s+/, text.lead ? ' ' : '');
+        // a line that ends with a formula: the line break is the space owed
+        if (!text && runs.length && runs[runs.length - 1].mathml) owed = true;
         flush();
     }
     return runs;

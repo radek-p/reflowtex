@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 5694dc2299ac908a386423430625d9850e6a5998a0b1fa7439956e68ac6b53bc
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 73ebde6ddf4e8d02ee675d9c4b6f2cc030d4194d2b217e2da07c5cb4bbf6ba31
 'use strict';
 "use strict";
 (() => {
@@ -2972,6 +2972,7 @@
     };
     const runs = [];
     let inFormula = 0;
+    let owed = false;
     for (let j = a; j <= b; j++) {
       const pos = /* @__PURE__ */ new Map(), ink = [];
       const metrics = data.cache.metrics || [];
@@ -3004,9 +3005,13 @@
         const p = pos.get(n);
         if (!s) return;
         if (!text) {
-          if (!s.trim()) return;
-          text = { text: "", x0: Infinity, x1: -Infinity, y0, y1 };
+          if (!s.trim()) {
+            owed = runs.length > 0 && !!runs[runs.length - 1].mathml;
+            return;
+          }
+          text = { text: owed ? " " : "", lead: owed, x0: Infinity, x1: -Infinity, y0, y1 };
         }
+        owed = false;
         text.text += s;
         if (p && s.trim()) {
           text.x0 = Math.min(text.x0, p.x);
@@ -3030,8 +3035,8 @@
           const last = pos.get(nodes[nodes.length - 1]);
           const x1 = end ? end.x : last ? last.x + last.w : start.x;
           const mine = ink.filter((g) => g.x >= start.x - 0.5 && g.x1 <= x1 + 0.5);
-          const my0 = mine.length ? Math.min(...mine.map((g) => g.top)) : y0;
-          const my1 = mine.length ? Math.max(...mine.map((g) => g.bottom)) : y1;
+          const my0 = Math.min(y0, ...mine.map((g) => g.top));
+          const my1 = Math.max(y1, ...mine.map((g) => g.bottom));
           runs.push({ mathml: n.mathml, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1 });
           if (e >= nodes.length) inFormula = depth;
           k = e;
@@ -3046,7 +3051,8 @@
         } else if (n.type === "hlist" || n.type === "vlist") addText(textOf3(n.children), n);
       }
       if (text && !text.hyphen) text.text = text.text.replace(/\s*$/, " ");
-      if (text) text.text = text.text.replace(/^\s+/, "");
+      if (text) text.text = text.text.replace(/^\s+/, text.lead ? " " : "");
+      if (!text && runs.length && runs[runs.length - 1].mathml) owed = true;
       flush();
     }
     return runs;
