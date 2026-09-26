@@ -86,12 +86,13 @@ const IconReload = () => html`<${Svg}><path d="M15.5 10a5.5 5.5 0 1 1-1.6-3.9M15
 const Seg = ({ value, options, onChange, title }) => html`<span class="seg" role="group" aria-label=${title} title=${title}>
     ${options.map(([v, label]) => html`<button type="button" aria-pressed=${String(v === value)} onClick=${() => onChange(v)}>${label}</button>`)}</span>`;
 
-/** A threshold in pt: typed freely, applied when it is a number. */
-function Threshold({ label, value, fallback, onChange }) {
+/** An error threshold in pt: what is further off is listed and boxed. Typed
+ *  freely, applied when it is a number. */
+function Threshold({ label, what, value, fallback, onChange }) {
     const [text, setText] = useState(String(value));
     useEffect(() => setText(String(value)), [value]);
-    return html`<label class="field" title=${`${label}: boxed when off by more than this (pt); the case's ceiling is ${fallback}`}>${label}
-        <input value=${text} inputmode="decimal" onInput=${e => { setText(e.target.value); const n = Number(e.target.value); if (e.target.value !== '' && n >= 0) onChange(n); }}/>pt
+    return html`<label class="field" title=${`${what} further off than this (pt) are listed and boxed; the case's ceiling is ${fallback}`}>${label}
+        <input value=${text} inputmode="decimal" onInput=${e => { setText(e.target.value); const n = Number(e.target.value); if (e.target.value !== '' && n >= 0) onChange(n); }}/>
         ${value !== fallback ? html`<button type="button" class="reset" title="The case's ceiling" onClick=${() => onChange(fallback)}>↺</button>` : null}</label>`;
 }
 const IconLock = ({ on }) => html`<${Svg}><rect x="4.5" y="9" width="11" height="8" rx="1.5" ...${stroke}/>
@@ -399,42 +400,42 @@ function App() {
 
     return html`<div class="rep">
         <div class="bar">
-            <button class="ib" title="Previous test (←)" aria-label="Previous test" onClick=${() => go(idx - 1)}><${IconPrev}/></button>
-            <span class="pick"><select aria-label="Test" value=${r.id} onChange=${e => { location.hash = encodeURIComponent(e.target.value); }}>
-                ${results.map(x => html`<option value=${x.id}>${MARK[x.status] ?? '·'} ${x.id}</option>`)}
-            </select></span>
-            <button class="ib" title="Next test (→)" aria-label="Next test" onClick=${() => go(idx + 1)}><${IconNext}/></button>
-            <span class=${`st ${r.status}`} title=${r.known ? `known: ${r.known}` : ''}>${STATUS[r.status]}</span>
-            <span class="muted mono">${idx + 1} / ${results.length}</span>
-            <span class="sep"></span>
-            <${Threshold} label="Glyph" value=${glyphThr} fallback=${r.tolerance} onChange=${setGlyphThr}/>
-            <${Threshold} label="Rule" value=${ruleThr} fallback=${r.rule_tolerance ?? r.tolerance} onChange=${setRuleThr}/>
-            <span class="sep"></span>
-            <${Seg} title="Zoom" value=${zoom} onChange=${setZoom} options=${[['fit', 'Fit'], [1, '1×'], [2, '2×'], [4, '4×']]}/>
-            <button class=${`ib ${lock ? 'on' : ''}`} aria-pressed=${String(lock)} title=${lock ? 'Scrolling together: both sides at the same x and y' : 'Scrolling apart'}
-                aria-label="Scroll together" onClick=${() => setLock(!lock)}><${IconLock} on=${lock}/></button>
-            <span class="sep"></span>
-            <${Seg} title="The browser's side: the page itself, or the screenshot the test compared" value=${mode}
-                onChange=${setSide} options=${[['live', 'Live page'], ['snapshot', 'Snapshot']]}/>
-            <button class=${`ib text ${inspecting ? 'on' : ''}`} aria-pressed=${String(inspecting)} disabled=${!liveSrc}
-                title=${`The inspector on the reflowed page: boxes, glue, every glyph (${inspector()?.shortcut ?? 'Alt+Shift+I'})`}
-                onClick=${toggleInspector}><${IconInspect}/> Inspect</button>
-            <span class="sep"></span>
-            <${ViewMenu} theme=${theme} setTheme=${setTheme} split=${split} setSplit=${setSplit} lock=${lock} setLock=${setLock}/>
-            <span class="fill"></span>
-            <span class="muted">${Object.entries(counts).map(([k, n]) => html`<span class=${`st ${k}`} style="font-weight:400">${n}</span>`)}</span>
-            <button class="ib" title="Read the report again (after a test run)" aria-label="Reload" onClick=${load}><${IconReload}/></button>
+            <div class="group start" role="group" aria-label="Tests">
+                <button class="ib" title="Previous test (←)" aria-label="Previous test" onClick=${() => go(idx - 1)}><${IconPrev}/></button>
+                <span class="pick"><select aria-label="Test" value=${r.id} onChange=${e => { location.hash = encodeURIComponent(e.target.value); }}>
+                    ${results.map(x => html`<option value=${x.id}>${MARK[x.status] ?? '·'} ${x.id}</option>`)}
+                </select></span>
+                <button class="ib" title="Next test (→)" aria-label="Next test" onClick=${() => go(idx + 1)}><${IconNext}/></button>
+                <span class=${`st ${r.status}`} title=${r.known ? `known: ${r.known}` : ''}>${STATUS[r.status]}</span>
+                <span class="muted mono">${idx + 1} / ${results.length}</span>
+            </div>
+            <div class="group middle" role="group" aria-label="Both sides">
+                <${Seg} title="Zoom" value=${zoom} onChange=${setZoom} options=${[['fit', 'Fit'], [1, '1×'], [2, '2×'], [4, '4×']]}/>
+                <button class=${`ib ${lock ? 'on' : ''}`} aria-pressed=${String(lock)} title=${lock ? 'Scrolling together: both sides at the same x and y' : 'Scrolling apart'}
+                    aria-label="Scroll together" onClick=${() => setLock(!lock)}><${IconLock} on=${lock}/></button>
+            </div>
+            <div class="group end" role="group" aria-label="Tools">
+                <button class=${`ib text ${inspecting ? 'on' : ''}`} aria-pressed=${String(inspecting)} disabled=${!liveSrc}
+                    title=${`The inspector on the reflowed page: boxes, glue, every glyph (${inspector()?.shortcut ?? 'Alt+Shift+I'})`}
+                    onClick=${toggleInspector}><${IconInspect}/> Inspect</button>
+                <${ViewMenu} theme=${theme} setTheme=${setTheme} split=${split} setSplit=${setSplit} lock=${lock} setLock=${setLock}/>
+                <span class="sep"></span>
+                <span class="totals" title="All tests, by status">${Object.entries(counts).map(([k, n]) => html`<span class=${`st ${k}`}>${n}</span>`)}</span>
+                <button class="ib" title="Read the report again (after a test run)" aria-label="Reload" onClick=${load}><${IconReload}/></button>
+            </div>
         </div>
         ${r.problems?.length ? html`<ul class=${`problems ${r.status}`}>${r.problems.map(p => html`<li>${p}</li>`)}</ul>` : null}
         <div class="main">
             <div class="compare" ref=${compare} data-dir=${dir}>
                 <section class="side">
-                    <h2>TeX · pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></h2>
+                    <h2><span class="title">TeX · pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></span></h2>
                     ${empty ?? html`<${Pane} paneRef=${left} onScroll=${onLeft} stage=${stage}>
                         <${Sheet} src=${stripSrc} size=${stripSize} items=${items} side="strip" sel=${sel} scale=${scale}/><//>`}
                 </section>
                 <section class="side">
-                    <h2>Browser · reflowed <span class="mono">${mode === 'live' ? 'live page' : 'as the test saw it'}</span></h2>
+                    <h2><span class="title">Browser · reflowed</span>
+                        <${Seg} title="The browser's side: the page itself (the inspector works on it), or the screenshot the test compared" value=${mode}
+                            onChange=${setSide} options=${[['live', 'Live page'], ['snapshot', 'Snapshot']]}/></h2>
                     ${empty ?? html`<${Pane} paneRef=${right} onScroll=${onRight} stage=${stage}>
                         ${mode === 'live' && liveSrc
                             ? html`<${Live} key=${`${r.id}|${r.at}`} src=${liveSrc} items=${items} sel=${sel} scale=${scale} stagePt=${stagePt}
@@ -448,6 +449,11 @@ function App() {
                     <button class="ib" title="Previous (p)" aria-label="Previous mismatch" disabled=${!items.length} onClick=${() => reveal(Math.max(0, sel - 1))}><${IconUp}/></button>
                     <button class="ib" title="Next (n)" aria-label="Next mismatch" disabled=${!items.length} onClick=${() => reveal(Math.min(items.length - 1, sel + 1))}><${IconDown}/></button>
                 </h2>
+                <div class="filters" role="group" aria-label="Error thresholds">
+                    <span class="caption muted" title="What is further off is listed here and boxed on both sides; ↺ goes back to the case's ceiling">Error threshold (pt)</span>
+                    <${Threshold} label="glyph" what="Glyphs" value=${glyphThr} fallback=${r.tolerance} onChange=${setGlyphThr}/>
+                    <${Threshold} label="rule" what="Rules" value=${ruleThr} fallback=${r.rule_tolerance ?? r.tolerance} onChange=${setRuleThr}/>
+                </div>
                 <div class="rows" role="listbox" aria-label="Mismatches">
                     ${shown.map((it, i) => html`<div class=${`row ${it.allowed ? 'allowed' : ''}`} role="option" data-i=${i} aria-selected=${String(i === sel)}
                         onClick=${() => reveal(i)} title=${`y ${it.y} pt`}>
