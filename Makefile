@@ -9,7 +9,6 @@ DEMO_OUT := build/demo-site
 # Pinned version of the vendored browser runtime (src/viewer/protobuf.min.js).
 # Bump this and run `make vendor-protobuf` to update it.
 PROTOBUFJS_VERSION := 8.7.1
-TERSER_VERSION     = 5.39.0
 # The inspector panel's UI library (src/inspector/vendor/preact.js): Preact,
 # htm and Preact Signals in one ES module. Bump and run `make vendor-inspector`.
 PREACT_VERSION     = 10.29.8
@@ -170,13 +169,13 @@ build-viewer:
 # latex-viewer.js when its header records the current source's SHA-256, and
 # fall back to the source (with a warning) when it is stale – so forgetting
 # this step costs bytes, never correctness. Needs npx (Node); site builders
-# do not. terser is pinned like protobufjs above.
+# do not. The same pinned esbuild that bundles it (no second tool).
 minify-viewer:
 	@src=src/viewer/latex-viewer.js; out=src/viewer/latex-viewer.min.js; \
 	sha=$$(shasum -a 256 $$src | cut -c1-64); \
-	npx --yes terser@$(TERSER_VERSION) $$src --compress --mangle \
-	  --comments '/SPDX-License-Identifier/' -o $$out.tmp && \
-	{ printf '/* reflowtex latex-viewer.js, minified by terser@$(TERSER_VERSION); source sha256 %s */\n' "$$sha"; cat $$out.tmp; } > $$out && \
+	npx --yes esbuild@$(ESBUILD_VERSION) $$src --minify --charset=utf8 \
+	  --legal-comments=none --log-level=warning --outfile=$$out.tmp && \
+	{ printf '/* SPDX-License-Identifier: AGPL-3.0-or-later; reflowtex latex-viewer.js, minified by esbuild@$(ESBUILD_VERSION); source sha256 %s */\n' "$$sha"; cat $$out.tmp; } > $$out && \
 	rm -f $$out.tmp && \
 	echo "wrote $$out ($$(wc -c < $$src | tr -d ' ') -> $$(wc -c < $$out | tr -d ' ') bytes)"
 
