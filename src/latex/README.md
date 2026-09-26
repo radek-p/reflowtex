@@ -22,7 +22,7 @@ PDF.
 | `\webtext{name}{default}` | `default`, which a page may replace: `reflowtex.host.setText(name, text)` | `default` |
 | `\webwidget[default]{kind:key}` | an inline instance the page draws (`defineInline(kind, …)` in the companion), breakable across lines | `default`, or nothing (and no extra space) |
 | `\webpart{role}{text}` | a part of the widget before it (in text) or of the environment around it: `instance.part(role)` | nothing typeset |
-| `\webid{id}{text}`, `\webclass{classes}{text}` | the glyphs marked: `data-rtx-id`, classes; `reflowtex.host.mark(id)` | `text` |
+| `\webid{id}{text}`, `\webclass{classes}{text}` | the glyphs marked: `data-rtx-id`, classes; a band under each line (`rect.latex-mark`); `reflowtex.host.mark(id)` | `text` |
 | `\NewWebEnvironment{env}{kind}{print begin}{print end}` | `env[key=value]` is a block of `kind` | the body between the print code |
 | `\NewWebAside{\cmd}{kind}{print form}` | `\cmd[key=value]{text}` is an aside of `kind` | the print form (`#1`: the text) |
 | `webaccordion[initial=…, print=…]` with `webpane[name]` | one pane shown at a time | only the `print=` pane (default: the last) |

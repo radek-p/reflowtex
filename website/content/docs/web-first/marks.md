@@ -12,7 +12,10 @@ being defined, a step of a proof that a script points at.
 \verb|\webclass{|\emph{classes}\verb|}{|\emph{text}\verb|}| gives the text
 CSS classes, and \verb|\webid{|\emph{id}\verb|}{|\emph{text}\verb|}| names
 it. Every glyph inside carries the mark however the lines break, so a rule
-in the page's stylesheet reaches all of it. Marks nest: an inner one keeps
+in the page's stylesheet reaches all of it. Behind the text, each line of a
+mark also has a band, from its first glyph to its last, spaces included:
+it is invisible until the page gives it a colour, and makes a highlighter,
+which a link's colour cannot be mistaken for. Marks nest: an inner one keeps
 the outer classes. In print the text is simply typeset.
 {{< /latex >}}
 
@@ -23,7 +26,9 @@ are called the atoms of arithmetic.
 {{< /latex >}}
 
 ```css
-.latex-block svg .key { fill: var(--lt-primary); }
+.latex-block rect.latex-mark[data-mark~="key"] {
+  fill: color-mix(in srgb, var(--lt-primary) 18%, transparent);
+}
 ```
 
 {{< latex preamble="webfirst" >}}
@@ -39,5 +44,5 @@ for (const r of rects()) { /* one rectangle per line */ }
 ```
 
 <style>
-  .latex-block svg .key { fill: var(--lt-primary) !important; }
+  .latex-block rect.latex-mark[data-mark~="key"] { fill: color-mix(in srgb, var(--lt-primary) 18%, transparent); }
 </style>

@@ -54,6 +54,41 @@ test('a mark is styled by CSS, however the lines break', async ({ openPage }) =>
   expect(fills).toEqual(['rgb(200, 0, 0)']);
 });
 
+// A mark's band: one rect per line behind its glyphs, across the spaces
+// between its words, invisible until a page styles it – an effect other
+// than a fill, so a mark need not look like a link.
+test('a mark has a band behind it on every line', async ({ openPage }) => {
+  const page = await openPage('parts');
+  await page.locator('.latex-block[data-nodelist-b64]').first().evaluate((b: HTMLElement) => { b.style.width = '220px'; });
+  await page.waitForTimeout(400);
+  const before = await page.evaluate(() => {
+    const bands = [...document.querySelectorAll<SVGRectElement>('rect.latex-mark[data-rtx-id="key"]')];
+    return { n: bands.length, lines: reflowtex.host.mark('key').rects().length, fill: getComputedStyle(bands[0]).fill,
+             hot: document.querySelectorAll('rect.latex-mark[data-mark~="hot"]').length,
+             glyphsOnly: reflowtex.host.mark('key').elements().every((e: Element) => e.tagName === 'tspan') };
+  });
+  expect(before.n, 'one band per line').toBe(before.lines);
+  expect(before.n).toBeGreaterThan(1);
+  expect(before.fill, 'invisible unless styled').toBe('rgba(0, 0, 0, 0)');
+  expect(before.hot, 'the classes in data-mark').toBeGreaterThan(0);
+  expect(before.glyphsOnly, 'mark(id).elements() is the glyphs, not the bands').toBe(true);
+  await page.addStyleTag({ content: '.latex-block rect.latex-mark[data-rtx-id="key"] { fill: rgb(255, 230, 150); }' });
+  const r = await page.evaluate(() => {
+    // In the SVG's units, from the glyphs' own x and y (a tspan's client
+    // rect is its whole line in WebKit): the band's line is the glyphs
+    // whose baseline lies inside it.
+    const band = document.querySelector<SVGRectElement>('rect.latex-mark[data-rtx-id="key"]')!;
+    const [x, y, w, h] = ['x', 'y', 'width', 'height'].map(k => parseFloat(band.getAttribute(k)!));
+    const xs = reflowtex.host.mark('key').elements().filter((e: Element) => e.closest('svg') === band.ownerSVGElement)
+      .map((e: Element) => [parseFloat(e.getAttribute('x')!), parseFloat(e.getAttribute('y')!)]).filter(([, gy]: number[]) => gy > y && gy < y + h).map(([gx]: number[]) => gx);
+    return { fill: getComputedStyle(band).fill, under: band.ownerSVGElement!.firstElementChild!.contains(band),
+             spans: xs.length > 1 && Math.abs(x - Math.min(...xs)) < 0.01 && x + w > Math.max(...xs) };
+  });
+  expect(r.fill, 'styled by the page').toBe('rgb(255, 230, 150)');
+  expect(r.spans, 'from the first glyph on the line to the last').toBe(true);
+  expect(r.under, 'drawn first, under the text').toBe(true);
+});
+
 test('NewWebEnvironment and NewWebAside make instances', async ({ openPage }) => {
   const page = await openPage('parts');
   const r = await page.evaluate(() => {

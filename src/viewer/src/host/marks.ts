@@ -18,7 +18,8 @@ export function applyMark(el: Element, index: number, cache: { marks?: Mark[] })
 }
 
 export function markHandle(id: string): MarkHandle {
-    const elements = () => [...document.querySelectorAll(`[data-rtx-id="${CSS.escape(id)}"]`)];
+    // The glyphs; the bands behind them (paint.js, paintMarkBands) carry the id too.
+    const elements = () => [...document.querySelectorAll(`[data-rtx-id="${CSS.escape(id)}"]:not(rect.latex-mark)`)];
     return {
         id,
         elements,

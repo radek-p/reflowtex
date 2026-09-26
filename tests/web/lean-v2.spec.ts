@@ -84,7 +84,14 @@ test('side by side when wide', async ({ openPage }) => {
   await page.waitForTimeout(900);
   const g = await geometry(page, THM);
   expect([g.sameTop, g.sameHeight, g.beside]).toEqual([true, true, true]);
+  expect(await overflow(page, THM), 'the proof broken to its column, not under the code').toBe(0);
 });
+
+// How far the TeX part's glyphs reach past its right edge (0: none do).
+const overflow = (page: WebPage, sel: string) => page.evaluate(s => {
+  const part = document.querySelector(s + ' .rtx-lean-part[data-part="tex"]')!, right = part.getBoundingClientRect().right;
+  return Math.max(0, ...[...part.querySelectorAll('tspan')].map(t => Math.round(t.getBoundingClientRect().right - right)));
+}, sel);
 
 test('stacked when narrow', async ({ openPage }) => {
   const page = await openPage('lean-v2', { width: 600 });

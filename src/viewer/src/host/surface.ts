@@ -154,8 +154,10 @@ export class SurfaceImpl implements Surface {
         const px = this.measure();
         if (!force && Math.abs(px - this.px) < 0.5) return;
         this.px = px;
-        const { root } = this.part.layout(px, this.cache);
+        // The width first: a stream inside measures its box as it is laid
+        // out (layoutStreamSegment), and would take the old one.
         this.box.style.width = `${px}px`;
+        const { root } = this.part.layout(px, this.cache);
         if (root.parentNode !== this.box) this.box.replaceChildren(root);
         if (this.box.parentNode !== this.el) this.el.replaceChildren(this.box);
         markDirty(this.cache);

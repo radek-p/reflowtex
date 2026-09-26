@@ -72,6 +72,16 @@ export function reconcileSink(byNode, used, stats, cache) {
     let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
     const stack = [];
     const linkRuns = new Map();   // data-link key → { el, x0, x1, top, bottom }
+    const markRuns = new Map();   // mark index → { el, x0, x1, top, bottom }
+    const extend = (runs, key, el, x, n, y) => {
+        const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
+        const r = runs.get(key);
+        if (!r) runs.set(key, { el, x0: x, x1, top, bottom });
+        else {
+            r.x0 = Math.min(r.x0, x); r.x1 = Math.max(r.x1, x1);
+            r.top = Math.min(r.top, top); r.bottom = Math.max(r.bottom, bottom);
+        }
+    };
 
     function place(parent, last, el, isNew) {
         const expected = last ? last.nextSibling : parent.firstChild;
@@ -143,18 +153,13 @@ export function reconcileSink(byNode, used, stats, cache) {
             // The extent of each reference on this line, for its hit area
             // (see paintLinkHits). Not inside a transform: that has its own
             // coordinates.
-            if (el.dataset.link && !stack.length) {
-                const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
-                const r = linkRuns.get(el.dataset.link);
-                if (!r) linkRuns.set(el.dataset.link, { el, x0: x, x1, top, bottom });
-                else {
-                    r.x0 = Math.min(r.x0, x); r.x1 = Math.max(r.x1, x1);
-                    r.top = Math.min(r.top, top); r.bottom = Math.max(r.bottom, bottom);
-                }
-            }
+            if (el.dataset.link && !stack.length) extend(linkRuns, el.dataset.link, el, x, n, y);
+            // And of each mark, for its band (see paintMarkBands).
+            if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
         },
         // The references' extents on the line just drawn; starts afresh.
         takeLinkRuns() { const runs = [...linkRuns.values()]; linkRuns.clear(); return runs; },
+        takeMarkRuns() { const runs = [...markRuns.entries()]; markRuns.clear(); return runs; },
         // A glyph whose font could not be loaded: draw its TeX metric boxes – the
         // advance width by the height above the baseline, and by the depth below –
         // as two outlined rects, so the missing ink's place and size are visible.
@@ -510,7 +515,7 @@ export function paintSegment(fontInfo, cache, i) {
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
     const used  = new Set();
     const sink  = reconcileSink(dom.byNode, used, stats, cache);
-    const linkRuns = [];
+    const linkRuns = [], markRuns = [];
 
     // Grow/shrink the pool of per-line group pairs. Detached pairs are kept for
     // later regrowth; their stale children are swept by the live set.
@@ -541,8 +546,10 @@ export function paintSegment(fontInfo, cache, i) {
         renderNodes(fontInfo, sink, L.lines[j].nodes, x0, L.baselineYs[j],
                     fillOrder ? fillRatio : ratio, er, fillOrder || 0);
         linkRuns.push(...sink.takeLinkRuns());
+        markRuns.push(...sink.takeMarkRuns());
     }
     paintLinkHits(s, linkRuns);
+    paintMarkBands(s, markRuns, cache);
 
     // Detach this segment's elements no longer rendered (disc paths toggled off,
     // spaces consumed by new break points). They stay cached in byNode.
@@ -582,6 +589,32 @@ export function paintLinkHits(s, runs) {
         for (const k of ['link', 'linkHref', 'linkLabel', 'linkAction'])
             if (r.el.dataset[k] !== undefined) rect.dataset[k] = r.el.dataset[k];
         rect.style.cssText = 'fill:transparent;cursor:pointer';
+        return rect;
+    }));
+}
+
+// A mark's band: one rect per line it is on, from its first glyph to its
+// last and as tall as its glyphs, under the text – the spaces between its
+// words are glue, drawn as nothing, so a background on the glyphs alone
+// would break at every space. Class latex-mark, the mark's classes in
+// data-mark (not as classes: a page's rule for the glyphs, `.key { fill }`,
+// would fill the band too) and its id in data-rtx-id. Transparent (as an
+// attribute, which any CSS outranks) unless a page styles it:
+//   .latex-block rect.latex-mark[data-mark~="key"] { fill: #fde68a; }
+export function paintMarkBands(s, runs, cache) {
+    if (!runs.length && !s.bands) return;
+    if (!s.bands) {
+        s.bands = svgEl('g', { 'aria-hidden': 'true', style: 'pointer-events:none' });
+        s.svg.insertBefore(s.bands, s.svg.firstChild);
+    }
+    s.bands.replaceChildren(...runs.map(([index, r]) => {
+        const m = (cache.marks && cache.marks[index - 1]) || {};
+        const rect = svgEl('rect', { x: r.x0, y: r.top, width: Math.max(0, r.x1 - r.x0),
+                                     height: Math.max(0, r.bottom - r.top) });
+        rect.setAttribute('class', 'latex-mark');
+        if (m.classes) rect.dataset.mark = m.classes;
+        if (m.id) rect.dataset.rtxId = m.id;
+        rect.setAttribute('fill', 'transparent');     // an attribute: any page rule wins
         return rect;
     }));
 }

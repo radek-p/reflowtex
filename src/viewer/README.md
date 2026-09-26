@@ -297,6 +297,10 @@ everything a page draws:
 - **Marks**: `\webid{id}{…}` and `\webclass{classes}{…}` mark glyphs
   (`Node.mark` → `Document.marks`), drawn with `data-rtx-id` and the classes;
   `host.mark(id)` gives `{ elements(), rects() }`, one rect per drawn line.
+  Each mark also has a band on every line it is on, drawn under the text:
+  `rect.latex-mark` with the classes in `data-mark` and the id in
+  `data-rtx-id`, transparent until a page styles it (a highlighter:
+  `rect.latex-mark[data-mark~="key"] { fill: … }`).
 
 ## Streams
 

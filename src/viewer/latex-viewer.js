@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 1810fbc2c908844dff2bf6b8c66fa1b32487cf18e7eeff68b4ebf8567b888890
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 abdba2afb612799ce56f3414f7d141cc29f00732b1fd95109b3cc28ee0996159
 'use strict';
 "use strict";
 (() => {
@@ -1682,7 +1682,7 @@
     for (const c of (m.classes || "").split(/\s+/)) if (c) el.classList.add(c);
   }
   function markHandle(id) {
-    const elements = () => [...document.querySelectorAll(`[data-rtx-id="${CSS.escape(id)}"]`)];
+    const elements = () => [...document.querySelectorAll(`[data-rtx-id="${CSS.escape(id)}"]:not(rect.latex-mark)`)];
     return {
       id,
       elements,
@@ -1741,6 +1741,18 @@
     let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
     const stack = [];
     const linkRuns = /* @__PURE__ */ new Map();
+    const markRuns = /* @__PURE__ */ new Map();
+    const extend = (runs, key, el, x, n, y) => {
+      const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
+      const r = runs.get(key);
+      if (!r) runs.set(key, { el, x0: x, x1, top, bottom });
+      else {
+        r.x0 = Math.min(r.x0, x);
+        r.x1 = Math.max(r.x1, x1);
+        r.top = Math.min(r.top, top);
+        r.bottom = Math.max(r.bottom, bottom);
+      }
+    };
     function place(parent, last, el, isNew) {
       const expected = last ? last.nextSibling : parent.firstChild;
       if (el !== expected) {
@@ -1816,22 +1828,18 @@
         place(textParent, lastTspan, el, isNew);
         used.add(el);
         lastTspan = el;
-        if (el.dataset.link && !stack.length) {
-          const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
-          const r = linkRuns.get(el.dataset.link);
-          if (!r) linkRuns.set(el.dataset.link, { el, x0: x, x1, top, bottom });
-          else {
-            r.x0 = Math.min(r.x0, x);
-            r.x1 = Math.max(r.x1, x1);
-            r.top = Math.min(r.top, top);
-            r.bottom = Math.max(r.bottom, bottom);
-          }
-        }
+        if (el.dataset.link && !stack.length) extend(linkRuns, el.dataset.link, el, x, n, y);
+        if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
       },
       // The references' extents on the line just drawn; starts afresh.
       takeLinkRuns() {
         const runs = [...linkRuns.values()];
         linkRuns.clear();
+        return runs;
+      },
+      takeMarkRuns() {
+        const runs = [...markRuns.entries()];
+        markRuns.clear();
         return runs;
       },
       // A glyph whose font could not be loaded: draw its TeX metric boxes – the
@@ -2145,7 +2153,7 @@
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
     const used = /* @__PURE__ */ new Set();
     const sink = reconcileSink(dom.byNode, used, stats, cache);
-    const linkRuns = [];
+    const linkRuns = [], markRuns = [];
     while (s.pairs.length < L.lines.length) {
       const g = svgEl("g", { "aria-hidden": "true", style: "user-select:none;pointer-events:none" });
       const text = svgEl("text", {});
@@ -2178,8 +2186,10 @@
         fillOrder || 0
       );
       linkRuns.push(...sink.takeLinkRuns());
+      markRuns.push(...sink.takeMarkRuns());
     }
     paintLinkHits(s, linkRuns);
+    paintMarkBands(s, markRuns, cache);
     if (s.live) {
       for (const el of s.live) if (!used.has(el)) {
         el.remove();
@@ -2210,6 +2220,27 @@
       for (const k of ["link", "linkHref", "linkLabel", "linkAction"])
         if (r.el.dataset[k] !== void 0) rect.dataset[k] = r.el.dataset[k];
       rect.style.cssText = "fill:transparent;cursor:pointer";
+      return rect;
+    }));
+  }
+  function paintMarkBands(s, runs, cache) {
+    if (!runs.length && !s.bands) return;
+    if (!s.bands) {
+      s.bands = svgEl("g", { "aria-hidden": "true", style: "pointer-events:none" });
+      s.svg.insertBefore(s.bands, s.svg.firstChild);
+    }
+    s.bands.replaceChildren(...runs.map(([index, r]) => {
+      const m = cache.marks && cache.marks[index - 1] || {};
+      const rect = svgEl("rect", {
+        x: r.x0,
+        y: r.top,
+        width: Math.max(0, r.x1 - r.x0),
+        height: Math.max(0, r.bottom - r.top)
+      });
+      rect.setAttribute("class", "latex-mark");
+      if (m.classes) rect.dataset.mark = m.classes;
+      if (m.id) rect.dataset.rtxId = m.id;
+      rect.setAttribute("fill", "transparent");
       return rect;
     }));
   }
@@ -3892,8 +3923,8 @@
       const px = this.measure();
       if (!force && Math.abs(px - this.px) < 0.5) return;
       this.px = px;
-      const { root } = this.part.layout(px, this.cache);
       this.box.style.width = `${px}px`;
+      const { root } = this.part.layout(px, this.cache);
       if (root.parentNode !== this.box) this.box.replaceChildren(root);
       if (this.box.parentNode !== this.el) this.el.replaceChildren(this.box);
       markDirty(this.cache);
