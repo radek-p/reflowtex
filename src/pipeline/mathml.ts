@@ -19,6 +19,11 @@
 // its cells, an empty box (the strut in \big) nothing. Then what a speech
 // engine would read as noise is cleaned up. What is left of the capture's
 // bookkeeping (`mathml` table, `mathml_box`, `display_no`) is removed.
+//
+// Given a speaker (MathML → words; the pipeline's is Speech Rule Engine's
+// ClearSpeak, see speaker()), every <math> also carries its spoken form as
+// alttext: VoiceOver's "read all" skips a formula without one, and a reader
+// that does not read MathML says the words.
 import { contentItems, forEachNode, walkNodes, type ContentItem, type SerializerOutput, type TexNode } from './nodes.ts';
 
 export interface MathElement {
@@ -125,7 +130,26 @@ function formulaEnd(nodes: TexNode[], i: number): number {
   return nodes.length;
 }
 
-export function attachMathML(data: SerializerOutput): number {
+export interface AttachOptions { speak?: (mathml: string) => string }
+
+/** The pipeline's speaker: Speech Rule Engine (ClearSpeak, English), set up
+ *  once. Null when it cannot be loaded (no alttext then). */
+let speakerPromise: Promise<((mathml: string) => string) | null> | null = null;
+export function speaker(): Promise<((mathml: string) => string) | null> {
+  speakerPromise ??= (async () => {
+    try {
+      const mod = await import('speech-rule-engine');
+      const sre = ((mod as { default?: unknown }).default ?? mod) as {
+        setupEngine(o: object): Promise<void>; engineReady(): Promise<void>; toSpeech(x: string): string };
+      await sre.setupEngine({ domain: 'clearspeak', modality: 'speech', locale: 'en' });
+      await sre.engineReady();
+      return (xml: string) => { try { return sre.toSpeech(xml); } catch { return ''; } };
+    } catch { return null; }
+  })();
+  return speakerPromise;
+}
+
+export function attachMathML(data: SerializerOutput, { speak }: AttachOptions = {}): number {
   const table = data.mathml as Formula[] | undefined;
   delete data.mathml;
   const boxes = new Map<number, TexNode>();
@@ -198,7 +222,10 @@ export function attachMathML(data: SerializerOutput): number {
     const c = tree === null ? null : cleanup(tree);
     if (textOnly(c)) return undefined;
     const children = c === null ? [] : typeof c !== 'string' && c.name === 'mrow' && !hasAttrs(c) ? c.children ?? [] : [c];
-    return toXml({ name: 'math', ...(display ? { attrs: { display: 'block' } } : {}), children });
+    const math: MathElement = { name: 'math', ...(display ? { attrs: { display: 'block' } } : {}), children };
+    const words = speak ? speak(toXml(math)).trim() : '';
+    if (words) math.attrs = { ...math.attrs, alttext: words };
+    return toXml(math);
   };
 
   let count = 0;

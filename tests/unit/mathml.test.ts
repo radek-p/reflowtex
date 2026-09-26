@@ -179,3 +179,18 @@ test('a document without formulas is left as it was', () => {
   assert.equal(attachMathML(d), 0);
   assert.equal(JSON.stringify(d.paragraphs), before);
 });
+
+// ── What a reader says ──────────────────────────────────────────────────────
+
+test('alttext: each formula carries its spoken form, from the speaker given', () => {
+  const d = doc({
+    paragraphs: [{ nodes: [begin(1), end()] }],
+    content: [{ kind: 'paragraph', para: 1 }, { kind: 'display', display_no: 1, box: { type: 'hlist', subtype: 6, children: [] } }],
+    mathml: [{ tree: el('msup', [el('mi', ['𝑥']), el('mn', ['2'])]) }, { tree: el('mn', ['1']), display: 1 }],
+  });
+  const heard: string[] = [];
+  attachMathML(d, { speak: xml => { heard.push(xml); return xml.includes('msup') ? 'x squared' : 'one'; } });
+  assert.equal(bare(d.paragraphs[0].nodes[0].mathml), '<math alttext="x squared"><msup><mi>𝑥</mi><mn>2</mn></msup></math>');
+  assert.equal(bare(d.content[1].mathml), '<math alttext="one" display="block"><mn>1</mn></math>');
+  assert.ok(heard.every(x => !x.includes('alttext')), 'spoken from the MathML itself');
+});

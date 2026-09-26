@@ -20,7 +20,7 @@ import { encodeDocument } from './encode.ts';
 import { runLuaLatex } from './lualatex.ts';
 import * as DM from './display-model.ts';
 import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from './transforms.ts';
-import { attachMathML } from './mathml.ts';
+import { attachMathML, speaker } from './mathml.ts';
 import { convertPictures } from './pictures.ts';
 import { Fonts, glyphRequirements, drawnCodepoints } from './fonts/fonts.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
@@ -311,7 +311,7 @@ export class Pipeline {
    *  'unknown' fonts real files, which the glyph addressing and provisioning
    *  that follow then see), address glyphs. Changes `data`. */
   async transform(data: SerializerOutput, dir: string, o: { block?: string; docTag?: string } = {}): Promise<void> {
-    const nMathml = attachMathML(data);
+    const nMathml = attachMathML(data, { speak: (await speaker()) ?? undefined });
     const nDropped = dropUnreferencedParagraphs(data);
     const nPictures = await convertPictures(data, dir, o.block, o.docTag);
     const nStripped = stripUnsupportedNodes(data);

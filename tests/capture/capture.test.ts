@@ -292,10 +292,12 @@ async function captureWithoutMathml(body: string, preamble = '', passes = 1): Pr
 }
 
 const NS = ' xmlns="http://www.w3.org/1998/Math/MathML"';
+/** Without the namespace and the spoken form (checked on its own, below). */
+const structure = (m: unknown) => String(m).replaceAll(NS, '').replace(/ alttext="[^"]*"/g, '');
 /** The MathML of each top-level inline formula, paragraph by paragraph. */
 const inlineMathml = (d: Output) => d.paragraphs.map(p =>
-  [...walk(p.nodes)].filter(n => n.type === 'math' && n.mathml !== undefined).map(n => String(n.mathml).replaceAll(NS, '')));
-const displayMathml = (d: Output) => d.content.filter(i => i.kind === 'display').map(i => i.mathml === undefined ? undefined : String(i.mathml).replaceAll(NS, ''));
+  [...walk(p.nodes)].filter(n => n.type === 'math' && n.mathml !== undefined).map(n => structure(n.mathml)));
+const displayMathml = (d: Output) => d.content.filter(i => i.kind === 'display').map(i => i.mathml === undefined ? undefined : structure(i.mathml));
 
 const FORMULAS = [
   'Inline $x^2+y^2=z^2$, $\\alpha_i \\le \\sum_{k=1}^n k$, $f\\colon \\mathbb{R}\\to\\mathbb{R}$,',
@@ -365,4 +367,12 @@ test('MathML: unicode-math', async () => {
   const [a, b] = await Promise.all([capture('Roots $\\sqrt[3]{x}$ and $\\mathbb{R}$ and $\\underbrace{a+b}_{2}$.', pre),
     captureWithoutMathml('Roots $\\sqrt[3]{x}$ and $\\mathbb{R}$ and $\\underbrace{a+b}_{2}$.', pre)]);
   assert.deepEqual(withoutMathml(a), withoutMathml(b));
+});
+
+test('MathML: each formula carries its spoken form (alttext)', async () => {
+  const d = await capture(FORMULAS, '', 2);
+  const inline = d.paragraphs.flatMap(p => [...walk(p.nodes)].filter(n => n.type === 'math' && n.mathml !== undefined).map(n => String(n.mathml)));
+  const displays = d.content.filter(i => i.kind === 'display' && i.mathml !== undefined).map(i => String(i.mathml));
+  for (const m of [...inline, ...displays]) assert.match(m, /^<math alttext="[^"]+"/, m.slice(0, 80));
+  assert.match(inline[0], /alttext="x squared plus y squared equals z squared"/);
 });
