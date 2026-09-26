@@ -69,10 +69,12 @@ export function affineMul(m1, m2) {
             a1*e2 + c1*f2 + e1,  b1*e2 + d1*f2 + f1];
 }
 
-// A band's least height, in em of the glyphs' size: LaTeX's \strut, 0.7 and
-// 0.3 of a \baselineskip, at the usual 1.2 em (10/12 pt, 11/13.6, 12/14.5).
-// Lines set that far apart have bands that just meet.
-export const STRUT = { up: 0.7 * 1.2, down: 0.3 * 1.2 };
+// A band's least height, in em of the glyphs' size: a parenthesis's, as in
+// Computer Modern (0.75 em up, 0.25 down), which just covers capitals,
+// ascenders and descenders. (LaTeX's \strut, 0.84 and 0.36 em, fills the
+// whole line spacing: bands that met, and sat loose around the letters.)
+// Lines 1.2 em apart keep a gap of 0.2 em between their bands.
+export const BAND_MIN = { up: 0.75, down: 0.25 };
 
 export function reconcileSink(byNode, used, stats, cache) {
     let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
@@ -81,7 +83,7 @@ export function reconcileSink(byNode, used, stats, cache) {
     const markRuns = new Map();   // mark index, or live mark id → { el, x0, x1, top, bottom }
     let selRun = null;            // the selection on this line, drawn as a band (host/selection.ts)
     // How far the line reaches above and below: each glyph's ink, and at
-    // least a strut at its size (STRUT). A band – a mark's, the selection's –
+    // least a parenthesis at its size (BAND_MIN). A band – a mark's, the selection's –
     // is never less than the line: one over "one" is as tall as one over
     // "gyR", and all its lines are even, grown only by a taller glyph on
     // the line (a superscript, a big operator).
@@ -179,8 +181,8 @@ export function reconcileSink(byNode, used, stats, cache) {
             if (el.dataset.link && !stack.length) extend(linkRuns, el.dataset.link, el, x, n, y);
             if (!stack.length) {
                 const em = fi?.size_px ?? 12;
-                lineTop = Math.min(lineTop, y - Math.max(STRUT.up * em, gH(n) * SP_TO_PX));
-                lineBottom = Math.max(lineBottom, y + Math.max(STRUT.down * em, gD(n) * SP_TO_PX));
+                lineTop = Math.min(lineTop, y - Math.max(BAND_MIN.up * em, gH(n) * SP_TO_PX));
+                lineBottom = Math.max(lineBottom, y + Math.max(BAND_MIN.down * em, gD(n) * SP_TO_PX));
             }
             // And of each mark, for its band (see paintMarkBands).
             if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
@@ -635,7 +637,7 @@ export function paintLinkHits(s, runs) {
 }
 
 // A mark's band: one rect per line it is on, from its first glyph to its
-// last and as tall as its line (at least a strut: STRUT), under the text – the spaces between its
+// last and as tall as its line (at least a parenthesis: BAND_MIN), under the text – the spaces between its
 // words are glue, drawn as nothing, so a background on the glyphs alone
 // would break at every space. Class latex-mark, the mark's classes in
 // data-mark (not as classes: a page's rule for the glyphs, `.key { fill }`,

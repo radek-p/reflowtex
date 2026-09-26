@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 cfa6ff087544e2bd3473325e2f5986fa4d0e8c98b87a8f09d059454165a93a4c
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 af654a60adf323ad6ad5796d4f6924b87e4c5f3dfb7a8d61dc6d2a60dd47fa03
 'use strict';
 "use strict";
 (() => {
@@ -1992,7 +1992,7 @@
       b1 * e2 + d1 * f2 + f1
     ];
   }
-  var STRUT = { up: 0.7 * 1.2, down: 0.3 * 1.2 };
+  var BAND_MIN = { up: 0.75, down: 0.25 };
   function reconcileSink(byNode, used, stats, cache) {
     let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
     const stack = [];
@@ -2100,8 +2100,8 @@
         if (el.dataset.link && !stack.length) extend(linkRuns, el.dataset.link, el, x, n, y);
         if (!stack.length) {
           const em = fi?.size_px ?? 12;
-          lineTop = Math.min(lineTop, y - Math.max(STRUT.up * em, gH(n) * SP_TO_PX));
-          lineBottom = Math.max(lineBottom, y + Math.max(STRUT.down * em, gD(n) * SP_TO_PX));
+          lineTop = Math.min(lineTop, y - Math.max(BAND_MIN.up * em, gH(n) * SP_TO_PX));
+          lineBottom = Math.max(lineBottom, y + Math.max(BAND_MIN.down * em, gD(n) * SP_TO_PX));
         }
         if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
         if (live3 && !stack.length) for (const id of live3) extend(markRuns, id, el, x, n, y);

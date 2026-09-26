@@ -178,8 +178,8 @@ test('a new colour over part of a highlight leaves the rest as it was', async ({
   expect(three).toEqual([['rtx-highlight-green', 'beraboveoneis'], ['rtx-highlight-yellow', 'Everynum']]);
 });
 
-// A band is as tall as its line, and at least a strut (0.84 em up, 0.36 em
-// down): one over "one", with no ascender or descender, was a sliver next to
+// A band is as tall as its line, and at least a parenthesis (0.75 em up,
+// 0.25 em down): one over "one", with no ascender or descender, was a sliver next to
 // one over "Every". (Its height came from its own glyphs' ink.)
 test('a band is as tall as its line, whatever letters it holds', async ({ openPage }) => {
   const page = await openPage('highlighter');
@@ -199,5 +199,5 @@ test('a band is as tall as its line, whatever letters it holds', async ({ openPa
     return { small: y('small'), tall: y('tall'), em: +els[one].getAttribute('font-size')! };
   });
   expect(r.small, 'the same band on the same line').toEqual(r.tall);
-  expect(r.small[1]).toBeGreaterThanOrEqual(1.2 * r.em - 0.01);
+  expect(r.small[1]).toBeGreaterThanOrEqual(r.em - 0.01);
 });
