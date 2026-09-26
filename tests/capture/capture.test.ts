@@ -257,6 +257,7 @@ test('Lean: the parts are marked, decl and url on the widget', async () => {
   const roles = streams.filter(s => attrsOf(s.attrs)['rtx-part']).map(s => attrsOf(s.attrs)['rtx-part']);
   assert.deepEqual(roles.sort(), ['code', 'tex']);
   assert.match(streams.find(s => attrsOf(s.attrs)['rtx-part'] === 'code')!.text!, /example : 1 = 1 := rfl/);
+});
 
 // ── MathML ──────────────────────────────────────────────────────────────────
 // Every formula a reader meets carries MathML (src/extract/mathml.lua records
