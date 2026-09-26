@@ -303,6 +303,20 @@ everything a page draws:
   `data-rtx-id`, transparent until a page styles it (a highlighter:
   `rect.latex-mark[data-mark~="key"] { fill: #fff176 }`; a stroke of the
   same colour pads it).
+- **Live marks**: the same, made while the page is open (a reader's
+  highlight). A `TextRange` is `{ block, from, to, text }`: the block's key
+  and the positions of its first and last glyph, every glyph of the block
+  numbered in reading order (footnotes and boxes included; a disc's hyphen
+  too, without text), which is the same on every load of the same document.
+  `host.rangesOf(range)` turns a DOM `Range` (the selection) into them;
+  `host.addMark(ranges, { id, classes })` marks them, a band on every line
+  as above, kept through every reflow (glyphs get the id in
+  `data-rtx-marks`); a saved range whose text has moved is found again by
+  its text. `host.liveMarks(at?)` lists them (all, on a glyph element, or
+  touching ranges); each has `setClasses`, `remove`, `ranges` and the
+  handle's `elements()`/`rects()`. Every change sends `reflowtex:marks` on
+  `document`. The marks live in [host/marks.ts](src/host/marks.ts); the
+  painter asks `liveOn(node)` for every glyph it draws.
 - **Colour maps**: `host.colorMaps()` gives the maps in force (the page's
   island, or what was set last), `host.setColorMaps(maps)` replaces them;
   the page's colours follow at once, with no layout (see Theming).

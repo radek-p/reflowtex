@@ -57,6 +57,7 @@ width by its `.latex-block`'s style, then wait for the resize to settle
 | Hints: blurred with a label, click and Enter, `--latex-hint-label`, print | `hints.spec.ts`, `regressions.spec.ts` |
 | Cross-references: `\eqref` goes to its anchor | `links.spec.ts` |
 | Live text: `reflowtex.setText`, and back to the default | `live.spec.ts` |
+| Live marks and the highlighter: selection to ranges, bands through a reflow, two blocks, saved and restored, re-found by text, eraser, recolour | `highlighter.spec.ts` |
 | Widgets: drawn, split across lines, `invalidate()` | `live.spec.ts`, `regressions.spec.ts` |
 | Asides: query, natural width, `render`, `anchor()`, `reflowtex:layout` | `asides.spec.ts` |
 | Side notes: in the margin on their line, no overlap, marks without a margin | `asides.spec.ts` |
