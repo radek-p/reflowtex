@@ -20,7 +20,7 @@ ESBUILD_VERSION    = 0.28.2
 VENV := .venv
 PYTHON := $(CURDIR)/$(VENV)/bin/python3
 
-.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all clean vendor-protobuf vendor-inspector venv minify-viewer
+.PHONY: help demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all test-web clean vendor-protobuf vendor-inspector venv minify-viewer
 
 help:
 	@echo "Reflow TeX targets:"
@@ -38,6 +38,7 @@ help:
 	@echo "  make minify-viewer    regenerate src/viewer/latex-viewer.min.js (maintainers; after editing the viewer)"
 	@echo "  make test-render      the render tests: every glyph in the browser against TeX (tests/render)"
 	@echo "  make test-render-all  the same, with the whole-document cases (testmath)"
+	@echo "  make test-web         the web tests: the viewer, companion and Hugo integration in Chromium and WebKit (tests/web)"
 	@echo "  make vendor-inspector refresh src/inspector/vendor/preact.js (preact@$(PREACT_VERSION), htm, signals)"
 
 # Python deps live in a project-local virtualenv, not the system interpreter.
@@ -114,6 +115,13 @@ test-render: test-render-deps
 
 test-render-all: test-render-deps
 	$(PYTHON) -m pytest $(RENDER)
+
+# The web tests (tests/web/README.md): pytest and Playwright for Python, with
+# Chromium and WebKit (downloaded once); Hugo for the integration's site.
+test-web: venv
+	@$(PYTHON) -m pip install -q -r tests/web/requirements.txt
+	@$(PYTHON) -m playwright install chromium webkit
+	$(PYTHON) -m pytest tests/web
 
 website-clean:
 	cd website && rm -rf public resources .reflowtex-build .hugo_build.lock \

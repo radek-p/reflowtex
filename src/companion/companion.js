@@ -75,11 +75,22 @@ export const PILL = { up: 0.9, down: 0.45, side: 0.55 };
 export function InlineButton({ ctx, onPress, pressed, label, class: cls = '', metrics = PILL, children }) {
     const em = ctx.fontSize, inside = useRef(null);
     useLayoutEffect(() => {
-        const el = inside.current, box = el && el.querySelector('.latex-aside[data-baseline]');
-        if (!box) return;
-        const k = el.getBoundingClientRect().height / el.offsetHeight || 1;
-        const down = (box.getBoundingClientRect().top - el.getBoundingClientRect().top) / k;
-        el.style.top = metrics.up * em - down - parseFloat(box.dataset.baseline) + 'px';
+        // Measured, not worked out: where the label's baseline is against where
+        // it should be (metrics.up em below the button's top edge), the
+        // content moved by the difference – whatever the border, zoom or
+        // rounding in between.
+        // A widget is drawn before the viewer puts it in the page: measure
+        // once it is there.
+        const fit = () => {
+            const el = inside.current, box = el && el.querySelector('.latex-aside[data-baseline]');
+            if (!box || !el.isConnected) return false;
+            const button = el.parentElement, k = button.getBoundingClientRect().height / button.offsetHeight || 1;
+            const want = button.getBoundingClientRect().top + metrics.up * em * k;
+            const have = box.getBoundingClientRect().top + parseFloat(box.dataset.baseline) * k;
+            el.style.top = (parseFloat(el.style.top) || 0) + (want - have) / k + 'px';
+            return true;
+        };
+        if (!fit()) { const f = requestAnimationFrame(() => fit()); return () => cancelAnimationFrame(f); }
     });
     return html`
       <button type="button" class=${'rtx-button ' + cls} onClick=${onPress} aria-label=${label}
@@ -108,7 +119,8 @@ export function Popover({ anchor, onClose, children, className = '' }) {
         panel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - panel.offsetWidth - 8)) + 'px';
         panel.style.top = r.bottom + 6 + 'px';
     });
-    useEffect(() => {
+    // Before the first paint, so a key pressed as soon as it shows counts.
+    useLayoutEffect(() => {
         const away = e => { if (!host.contains(e.target) && !anchor.contains(e.target)) onClose(); };
         const key = e => { if (e.key === 'Escape') { onClose(); anchor.focus && anchor.focus(); } };
         document.addEventListener('pointerdown', away);

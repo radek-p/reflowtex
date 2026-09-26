@@ -1,0 +1,53 @@
+name: Web tests
+
+# What a site built with Reflow TeX does in the browser (tests/web/README.md):
+# the viewer's features, the companion package's browser side and the Hugo
+# integration, in Chromium and WebKit. Separate from the render tests, which
+# check glyph positions against TeX.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: reflowtex:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Playwright's browsers, kept between runs.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-py-${{ hashFiles('tests/web/requirements.txt') }}
+
+      - name: Run the web tests
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            -v "$HOME/.cache/ms-playwright":/root/.cache/ms-playwright \
+            reflowtex:ci bash -lc '
+              set -e
+              make venv
+              .venv/bin/python3 -m pip install -q -r tests/web/requirements.txt
+              .venv/bin/python3 -m playwright install --with-deps chromium webkit
+              make test-web
+            '
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: web-test-logs
+          path: tests/web/build/*.log
+          if-no-files-found: ignore

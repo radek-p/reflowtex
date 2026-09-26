@@ -1,0 +1,9 @@
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{reflowtex}
+\newcounter{mypopover}
+\NewDocumentCommand\mypopover{m +m}{%
+  \stepcounter{mypopover}%
+  \webwidget{popover:\themypopover}%
+  \webaside[for=\themypopover]{popover-label}{#1}%
+  \webaside[for=\themypopover]{popover-note}{\footnotesize #2}}

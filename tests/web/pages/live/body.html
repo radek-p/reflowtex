@@ -1,0 +1,25 @@
+<script>
+  // A badge whose label may break at its spaces (the segments form).
+  window.reflowtex = window.reflowtex || {};
+  reflowtex.widgets = reflowtex.widgets || {};
+  var LABEL = 'checked by Lean on 25 September 2026';
+  reflowtex.widgets.badge = {
+    measure: function (ctx) {
+      ctx.state.measured = (ctx.state.measured || 0) + 1;
+      var words = (ctx.state.label || LABEL).split(' ');
+      var m = function (t) { return ctx.measure('<span class="badge" style="padding:0">' + t + '</span>'); };
+      var space = m('a b').width - m('ab').width;
+      return {
+        segments: words.map(function (w) { var r = m(w); return { width: r.width, height: r.height, depth: r.depth }; }),
+        gaps: words.slice(1).map(function () { return { width: space, penalty: 100 }; }),
+        ends: { left: { cap: 4, cut: 4 }, right: { cap: 4, cut: 4 } },
+      };
+    },
+    render: function (el, part, ctx) {
+      var words = (ctx.state.label || LABEL).split(' ');
+      el.innerHTML = '<span class="badge' + (part.left === 'cut' ? ' cut-left' : '') + (part.right === 'cut' ? ' cut-right' : '')
+        + '">' + words.slice(part.from, part.to + 1).join(' ') + '</span>';
+    },
+  };
+</script>
+<style>.badge { display: inline-block; padding: 0 4px; background: #2f2ccd; color: #fff; font: 600 .7em/1.6 sans-serif; border-radius: 99px; }</style>
