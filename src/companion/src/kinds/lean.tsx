@@ -135,7 +135,7 @@ function LeanWidget({ instance, attrs, host, statement }: BlockProps & { stateme
     useLayoutEffect(() => {
         const adjust = () => {
             host.el.style.marginBottom = '';
-            if (drawn.proof) return;
+            if (drawn.proof || host.type !== 'block') return;
             const { before, after } = host.spacing();
             const want = stmt ? (tex ? tex.spaceBefore : after) : before;
             if (want < after) host.el.style.marginBottom = `${want - after}px`;

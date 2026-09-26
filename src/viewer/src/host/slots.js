@@ -7,7 +7,7 @@ import { widgetNodes } from './widgets.js';
 import { blockData } from '../runtime/blocks.js';
 import { api } from '../runtime/page.js';
 import { paintVisibleNow } from '../runtime/visibility.js';
-import { docData } from './asides.js';
+import { docData } from '../runtime/block-data.js';
 import { disposePiece } from './inline.ts';
 import { textHooks } from './instances.ts';
 // ── end of imports

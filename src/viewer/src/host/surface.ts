@@ -15,6 +15,9 @@ import { NATURAL_PROBE_PT, markDirty, unobserveAll } from '../runtime/blocks.js'
 import { paintVisibleNow } from '../runtime/visibility.js';
 import { paintDocument } from '../engine/paint.js';
 import { disposePieces } from './inline.ts';
+// block-hosts.ts and this module import each other: only functions, called
+// after both have loaded.
+import { disposeHosts, surfaceChanged } from './block-hosts.ts';
 import type { Doc, DocStream } from './instances.ts';
 import type { Instance, MountOptions, Surface, SurfaceMetrics, TypesetPart } from './types.ts';
 
@@ -51,12 +54,6 @@ export function edgesOf(cache: Cache): Edges {
              textFirst: textAt(first), lastDepth: last ? last.lastDepth : 0, textLast: textAt(last) };
 }
 
-/** Set by block-hosts.ts: a surface appeared or went, and a layout's hosts
- *  must go with it. (A hook rather than an import, to keep the two apart.) */
-export const surfaceHooks = {
-    changed: (_s: SurfaceImpl) => {},
-    disposeHosts: (_cache: Cache) => {},
-};
 
 /** The live surfaces of a block (every part of its instances, wherever mounted). */
 export function surfacesOf(blockEl: HTMLElement): Iterable<SurfaceImpl> {
@@ -174,7 +171,7 @@ export class SurfaceImpl implements Surface {
         for (const fn of [...this.listeners]) {
             try { fn(this.last); } catch (e) { console.error('[latex-viewer] surface listener:', e); }
         }
-        surfaceHooks.changed(this);
+        surfaceChanged(this);
     }
 
     edges(): Edges { return edgesOf(this.cache); }
@@ -204,13 +201,18 @@ export class SurfaceImpl implements Surface {
         if (this.frame) cancelAnimationFrame(this.frame);
         unobserveAll(this.cache);
         disposePieces(this.cache);
-        surfaceHooks.disposeHosts(this.cache);
+        disposeHosts(this.cache);
         this.listeners.clear();
         if (this.box.parentNode === this.el) this.el.removeChild(this.box);
         live.get(this.part.data.el)?.delete(this);
         all.delete(this);
-        surfaceHooks.changed(this);
+        surfaceChanged(this);
     }
+}
+
+/** block.destroy: every surface of a block, disposed. */
+export function disposeSurfaces(blockEl: HTMLElement) {
+    for (const s of [...(live.get(blockEl) || [])]) s.dispose();
 }
 
 /** After webfonts load: redraw every surface of a block (see rerenderBlock). */

@@ -3,15 +3,16 @@
 // viewer's one registry (host.define, types.ts KindDef).
 import { Component, render, type ComponentType } from 'preact';
 import { InstanceContext } from './context.ts';
-import { onHost, type BlockHost, type InlineEnv, type InlineMetrics, type Instance, type PieceHost } from './host.ts';
+import { onHost, type AnyHost, type BlockHost, type InlineEnv, type InlineMetrics, type Instance, type NoteHost, type PieceHost } from './host.ts';
 import { Typeset } from './typeset.tsx';
 
 export interface BlockProps {
     instance: Instance;
     /** The author's parameters (instance.attrs). */
     attrs: Readonly<Record<string, string>>;
-    /** host.type: 'block' (in the flow) or 'margin' (a margin note). */
-    host: BlockHost;
+    /** host.type: 'block' (in the flow), 'margin' (a margin note) or
+     *  'popover' (opened from a glyph, as a footnote is). */
+    host: BlockHost | NoteHost;
 }
 
 export interface BlockOptions {
@@ -46,7 +47,7 @@ function autoFrame(host: BlockHost): () => void {
     return () => ro.disconnect();
 }
 
-function mount(kind: string, instance: Instance, host: BlockHost | PieceHost, view: any, plain: boolean) {
+function mount(kind: string, instance: Instance, host: AnyHost, view: any, plain: boolean) {
     render(
         <InstanceContext.Provider value={{ instance, host }}>
             <Boundary kind={kind} plain={plain}>{view}</Boundary>
@@ -61,9 +62,10 @@ function register(kind: string, def: Parameters<import('./host.ts').Host['define
 }
 
 /** Draw every instance of `kind` – a block in the flow (\begin{webstream}{kind}
- *  and the package's environments), or a note in the margin
- *  (\webaside[place=margin]{kind}) – with `View`, in the element the viewer
- *  gives it (props.host.el). Instances already drawn are drawn again.
+ *  and the package's environments), a note in the margin
+ *  (\webaside[place=margin]{kind}), or the popover a glyph opens (a
+ *  footnote) – with `View`, in the element the viewer gives it
+ *  (props.host.el). Instances already drawn are drawn again.
  *  Returns what undoes it. */
 export function define(kind: string, View: ComponentType<BlockProps>, options: BlockOptions = {}): () => void {
     return register(kind, {
@@ -71,7 +73,7 @@ export function define(kind: string, View: ComponentType<BlockProps>, options: B
             if (host.type === 'piece') return;                 // an inline kind: defineInline
             const f = options.frame ?? 'auto';
             const stopFrame = host.type === 'block' && f === 'auto' ? autoFrame(host) : null;
-            if (f !== 'auto') host.setFrame(f === true ? { top: true, bottom: true } : f === false ? {} : f);
+            if (host.type === 'block' && f !== 'auto') host.setFrame(f === true ? { top: true, bottom: true } : f === false ? {} : f);
             const unmount = mount(kind, instance, host,
                                   <View instance={instance} attrs={instance.attrs} host={host} />, true);
             return () => { stopFrame?.(); unmount(); };

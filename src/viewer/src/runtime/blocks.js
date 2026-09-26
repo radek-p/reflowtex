@@ -4,7 +4,7 @@
 import { DEFAULT_WIDTH_PT, ZOOM } from '../engine/core.js';
 import { layoutDocument } from '../engine/layout/document.js';
 import { paintDocument } from '../engine/paint.js';
-import { announceLayout } from '../host/asides.js';
+import { announceLayout } from './block-data.js';
 import { rerenderSurfaces } from '../host/surface.ts';
 import { disposePieces } from '../host/inline.ts';
 import { debugLog } from './page.js';

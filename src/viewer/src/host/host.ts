@@ -12,6 +12,7 @@ import { TypesetPartImpl, type BlockData } from './surface.ts';
 import './block-hosts.ts';
 import { defineKind } from './kinds.ts';
 import { setSlotText } from './slots.js';
+import { destroyBlock, mountBlock } from '../runtime/init.js';
 import { blockData } from '../runtime/blocks.js';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
 
@@ -48,6 +49,7 @@ class BlockImpl implements Block {
         if (!this.byId) this.byId = new Map([...walk(this.roots)].map(i => [i.id, i]));
         return this.byId.get(id);
     }
+    destroy() { destroyBlock(this.el); }
     on<E extends keyof BlockEvents>(event: E, fn: BlockEvents[E]): () => void {
         // 'layout' is the block's reflowtex:layout DOM event (announceLayout).
         const h = (e: Event) => { if ((e as CustomEvent).detail?.block === this.el) fn(); };
@@ -102,6 +104,12 @@ export const host: Host = {
         const b = blocks.find(b => id.startsWith(b.key + '/'));
         return b && b.find(id);
     },
+    async mount(el) {
+        await mountBlock(el);
+        const b = blockOf(el);
+        if (!b) throw new Error('host.mount: not a block (no data-nodelist-b64, or it failed to render)');
+        return b;
+    },
     onBlock(fn) {
         blockListeners.add(fn);
         for (const b of blocks) fn(b);
@@ -110,6 +118,15 @@ export const host: Host = {
 };
 
 /** From initBlock, once the block is laid out (so it has its key). */
+/** From destroyBlock: the block is gone from the page's books. */
+export function unregisterBlock(el: Element) {
+    const b = byEl.get(el);
+    if (!b) return;
+    const i = blocks.indexOf(b);
+    if (i >= 0) blocks.splice(i, 1);
+    byEl.delete(el);
+}
+
 export function registerBlock(data: ViewerBlockData) {
     const b = blockOf(data.el);
     if (!b || blocks.includes(b)) return;

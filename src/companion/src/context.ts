@@ -3,13 +3,13 @@
 import { createContext } from 'preact';
 import { useContext, useLayoutEffect, useRef } from 'preact/hooks';
 import { signal, type Signal } from '@preact/signals';
-import type { Action, BlockHost, Instance, PieceHost } from './host.ts';
+import type { Action, AnyHost, BlockHost, Instance, NoteHost, PieceHost } from './host.ts';
 
 export interface InstanceScope {
     instance: Instance;
-    /** Where it is drawn: a block in the flow or a margin note (define), or
-     *  one piece of an inline widget (defineInline). */
-    host?: BlockHost | PieceHost;
+    /** Where it is drawn: a block in the flow, a margin note or a popover
+     *  (define), or one piece of an inline widget (defineInline). */
+    host?: AnyHost;
 }
 export const InstanceContext = createContext<InstanceScope | null>(null);
 
@@ -25,11 +25,26 @@ export const useInstance = (): Instance => scope('useInstance').instance;
 /** The author's parameters: \begin{…}[key=value]. */
 export const useAttrs = (): Readonly<Record<string, string>> => scope('useAttrs').instance.attrs;
 
-/** Where a block instance stands in the flow, or a margin note in the
- *  margin (its element: host.el). */
+/** Where the instance is drawn: host.type is 'block', 'margin', 'popover'
+ *  or 'piece'; host.el its element. */
+export function useHost(): AnyHost {
+    const h = scope('useHost').host;
+    if (!h) throw new Error('useHost: the instance is not being drawn');
+    return h;
+}
+
+/** Where a block instance stands in the flow (host.el, setFrame, setEdges,
+ *  spacing). */
 export function useBlockHost(): BlockHost {
     const h = scope('useBlockHost').host;
-    if (!h || h.type === 'piece') throw new Error('useBlockHost: not a block or margin note');
+    if (!h || h.type !== 'block') throw new Error('useBlockHost: not a block in the flow');
+    return h;
+}
+
+/** Where a detached instance is shown: the margin or a popover. */
+export function useNoteHost(): NoteHost {
+    const h = scope('useNoteHost').host;
+    if (!h || (h.type !== 'margin' && h.type !== 'popover')) throw new Error('useNoteHost: not a margin note or a popover');
     return h;
 }
 

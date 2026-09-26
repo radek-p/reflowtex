@@ -32,7 +32,7 @@ export { onHost, whenHost } from './host.ts';
 export type * from './host.ts';
 export { define, defineInline, type BlockProps, type BlockOptions, type PieceProps } from './define.tsx';
 export { Typeset, type TypesetProps } from './typeset.tsx';
-export { useInstance, useAttrs, useBlockHost, usePiece, useInstanceState, useAction, InstanceContext, type Action } from './context.ts';
+export { useInstance, useAttrs, useHost, useBlockHost, useNoteHost, usePiece, useInstanceState, useAction, InstanceContext, type Action } from './context.ts';
 export { readMotion, animateHeight, fadeIn, fadeOut, type Motion } from './motion.ts';
 export { Accordion, findPane } from './kinds/accordion.tsx';
 export { LeanProof, LeanTheorem, LeanCode, highlightLean } from './kinds/lean.tsx';

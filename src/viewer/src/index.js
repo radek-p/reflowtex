@@ -18,7 +18,7 @@ import { installHost } from './host/host.ts';
 // TeX's sizes are given in) and what is true of every control on paper. The
 // looks of the companion package's kinds – notes, hints, boxed theorems,
 // accordions, Lean – are the companion's (src/companion/companion.css).
-export function installStreamStyles() {
+export function installViewerStyles() {
     const st = document.createElement('style');
     st.textContent = `
       /* One TeX point in CSS px, for styles that size by TeX's measures. */

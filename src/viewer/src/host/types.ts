@@ -166,6 +166,25 @@ export interface Block {
     instances(query?: InstanceQuery): Instance[];
     find(id: string): Instance | undefined;
     on<E extends keyof BlockEvents>(event: E, fn: BlockEvents[E]): () => void;
+    /** Take the block off the page's books: everything drawn for its
+     *  instances is undone, its observers stop, and its element is emptied.
+     *  The element may then be removed, or mounted again. */
+    destroy(): void;
+}
+
+/** Where the viewer shows a detached instance, for its kind to draw in:
+ *  - 'margin': a note beside its line (place=margin, \marginpar); el is the
+ *    note, as wide as the margin; the first line of the edge surface
+ *    (setEdges; by default a body surface inside) is set on the line of its
+ *    mark.
+ *  - 'popover': the panel opened from a glyph that refers to it (a
+ *    footnote's marker); el is the panel's content, drawn anew each time it
+ *    opens and undone when it closes. */
+export interface NoteHost {
+    readonly type: 'margin' | 'popover';
+    readonly el: HTMLElement;
+    readonly instance: Instance;
+    setEdges(edges: { top?: Surface | null; bottom?: Surface | null }): void;
 }
 
 /** How a kind is drawn: the page's code, not the viewer's. One definition
@@ -175,8 +194,9 @@ export interface Block {
  *    places in the flow. Undefined kinds are drawn by default: the stream's
  *    own element (.latex-stream[data-kind], with its data-* parameters,
  *    classes and custom properties) holding the body at its width.
- *  - detached instances shown in the margin (place=margin): render(instance,
- *    BlockHost of type 'margin'). Default: the body, at the margin's width.
+ *  - detached instances the viewer shows – in the margin (place=margin), or
+ *    in the popover a glyph opens (a footnote): render(instance, NoteHost).
+ *    Default: the body, at the margin's or the popover's width.
  *  - inline instances (\webwidget): measure(instance, env) sizes it and
  *    says where it may break; render(instance, PieceHost) draws each piece
  *    (the whole widget, or its part on one line). Undefined: nothing drawn.
@@ -188,9 +208,11 @@ export interface Block {
  *  instance (instance.id), never to a host: an inline widget has as many
  *  hosts as lines it is broken across. */
 export interface KindDef {
-    render(instance: Instance, host: BlockHost | PieceHost): void | (() => void);
+    render(instance: Instance, host: AnyHost): void | (() => void);
     measure?(instance: Instance, env: InlineEnv): InlineMetrics;
 }
+
+export type AnyHost = BlockHost | NoteHost | PieceHost;
 
 /** An inline instance's surroundings, for measuring and drawing. */
 export interface InlineEnv {
@@ -235,11 +257,7 @@ export interface PieceHost {
 /** Where a block instance stands in the flow, and what the flow needs to
  *  know about it to space it as TeX would. */
 export interface BlockHost {
-    /** 'block': in the flow. 'margin': a detached instance the viewer shows
-     *  in the margin (place=margin): el is the note, as wide as the margin;
-     *  the first line of its edge surface is set on the line of its mark.
-     *  setFrame and spacing mean nothing there. */
-    readonly type: 'block' | 'margin';
+    readonly type: 'block';
     readonly el: HTMLElement;
     readonly instance: Instance;
     /** A framed edge (a border, padding: the instance draws a box) stops
@@ -277,6 +295,11 @@ export interface Host {
     /** Called for every block, now for those already initialised and later
      *  for each new one. Returns an unsubscribe function. */
     onBlock(fn: (block: Block) => void): () => void;
+    /** Render a block element added after the page loaded (a framework's,
+     *  say): one carrying data-nodelist-b64, as the integrations write it.
+     *  Resolves when it is laid out; a block already rendered resolves at
+     *  once. */
+    mount(el: HTMLElement): Promise<Block>;
 }
 
 declare global {

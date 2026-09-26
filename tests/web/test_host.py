@@ -319,3 +319,43 @@ def test_nested_boxes_mirror_right_to_left(open_page):
     for f in [f for f in fs if f['depth'] >= 1]:
         assert abs(f['left'] - proof['left']) < 0.5, 'right to left: the end (left) edges stand flush'
         assert f['right'] < proof['right'] - 5, 'right to left: set in at the start (right)'
+
+
+# ── Blocks added later, and taken away ───────────────────────────────────────
+
+def test_mount_later_destroy_and_mount_again(open_page):
+    page = open_page('host')
+    r = page.evaluate("""async () => {
+      const src = document.querySelector('[data-nodelist-b64]');
+      const el = document.createElement('div');
+      el.className = 'latex-block'; el.dataset.nodelistB64 = src.dataset.nodelistB64;
+      document.body.append(el);
+      const h = reflowtex.host, before = h.blocks().length;
+      const b = await h.mount(el);
+      const drawn = { blocks: h.blocks().length, callouts: b.instances('callout').length,
+                      glyphs: el.querySelectorAll('svg text tspan').length, same: (await h.mount(el)) === b };
+      const surface = b.instances('callout')[0].part('body').mount(document.body.appendChild(document.createElement('div')));
+      b.destroy();
+      const gone = { blocks: h.blocks().length, children: el.childElementCount, found: h.block(el) === undefined,
+                     surface: surface.el.childElementCount };
+      const again = await h.mount(el);
+      return { before, drawn, gone, again: again.instances('callout').length, back: h.blocks().length };
+    }""")
+    assert r['drawn']['blocks'] == r['before'] + 1 and r['drawn']['callouts'] == 1 and r['drawn']['glyphs'] > 0
+    assert r['drawn']['same'], 'mounting twice renders once'
+    assert r['gone'] == {'blocks': r['before'], 'children': 0, 'found': True, 'surface': 0}
+    assert r['again'] == 1 and r['back'] == r['before'] + 1
+
+
+def test_popover_drawn_by_its_kind(open_page):
+    page = open_page('host')
+    page.evaluate("""() => { window.__undone = 0;
+      reflowtex.host.define('footnote', { render(i, h) {
+        h.el.innerHTML = '<p class="mine">' + h.type + ' ' + i.kind + '</p>';
+        return () => { window.__undone++; }; } }); }""")
+    page.locator('[data-footnote]').first.click()
+    page.wait_for_selector('#latex-footnote-pop .mine')
+    assert page.locator('#latex-footnote-pop .mine').inner_text() == 'popover footnote'
+    page.keyboard.press('Escape')
+    page.wait_for_timeout(100)
+    assert page.evaluate('__undone') == 1

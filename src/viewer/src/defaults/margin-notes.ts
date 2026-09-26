@@ -19,11 +19,11 @@
 // the window leaves beside the block, up to MARGIN.max. Placed again after
 // every layout, drawing and resize.
 import { registerFootnoteSource } from './footnotes.js';
-import { allData } from '../host/asides.js';
+import { allData } from '../runtime/block-data.js';
 import { blockOf } from '../host/host.ts';
 import { kindDef, onKindChange } from '../host/kinds.ts';
 import { surfacesOf, type SurfaceImpl } from '../host/surface.ts';
-import type { BlockHost, Instance, KindDef, Surface } from '../host/types.ts';
+import type { Instance, KindDef, NoteHost, Surface } from '../host/types.ts';
 
 export const MARGIN = { gap: 28, min: 150, max: 260 };   // px, by default
 
@@ -36,11 +36,9 @@ interface Item {
     edges: { top?: Surface | null };      // the kind's choice (setEdges)
 }
 
-function marginHost(it: Item, instance: Instance, again: () => void): BlockHost {
+function marginHost(it: Item, instance: Instance, again: () => void): NoteHost {
     return {
         type: 'margin', el: it.note, instance,
-        setFrame() {},
-        spacing: () => ({ before: 0, after: 0 }),
         setEdges(e) { it.edges = { ...it.edges, ...e }; again(); },
     };
 }
@@ -83,6 +81,15 @@ function edgeOf(it: Item, instance: Instance, blockEl: HTMLElement): Surface | n
     for (const s of surfacesOf(blockEl) as Iterable<SurfaceImpl>)
         if (s.part === body && it.note.contains(s.el)) return s;
     return null;
+}
+
+/** block.destroy: its notes undrawn and their layer gone. */
+export function removeMarginNotes(data: any) {
+    const M = data && data.margin;
+    if (!M) return;
+    for (const it of M.items.values()) undraw(it);
+    M.layer.remove();
+    data.margin = null;
 }
 
 export function placeMarginNotes(data: any) {

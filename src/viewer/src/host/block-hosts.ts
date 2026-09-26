@@ -25,7 +25,7 @@
 import { ZOOM } from '../engine/core.js';
 import { blockData, rerenderBlock } from '../runtime/blocks.js';
 import { blockOf } from './host.ts';
-import { surfaceHooks, surfacesOf, type Cache, type Edges, type SurfaceImpl } from './surface.ts';
+import { surfacesOf, type Cache, type Edges, type SurfaceImpl } from './surface.ts';
 import type { BlockHost, KindDef, Instance, Surface } from './types.ts';
 import { kindDef, onKindChange } from './kinds.ts';
 
@@ -83,19 +83,22 @@ function edgeValues(rec: HostRecord): Edges {
 const sameEdges = (a: Edges | null, b: Edges) => !!a && a.firstAscent === b.firstAscent && a.lastDepth === b.lastDepth
     && a.firstMeta === b.firstMeta && a.textFirst === b.textFirst && a.textLast === b.textLast;
 
-// A surface changed or went: the host it stands for an edge of lays out again
-// if what the flow reads from it changed.
-surfaceHooks.changed = (s: SurfaceImpl) => {
+/** A surface changed or went: the host it stands for an edge of lays out
+ *  again if what the flow reads from it changed. */
+export function surfaceChanged(s: SurfaceImpl) {
     for (let el: HTMLElement | null = s.el; el; el = el.parentElement) {
         const rec = byBox.get(el);
         if (!rec) continue;
         if (rec.laid && !sameEdges(rec.laid, edgeValues(rec))) relayoutSoon(rec.owner);
         return;
     }
-};
-surfaceHooks.disposeHosts = (cache: Cache) => {
+}
+/** The hosts of a layout (and of those nested in it), undone: a surface
+ *  disposed, a block destroyed. */
+export function disposeHosts(cache: Cache) {
     for (const rec of [...records]) if (rec.owner.hosts === cache.hosts) dispose(rec);
-};
+}
+
 
 function dispose(rec: HostRecord) {
     records.delete(rec);
