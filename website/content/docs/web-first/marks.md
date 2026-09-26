@@ -59,6 +59,16 @@ change its colour or remove it. The page remembers them for the next visit.
 ```
 
 {{< latex preamble="webfirst" >}}
+\paragraph{Try it here.} Select a few words of this paragraph and pick
+yellow, then select some of them together with the words after them and
+pick green. Only the words selected turn green: the rest of the yellow
+highlight stays yellow. A colour over a highlight of the same colour joins
+the two. To take a part out, select it and press the cross; to change a
+whole highlight, press it. Narrow the window, and the bands follow the
+words into their new lines.
+{{< /latex >}}
+
+{{< latex preamble="webfirst" >}}
 Underneath, a highlight is a live mark: \texttt{reflowtex.host.addMark}
 takes the glyphs by their places in the text and draws them as the
 author's marks are drawn, with its classes in \texttt{data-mark}.
