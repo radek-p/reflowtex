@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 862896ca97d04b1e63d38c2965d69764c7dad4e59833747b3b810131c3ffbeb6
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 8e7d8ef43c8aa55760bb34da0009c7e4f77dd41e1583642b2007406c77fa7884
 'use strict';
 "use strict";
 (() => {
@@ -1514,7 +1514,7 @@
       });
     }
     useGlyphMetrics(doc.glyph_metrics);
-    const changed2 = /* @__PURE__ */ new Set();
+    const changed3 = /* @__PURE__ */ new Set();
     for (const sp of doc.slotParas) {
       const orig = sp.orig, out = [], made = [];
       for (let i = 0; i < orig.length; i++) {
@@ -1543,13 +1543,13 @@
       sp.stale = sp.made;
       sp.made = made;
       sp.para.nodes = made.length ? out : orig;
-      changed2.add(sp.index);
+      changed3.add(sp.index);
     }
-    return changed2;
+    return changed3;
   }
-  function invalidateParagraphs(cache, changed2, stale) {
+  function invalidateParagraphs(cache, changed3, stale) {
     if (!cache || !cache.dom || !cache.layoutCtx) return;
-    for (const i of changed2) cache.bcs && cache.bcs.delete(i);
+    for (const i of changed3) cache.bcs && cache.bcs.delete(i);
     for (const n of stale) {
       disposePiece(cache.dom.byNode.get(n));
       cache.dom.byNode.delete(n);
@@ -1557,8 +1557,8 @@
     cache.layoutCtx.segs.forEach((seg, i) => {
       const s = cache.dom.segs[i];
       if (!s) return;
-      if (s.sub) invalidateParagraphs(s.sub, changed2, stale);
-      if (seg.items && seg.items.some((it) => changed2.has(it.index))) {
+      if (s.sub) invalidateParagraphs(s.sub, changed3, stale);
+      if (seg.items && seg.items.some((it) => changed3.has(it.index))) {
         s.hc = null;
         if (s.painted) s.dirty = true;
       }
@@ -1567,14 +1567,14 @@
   function refreshSlots(el) {
     const data = blockData.get(el);
     if (!data || !data.cache.dom) return;
-    const changed2 = applySlots(data.fontInfo, data.doc);
-    if (!changed2.size) return;
+    const changed3 = applySlots(data.fontInfo, data.doc);
+    if (!changed3.size) return;
     const parts = (n) => n.type === "wdisc" ? [...n.replace, ...n.options.flatMap((o) => [...o.pre, ...o.post])] : n.run ? [...n.run.merged.values()] : [n];
     const stale = data.doc.slotParas.flatMap((sp) => (sp.stale || []).flatMap(parts));
     data.doc.slotParas.forEach((sp) => {
       sp.stale = null;
     });
-    invalidateParagraphs(data.cache, changed2, stale);
+    invalidateParagraphs(data.cache, changed3, stale);
     const params = { ...data.params, align: data.lastAlign };
     layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
     paintVisibleNow(data.fontInfo, data.cache);
@@ -1681,8 +1681,8 @@
     if (m.id) el.dataset.rtxId = m.id;
     for (const c of (m.classes || "").split(/\s+/)) if (c) el.classList.add(c);
   }
-  function markHandle(id) {
-    const elements = () => [...document.querySelectorAll(`[data-rtx-id="${CSS.escape(id)}"]:not(rect.latex-mark)`)];
+  function handle(id, selector) {
+    const elements = () => [...document.querySelectorAll(selector)].filter((e) => !e.matches("rect.latex-mark"));
     return {
       id,
       elements,
@@ -1703,6 +1703,210 @@
         return [...lines.values()].map((l) => new DOMRect(l.left, l.top, l.right - l.left, l.bottom - l.top));
       }
     };
+  }
+  function markHandle(id) {
+    const q = CSS.escape(id);
+    return handle(id, `[data-rtx-id="${q}"], [data-rtx-marks~="${q}"]`);
+  }
+  var indexes = /* @__PURE__ */ new WeakMap();
+  function glyphIndex(doc) {
+    let ix = indexes.get(doc);
+    if (ix) return ix;
+    const nodes = [], seen = /* @__PURE__ */ new Set(), streams = /* @__PURE__ */ new Set();
+    const atBreak = /* @__PURE__ */ new Set();
+    const node = (n, broken = false) => {
+      if (seen.has(n)) return;
+      seen.add(n);
+      if (n.type === "glyph") {
+        nodes.push(n);
+        if (broken) atBreak.add(n);
+        if (n.stream) stream(n.stream);
+        return;
+      }
+      for (const c of n.children || []) node(c, broken);
+      for (const c of n.pre || []) node(c, true);
+      for (const c of n.post || []) node(c, true);
+      for (const c of n.replace || []) node(c, broken);
+    };
+    const items = (list) => {
+      for (const it of list || []) {
+        if (it.kind === "paragraph" && it.para) for (const n of doc.paragraphs?.[it.para - 1]?.nodes || []) node(n);
+        else if (it.kind === "display" && it.box) node(it.box);
+        else if (it.kind === "stream" && it.stream) stream(it.stream);
+      }
+    };
+    const stream = (i) => {
+      if (streams.has(i)) return;
+      streams.add(i);
+      items(doc.streams?.[i - 1]?.content);
+    };
+    items(doc.content);
+    for (let i = 1; i <= (doc.streams || []).length; i++) stream(i);
+    const at = /* @__PURE__ */ new WeakMap(), starts = [];
+    let text = "";
+    nodes.forEach((n, i) => {
+      at.set(n, i);
+      starts.push(text.length);
+      if (!atBreak.has(n)) text += n.text !== void 0 ? n.text : String.fromCodePoint(n.char || 65533);
+    });
+    indexes.set(doc, ix = { nodes, at, text, starts });
+    return ix;
+  }
+  var textOf2 = (ix, from, to) => ix.text.slice(ix.starts[from], to + 1 < ix.starts.length ? ix.starts[to + 1] : ix.text.length);
+  var blockByKey = (key) => allData.find((d) => d.cache.blockKey === key && d.el.isConnected);
+  var nodeOfEl = /* @__PURE__ */ new WeakMap();
+  function registerGlyph(el, n) {
+    nodeOfEl.set(el, n);
+  }
+  function dataOfNode(n) {
+    for (const d of allData) if (d.el.isConnected && glyphIndex(d.doc).at.has(n)) return d;
+    return void 0;
+  }
+  function rangesOf(range) {
+    if (range.collapsed) return [];
+    const root = range.commonAncestorContainer;
+    const scope = root.nodeType === Node.ELEMENT_NODE ? root : root.parentElement;
+    if (!scope) return [];
+    const els = scope.matches("tspan") ? [scope] : [...scope.querySelectorAll("tspan")];
+    const inside = (el) => {
+      if (!range.intersectsNode(el)) return false;
+      const t = el.firstChild;
+      if (t && range.startContainer === t && range.startOffset >= (t.textContent || "").length) return false;
+      if (t && range.endContainer === t && range.endOffset === 0) return false;
+      if (range.endContainer === el && range.endOffset === 0) return false;
+      return true;
+    };
+    const spans = /* @__PURE__ */ new Map();
+    for (const el of els) {
+      const n = nodeOfEl.get(el);
+      if (!n || !inside(el)) continue;
+      const d = dataOfNode(n);
+      if (!d) continue;
+      const i = glyphIndex(d.doc).at.get(n);
+      const s = spans.get(d);
+      if (!s) spans.set(d, { from: i, to: i });
+      else {
+        s.from = Math.min(s.from, i);
+        s.to = Math.max(s.to, i);
+      }
+    }
+    return [...spans].map(([d, s]) => ({ block: d.cache.blockKey || "", ...s, text: textOf2(glyphIndex(d.doc), s.from, s.to) }));
+  }
+  function resolve(r) {
+    const data = blockByKey(r.block);
+    if (!data) return null;
+    const ix = glyphIndex(data.doc), n = ix.nodes.length;
+    const from = Math.floor(r.from), to = Math.floor(r.to);
+    if (!(from >= 0 && to >= from && to < n)) {
+      if (!r.text) return null;
+    } else if (!r.text || textOf2(ix, from, to) === r.text) return { data, from, to };
+    let best = -1;
+    const want = from >= 0 && from < n ? ix.starts[from] : 0;
+    for (let at = ix.text.indexOf(r.text); at >= 0; at = ix.text.indexOf(r.text, at + 1))
+      if (best < 0 || Math.abs(at - want) < Math.abs(best - want)) best = at;
+    if (best < 0) return null;
+    const glyphAt = (c) => {
+      let lo = 0, hi = n - 1;
+      while (lo < hi) {
+        const m = lo + hi + 1 >> 1;
+        if (ix.starts[m] <= c) lo = m;
+        else hi = m - 1;
+      }
+      return lo;
+    };
+    const f = glyphAt(best), t = glyphAt(best + r.text.length - 1);
+    return textOf2(ix, f, t) === r.text ? { data, from: f, to: t } : null;
+  }
+  var live = /* @__PURE__ */ new Map();
+  var onNode = /* @__PURE__ */ new WeakMap();
+  var seq = 0;
+  function liveOn(n) {
+    const ids = onNode.get(n);
+    return ids && ids.length ? ids : void 0;
+  }
+  function liveInfo(id) {
+    const m = live.get(id);
+    return m && { id: m.id, classes: m.classes };
+  }
+  function repaint(blocks2) {
+    for (const d of blocks2) {
+      if (!d.el.isConnected) continue;
+      markDirty(d.cache);
+      paintVisibleNow(d.fontInfo, d.cache);
+      for (const s of surfacesOf(d.el)) {
+        if (s.isDisposed) continue;
+        markDirty(s.layoutCache);
+        paintVisibleNow(s.part.data.fontInfo, s.layoutCache);
+      }
+    }
+  }
+  function changed2() {
+    document.dispatchEvent(new CustomEvent("reflowtex:marks", { detail: { marks: liveMarks() } }));
+  }
+  function liveHandle(m) {
+    const base = markHandle(m.id);
+    return {
+      ...base,
+      get classes() {
+        return m.classes;
+      },
+      get ranges() {
+        return m.ranges.slice();
+      },
+      get live() {
+        return live.get(m.id) === m;
+      },
+      setClasses(classes) {
+        if (live.get(m.id) !== m || m.classes === classes) return;
+        m.classes = classes;
+        repaint(m.blocks);
+        changed2();
+      },
+      remove() {
+        if (live.get(m.id) !== m) return;
+        live.delete(m.id);
+        for (const n of m.nodes) {
+          const ids = onNode.get(n);
+          if (ids) onNode.set(n, ids.filter((x) => x !== m.id));
+        }
+        repaint(m.blocks);
+        changed2();
+      }
+    };
+  }
+  function addMark(ranges, options = {}) {
+    const id = options.id || `rtx-live-${++seq}`;
+    live.get(id) && liveHandle(live.get(id)).remove();
+    const m = { id, classes: options.classes || "", ranges: [], nodes: [], blocks: /* @__PURE__ */ new Set() };
+    for (const r of ranges) {
+      const at = resolve(r);
+      if (!at) continue;
+      const ix = glyphIndex(at.data.doc);
+      m.ranges.push({ block: r.block, from: at.from, to: at.to, text: textOf2(ix, at.from, at.to) });
+      m.blocks.add(at.data);
+      for (let i = at.from; i <= at.to; i++) {
+        const n = ix.nodes[i];
+        const ids = onNode.get(n);
+        onNode.set(n, ids ? [...ids, id] : [id]);
+        m.nodes.push(n);
+      }
+    }
+    if (!m.nodes.length) return null;
+    live.set(id, m);
+    repaint(m.blocks);
+    changed2();
+    return liveHandle(m);
+  }
+  var overlaps = (a, b) => a.block === b.block && a.from <= b.to && b.from <= a.to;
+  function liveMarks(at) {
+    let ms = [...live.values()];
+    if (at instanceof Element) {
+      const n = nodeOfEl.get(at), ids = n ? onNode.get(n) || [] : [];
+      ms = ms.filter((m) => ids.includes(m.id));
+    } else if (at) {
+      ms = ms.filter((m) => m.ranges.some((r) => at.some((q) => overlaps(r, q))));
+    }
+    return ms.map(liveHandle);
   }
 
   // src/engine/paint.js
@@ -1818,6 +2022,7 @@
           if (n.mark) applyMark(el, n.mark, cache);
           if (n.slot && cache.slotNames && cache.slotNames[n.slot - 1] !== void 0)
             el.dataset.slot = cache.slotNames[n.slot - 1];
+          registerGlyph(el, n);
           byNode.set(n, el);
           stats.created++;
         } else {
@@ -1825,11 +2030,15 @@
           el.setAttribute("y", y);
           stats.repositioned++;
         }
+        const live3 = liveOn(n);
+        if (live3) el.dataset.rtxMarks = live3.join(" ");
+        else if (el.dataset.rtxMarks !== void 0) delete el.dataset.rtxMarks;
         place(textParent, lastTspan, el, isNew);
         used.add(el);
         lastTspan = el;
         if (el.dataset.link && !stack.length) extend(linkRuns, el.dataset.link, el, x, n, y);
         if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
+        if (live3 && !stack.length) for (const id of live3) extend(markRuns, id, el, x, n, y);
       },
       // The references' extents on the line just drawn; starts afresh.
       takeLinkRuns() {
@@ -2229,8 +2438,9 @@
       s.bands = svgEl("g", { "aria-hidden": "true", style: "pointer-events:none" });
       s.svg.insertBefore(s.bands, s.svg.firstChild);
     }
+    runs = runs.filter(([k]) => typeof k !== "string").concat(runs.filter(([k]) => typeof k === "string"));
     s.bands.replaceChildren(...runs.map(([index, r]) => {
-      const m = cache.marks && cache.marks[index - 1] || {};
+      const m = (typeof index === "string" ? liveInfo(index) : cache.marks && cache.marks[index - 1]) || {};
       const rect = svgEl("rect", {
         x: r.x0,
         y: r.top,
@@ -2940,12 +3150,12 @@
   ];
   var AFFINE_CHILD_LISTS = ["children", "pre", "post", "replace"];
   function affineDisplayNode(n, deltaSp) {
-    let out = n, changed2 = false;
+    let out = n, changed3 = false;
     const edit = () => {
-      if (!changed2) {
+      if (!changed3) {
         out = { ...n };
         Object.defineProperty(out, "affineSource", { value: n.affineSource || n });
-        changed2 = true;
+        changed3 = true;
       }
     };
     for (const field of AFFINE_NODE_FIELDS) {
@@ -3810,7 +4020,7 @@
   }
 
   // src/host/surface.ts
-  var live = /* @__PURE__ */ new WeakMap();
+  var live2 = /* @__PURE__ */ new WeakMap();
   var all = /* @__PURE__ */ new Set();
   function edgesOf(cache) {
     const laid = cache.layout && cache.layout.laid || [];
@@ -3825,7 +4035,7 @@
     };
   }
   function surfacesOf(blockEl) {
-    return live.get(blockEl) || [];
+    return live2.get(blockEl) || [];
   }
   var TypesetPartImpl = class {
     constructor(role, instance, data, stream) {
@@ -3874,8 +4084,8 @@
       this.box.className = "latex-block latex-part";
       this.box.dataset.instance = part.instance.id;
       this.box.style.margin = "0";
-      let set = live.get(part.data.el);
-      if (!set) live.set(part.data.el, set = /* @__PURE__ */ new Set());
+      let set = live2.get(part.data.el);
+      if (!set) live2.set(part.data.el, set = /* @__PURE__ */ new Set());
       set.add(this);
       all.add(this);
       this.apply();
@@ -3993,16 +4203,16 @@
       disposeHosts(this.cache);
       this.listeners.clear();
       if (this.box.parentNode === this.el) this.el.removeChild(this.box);
-      live.get(this.part.data.el)?.delete(this);
+      live2.get(this.part.data.el)?.delete(this);
       all.delete(this);
       surfaceChanged(this);
     }
   };
   function disposeSurfaces(blockEl) {
-    for (const s of [...live.get(blockEl) || []]) s.dispose();
+    for (const s of [...live2.get(blockEl) || []]) s.dispose();
   }
   function rerenderSurfaces(blockEl) {
-    for (const s of live.get(blockEl) || []) s.rerender();
+    for (const s of live2.get(blockEl) || []) s.rerender();
   }
   window.addEventListener("beforeprint", () => {
     for (const s of all) s.paintAll();
@@ -4095,6 +4305,9 @@
     kinds: () => definedKinds().map((k) => k.kind),
     setText: (name, text) => setSlotText(name, text),
     mark: (id) => markHandle(id),
+    rangesOf: (range) => rangesOf(range),
+    addMark: (ranges, options) => addMark(ranges, options),
+    liveMarks: (at) => liveMarks(at),
     colorMaps: () => getColorMaps(),
     setColorMaps: (maps) => setColorMaps(maps),
     blocks: () => blocks.slice(),

@@ -12,7 +12,7 @@ import { TypesetPartImpl, type BlockData } from './surface.ts';
 import './block-hosts.ts';
 import { defineKind, definedKinds } from './kinds.ts';
 import { setSlotText } from './slots.js';
-import { markHandle } from './marks.ts';
+import { addMark, liveMarks, markHandle, rangesOf } from './marks.ts';
 import { getColorMaps, setColorMaps } from '../runtime/colour.js';
 import { destroyBlock, mountBlock } from '../runtime/init.js';
 import { blockData } from '../runtime/blocks.js';
@@ -101,6 +101,9 @@ export const host: Host = {
     kinds: () => definedKinds().map(k => k.kind),
     setText: (name, text) => setSlotText(name, text),
     mark: id => markHandle(id),
+    rangesOf: range => rangesOf(range),
+    addMark: (ranges, options) => addMark(ranges, options),
+    liveMarks: at => liveMarks(at),
     colorMaps: () => getColorMaps(),
     setColorMaps: maps => setColorMaps(maps),
     blocks: () => blocks.slice(),

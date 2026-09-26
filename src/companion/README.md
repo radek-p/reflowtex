@@ -203,6 +203,32 @@ inspector (`inspect={false}` hides it). The look uses `--rtx-glass`,
 `--rtx-accent`, `--rtx-surface-solid` and the swatches'
 `[data-t=…] .rtx-swatch`.
 
+## The highlighter
+
+The reader selects text, and a small bar over the selection offers colours
+to mark it with; pressing highlighted text offers the colours again and a
+button that removes the highlight, and the bar's eraser over a selection
+takes that part out of any highlight it touches. Declare it once on a page:
+
+```html
+<div data-rtx="highlighter"></div>
+<div data-rtx="highlighter" data-colours="yellow green" data-store="false"></div>
+```
+
+A highlight is a live mark (the viewer's `host.addMark`): drawn as an
+author's `\webclass` is, a band behind each of its lines, kept as the text
+breaks again. Its bands carry `rtx-highlight rtx-highlight-NAME` in
+`data-mark`, and look like the Marks page's example: filled with
+`--rtx-highlight-NAME` and padded by a stroke of the same colour
+(`--rtx-highlight-pad`), with darker colours in a dark theme
+([companion.css](companion.css)). The colours are yellow (the example's),
+green, pink and blue. Highlights across two blocks are
+one highlight; one over another merges with it. They are remembered per
+page in `localStorage` (`reflowtex-highlights:` and the path, or
+`data-store="key"`), by glyph positions and text, and come back on the next
+visit. From a script: `highlight(host, ranges, colour)` and
+`erase(host, ranges)`, with ranges from `host.rangesOf(range)`.
+
 `data-rtx` works for components of your own too:
 `registerElement('name', Component)` draws every
 `<div data-rtx="name" data-key="value">`, with each `data-*` as a prop

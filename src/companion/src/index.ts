@@ -21,6 +21,7 @@ import { LeanProof, LeanTheorem } from './kinds/lean.tsx';
 import { Hint } from './kinds/hint.tsx';
 import { PreviewOptions, ReadingButton, ReadingOptions } from './reading.tsx';
 import { registerElement } from './mount.ts';
+import { Highlighter } from './highlighter.tsx';
 
 export { h, render, Fragment, Component, createContext } from 'preact';
 export { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useContext } from 'preact/hooks';
@@ -41,6 +42,7 @@ export { InlineButton, PILL, Popover } from './controls.tsx';
 export { reading, scopedReading, ReadingOptions, ReadingButton, PreviewOptions, THEMES, WIDTHS,
          type Theme, type ReadingState, type ReadingOptionsProps } from './reading.tsx';
 export { registerElement, mountAll } from './mount.ts';
+export { Highlighter, highlight, erase, HIGHLIGHT_COLOURS, type HighlighterProps } from './highlighter.tsx';
 
 // The package's own kinds. A page may draw one differently: define
 // again, with its own component.
@@ -53,3 +55,4 @@ define('hint', Hint);
 registerElement('reading-button', ReadingButton);
 registerElement('reading-options', ReadingOptions);
 registerElement('preview-options', PreviewOptions);
+registerElement('highlighter', Highlighter);

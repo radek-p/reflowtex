@@ -88,6 +88,42 @@ export interface MarkHandle {
     rects(): DOMRect[];
 }
 
+/** A stretch of a block's text, by the positions of its glyphs: every
+ *  glyph of the block (footnotes and boxes included) numbered from 0 in
+ *  reading order, the same on every load of the same document. */
+export interface TextRange {
+    /** Block.key. */
+    readonly block: string;
+    /** The first glyph and the last (inclusive). */
+    readonly from: number;
+    readonly to: number;
+    /** What the glyphs spell, without spaces (a space is glue, not a
+     *  glyph). Kept with a saved range: if the document has changed, the
+     *  range is found again by it. */
+    readonly text: string;
+}
+
+export interface LiveMarkOptions {
+    /** Default: a new one (rtx-live-N). An id in use replaces that mark. */
+    id?: string;
+    /** Space-separated, as \webclass's: in the bands' data-mark. */
+    classes?: string;
+}
+
+/** A mark made while the page is open (host.addMark): a reader's
+ *  highlight, say. Drawn as the document's own: a band behind each line
+ *  (rect.latex-mark, the classes in data-mark, the id in data-rtx-id),
+ *  kept through every reflow; its glyphs carry the id in data-rtx-marks. */
+export interface LiveMark extends MarkHandle {
+    readonly classes: string;
+    /** Where it is, as it was resolved: save these to make it again. */
+    readonly ranges: readonly TextRange[];
+    /** False once removed (or replaced by a mark of the same id). */
+    readonly live: boolean;
+    setClasses(classes: string): void;
+    remove(): void;
+}
+
 /** A \webaction the reader pressed: \webaction{pane:next}{…} is verb
  *  "pane", arg "next". */
 export interface Action {
@@ -319,6 +355,18 @@ export interface Host {
      *  classes, which CSS reaches directly); only lines already drawn have
      *  elements (the viewer draws lines as they near the window). */
     mark(id: string): MarkHandle;
+    /** The text a DOM range covers (the reader's selection:
+     *  getSelection().getRangeAt(0)), one range per block it reaches; []
+     *  when it holds no glyph. A glyph counts when any of its text is in. */
+    rangesOf(range: Range): TextRange[];
+    /** Mark text from now on (see LiveMark). A range whose `text` no longer
+     *  reads the same at its positions is looked for by its text, nearest
+     *  its old place, and left out if not found; null when nothing is left.
+     *  Every change to live marks sends `reflowtex:marks` on document. */
+    addMark(ranges: readonly TextRange[], options?: LiveMarkOptions): LiveMark | null;
+    /** The live marks: all of them, those on a glyph element, or those
+     *  sharing a glyph with any of the ranges. In the order made. */
+    liveMarks(at?: Element | readonly TextRange[]): LiveMark[];
     /** Blocks initialised so far, in page order. */
     blocks(): Block[];
     block(el: Element): Block | undefined;
@@ -342,5 +390,7 @@ declare global {
     interface DocumentEventMap {
         /** Sent once, on document, when window.reflowtex.host exists. */
         'reflowtex:host': CustomEvent<{ host: Host }>;
+        /** Sent on document after live marks change (host.addMark). */
+        'reflowtex:marks': CustomEvent<{ marks: LiveMark[] }>;
     }
 }

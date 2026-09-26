@@ -11,7 +11,7 @@ import { materializeSegment } from './layout/document.js';
 import { registerLinkGlyph, restoreLinkStates } from '../host/links.js';
 import { colorFill } from '../runtime/colour.js';
 import { renderPiece } from '../host/inline.ts';
-import { applyMark } from '../host/marks.ts';
+import { applyMark, liveInfo, liveOn, registerGlyph } from '../host/marks.ts';
 // ── end of imports
 
 // ── SVG renderer ──────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ export function reconcileSink(byNode, used, stats, cache) {
     let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
     const stack = [];
     const linkRuns = new Map();   // data-link key → { el, x0, x1, top, bottom }
-    const markRuns = new Map();   // mark index → { el, x0, x1, top, bottom }
+    const markRuns = new Map();   // mark index, or live mark id → { el, x0, x1, top, bottom }
     const extend = (runs, key, el, x, n, y) => {
         const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
         const r = runs.get(key);
@@ -144,10 +144,16 @@ export function reconcileSink(byNode, used, stats, cache) {
                 // – carry its name, so a page can find (and style) where it is.
                 if (n.slot && cache.slotNames && cache.slotNames[n.slot - 1] !== undefined)
                     el.dataset.slot = cache.slotNames[n.slot - 1];
+                registerGlyph(el, n);
                 byNode.set(n, el); stats.created++;
             } else {
                 el.setAttribute('x', x); el.setAttribute('y', y); stats.repositioned++;
             }
+            // Live marks (host.addMark, a reader's highlight) come and go
+            // while the element stays: their ids are set on every paint.
+            const live = liveOn(n);
+            if (live) el.dataset.rtxMarks = live.join(' ');
+            else if (el.dataset.rtxMarks !== undefined) delete el.dataset.rtxMarks;
             place(textParent, lastTspan, el, isNew);
             used.add(el); lastTspan = el;
             // The extent of each reference on this line, for its hit area
@@ -156,6 +162,7 @@ export function reconcileSink(byNode, used, stats, cache) {
             if (el.dataset.link && !stack.length) extend(linkRuns, el.dataset.link, el, x, n, y);
             // And of each mark, for its band (see paintMarkBands).
             if (n.mark && !stack.length) extend(markRuns, n.mark, el, x, n, y);
+            if (live && !stack.length) for (const id of live) extend(markRuns, id, el, x, n, y);
         },
         // The references' extents on the line just drawn; starts afresh.
         takeLinkRuns() { const runs = [...linkRuns.values()]; linkRuns.clear(); return runs; },
@@ -601,14 +608,18 @@ export function paintLinkHits(s, runs) {
 // would fill the band too) and its id in data-rtx-id. Transparent (as an
 // attribute, which any CSS outranks) unless a page styles it:
 //   .latex-block rect.latex-mark[data-mark~="key"] { fill: #fde68a; }
+// A live mark (host.addMark) has its band the same way, drawn after the
+// document's own, so over them.
 export function paintMarkBands(s, runs, cache) {
     if (!runs.length && !s.bands) return;
     if (!s.bands) {
         s.bands = svgEl('g', { 'aria-hidden': 'true', style: 'pointer-events:none' });
         s.svg.insertBefore(s.bands, s.svg.firstChild);
     }
+    // The document's own marks first, then the live ones over them.
+    runs = runs.filter(([k]) => typeof k !== 'string').concat(runs.filter(([k]) => typeof k === 'string'));
     s.bands.replaceChildren(...runs.map(([index, r]) => {
-        const m = (cache.marks && cache.marks[index - 1]) || {};
+        const m = (typeof index === 'string' ? liveInfo(index) : cache.marks && cache.marks[index - 1]) || {};
         const rect = svgEl('rect', { x: r.x0, y: r.top, width: Math.max(0, r.x1 - r.x0),
                                      height: Math.max(0, r.bottom - r.top) });
         rect.setAttribute('class', 'latex-mark');

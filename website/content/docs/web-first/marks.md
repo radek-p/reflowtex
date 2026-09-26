@@ -44,6 +44,28 @@ const { elements, rects } = reflowtex.host.mark('euclid');
 for (const r of rects()) { /* one rectangle per line */ }
 ```
 
+{{< latex preamble="webfirst" >}}
+\subsection*{The reader's marks}
+A page can let its readers mark text too. With the highlighter on the
+page, select some text on this one: a bar offers colours, and the text
+gets a band behind each of its lines, as the key sentence above has. The
+bands follow the text when the lines break again, a highlight may reach
+from one block into the next, and pressing highlighted text lets the reader
+change its colour or remove it. The page remembers them for the next visit.
+{{< /latex >}}
+
+```html
+<div data-rtx="highlighter"></div>
+```
+
+{{< latex preamble="webfirst" >}}
+Underneath, a highlight is a live mark: \texttt{reflowtex.host.addMark}
+takes the glyphs by their places in the text and draws them as the
+author's marks are drawn, with its classes in \texttt{data-mark}.
+{{< /latex >}}
+
+<div data-rtx="highlighter"></div>
+
 <style>
   :root { --mark-highlight: #fff176; }
   html.dark, [data-latex-theme="dark"] { --mark-highlight: #5c5000; }

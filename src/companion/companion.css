@@ -382,3 +382,59 @@
 }
 
 @media print { .rtx-popover { display: none; } }
+
+/* ── The reader's highlighter (highlighter.tsx) ────────────────────────── */
+
+/* A highlight is a live mark: a band behind each of its lines, carrying
+   `rtx-highlight rtx-highlight-NAME` in data-mark. It looks like the Marks
+   page's example: filled with --rtx-highlight-NAME, and a stroke of the
+   same colour pads it, with round corners. Each colour has a darker one
+   for a dark theme. A colour of one's own is a name and a custom property:
+   data-colours="yellow mint" with
+     :root { --rtx-highlight-mint: #b2f5ea; }
+     [data-mark~="rtx-highlight-mint"], .rtx-highlight-mint { --rtx-highlight: var(--rtx-highlight-mint); } */
+:root {
+  --rtx-highlight-yellow: #fff176;
+  --rtx-highlight-green: #c8f0c0;
+  --rtx-highlight-pink: #f9c6dc;
+  --rtx-highlight-blue: #c6dcfb;
+  --rtx-highlight-pad: 3px;
+}
+html.dark, [data-latex-theme="dark"] {
+  --rtx-highlight-yellow: #5c5000;
+  --rtx-highlight-green: #1f4a26;
+  --rtx-highlight-pink: #5a2340;
+  --rtx-highlight-blue: #1f3a60;
+}
+[data-mark~="rtx-highlight-yellow"], .rtx-highlighter-colour.rtx-highlight-yellow { --rtx-highlight: var(--rtx-highlight-yellow); }
+[data-mark~="rtx-highlight-green"],  .rtx-highlighter-colour.rtx-highlight-green  { --rtx-highlight: var(--rtx-highlight-green); }
+[data-mark~="rtx-highlight-pink"],   .rtx-highlighter-colour.rtx-highlight-pink   { --rtx-highlight: var(--rtx-highlight-pink); }
+[data-mark~="rtx-highlight-blue"],   .rtx-highlighter-colour.rtx-highlight-blue   { --rtx-highlight: var(--rtx-highlight-blue); }
+.latex-block rect.latex-mark[data-mark~="rtx-highlight"] {
+  --rtx-highlight-fill: var(--rtx-highlight, var(--rtx-highlight-yellow));
+  fill: var(--rtx-highlight-fill); stroke: var(--rtx-highlight-fill);
+  stroke-width: var(--rtx-highlight-pad); stroke-linejoin: round;
+}
+
+/* The bar over the selection. */
+.rtx-highlighter {
+  position: fixed; z-index: 2147482000; display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px; border-radius: 999px;
+  border: .5px solid color-mix(in srgb, currentColor 16%, transparent);
+  background: var(--latex-popover-background, var(--latex-page-bg, Canvas)); color: inherit;
+  box-shadow: 0 8px 24px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .08);
+  -webkit-user-select: none; user-select: none;
+}
+.rtx-highlighter button {
+  display: grid; place-items: center; width: 24px; height: 24px; margin: 0; padding: 0;
+  border: 0; border-radius: 50%; color: inherit; background: transparent; cursor: pointer;
+}
+.rtx-highlighter-colour {
+  background: var(--rtx-highlight) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+.rtx-highlighter-colour[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 2px; }
+.rtx-highlighter-erase:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+.rtx-highlighter button:focus-visible { outline: 2px solid var(--rtx-accent); outline-offset: 2px; }
+
+@media print { .rtx-highlighter { display: none; } }
