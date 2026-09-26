@@ -145,8 +145,8 @@ h2 .seg button { padding: 0 7px; }
 }
 
 /* ── The pointer's ghost and the selected area, on both sides ─────────────── */
-/* the system's pointer gives way to the drawn one (makeMarks) */
-.scroll { cursor: none; }
+/* the system's pointer, an arrow over all of it (the crosshair goes with it: makeMarks) */
+.scroll { cursor: default; }
 .stage > .overlay { position: absolute; inset: 0; pointer-events: none; }
 .overlay > svg { position: absolute; left: 0; top: 0; overflow: visible; }
 /* the crosshair inverts what is under it */

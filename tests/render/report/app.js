@@ -171,13 +171,16 @@ function useImageSize(src) {
     return size;
 }
 
-// The pointer, drawn: four hairline arms clear of the point, and the point
-// one pixel. It is drawn on both sides – where the pointer is (the system's is
-// hidden over the panes, and in the live page: pinPage) and, as its ghost, at
-// the same place on the other – in white with mix-blend-mode: difference, so
-// it inverts whatever is under it: black on the paper, white on ink, and it
-// shows on the pattern and inverted pages alike. One device pixel wide, on
-// device pixels (crosshair()), so it is sharp on any screen.
+// The crosshair: four hairline arms clear of the point, and the point one
+// pixel. The system's pointer stays, and the crosshair goes with it,
+// CROSSHAIR_OFFSET px up and to the left of its tip, so that the arrow never
+// hides what it marks; the crosshair's point is what is measured and where an
+// area starts and ends. It is drawn on both sides – by the pointer, and as its
+// ghost at the same place on the other – in white with mix-blend-mode:
+// difference, so it inverts whatever is under it: black on the paper, white on
+// ink, and it shows on the pattern and inverted pages alike. One device pixel
+// wide, on device pixels (crosshair()), so it is sharp on any screen.
+const CROSSHAIR_OFFSET = 5;                    // CSS px, up and left of the pointer's tip
 const ARM_FROM = 3, ARM_TO = 10;               // CSS px from the point
 function crosshair() {
     // (the point is a pixel's middle: the arms end on pixel edges, half a pixel on)
@@ -241,9 +244,10 @@ function makeMarks({ scale, status }) {
         ].filter(Boolean).join('   ·   ');
     }
     // (e.currentTarget: the pane; the point in its stage's pt)
+    // (the crosshair's point, not the pointer's: CROSSHAIR_OFFSET px up and left)
     const at = e => {
         const r = e.currentTarget.querySelector('.stage').getBoundingClientRect(), s = scale();
-        return [(e.clientX - r.left) / s, (e.clientY - r.top) / s];
+        return [(e.clientX - CROSSHAIR_OFFSET - r.left) / s, (e.clientY - CROSSHAIR_OFFSET - r.top) / s];
     };
     const onScrollbar = e => {
         const p = e.currentTarget, r = p.getBoundingClientRect();
@@ -283,7 +287,9 @@ function makeMarks({ scale, status }) {
         // the inspector picks a node from the page (its agent says so).
         frame(win) {
             const d = win.document;
-            const pt = e => [(e.clientX + win.scrollX) / PX_PER_PT, (e.clientY + win.scrollY) / PX_PER_PT];
+            // (the page's px are the report's × PX_PER_PT / scale: the offset in pt is the same)
+            const pt = e => [(e.clientX + win.scrollX) / PX_PER_PT - CROSSHAIR_OFFSET / scale(),
+                             (e.clientY + win.scrollY) / PX_PER_PT - CROSSHAIR_OFFSET / scale()];
             d.addEventListener('pointermove', e => point('right', ...pt(e)), { passive: true });
             d.documentElement.addEventListener('mouseleave', () => { if (pointer?.side === 'right' && !drag) { pointer = null; draw(); } });
             let dragged = false;
@@ -337,7 +343,7 @@ function pinPage(win, colPx, marginPx) {
         #lt-content { max-width:none !important; width:${colPx}px !important; margin:0 !important; padding:0 ${marginPx}px !important; background: var(--latex-page-bg, #fff) !important }
         .latex-block { margin:0 !important; width:${colPx}px !important }
         #rr-overlay { position:absolute; pointer-events:none; overflow:visible; z-index:2147483646 }
-        html, html * { cursor: none !important }
+        html, html * { cursor: default !important }
         html, html * { user-select: none !important; -webkit-user-select: none !important; -webkit-user-drag: none !important }`;
     doc.head.appendChild(css);
     win.dispatchEvent(new Event('resize'));
