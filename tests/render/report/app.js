@@ -116,7 +116,7 @@ function applyTheme(choice) {
 }
 
 /** The View menu: theme, split, scroll lock. */
-function ViewMenu({ theme, setTheme, split, setSplit, lock, setLock }) {
+function ViewMenu({ theme, setTheme, colours, setColours, split, setSplit, lock, setLock }) {
     const [open, setOpen] = useState(false);
     const box = useRef(null);
     useEffect(() => {
@@ -136,6 +136,9 @@ function ViewMenu({ theme, setTheme, split, setSplit, lock, setLock }) {
             <${Radio} value=${theme} set=${setTheme} v="auto" label="Auto" hint="As the system's"/>
             <${Radio} value=${theme} set=${setTheme} v="light" label="Light"/>
             <${Radio} value=${theme} set=${setTheme} v="dark" label="Dark"/>
+            <div class="mhead">Page colours</div>
+            <${Radio} value=${colours} set=${setColours} v="auto" label="Auto" hint="TeX, or TeX inverted while the report is dark"/>
+            ${PAGE_COLOURS.map(([v, label, hint]) => html`<${Radio} value=${colours} set=${setColours} v=${v} label=${label} hint=${hint}/>`)}
             <div class="mhead">Split</div>
             <${Radio} value=${split} set=${setSplit} v="auto" label="Auto" hint="Side by side when there is more width than height, else stacked"/>
             <${Radio} value=${split} set=${setSplit} v="row" label="Side by side"/>
@@ -169,6 +172,17 @@ function useImageSize(src) {
     return size;
 }
 
+// The pointer over either side, and its ghost on the other: one crosshair,
+// centred on 0 0 in px, a white halo under a magenta line so that it reads on
+// the page and on the pattern alike. The pointer is it as a CSS cursor (in
+// the report, and in the live page: pinPage), the ghost as SVG (makeMarks).
+const CROSSHAIR_SHAPE = '<circle r="5"/><path d="M-13 0H-7M7 0H13M0-13V-7M0 7V13"/>';
+const CROSSHAIR = `<g fill="none" stroke-linecap="round"><g stroke="#fff" stroke-width="3.5">${CROSSHAIR_SHAPE}</g>` +
+    `<g stroke="#d81b60" stroke-width="1.5">${CROSSHAIR_SHAPE}</g></g>`;
+const CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="-14 -14 28 28">${CROSSHAIR}</svg>`)}") 14 14, crosshair`;
+document.documentElement.style.setProperty('--rr-cursor', CURSOR);
+
 /** A side's pane. Over its content, the marks both sides share (makeMarks):
  *  the ghost of the pointer on the other side, and the selected area. With
  *  `capture`, a layer over the content takes the pointer (the live page would). */
@@ -180,7 +194,7 @@ const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, capture, childre
         ${capture ? html`<div class="capture"></div>` : null}
         <svg class="marks" ref=${el => marks.attach(side, el)} viewBox=${`0 0 ${stagePt[0]} ${stagePt[1]}`} width=${stage[0]} height=${stage[1]}>
             <rect class="area"/>
-            <g class="ghost"><circle r="5"/><path d="M-13 0H-7M7 0H13M0-13V-7M0 7V13"/></g>
+            <g class="ghost" dangerouslySetInnerHTML=${{ __html: CROSSHAIR }}/>
         </svg>
     </div></div>`;
 
@@ -270,24 +284,42 @@ function pinPage(win, colPx, marginPx) {
     const doc = win.document;
     if (win.__setTheme) win.__setTheme('light');
     if (win.__zoom) win.__zoom(0);
-    const bg = [doc.body, doc.documentElement].map(e => getComputedStyle(e).backgroundColor)
-        .find(c => c && !/^(transparent|rgba\(0, 0, 0, 0\))$/.test(c)) ?? '#fff';
     const css = doc.createElement('style');
     css.textContent = `:root { color-scheme: light !important }
         html, body { margin:0 !important; padding:0 !important; background: transparent !important }
         body > :not(#lt-content):not(#rr-overlay) { display:none !important }
         #lt-content > :not(.latex-block) { display:none !important }
-        #lt-content { max-width:none !important; width:${colPx}px !important; margin:0 !important; padding:0 ${marginPx}px !important; background: ${bg} !important }
+        #lt-content { max-width:none !important; width:${colPx}px !important; margin:0 !important; padding:0 ${marginPx}px !important; background: var(--latex-page-bg, #fff) !important }
         .latex-block { margin:0 !important; width:${colPx}px !important }
-        #rr-overlay { position:absolute; pointer-events:none; overflow:visible; z-index:2147483646 }`;
+        #rr-overlay { position:absolute; pointer-events:none; overflow:visible; z-index:2147483646 }
+        html, html * { cursor: ${CURSOR} !important }`;
     doc.head.appendChild(css);
     win.dispatchEvent(new Event('resize'));
+}
+
+// The page's colours. 'tex' is TeX's own: black on white, as the PDF is (the
+// page's light theme is #333 on #fafaf9); four are the page's themes; 'inverted'
+// is TeX's, inverted by a filter on both sides (report.css). 'auto': TeX, or
+// inverted while the report is dark.
+const PAGE_COLOURS = [['tex', 'TeX', 'Black on white, as TeX sets it'], ['light', 'Light', "The page's light theme"],
+    ['dark', 'Dark', "The page's dark theme"], ['sepia', 'Sepia', "The page's sepia theme"], ['contrast', 'Contrast', "The page's high-contrast theme"],
+    ['inverted', 'TeX inverted', "TeX's colours, inverted on both sides"]];
+const resolvePageColours = mode => (mode !== 'auto' ? mode : document.documentElement.dataset.theme === 'dark' ? 'inverted' : 'tex');
+/** Give the live page these colours: a theme of its own, or TeX's. */
+function pageColours(win, mode) {
+    const doc = win?.document;
+    if (!doc?.head) return;
+    const tex = mode === 'tex' || mode === 'inverted';
+    if (win.__setTheme) win.__setTheme(tex ? 'light' : mode);
+    let style = doc.getElementById('rr-colours');
+    if (!style) { style = doc.createElement('style'); style.id = 'rr-colours'; doc.head.appendChild(style); }
+    style.textContent = tex ? 'html { color: #000 !important; --latex-page-bg: #fff !important }' : '';
 }
 
 /** The page itself, as the test measured it: live, for the inspector. As tall
  *  as the stage and scaled to it, so it never scrolls on its own – the pane
  *  does. `onPage(win, block)` when it is ready; `onHeight(pt)` as it settles. */
-function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, frameRef, onPage, onHeight }) {
+function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, colours, frameRef, onPage, onHeight }) {
     // hidden until pinned: the page as it loads (its header and title, its own
     // layout) is not the page the test measured
     const [ready, setReady] = useState(false);
@@ -307,9 +339,11 @@ function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, frameRef, on
         onHeight(hPt);
     }, [items, sel, colPx, marginPx]);
     useEffect(place, [place]);
+    useEffect(() => pageColours(frameRef.current?.contentWindow, colours), [colours]);
     const onLoad = () => {
         const win = frameRef.current.contentWindow;
         pinPage(win, colPx, marginPx);
+        pageColours(win, colours);
         requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
         requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
         // the block settles as its fonts arrive
@@ -340,6 +374,7 @@ function App() {
     const [mode, setMode] = useState('live');
     const [theme, setThemeKept] = useSetting('theme', 'auto');
     const [split, setSplit] = useSetting('split', 'auto');
+    const [coloursKept, setColours] = useSetting('colours', 'auto');
     const [lockKept, setLockKept] = useSetting('lock', 'on');
     const lock = lockKept === 'on', setLock = on => setLockKept(on ? 'on' : 'off');
     const [inspecting, setInspecting] = useState(false);
@@ -355,9 +390,12 @@ function App() {
     const inspectorUsed = useRef(false);
 
     const setTheme = t => { setThemeKept(t); applyTheme(t); };
+    const colours = resolvePageColours(coloursKept);
+    // (a render when the system turns dark or light: the page's colours may follow)
+    const [, setSystemDark] = useState(false);
     useEffect(() => {
         const mq = matchMedia('(prefers-color-scheme: dark)');
-        const follow = () => applyTheme(stored('theme', 'auto'));
+        const follow = () => { applyTheme(stored('theme', 'auto')); setSystemDark(mq.matches); };
         mq.addEventListener('change', follow);
         return () => mq.removeEventListener('change', follow);
     }, []);
@@ -512,7 +550,7 @@ function App() {
                 <button class=${`ib text ${inspecting ? 'on' : ''}`} aria-pressed=${String(inspecting)} disabled=${!liveSrc}
                     title=${`The inspector on the reflowed page: boxes, glue, every glyph (${inspector()?.shortcut ?? 'Alt+Shift+I'})`}
                     onClick=${toggleInspector}><${IconInspect}/> Inspect</button>
-                <${ViewMenu} theme=${theme} setTheme=${setTheme} split=${split} setSplit=${setSplit} lock=${lock} setLock=${setLock}/>
+                <${ViewMenu} theme=${theme} setTheme=${setTheme} colours=${coloursKept} setColours=${setColours} split=${split} setSplit=${setSplit} lock=${lock} setLock=${setLock}/>
                 <span class="sep"></span>
                 <span class="totals" title="All tests, by status">${Object.entries(counts).map(([k, n]) => html`<span class=${`st ${k}`}>${n}</span>`)}</span>
                 <button class="ib" title="Read the report again (after a test run)" aria-label="Reload" onClick=${load}><${IconReload}/></button>
@@ -520,7 +558,7 @@ function App() {
         </div>
         ${r.problems?.length ? html`<ul class=${`problems ${r.status}`}>${r.problems.map(p => html`<li>${p}</li>`)}</ul>` : null}
         <div class="main">
-            <div class="compare" ref=${compare} data-dir=${dir}>
+            <div class=${`compare${colours === 'inverted' ? ' inverted' : ''}`} ref=${compare} data-dir=${dir}>
                 <section class="side">
                     <h2><span class="title">TeX · pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></span></h2>
                     ${empty ?? html`<${Pane} paneRef=${left} onScroll=${onLeft} stage=${stage} stagePt=${stagePt} side="left" marks=${marks}>
@@ -534,7 +572,7 @@ function App() {
                         capture=${areaTool && mode === 'live' && !!liveSrc}>
                         ${mode === 'live' && liveSrc
                             ? html`<${Live} key=${`${r.id}|${r.at}`} src=${liveSrc} items=${items} sel=${sel} scale=${scale} stagePt=${stagePt}
-                                marginPt=${marginPt} hsizePt=${hsizePt} frameRef=${frame} onPage=${onPage} onHeight=${setLiveH}/>`
+                                marginPt=${marginPt} hsizePt=${hsizePt} colours=${colours} frameRef=${frame} onPage=${onPage} onHeight=${setLiveH}/>`
                             : html`<${Sheet} src=${viewerSrc} size=${viewerSize} items=${items} side="viewer" sel=${sel} scale=${scale}/>`}<//>`}
                 </section>
             </div>
