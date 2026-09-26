@@ -9,10 +9,12 @@ aliases: ["/docs/typesetting/links-and-footnotes/"]
 \pagetitle[Typesetting]{Links}
 \bigskip
 Cross-references and hyperlinks become links: \verb|\ref|, \verb|\eqref|
-and \verb|\autoref| to a \verb|\label|, and \verb|\href| or \verb|\url| to
-an address. A link lights up as a whole when you point at
-it, even when it is split across lines, and each \verb|\label| becomes an
-anchor on the page.
+and \verb|\autoref| to a \verb|\label|, \verb|\href| or \verb|\url| to
+an address, and with hyperref loaded, every other link it makes: a
+\verb|\cite| to its entry in the bibliography, \verb|\hyperref| to a label,
+\verb|\hyperlink| to a \verb|\hypertarget|. A link lights up as a whole when
+you point at it, even when it is split across lines, and each \verb|\label|
+becomes an anchor on the page.
 {{< /latex >}}
 
 {{< latex preamble="links" show-source="true" >}}
@@ -33,10 +35,29 @@ Wikipedia; displayed formulas in general on the page
 \href{../displays/}{Displays}.
 {{< /latex >}}
 
+{{< latex preamble="links" show-source="true" >}}
+\section*{Citations}
+Euler summed the reciprocals of the squares~\cite{euler1740}; a modern
+proof is in~\cite{aigner2018}, and the \hyperlink{note}{note below} says
+where.
+
+\hypertarget{note}{Note.} The chapter ``Three times $\pi^2/6$''
+of~\cite{aigner2018} gives three proofs.
+
+\begin{thebibliography}{9}
+\bibitem{aigner2018} M.~Aigner and G.~M.~Ziegler.
+  \emph{Proofs from THE BOOK}, 6th edition. Springer, 2018.
+\bibitem{euler1740} L.~Euler. De summis serierum reciprocarum.
+  \emph{Commentarii academiae scientiarum Petropolitanae} 7 (1740), 123--134.
+\end{thebibliography}
+{{< /latex >}}
+
 {{< latex preamble="links" >}}
 Point at a reference to see where it goes; press it to jump. A label on
 another page of the same site resolves through the link map the Hugo
 integration writes. A reference to a label that is not published anywhere
-stays plain text. An address with no scheme, like \verb|../displays/|, is
-relative to the page.
+stays plain text, and so does a link to a page number, since a page
+without pages has nowhere to send it. An address with no scheme, like
+\verb|../displays/|, is relative to the page. All of it together, in one
+short paper: \href{../../showcase/citations/}{Citations and links}.
 {{< /latex >}}

@@ -28,5 +28,7 @@ Documents published from their \LaTeX{} source, oldest first.
 \item \href{testmath/}{\textbf{The AMS \texttt{testmath.tex}}} -- the sample
   paper of the \texttt{amsmath} package, whole and unchanged, with its
   contents beside it
+\item \href{citations/}{\textbf{Citations and links}} -- a short paper with
+  a bibliography, cross-references and hyperref's links, and its source
 \end{itemize}
 {{< /latex >}}
