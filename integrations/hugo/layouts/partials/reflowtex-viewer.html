@@ -227,35 +227,10 @@
   <a href="{{ site.Params.reflowtexSource | default "https://github.com/radek-p/reflowtex" }}">Source code</a>.
 </footer>
 
-{{/* Example tabs and preview options (show-source="true", themes="…"):
-     delegated listeners. A theme button scopes that theme to its example's
-     Result panel; until one is pressed, the button of the page's theme is
-     marked. The size buttons zoom that panel's stage alone, in the page's
-     steps: the block lays out again in the room the zoom leaves it. */}}
+{{/* Example tabs (show-source="true"): a delegated listener. The preview
+     options (themes="…") are the companion package's (below). */}}
 <script>
   document.addEventListener('click', function (e) {
-    var zoom = e.target.closest && e.target.closest('button[data-latex-zoom]');
-    if (zoom) {
-      // (the level is kept apart from the buttons' data-latex-zoom, which
-      // says what a button does)
-      var box = zoom.closest('.latex-example-preview'), how = zoom.getAttribute('data-latex-zoom');
-      var z = parseFloat(box.getAttribute('data-latex-zoom-level') || '1');
-      z = how === 'reset' ? 1 : Math.min(3, Math.max(0.5, z * (how === 'in' ? 1.1 : 1 / 1.1)));
-      z = Math.round(z * 1000) / 1000;
-      box.setAttribute('data-latex-zoom-level', z);
-      box.querySelector('.latex-example-stage').style.zoom = z === 1 ? '' : z;
-      box.querySelector('[data-latex-zoom="reset"]').textContent = Math.round(z * 100) + '%';
-      return;
-    }
-    var choice = e.target.closest && e.target.closest('[data-latex-theme-choice]');
-    if (choice) {
-      var panel = choice.closest('.latex-example-preview');
-      panel.setAttribute('data-latex-theme', choice.getAttribute('data-latex-theme-choice'));
-      panel.querySelectorAll('[data-latex-theme-choice]').forEach(function (b) {
-        b.setAttribute('aria-pressed', b === choice ? 'true' : 'false');
-      });
-      return;
-    }
     var tab = e.target.closest && e.target.closest('.latex-example-tabs [data-tab]');
     if (!tab) return;
     var fig = tab.closest('figure.latex-example');
@@ -357,14 +332,17 @@
       e.preventDefault(); setPx(h, to); busy(h);
     });
   })();
-  document.addEventListener('DOMContentLoaded', function () {
-    var cls = document.documentElement.classList;
-    var page = ['dark', 'sepia', 'contrast'].filter(function (t) { return cls.contains(t); })[0] || 'light';
-    document.querySelectorAll('.latex-example-themes').forEach(function (g) {
-      var b = g.querySelector('[data-latex-theme-choice="' + page + '"]');
-      if (b) b.setAttribute('aria-pressed', 'true');
-    });
-  });
 </script>
+{{- /* The companion package (src/companion, installed by prebuild into
+       static/companion/): only when the site turns it on – params
+       .reflowtexCompanion = true. It draws the shortcode's preview options
+       (themes=), and the package's kinds (accordion, hints, Lean, boxed
+       theorems' looks); pages import it as 'reflowtex/companion'. */}}
+{{- if site.Params.reflowtexCompanion }}
+{{- $map := dict "imports" (dict "reflowtex/companion" ("companion/companion.js" | relURL)) }}
+{{ printf "<script type=\"importmap\">%s</script>" ($map | jsonify) | safeHTML }}
+<link rel="stylesheet" href="{{ "companion/companion.css" | relURL }}">
+<script type="module">import 'reflowtex/companion';</script>
+{{- end }}
 <script src="{{ "protobuf.min.js" | relURL }}?v={{ substr (readFile "static/protobuf.min.js" | crypto.MD5) 0 8 }}"></script>
 <script src="{{ "latex-viewer.js" | relURL }}?v={{ substr (readFile "static/latex-viewer.js" | crypto.MD5) 0 8 }}"></script>

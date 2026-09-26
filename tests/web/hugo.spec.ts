@@ -28,17 +28,18 @@ test('a reference to another page', async ({ openPage }) => {
 
 // An example's text size stays when its theme is changed or its text clicked:
 // the stored size once shared the buttons' attribute, so every click shrank
-// the text (1d3a850).
+// the text (1d3a850). The options are the companion's (<PreviewOptions>),
+// which the site turns on (params.reflowtexCompanion).
 test('example controls', async ({ openPage }) => {
   const page = await openPage('hugo/alpha/');
   const fig = page.locator('figure.latex-example');
   const level = () => fig.evaluate(f => ((f.querySelector('[data-latex-zoom-level]') ?? f) as HTMLElement).dataset.latexZoomLevel);
   const start = await level();
-  await fig.locator('[data-latex-zoom="out"]').click();
+  await fig.locator('[data-rtx="preview-options"] [data-z="out"]').click();
   await page.waitForTimeout(100);
   const smaller = await level();
   expect(smaller, 'the smaller-text button did nothing').not.toBe(start);
-  await fig.locator('[data-latex-theme-choice="dark"]').click();
+  await fig.locator('[data-rtx="preview-options"] [data-t="dark"]').click();
   await fig.locator('.latex-example-preview').click({ position: { x: 20, y: 60 } });
   await page.waitForTimeout(300);
   expect(await level(), 'the text size changed on a click elsewhere').toBe(smaller);
@@ -57,4 +58,16 @@ test('example handle', async ({ openPage }) => {
   await page.waitForTimeout(400);
   expect(await blk.evaluate(b => b.getBoundingClientRect().height)).toBeGreaterThan(h0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+});
+
+// Until the reader picks one, an example's options mark the page's theme;
+// a pick themes that example alone.
+test("example options start from the page's theme, and theme one example", async ({ openPage }) => {
+  const page = await openPage('hugo/alpha/');
+  const opts = page.locator('figure.latex-example [data-rtx="preview-options"]');
+  await opts.locator('[data-t]').first().waitFor();
+  expect(await opts.locator('[aria-checked="true"]').getAttribute('data-t')).toBe('light');
+  await opts.locator('[data-t="dark"]').click();
+  expect(await page.evaluate(() => [document.documentElement.getAttribute('data-theme'),
+    document.querySelector('.latex-example-preview')!.getAttribute('data-latex-theme')])).toEqual([null, 'dark']);
 });

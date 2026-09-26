@@ -83,6 +83,10 @@ export function installViewer(outDir: string, { inspector = false, log }: { insp
   copyFileSync(viewerScript(log), join(outDir, 'latex-viewer.js'));
   copyFileSync(join(VIEWER_DIR, 'protobuf.min.js'), join(outDir, 'protobuf.min.js'));
   if (inspector) cpSync(join(SRC, 'inspector'), join(outDir, 'inspector'), { recursive: true, filter: s => !s.endsWith('README.md') });
+  // The companion package's browser side, for a site that turns it on (the
+  // Hugo integration's params.reflowtexCompanion): two files, no Node needed.
+  mkdirSync(join(outDir, 'companion'), { recursive: true });
+  for (const f of ['companion.js', 'companion.css']) copyFileSync(join(SRC, 'companion', f), join(outDir, 'companion', f));
 }
 
 // ── Python-compatible JSON, where a stored hash depends on it ────────────────

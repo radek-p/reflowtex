@@ -81,6 +81,29 @@ focus it and use the arrow keys, to narrow the result and watch it re-break
 A block that uses `\ref`, `\eqref` or a similar reference command is compiled twice, so the
 numbers resolve.
 
+### The companion package (optional)
+
+`reflowtex.sty`'s own kinds – the accordion, hints, the Lean widgets, the
+looks of boxed theorems – and the examples' preview options are drawn by
+the companion package's browser side, an ES module that `prebuild` installs
+into `static/companion/`. A site turns it on in its config:
+
+```toml
+[params]
+reflowtexCompanion = true
+```
+
+The partial then loads it, with an import map naming it
+`reflowtex/companion`, so a page's own scripts can import from it too (after
+the partial: an import map must come before the modules that use it).
+Without it everything else works as before; only what the companion draws
+is not drawn. A site that wants the preview options without the companion
+writes its own on the viewer's API (`reflowtex.host`).
+
+`themes="light,dark"` with `show-source` puts preview options above the
+result – a text size and the named themes – for that example alone (the
+companion's `<PreviewOptions>`).
+
 ### Books in parts: `batch` and `weight`
 
 Blocks with the same `batch="name"` are compiled together as one LaTeX
@@ -161,6 +184,7 @@ matter keeps it out of the site) replaces what would otherwise need a whole
 | `data/latex_color_maps.json` | `name` → parsed colour-map JSON, for every `color-map="…"` in use | optional |
 | `static/fonts/*.otf` | provisioned fonts; the ones Reflow TeX modified are cmap-patched and subset to the site's characters (`--no-font-subset` serves them whole) | optional |
 | `static/{latex-viewer.js,protobuf.min.js}` | viewer scripts | no |
+| `static/companion/{companion.js,companion.css}` | the companion package, loaded with `params.reflowtexCompanion` | no |
 | `.reflowtex-build/<hash>/` | per-block LaTeX build artefacts | no |
 
 All of it is reproducible from content, so the `.gitignore` here ignores it.

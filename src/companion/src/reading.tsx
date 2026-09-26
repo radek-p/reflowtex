@@ -21,7 +21,7 @@
 // sends a window resize, so the viewer lays the text out again. For no flash
 // before the module has loaded, a page sets the saved state itself first,
 // from the same localStorage keys (the website's head.html does).
-import { signal, useSignal } from '@preact/signals';
+import { signal, useSignal, type Signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 
 const KEYS = { theme: 'reflowtex-theme', zoom: 'reflowtex-zoom', width: 'reflowtex-width' };
@@ -45,8 +45,20 @@ function initialZoom(): number {
     return z > 0 ? Math.min(ZOOM.max, Math.max(ZOOM.min, z)) : 1;
 }
 
+/** What a set of reading options controls: the page's (reading) or one
+ *  element's (scopedReading). */
+export interface ReadingState {
+    theme: Signal<string>;
+    zoom: Signal<number>;
+    width: Signal<string>;
+    themes: Theme[];
+    setTheme(t: string): void;
+    zoomBy(dir: -1 | 0 | 1): void;
+    setWidth(w: string): void;
+}
+
 /** The reader's choices, applied to the page as they change. */
-export const reading = {
+export const reading: ReadingState & { setZoom(z: number): void } = {
     theme: signal(initialTheme()),
     zoom: signal(initialZoom()),
     width: signal(html().getAttribute('data-width') || load(KEYS.width) || 'auto'),
@@ -83,7 +95,34 @@ export const reading = {
 
 const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** Choices for one element alone – an example's preview – not remembered:
+ *  the theme as data-latex-theme on it (the viewer's scoped themes: its
+ *  Theming docs), the size as a CSS zoom on `stage` (default: the element)
+ *  and data-latex-zoom-level on it. The page's theme is shown chosen until
+ *  another is. */
+export function scopedReading(target: HTMLElement, themes: Theme[], stage: HTMLElement = target): ReadingState {
+    const state: ReadingState = {
+        theme: signal(target.getAttribute('data-latex-theme') || reading.theme.value),
+        zoom: signal(parseFloat(target.getAttribute('data-latex-zoom-level') || '1') || 1),
+        width: signal('auto'),
+        themes,
+        setTheme(t) { target.setAttribute('data-latex-theme', t); state.theme.value = t; },
+        zoomBy(dir) {
+            const z = dir === 0 ? 1 : Math.min(ZOOM.max, Math.max(ZOOM.min, state.zoom.value * (dir > 0 ? ZOOM.step : 1 / ZOOM.step)));
+            const r = Math.round(z * 1000) / 1000;
+            target.setAttribute('data-latex-zoom-level', String(r));
+            stage.style.zoom = r === 1 ? '' : String(r);
+            state.zoom.value = r;
+        },
+        setWidth() {},
+    };
+    return state;
+}
+
 export interface ReadingOptionsProps {
+    /** Whose choices: the page's (`reading`, the default) or an element's
+     *  (scopedReading). */
+    state?: ReadingState;
     /** Offer the column width (a page that lets its column change). */
     width?: boolean;
     /** Offer the inspector (when the page has it). Default true. */
@@ -95,20 +134,20 @@ export interface ReadingOptionsProps {
 }
 
 /** The controls: text size, colour theme, (column width), (inspector). */
-export function ReadingOptions({ width = false, inspect = true, themes = reading.themes, onDone, class: cls }: ReadingOptionsProps) {
+export function ReadingOptions({ state = reading, width = false, inspect = true, themes = state.themes, onDone, class: cls }: ReadingOptionsProps) {
     const inspector = (window.reflowtex as any)?.inspector;
     return (
         <div class={cls ? `rtx-reading ${cls}` : 'rtx-reading'}>
             <div class="rtx-reading-row rtx-reading-size" role="group" aria-label="Text size">
-                <button type="button" data-z="out" aria-label="Smaller text" title="Smaller" onClick={() => reading.zoomBy(-1)}>A</button>
-                <button type="button" data-z="reset" aria-label="Reset text size" title="Reset" onClick={() => reading.zoomBy(0)}>
-                    {Math.round(reading.zoom.value * 100)}%</button>
-                <button type="button" data-z="in" aria-label="Larger text" title="Larger" onClick={() => reading.zoomBy(1)}>A</button>
+                <button type="button" data-z="out" aria-label="Smaller text" title="Smaller" onClick={() => state.zoomBy(-1)}>A</button>
+                <button type="button" data-z="reset" aria-label="Reset text size" title="Reset" onClick={() => state.zoomBy(0)}>
+                    {Math.round(state.zoom.value * 100)}%</button>
+                <button type="button" data-z="in" aria-label="Larger text" title="Larger" onClick={() => state.zoomBy(1)}>A</button>
             </div>
             <div class="rtx-reading-row rtx-reading-themes" role="radiogroup" aria-label="Colour theme">
                 {themes.map(t => (
-                    <button type="button" role="radio" data-t={t.name} aria-checked={reading.theme.value === t.name}
-                            onClick={() => reading.setTheme(t.name)}>
+                    <button type="button" role="radio" data-t={t.name} aria-checked={state.theme.value === t.name}
+                            onClick={() => state.setTheme(t.name)}>
                         <span class="rtx-swatch" aria-hidden="true">Aa</span><span>{t.label || title(t.name)}</span>
                     </button>))}
             </div>
@@ -116,8 +155,8 @@ export function ReadingOptions({ width = false, inspect = true, themes = reading
                 <p class="rtx-reading-caption" id="rtx-width-label">Text width</p>
                 <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-width-label">
                     {WIDTHS.map(w => (
-                        <button type="button" role="radio" data-w={w} aria-checked={reading.width.value === w}
-                                onClick={() => reading.setWidth(w)}>{title(w)}</button>))}
+                        <button type="button" role="radio" data-w={w} aria-checked={state.width.value === w}
+                                onClick={() => state.setWidth(w)}>{title(w)}</button>))}
                 </div>
             </div>}
             {inspect && inspector && <div class="rtx-reading-row">
@@ -158,4 +197,17 @@ export function ReadingButton(props: ReadingOptionsProps) {
                 <span class="rtx-sr-only">Reading options</span>
             </button>
         </div>);
+}
+
+/** An example's own preview options (the Hugo integration's themes=): text
+ *  size and theme for the preview this element stands in, alone. Declared as
+ *  <div data-rtx="preview-options" data-themes="light,dark">. */
+export function PreviewOptions({ themes = 'light,dark', element }: { themes?: string; element?: HTMLElement }) {
+    const state = useRef<ReadingState | null>(null);
+    if (!state.current && element) {
+        const target = (element.closest('.latex-example-preview') as HTMLElement) || element.parentElement!;
+        const stage = (target.querySelector('.latex-example-stage') as HTMLElement) || target;
+        state.current = scopedReading(target, themes.split(',').map(t => ({ name: t.trim() })).filter(t => t.name), stage);
+    }
+    return state.current ? <ReadingOptions state={state.current} inspect={false} class="rtx-reading-preview" /> : null;
 }

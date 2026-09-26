@@ -2,3 +2,7 @@
 baseURL = "http://example.org/hugo/"
 title = "Reflow TeX – Hugo fixture"
 disableKinds = ["taxonomy", "term", "RSS", "sitemap"]
+
+# The companion package: the examples' preview options (themes=) need it.
+[params]
+reflowtexCompanion = true

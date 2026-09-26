@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Components declared in HTML: <div data-rtx="NAME" data-KEY="value"></div>
 // is drawn by the component registered under NAME, with each data-KEY as a
-// prop (camelCase; "true" and "false" as booleans, numbers as numbers).
+// prop (camelCase; "true" and "false" as booleans, numbers as numbers), and
+// the element itself as `element`.
 // The companion draws every such element when it loads, and any added later
 // with mountAll(). A page registers its own: registerElement(name, Component).
 import { h, render, type ComponentType } from 'preact';
@@ -29,6 +30,6 @@ export function mountAll(root: ParentNode = document): void {
         const View = elements.get(el.dataset.rtx || '');
         if (!View || mounted.has(el)) continue;
         mounted.add(el);
-        render(h(View, props(el)), el);
+        render(h(View, { ...props(el), element: el }), el);
     }
 }

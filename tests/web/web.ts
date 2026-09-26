@@ -7,7 +7,7 @@
 // gets – into build/<name>/. Then, as a site would, the page's own code is
 // added: pages/<name>/head.html before </head>, body.html before </body>;
 // and, if pages/<name>/companion exists, the companion package's browser side
-// (src/companion, with the Preact it imports) and an import map naming it
+// (installed by the vanilla build: src/companion, Preact bundled in) with an import map naming it
 // 'reflowtex/companion'.
 /// <reference lib="dom" />
 import { execFile } from 'node:child_process';
@@ -46,10 +46,8 @@ export async function build(name: string): Promise<string> {
   let html = readFileSync(page, 'utf8');
   let head = existsSync(join(src, 'head.html')) ? readFileSync(join(src, 'head.html'), 'utf8') : '';
   if (existsSync(join(src, 'companion'))) {
-    const comp = join(out, 'companion');
-    mkdirSync(comp);
-    for (const f of ['src/companion/companion.js', 'src/companion/companion.css', 'src/inspector/vendor/preact.js'])
-      copyFileSync(join(REPO, f), join(comp, basename(f)));
+    // The vanilla build installs the companion's files (installViewer); the
+    // page turns it on, as a site does.
     head = '<script type="importmap">{"imports": {"reflowtex/companion": "./companion/companion.js"}}</script>\n' +
       '<link rel="stylesheet" href="companion/companion.css">\n' + head;
   }
