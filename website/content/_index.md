@@ -86,7 +86,7 @@ Displayed equations look as they do in the PDF.
 \noindent Text size and colour scheme.
 {{< /latex >}}
 
-{{< reading-options >}}
+{{< reading-options simple="true" >}}
 
 </div>
 

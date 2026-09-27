@@ -2,6 +2,8 @@
 {{- /*
   The reading options set into the page: the companion's <ReadingOptions>
   (src/companion/src/reading.tsx), in a panel that stays open. Usage:
-  {{< reading-options >}}
+  {{< reading-options >}}                 text size, colour theme, selection, inspector
+  {{< reading-options simple="true" >}}   text size and colour theme only (the home page's card)
 */ -}}
-<div data-rtx="reading-options" data-selection="true" style="margin-top: 1rem"></div>
+{{- $full := ne (.Get "simple") "true" -}}
+<div data-rtx="reading-options" data-selection="{{ $full }}" data-inspect="{{ $full }}" style="margin-top: 1rem"></div>
