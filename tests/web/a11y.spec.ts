@@ -89,6 +89,49 @@ test('the layer follows a reflow', async ({ openPage }) => {
   expectPlaced(await layerBoxes(page));
 });
 
+// A column that animates its width (the website's breathing hero) reflows
+// its block on every frame. Placing the layer rebuilds and measures the text
+// of each paragraph near the window, and done on every frame it cost a phone
+// frames: the animation stuttered. It is placed a few times a second while
+// the width moves, and once more after the last reflow.
+test('while the width moves, the layer is placed now and then, and on the lines at the end', async ({ openPage }) => {
+  const page = await openPage('mathml', { width: 900, height: 600 });
+  const counts = await page.evaluate(() => new Promise<{ reflows: number; placings: number }>(resolve => {
+    const block = document.querySelector<HTMLElement>('.latex-block[data-nodelist-b64]')!;
+    const layer = block.previousElementSibling!;
+    let reflows = 0, placings = 0, placed = false;
+    block.addEventListener('reflowtex:layout', () => { reflows++; });
+    new MutationObserver(() => { placed = true; }).observe(layer, { attributes: true, subtree: true, childList: true });
+    const t0 = performance.now();
+    (function step(now: number) {
+      if (placed) { placings++; placed = false; }                  // frames in which the layer moved
+      if (now - t0 > 1000) { resolve({ reflows, placings }); return; }
+      block.style.width = `${600 - 200 * Math.sin((now - t0) / 1000 * Math.PI)}px`;
+      requestAnimationFrame(step);
+    })(t0);
+  }));
+  expect(counts.reflows).toBeGreaterThan(20);
+  expect(counts.placings).toBeGreaterThan(0);
+  expect(counts.placings).toBeLessThan(counts.reflows / 3);
+  await idle(page);
+  expectPlaced(await layerBoxes(page));
+});
+
+// A run is fitted to its drawn line by letter spacing, which only goes so far
+// below zero: a line of a table, its cells' text run together, stayed
+// hundreds of pixels wider than the line, and the page on a phone scrolled
+// sideways. The layer clips sideways at its block's width.
+test('however wide a run of the layer, the page does not widen', async ({ openPage }) => {
+  const page = await openPage('mathml', { width: 420, height: 600 });
+  const widths = await page.evaluate(() => {
+    const run = document.querySelector<HTMLElement>('.latex-a11y [data-run], .latex-a11y span')!;
+    run.style.letterSpacing = '400px';
+    return { run: run.getBoundingClientRect().right, page: document.documentElement.scrollWidth, window: innerWidth };
+  });
+  expect(widths.run).toBeGreaterThan(widths.window);             // the run does reach past the window
+  expect(widths.page).toBeLessThanOrEqual(widths.window);
+});
+
 // Inside each piece, the text a screen reader reads is laid out to fill the
 // piece as the drawn paragraph fills its lines: VoiceOver frames the words it
 // reads, so text wrapped at another size puts its frame beside the

@@ -25,44 +25,58 @@
     var stage = document.getElementById('stage');
     if (!stage) return;
     var flow = document.getElementById('hero-flow');
-    var column = document.getElementById('lt-content');
+    var hero = stage.parentElement;
     var reduce  = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var PERIOD  = 17000;                       // one slow breath, ms
-    var running = false, start = 0, reserved = 0;
-    // The width band, inside the page's column.
+    var running = false, visible = true, looping = false;
+    var phase = 0, last = 0, reserved = 0, heroW = -1;
+    // The width band, as fractions of the hero's own width (the column's
+    // content box), so the stage can never be wider than the column.
     function band() {
-      var maxW = Math.min(740, column.clientWidth);
-      return { minW: Math.max(Math.min(320, maxW), maxW * 0.6), maxW: maxW };
+      var maxW = Math.min(740, heroW), minW = Math.max(Math.min(320, maxW), maxW * 0.6);
+      return { lo: minW / heroW, hi: maxW / heroW, span: maxW - minW };
     }
     // The stage keeps the height of the paragraph's tallest layout, so nothing
     // below it moves; the paragraph is centred in it, and glides there (CSS
     // transition) when a breath adds or removes a line. The breath starts at
     // its narrowest, so the tallest layout is measured in the first frames;
     // the reservation only ever grows, should a later one need more.
+    // The paragraph's own height (offsetHeight), not scrollHeight: the
+    // block's accessible layer hangs text below it that must not count.
     function fit() {
       var cs = getComputedStyle(stage);
       var pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-      var h = flow.scrollHeight;
+      var h = flow.offsetHeight;
       if (!h) return;
       if (h + pad > reserved) { reserved = Math.ceil(h + pad); stage.style.height = reserved + 'px'; }
       flow.style.transform = 'translateY(' + ((reserved - pad - h) / 2).toFixed(1) + 'px)';
     }
+    // The breath moves only while the hero is on screen; off it, it holds
+    // its place (the phase) and costs nothing.
     function breathe(now) {
-      if (!running) return;
-      if (!start) start = now;
-      var b = band(), mid = (b.maxW + b.minW) / 2, amp = (b.maxW - b.minW) / 2;
+      if (!running || !visible) { looping = false; return; }
+      if (last) phase += (now - last) / PERIOD;
+      last = now;
+      var b = band();
       // − cos: at its narrowest when it begins.
-      stage.style.width = (mid - amp * Math.cos((2 * Math.PI * (now - start)) / PERIOD)).toFixed(1) + 'px';
+      var f = (b.lo + b.hi) / 2 - (b.hi - b.lo) / 2 * Math.cos(2 * Math.PI * phase);
+      stage.style.width = (100 * f).toFixed(3) + '%';
       fit();
       requestAnimationFrame(breathe);
     }
+    function loop() {
+      if (running && visible && !looping) { looping = true; last = 0; requestAnimationFrame(breathe); }
+    }
+    // Only a change of the column's width counts: a phone's browser resizes
+    // the window as its toolbars show and hide while the page scrolls.
     function setup() {
-      var b = band(), canBreathe = !reduce && (b.maxW - b.minW) >= 24;
-      reserved = 0; start = 0;
-      if (canBreathe) {
-        if (!running) { running = true; requestAnimationFrame(breathe); }
-      } else {
-        running = false;
+      var w = hero.clientWidth;
+      if (w === heroW || !w) return;
+      heroW = w;
+      reserved = 0;
+      running = !reduce && band().span >= 24;
+      if (running) loop();
+      else {
         stage.style.width = '100%';
         stage.style.height = 'auto';
         flow.style.transform = '';
@@ -70,5 +84,11 @@
     }
     setup();
     window.addEventListener('resize', setup);
+    if (window.IntersectionObserver) {
+      new IntersectionObserver(function (es) {
+        visible = es[es.length - 1].isIntersecting;
+        loop();
+      }).observe(stage);
+    }
   })();
 </script>

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 a10fefedad08d4ebd5c97871469671525bd4f10ddfa567daf3ae50efbdf8717f
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 0cb2a168ceb6443c3926501a1d9117090aaa0e2e8af9e632bd287f30066dd015
 'use strict';
 "use strict";
 (() => {
@@ -2852,7 +2852,7 @@
     const st = data.cache.stats || {};
     const ls = data.cache.layoutStats || {};
     debugLog(`[latex-viewer] re-render at ${newWidth.toFixed(0)}pt: layout ${(tp - t0).toFixed(1)} ms, paint ${(performance.now() - tp).toFixed(1)} ms (${repainted} visible segment(s); ${st.repositioned || 0} repositioned, ${st.created || 0} created; segments: ${ls.computed || 0} laid out, ${ls.reused || 0} reused, ${ls.deferred || 0} deferred to scroll)`);
-    announceLayout(el);
+    announceLayout(el, quick);
     return true;
   }
   function rerenderBlock(el) {
@@ -2915,7 +2915,7 @@
   });
 
   // src/runtime/a11y.js
-  var ANCHOR = "position:relative;height:0;margin:0;padding:0;border:0;overflow:visible";
+  var ANCHOR = "position:relative;height:0;margin:0;padding:0;border:0;overflow-x:clip;overflow-y:visible";
   var PIECE = "position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;white-space:normal;pointer-events:none;user-select:none;-webkit-user-select:none";
   var LINE_HEIGHT = 1.15;
   var MIN_PX = 1;
@@ -3533,9 +3533,21 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
   // src/runtime/block-data.js
   var docData = /* @__PURE__ */ new WeakMap();
   var allData = [];
-  function announceLayout(el) {
-    placeMarginNotes(blockData.get(el));
-    placeAccessibleLayer(blockData.get(el));
+  var LAYER_MS = 200;
+  var layerTimers = /* @__PURE__ */ new Map();
+  function announceLayout(el, quick = false) {
+    const data = blockData.get(el);
+    placeMarginNotes(data);
+    if (quick) {
+      if (!layerTimers.has(el)) layerTimers.set(el, later("accessible layer", () => {
+        layerTimers.delete(el);
+        placeAccessibleLayer(blockData.get(el));
+      }, LAYER_MS));
+    } else {
+      cancelLater(layerTimers.get(el));
+      layerTimers.delete(el);
+      placeAccessibleLayer(data);
+    }
     el.dispatchEvent(new CustomEvent("reflowtex:layout", { bubbles: true, detail: { block: el } }));
   }
 

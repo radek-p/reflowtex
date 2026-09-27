@@ -4,6 +4,7 @@
 import { placeMarginNotes } from '../defaults/margin-notes.ts';
 import { blockData } from './blocks.js';
 import { placeAccessibleLayer } from './a11y.js';
+import { cancelLater, later } from './pending.js';
 // ── end of imports
 
 // Per-block data the host modules look up. Asides themselves (\webaside:
@@ -18,8 +19,26 @@ export const allData = [];                     // every block's data, in page or
 // a block places its margin notes and its accessible layer again and sends reflowtex:layout
 // (bubbling; block.on('layout') in the host API), for a page that places
 // things by anchors.
-export function announceLayout(el) {
-    placeMarginNotes(blockData.get(el));
-    placeAccessibleLayer(blockData.get(el));
+// While a resize is under way (a quick reflow, every frame of a drag or of
+// a column that animates its width), the accessible layer is placed a few
+// times a second, not on every frame: placing it rebuilds and measures the
+// text of every paragraph near the window, which on a phone cost frames. A
+// placement is always due after the last reflow, so the layer ends where the
+// lines are.
+const LAYER_MS = 200;
+const layerTimers = new Map();                 // a block → its placement to come
+export function announceLayout(el, quick = false) {
+    const data = blockData.get(el);
+    placeMarginNotes(data);
+    if (quick) {
+        if (!layerTimers.has(el)) layerTimers.set(el, later('accessible layer', () => {
+            layerTimers.delete(el);
+            placeAccessibleLayer(blockData.get(el));
+        }, LAYER_MS));
+    } else {
+        cancelLater(layerTimers.get(el));
+        layerTimers.delete(el);
+        placeAccessibleLayer(data);
+    }
     el.dispatchEvent(new CustomEvent('reflowtex:layout', { bubbles: true, detail: { block: el } }));
 }

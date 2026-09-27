@@ -97,7 +97,7 @@ export function reflowBlock(el, quick = false) {
     const st = data.cache.stats || {};
     const ls = data.cache.layoutStats || {};
     debugLog(`[latex-viewer] re-render at ${newWidth.toFixed(0)}pt: layout ${(tp - t0).toFixed(1)} ms, paint ${(performance.now() - tp).toFixed(1)} ms (${repainted} visible segment(s); ${st.repositioned||0} repositioned, ${st.created||0} created; segments: ${ls.computed||0} laid out, ${ls.reused||0} reused, ${ls.deferred||0} deferred to scroll)`);
-    announceLayout(el);
+    announceLayout(el, quick);
     return true;
 }
 

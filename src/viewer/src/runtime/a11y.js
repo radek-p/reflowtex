@@ -47,8 +47,11 @@ import { allData } from './block-data.js';
 // the pieces gave Safari negative heights for the page and its landmarks, and
 // VoiceOver drew its first outline at the block's end. Empty in the flow, the
 // layer moves nothing on the page wherever it is. A piece is placed relative
-// to it, so the page may move the block and its layer freely.
-const ANCHOR = 'position:relative;height:0;margin:0;padding:0;border:0;overflow:visible';
+// to it, so the page may move the block and its layer freely. It clips
+// sideways at the block's width: a run fitted to its line can still be much
+// wider than the line (letter spacing only goes so far below zero, see
+// fitRuns), and unclipped it would widen the page.
+const ANCHOR = 'position:relative;height:0;margin:0;padding:0;border:0;overflow-x:clip;overflow-y:visible';
 const PIECE  = 'position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;'
              + 'white-space:normal;pointer-events:none;user-select:none;-webkit-user-select:none';
 const LINE_HEIGHT = 1.15;          // the pieces' line-height, as in PIECE

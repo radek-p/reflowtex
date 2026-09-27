@@ -145,7 +145,8 @@
      folds into a "Contents" disclosure above the page. */
   .docs-layout {
     display: flex; justify-content: center; gap: 4rem;
-    max-width: 90rem; margin: 0 auto; padding: 0 2.5rem;
+    --docs-pad: 2.5rem;
+    max-width: 90rem; margin: 0 auto; padding: 0 var(--docs-pad);
   }
   /* The column is wide enough for an example's Result and LaTeX side by
      side; prose and code keep a reading measure inside it. */
@@ -174,10 +175,10 @@
   html[data-width-control] .docs-layout #lt-content > .latex-block { max-width: none; }
   /* A wide display scrolls in a box that peeks into the margins, sized by
      default as if the column were centred in the window. Here it is not, and
-     the free space either side is at least the layout's padding (2.5rem):
+     the free space either side is at least the layout's padding (--docs-pad):
      peek no further, in unzoomed units, so the page never scrolls sideways. */
   .docs-layout .latex-display {
-    --latex-display-peek: min(100px, calc(2.5rem / var(--rtx-zoom, 1))); }
+    --latex-display-peek: min(100px, calc(var(--docs-pad) / var(--rtx-zoom, 1))); }
   .docs-sidebar {
     flex: 0 0 14rem; align-self: flex-start;
     position: sticky; top: 0; max-height: calc(100vh - var(--rtx-dock-bottom, 0px)); overflow-y: auto;
@@ -206,7 +207,7 @@
   .docs-nav > .docs-nav-group:first-child { margin-top: 0; }
   .docs-nav-fold { display: none; }
   @media (max-width: 64rem) {
-    .docs-layout { flex-direction: column; gap: 0; padding: 0 1.25rem; }
+    .docs-layout { --docs-pad: 1.25rem; flex-direction: column; gap: 0; padding: 0 var(--docs-pad); }
     .docs-sidebar { display: none; }
     .docs-nav-fold {
       display: block; margin: 1.5rem 0 0; padding: 0.7rem 1rem;
