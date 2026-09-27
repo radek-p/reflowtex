@@ -293,6 +293,10 @@
   /* "Inspect": opens the floating inspector on this example's result. In
      the preview's top padding, clear of the width handle at its right edge. */
   .latex-example-preview { position: relative; }
+  /* In an example's tab bar, above the result, at its right edge (1.1rem in,
+     as it was inside the result): at the end of the row while the tabs are
+     stacked, in the Result column's cell when result and LaTeX are side by
+     side. */
   .lt-inspect {
     position: absolute; top: .55rem; right: 1.1rem; z-index: 1;
     display: inline-flex; align-items: center; gap: .3rem;
@@ -309,6 +313,23 @@
     background: color-mix(in srgb, var(--lt-primary) 7%, transparent);
   }
   .lt-inspect svg { width: .8rem; height: .8rem; }
+  .latex-example-tabs > button.lt-inspect {   /* its own look, not a tab's */
+    position: static; order: 2; margin: 0 1.1rem 0 auto; align-self: center;
+    font: 500 .68rem/1 system-ui, -apple-system, sans-serif; letter-spacing: .02em; text-transform: none;
+    padding: .28rem .5rem; border: 1px solid color-mix(in srgb, currentColor 16%, transparent); border-radius: 999px;
+    opacity: .45;
+  }
+  figure.latex-example:hover .latex-example-tabs > button.lt-inspect { opacity: .7; }
+  .latex-example-tabs > button.lt-inspect:hover, .latex-example-tabs > button.lt-inspect:focus-visible { opacity: 1; }
+  figure.latex-example[data-tab="source"] .latex-example-tabs > .lt-inspect { display: none; }
+  @container (min-width: 52rem) {
+    .latex-example-tabs > [data-tab="preview"] { grid-column: 1; grid-row: 1; }
+    .latex-example-tabs > [data-tab="source"] { grid-column: 2; grid-row: 1; }
+    .latex-example-tabs > .lt-inspect { grid-column: 1; grid-row: 1; justify-self: end; display: inline-flex !important; }
+  }
+  .latex-example-split .latex-example-tabs > [data-tab="preview"] { grid-column: 1; grid-row: 1; }
+  .latex-example-split .latex-example-tabs > [data-tab="source"] { grid-column: 2; grid-row: 1; }
+  .latex-example-split .latex-example-tabs > .lt-inspect { grid-column: 1; grid-row: 1; justify-self: end; display: inline-flex !important; }
   /* The same button above a block that is not an example (the inspect shortcode). */
   .lt-inspect-line { display: flex; justify-content: flex-end; margin: 1.25rem 0 .5rem; }
   .lt-inspect.lt-inspect-inline { position: static; opacity: .6; }

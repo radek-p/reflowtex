@@ -1,0 +1,69 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The Accessibility page's figure: the start of AMS testmath as drawn, with
+  the accessible layer's regions, and under each line what a screen reader
+  is given there – formulas as MathML or spoken, as the switch says. The
+  rows are the page's own content, so a screen reader here reads what they
+  show. Made by tools/a11y-figure.ts:
+    {{< a11y-reading >}}
+  The switch is the reader's choice of the whole site (the viewer's
+  reflowtex.setAccessibleMath, remembered), shown here as well.
+*/ -}}
+<div class="a11y-reading" data-a11y-reading>
+  <p class="a11y-switch-label" id="a11y-switch-label">Formulas for screen readers</p>
+  <div class="a11y-switch" role="radiogroup" aria-labelledby="a11y-switch-label">
+    <button type="button" role="radio" data-m="mathml" aria-checked="true">MathML</button>
+    <button type="button" role="radio" data-m="spoken" aria-checked="false">Spoken text</button>
+  </div>
+  {{ (resources.Get "a11y/testmath-reading.html").Content | safeHTML }}
+</div>
+<style>
+  .a11y-reading { margin: 1.5rem 0 2rem; }
+  .a11y-switch-label { font: 600 .8rem/1.4 system-ui, sans-serif; margin: 0 0 .35rem; opacity: .75; }
+  .a11y-switch { display: inline-grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; padding: 2px;
+    border-radius: 9px; background: color-mix(in srgb, currentColor 9%, transparent); margin-bottom: 1.25rem; }
+  .a11y-switch button { font: .82rem/1 system-ui, sans-serif; padding: .45rem .9rem; border: 0; border-radius: 7px;
+    background: none; color: inherit; cursor: pointer; opacity: .8; }
+  /* (the chosen option tinted with the text colour: readable in every theme) */
+  .a11y-switch button[aria-checked="true"] { opacity: 1; font-weight: 600;
+    background: color-mix(in srgb, currentColor 14%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / .14); }
+  .a11y-reading-figure[data-mode="mathml"] .a11y-said[data-mode="spoken"],
+  .a11y-reading-figure[data-mode="spoken"] .a11y-said[data-mode="mathml"] { display: none; }
+  .a11y-piece { margin-bottom: .5rem; }
+  .a11y-drawn { display: block; max-width: 100%; height: auto; overflow: visible; fill: currentColor; }
+  .a11y-region { fill: rgb(230 81 0 / .08); stroke: rgb(230 81 0 / .9); stroke-width: .8; }
+  .a11y-region.math { fill: rgb(230 81 0 / .16); }
+  .a11y-rule { fill: currentColor; }
+  /* ordinary text (a flex row would space every word and formula apart), the
+     speaker hanging on its left */
+  .a11y-said { position: relative; margin: .1rem 0 .85rem; padding-left: 1.6rem;
+    font: .84rem/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--lt-primary, #2f2ccd); }
+  .a11y-said math { font-size: 1.05em; }
+  /* beside its speaker, not centred (a numbered display is a table, which
+     centres itself in a block); Safari has no "inline math", but "inline"
+     does it there, and would break Chrome's layout */
+  .a11y-said math[display="block"] { display: inline; display: inline math; margin: 0; }
+  .a11y-speaker { position: absolute; left: .2rem; top: .15em; opacity: .9; }
+</style>
+<script>
+(function () {
+  var box = document.currentScript.previousElementSibling.previousElementSibling;
+  var fig = box.querySelector('.a11y-reading-figure'), KEY = 'reflowtex-a11y-math';
+  function show(m) {
+    fig.setAttribute('data-mode', m);
+    box.querySelectorAll('[data-m]').forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.m === m)); });
+  }
+  box.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-m]');
+    if (!b) return;
+    var rt = window.reflowtex;
+    if (rt && rt.setAccessibleMath) rt.setAccessibleMath(b.dataset.m);
+    else try { localStorage.setItem(KEY, b.dataset.m); } catch (x) {}
+    show(b.dataset.m);
+  });
+  // (the choice made in the reading options as well)
+  document.addEventListener('reflowtex:accessible-math', function (e) { show(e.detail.mode); });
+  var saved; try { saved = localStorage.getItem(KEY); } catch (x) {}
+  show(saved === 'spoken' ? 'spoken' : 'mathml');
+})();
+</script>

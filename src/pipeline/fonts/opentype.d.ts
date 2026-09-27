@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The part of opentype.js (which ships no types) the pipeline uses: building a
 // CFF-flavoured OpenType font from glyph outlines, and reading a font back
-// (the tests compare outlines through it).
+// (the tests compare outlines through it), and a glyph's outline as SVG path
+// data (the website's figures).
 declare module 'opentype.js' {
   export interface PathCommand { type: 'M' | 'L' | 'C' | 'Q' | 'Z'; x?: number; y?: number; x1?: number; y1?: number; x2?: number; y2?: number }
   export class Path {
@@ -10,6 +11,7 @@ declare module 'opentype.js' {
     lineTo(x: number, y: number): void;
     curveTo(x1: number, y1: number, x2: number, y2: number, x: number, y: number): void;
     close(): void;
+    toPathData(decimalPlaces?: number): string;
   }
   export class Glyph {
     constructor(options: { name: string; advanceWidth: number; path: Path; unicodes?: number[]; unicode?: number });
@@ -17,6 +19,8 @@ declare module 'opentype.js' {
     advanceWidth: number;
     unicodes: number[];
     path: Path;
+    /** its outline at (x, y), `fontSize` px to the em, y down */
+    getPath(x: number, y: number, fontSize: number): Path;
   }
   export interface FontOptions {
     familyName: string; styleName: string; fullName?: string; postScriptName?: string;

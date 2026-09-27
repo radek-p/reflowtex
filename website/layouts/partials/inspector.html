@@ -12,19 +12,22 @@
 (function () {
   var ins = window.reflowtex && window.reflowtex.inspector;
   if (!ins) return;
-  var ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3.5" width="9" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 1.4"/><path d="M8 8l6 2.6-2.6.9-.9 2.6z" fill="currentColor"/></svg>';
-  // One button per example result, added once its block is on the page.
+  // The inspector's own icon (its Pick button, src/inspector/panel/ui.js):
+  // a box, and the pointer going in.
+  var ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 16.5h-4a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 10l8 3.1-3.3 1.4-1.4 3.4z" fill="currentColor"/></svg>';
+  // One button per example, in its tab bar above the result (at the
+  // result's right edge), added once its block is on the page.
   function addButtons() {
-    document.querySelectorAll('figure.latex-example .latex-example-preview').forEach(function (p) {
-      var block = p.querySelector('[data-nodelist-b64]');
-      if (!block || p.querySelector(':scope > .lt-inspect')) return;
+    document.querySelectorAll('figure.latex-example').forEach(function (fig) {
+      var block = fig.querySelector('.latex-example-preview [data-nodelist-b64]'), bar = fig.querySelector('.latex-example-tabs');
+      if (!block || !bar || bar.querySelector(':scope > .lt-inspect')) return;
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'lt-inspect';
       b.title = 'Inspect the boxes and glue of this result (' + ins.shortcut + ' opens the inspector)';
       b.innerHTML = ICON + '<span>Inspect</span>';
       b.addEventListener('click', function () { ins.open(block); });
-      p.appendChild(b);
+      bar.appendChild(b);
     });
   }
   // The inspect shortcode: the next block on the page after the button.
