@@ -281,8 +281,8 @@ it runs again.
 
 {{< latex preamble="about" >}}
 \noindent At the width of its PDF, the browser puts every glyph of the AMS
-sample paper within a third of a point of where LuaTeX put it:
-\href{docs/showcase/accuracy/}{How close to the PDF?}
+sample paper within a tenth of a point of where LuaTeX put it:
+\href{docs/getting-started/accuracy/}{Accuracy}
 {{< /latex >}}
 
 {{< latex preamble="home" >}}

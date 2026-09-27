@@ -36,6 +36,14 @@ Reflow\,\TeX{} is free software under the \textbf{GNU Affero General Public
 License, version 3 or later} (AGPL-3.0-or-later). Bundled third-party
 components (the protobuf.js runtime, the fonts a build ships) keep their own
 permissive licences.
+\section*{Privacy}
+This site keeps your settings -- the colour theme, the text size and column
+width, where the inspector is, how the render tests page is set out -- in
+your browser's storage, so that they are there on your next visit. They are
+not cookies, they stay on your device, and they are never sent anywhere.
+The site has no analytics, adverts or other trackers, and loads nothing
+from other sites. It is served by GitHub Pages, whose servers are covered
+by GitHub's own privacy statement.
 \section*{Source and contact}
 The source code is at
 \href{https://github.com/radek-p/reflowtex}{github.com/radek-p/reflowtex}.

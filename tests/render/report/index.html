@@ -6,6 +6,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Render report</title>
 <link rel="stylesheet" href="report.css">
+<!-- Where the inspector is (its script, and the Preact app.js imports): beside
+     this page when served by serve.ts; the site's own copy on the website
+     (website/build.sh rewrites both uses). -->
+<meta name="rr-inspector" content="inspector/">
 <script>
 // the theme before the first paint (app.js follows it from here)
 try {
@@ -17,7 +21,7 @@ try {
 <body>
 <div id="app"></div>
 <!-- one inspector, in this page; it inspects the live page (app.js) -->
-<script src="/inspector/inspector.js"></script>
+<script src="inspector/inspector.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

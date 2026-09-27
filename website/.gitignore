@@ -30,3 +30,6 @@
 # The pixel comparison, fetched from a release by build.sh (pixel-compare.lock).
 /static/pixel-compare/
 /data/pixel_compare.json
+# The render tests' report, copied into static/ by build.sh, and its results,
+# fetched from a release (render-tests.lock).
+/static/render-tests/

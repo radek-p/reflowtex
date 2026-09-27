@@ -24,3 +24,20 @@ test('the index lists every result, cases in suite order, own width first', () =
     assert.deepEqual(JSON.parse(readFileSync(join(build, 'report.json'), 'utf8')).results.map((r: { id: string }) => r.id), results.map(r => r.id));
   } finally { rmSync(build, { recursive: true, force: true }); }
 });
+
+// The index goes into the website (report/site.ts): the same results must
+// make the same bytes, or a site built again from them changes. It carried
+// the time it was written.
+test('the index is the same file for the same results', async () => {
+  const build = mkdtempSync(join(tmpdir(), 'rtx-report-'));
+  try {
+    const dir = join(build, 'case', 'w0');
+    mkdirSync(dir, { recursive: true });
+    writeResult(dir, { id: 'case@0', case: 'case', extra: 0, status: 'pass', problems: [], tolerance: 0.05, target: 0.05 }, build);
+    writeIndex(build, ['case']);
+    const first = readFileSync(join(build, 'report.json'));
+    await new Promise(r => setTimeout(r, 20));          // (a moment later)
+    writeIndex(build, ['case']);
+    assert.deepEqual(readFileSync(join(build, 'report.json')), first);
+  } finally { rmSync(build, { recursive: true, force: true }); }
+});

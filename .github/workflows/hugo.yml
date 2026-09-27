@@ -26,11 +26,13 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Same image the container workflow verifies; layers come from the
-      # Actions cache, so this is seconds unless the Dockerfile changed.
+      # The image the render tests run in (the build's, with Chromium): the
+      # site shows their results. Layers come from the Actions cache, so this
+      # is seconds unless the Dockerfile changed.
       - uses: docker/build-push-action@v6
         with:
           context: .
+          target: test
           load: true
           tags: reflowtex:ci
           cache-from: type=gha
@@ -50,6 +52,15 @@ jobs:
           key: website-blocks-${{ hashFiles('src/**', 'examples/**', 'website/content/**', 'website/latex-preambles/**', 'integrations/hugo/**', 'Dockerfile') }}
           restore-keys: |
             website-blocks-
+
+      # Tools › Render tests shows the render tests of the version it is part
+      # of: they run here, for this commit, and build.sh copies their results
+      # into the site. A failing test does not stop the deploy – the page shows
+      # it; the Render tests workflow is what fails a change.
+      - name: Run the render tests, for the site
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace reflowtex:ci \
+            bash -lc 'npm ci --no-audit --no-fund && { make test-render-all || echo "render tests failed: the site shows which"; }'
 
       - name: Build the site in the container
         run: |

@@ -44,6 +44,8 @@ export function writeIndex(build: string, order: string[]): Result[] {
   // within a case: own width, then narrower, then wider – as the tests run
   const byWidth = (e: number) => (e === 0 ? 0 : e < 0 ? 1 : 2);
   results.sort((a, b) => rank(a) - rank(b) || a.case.localeCompare(b.case) || byWidth(a.extra) - byWidth(b.extra));
-  writeFileSync(join(build, 'report.json'), JSON.stringify({ written: new Date().toISOString(), results }, null, 1));
+  // (no time of its own: the same results make the same file, and a site built
+  // again from them does not change)
+  writeFileSync(join(build, 'report.json'), JSON.stringify({ results }, null, 1));
   return results;
 }

@@ -83,13 +83,29 @@ if [ ! -f "$PL_PDF" ] || [ -n "$(find "$TESTMATH/testmath.tex" "$TESTMATH/templa
   cp "$PL_OUT/pageless.pdf" "$PL_PDF"
 fi
 
-# 4. The accuracy page's pixel comparison: too big for git, so a release file
-#    that pixel-compare.lock names (tools/pageless-pdf/publish-compare.ts makes
-#    one). Fetched once, and again only when the lock changes; offline, the page
-#    shows no comparison and the build goes on.
+# 4. The render tests' report (Tools › Render tests), full screen at
+#    /render-tests/: the page from tests/render/report, pointed at the
+#    inspector's folder above (its one meta and script tag name it), with the
+#    site's privacy note, and the results of this checkout's render tests
+#    beside it. The deploy runs the tests first (.github/workflows/hugo.yml);
+#    locally, run them (make test-render-all), or the page has no results to
+#    show.
+rm -rf "$SITE/static/render-tests"
+mkdir -p "$SITE/static/render-tests"
+cp "$REPO/tests/render/report/app.js" "$REPO/tests/render/report/report.css" "$SITE/static/render-tests/"
+sed -e "s#\"inspector/#\"../inspector/$INSPECTOR_V/#g" \
+    -e "s#</body>#<script src=\"../privacy-notice.js\" defer></script>\n</body>#" \
+    "$REPO/tests/render/report/index.html" > "$SITE/static/render-tests/index.html"
+node "$REPO/tests/render/report/site.ts" "$SITE"
+
+# 5. The pixel comparison (Tools › Pixel comparison): too big for git, so a
+#    release file that pixel-compare.lock names
+#    (tools/pageless-pdf/publish-compare.ts makes one). Fetched once, and again
+#    only when the lock changes; offline, the page shows no comparison and the
+#    build goes on.
 node "$SITE/tools/fetch-pixel-compare.ts" "$SITE"
 
-# 5. Build (or serve) the static site.
+# 6. Build (or serve) the static site.
 if [ "${1:-}" = "server" ]; then
   shift
   exec hugo server --source "$SITE" "$@"

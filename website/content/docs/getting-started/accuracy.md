@@ -1,0 +1,44 @@
+---
+title: Accuracy
+weight: 50
+latexTitle: true
+aliases:
+  - /docs/showcase/accuracy/
+---
+
+{{< latex preamble="about" >}}
+\pagetitle[Getting started]{Accuracy}
+\bigskip
+How closely does the browser follow \TeX? To find out, a document is
+typeset by LuaTeX twice from one run: as a
+\href{../../tools/pageless-pdf/}{pageless PDF} -- one page as tall as the
+document, so that nothing is moved to another page -- and in the browser by
+Reflow\,\TeX, with its column exactly as wide as the PDF's. The two are then
+compared in two ways.
+
+\section*{Where each glyph is}
+The first comparison uses no pixels. The position of every glyph and rule
+in the PDF is read from the PDF, and the position the browser gave it from
+the page, and the two are matched. This is what the render tests do on every
+change to Reflow\,\TeX: a short document for each feature (paragraphs,
+inline mathematics, displays, alignments, lists, footnotes, microtype,
+rules, TikZ pictures) and all of the AMS sample paper
+\texttt{testmath.tex}. The short documents are also typeset 100\,pt narrower
+and 85\,pt wider, and compared with the page as the browser breaks it again
+for those widths. In the short documents no glyph is more than 0.014\,pt
+from where \TeX{} put it; in \texttt{testmath.tex}, no more than 0.1\,pt.
+
+\href{../../tools/render-tests/}{Render tests} shows every test: the PDF
+beside the page, anything that does not match marked on both, and the
+inspector open on the page.
+
+\section*{How it looks}
+The second comparison draws \texttt{testmath.tex} both ways, as a PDF
+renderer and as the browser draw it, and compares the two pictures pixel by
+pixel, line by line. As the glyphs are in the same places, what differs is
+the drawing: the two smooth the edges of glyphs differently, and the PDF
+renderer puts each glyph on a whole pixel row.
+
+\href{../../tools/pixel-compare/}{Pixel comparison} shows the pictures for
+the whole paper, with the rows that differ marked.
+{{< /latex >}}

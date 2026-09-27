@@ -7,9 +7,13 @@
 // edge of the margin and from the top of the block. strip.svg (MuPDF's drawing
 // of the PDF, vectors) and viewer.png are sized 2 px per pt in it; the live page
 // is pinned as dom-dump.ts pins it, where the viewer also draws 2 px per pt.
-import { html, render, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from '/inspector/vendor/preact.js';
+// Relative URLs throughout: the report is served at / by serve.ts, and under the
+// site's path on the website (website/build.sh).
+const INSPECTOR = document.querySelector('meta[name="rr-inspector"]').content;
+const { html, render, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } =
+    await import(new URL(`${INSPECTOR}vendor/preact.js`, document.baseURI).href);
 
-const BUILD = '/build/';
+const BUILD = 'build/';
 const PX_PER_PT = 2;
 const RED = '#d93025', AMBER = '#e37400', BLUE = '#0b57d0';
 
@@ -551,16 +555,17 @@ function App() {
     // The inspector: one panel, in this page, docked or floating as the
     // inspector does anywhere; it inspects the live page, whichever test is
     // shown.
-    // Whether it is open is remembered in this browser (render-report.inspector),
-    // and it opens again with the report; where it is, and its size, the
-    // inspector remembers itself.
+    // Open at first, docked at the bottom. Whether it is open is remembered in
+    // this browser (render-report.inspector), and it opens again with the
+    // report; where it is, and its size, the inspector remembers itself (the
+    // reader's place wins over 'bottom').
     const modeRef = useRef(mode);
     modeRef.current = mode;
     const openInspector = async (win, block) => {
         const api = inspector();
         if (!api) return;
         await api.inspect(win);
-        await api.open(block, { dock: 'auto', scroll: false });
+        await api.open(block, { dock: 'bottom', scroll: false });
         inspectorUsed.current = true;
         setInspecting(true);
         store('inspector', 'open');
@@ -568,7 +573,7 @@ function App() {
     const onPage = (win, block) => {
         page.current = [win, block];
         marks.frame(win);
-        if (stored('inspector', 'closed') === 'open') openInspector(win, block);
+        if (stored('inspector', 'open') === 'open') openInspector(win, block);
         else if (inspectorUsed.current) inspector()?.inspect(win);
     };
     const toggleInspector = async () => {

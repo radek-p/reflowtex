@@ -233,8 +233,8 @@ the current width and draws the lines as SVG. When the width changes, it
 runs again.
 \end{enumerate}
 At the width of its PDF, the browser puts every glyph of the AMS sample
-paper within a third of a point of where Lua\TeX{} put it; see
-\href{docs/showcase/accuracy/}{How close to the PDF?}
+paper within a tenth of a point of where Lua\TeX{} put it; see
+\href{docs/getting-started/accuracy/}{Accuracy}
 
 The paragraph below is broken again on every frame while its width
 changes. Press the button to set it moving.

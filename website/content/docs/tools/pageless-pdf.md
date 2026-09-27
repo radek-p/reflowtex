@@ -76,8 +76,8 @@ width:
   or the same ink moved. It writes a side-by-side picture, a heat map and a
   report. \texttt{tiles.ts} cuts them into tiles for a web page.
 \end{description}
-The results for \texttt{testmath.tex} are on
-\href{../../showcase/accuracy/}{How close to the PDF?}
+The results are on \href{../render-tests/}{Render tests}, for every test, and
+\href{../pixel-compare/}{Pixel comparison}, for \texttt{testmath.tex}.
 {{< /latex >}}
 
 ```sh
