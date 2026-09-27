@@ -27,8 +27,10 @@ inspector open on it.
   .render-tests .shot { display: block; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px; overflow: hidden; line-height: 0; }
   .render-tests .shot img { width: 100%; height: auto; }
   .render-tests p { font-size: .9rem; margin: .75rem 0 2rem; display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
-  .render-tests .open { display: inline-block; padding: .4rem .9rem; border-radius: 6px; background: var(--lt-primary, #0b57d0); color: #fff; text-decoration: none; font-weight: 600; }
-  .render-tests .open:hover { filter: brightness(1.1); }
+  /* the home page's primary button (layouts/partials/head.html) */
+  .render-tests .open { display: inline-block; padding: .5rem 1.1rem; border: 1px solid transparent; background: var(--lt-primary); color: #fff; text-decoration: none; font-weight: 600; transition: background .15s ease; }
+  .render-tests .open:hover { background: var(--lt-primary-strong); }
+  html.dark .render-tests .open { color: #0c0a09; }
 </style>
 
 {{< latex preamble="about" >}}
