@@ -22,7 +22,10 @@ test('waits for a reflow and its settling pass', async ({ openPage }) => {
   await idle(page);
   const r = await page.evaluate(() => ({ pending: reflowtex.inspect.pending(), seen: [...(window as any).__seen] }));
   expect(r.pending).toEqual([]);
-  expect(r.seen).toEqual(expect.arrayContaining(['reflow', 'settle']));
+  // The settling pass: its timer, or what the pass itself left for a frame.
+  // (It is looked for once a frame, and a frame held back past the timer's
+  // 150 ms misses the timer: WebKit on CI.)
+  expect(r.seen).toEqual(expect.arrayContaining(['reflow', expect.stringMatching(/^settle/)]));
   expect(await block.evaluate(b => b.getBoundingClientRect().height), 'laid out narrower').toBeGreaterThan(h0);
 });
 
