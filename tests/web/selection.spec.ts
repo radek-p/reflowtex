@@ -3,7 +3,7 @@
 // data-latex-selection="bands" on <html> or a block, and the reader's
 // switch in the companion's reading options. Off, the browser draws it.
 import { test, expect, type WebPage } from './fixtures.ts';
-import { READY } from './web.ts';
+import { READY, SETTLED } from './web.ts';
 
 /** Select glyphs a..b of the first block (all of mark `key` by default).
  *  The viewer draws its bands on selectionchange, which the browser queues
@@ -18,8 +18,11 @@ async function select(page: WebPage, glyphs?: [number, number], block = 0) {
     const r = document.createRange();
     r.setStart(a.firstChild!, 0);
     r.setEnd(b.firstChild!, b.textContent!.length);
-    const timer = setTimeout(done, 2000);           // (no event: the selection did not change)
-    document.addEventListener('selectionchange', () => { clearTimeout(timer); done(); }, { once: true });
+    // (the event for the new selection: clearing it first may be one of its own)
+    const timer = setTimeout(finish, 2000);          // (no event: the selection did not change)
+    function finish() { clearTimeout(timer); document.removeEventListener('selectionchange', seen); done(); }
+    function seen() { const s = getSelection()!; if (s.rangeCount && !s.isCollapsed) finish(); }
+    document.addEventListener('selectionchange', seen);
     getSelection()!.removeAllRanges();
     getSelection()!.addRange(r);
   }), [glyphs || null, block] as const);
@@ -61,8 +64,11 @@ test('bands follow the text into new lines', async ({ openPage }) => {
   await page.evaluate(() => document.documentElement.setAttribute('data-latex-selection', 'bands'));
   await select(page);
   const wide = (await bands(page)).length;
+  const before = await page.evaluate(() => reflowtex.inspect.paints);
   await page.evaluate(() => { (document.querySelector('.latex-block') as HTMLElement).style.width = '260px'; });
-  await page.waitForTimeout(400);
+  // The reflow's paint, then still frames (a frame can be held back for seconds)
+  await page.waitForFunction(n => reflowtex.inspect.paints > n, before);
+  await page.waitForFunction(SETTLED, undefined, { polling: 50 });
   const lines = await page.evaluate(() => reflowtex.host.mark('key').rects().length);
   expect(lines).toBeGreaterThan(wide);
   expect((await bands(page)).length).toBe(lines);
@@ -111,17 +117,10 @@ test('the reader\'s switch, remembered', async ({ openPage }) => {
   // As openPage waits: every block drawn, its fonts loaded (without it, a
   // slow load under the whole suite had nothing drawn to select yet).
   await page.waitForFunction(READY, undefined, { timeout: 20000 });
-  await page.evaluate(() => document.fonts.ready);
-  // …and the viewer's repaint for its web fonts, which comes after
-  // fonts.ready: it replaces the glyphs, and a selection made before it went
-  // with them (WebKit, 3 in 40 runs in the CI container: no bands, and no
-  // selection left). Until its paint count stays still.
-  await page.waitForFunction(() => {
-    const w = window as any, p = w.reflowtex.inspect.paints;
-    const still = w.__lastPaints === p && performance.now() - w.__since > 250;
-    if (w.__lastPaints !== p) { w.__lastPaints = p; w.__since = performance.now(); }
-    return still;
-  }, undefined, { polling: 50, timeout: 10000 });
+  // …and the viewer's repaint for its web fonts, after fonts.ready: it
+  // replaces the glyphs, and a selection made before it went with them
+  // (WebKit, 3 in 40 runs in the CI container: no bands, no selection left).
+  await page.waitForFunction(SETTLED, undefined, { polling: 50, timeout: 20000 });
   await page.waitForFunction(() => document.documentElement.getAttribute('data-latex-selection') === 'bands');
   await expect(page.getByRole('radio', { name: 'Even' })).toHaveAttribute('aria-checked', 'true');
   await select(page);
@@ -145,24 +144,29 @@ test('a selection over a space: its band reaches the glyphs\' edges', async ({ o
     const d = text.indexOf('Every') + 4, w = d + 1;             // "Every| number": y, then n
     const x = (i: number) => +els[i].getAttribute('x')!;
     const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const select = (a: Node, ao: number, b: Node, bo: number) => {
+    // (as the select above: the selection's event, then the frames the bands are drawn in)
+    const select = (a: Node, ao: number, b: Node, bo: number) => new Promise<void>(done => {
+      const t = setTimeout(finish, 2000);
+      function finish() { clearTimeout(t); document.removeEventListener('selectionchange', seen); done(); }
+      function seen() { const s = getSelection()!; if (s.rangeCount && !s.isCollapsed) finish(); }
+      document.addEventListener('selectionchange', seen);
       const range = document.createRange(); range.setStart(a, ao); range.setEnd(b, bo);
       getSelection()!.removeAllRanges(); getSelection()!.addRange(range);
-    };
+    });
     const band = () => { const b = document.querySelector('.latex-block rect.latex-selection');
       return b ? [+b.getAttribute('x')!, +b.getAttribute('x')! + +b.getAttribute('width')!] : null; };
     // From the end of "Every" to the end of "number".
-    select(els[d].firstChild!, 1, els[w + 5].firstChild!, 1); await frames();
+    await select(els[d].firstChild!, 1, els[w + 5].firstChild!, 1); await frames();
     const withWord = band();
     // The space alone: from the end of "Every" to the start of "number".
-    select(els[d].firstChild!, 1, els[w].firstChild!, 0); await frames();
+    await select(els[d].firstChild!, 1, els[w].firstChild!, 0); await frames();
     const space = band();
     // As Chromium puts it: in the word space's own element, before its
     // text (the start) and after it (the end).
     const sp = [...els[d].parentElement!.children].find(e => e.textContent === ' ' && +e.getAttribute('x')! > x(d))!;
-    select(sp.firstChild!, 0, els[w + 5].firstChild!, 1); await frames();
+    await select(sp.firstChild!, 0, els[w + 5].firstChild!, 1); await frames();
     const fromSpace = band();
-    select(els[d - 4].firstChild!, 0, sp.firstChild!, 1); await frames();
+    await select(els[d - 4].firstChild!, 0, sp.firstChild!, 1); await frames();
     const toSpaceEnd = band();
     return { withWord, space, fromSpace, toSpaceEnd, dx: x(d), wx: x(w) };
   });

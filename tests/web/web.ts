@@ -86,6 +86,30 @@ export async function buildHugo(): Promise<string> {
 /** The viewer's API on window (see src/viewer). */
 declare global { const reflowtex: any; interface Window { [k: string]: any } }
 
+/** The page has settled: its fonts are in, and the viewer's paint count has
+ *  stayed still for 3 frames and 150 ms. The viewer draws every block again
+ *  once its web fonts have arrived, after document.fonts.ready; that repaint
+ *  replaces the glyphs, and a selection or a measurement made before it goes
+ *  with them. It waits for a frame (requestAnimationFrame), and under load
+ *  WebKit can hold frames back for seconds: time alone passed with the repaint
+ *  still to come (in the CI container, 3 in 360 runs). Frames that ran
+ *  without a paint mean none is waiting: the viewer's callbacks, asked for
+ *  first, run first in a frame. (Pages with no inspection API: fonts only.)
+ *  For waitForFunction, polling every 50 ms. */
+export const SETTLED = () => {
+  const w = window as any, p = w.reflowtex?.inspect?.paints;
+  if (document.fonts.status !== 'loaded') return false;
+  if (p === undefined) return true;
+  if (w.__rtxFrames === undefined) {
+    w.__rtxFrames = 0;
+    const tick = () => { w.__rtxFrames++; requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }
+  const now = performance.now();
+  if (w.__rtxLastPaints !== p) { w.__rtxLastPaints = p; w.__rtxSince = now; w.__rtxFrom = w.__rtxFrames; return false; }
+  return now - w.__rtxSince >= 150 && w.__rtxFrames - w.__rtxFrom >= 3;
+};
+
 /** Every block laid out and its visible lines drawn: each .latex-block holds
  *  an <svg> with glyphs. */
 export const READY = () => {
