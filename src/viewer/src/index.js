@@ -13,6 +13,7 @@ import { ZOOM } from './engine/core.js';
 import { init } from './runtime/init.js';
 import { installHost } from './host/host.ts';
 import { SELECTION_CSS, installSelection } from './host/selection.ts';
+import { track } from './runtime/pending.js';
 // ── end of imports
 
 // The viewer's own styles: what it draws itself (margin notes, the unit
@@ -46,4 +47,5 @@ export function installViewerStyles() {
 
 installHost();
 installSelection();
-document.addEventListener('DOMContentLoaded', init);
+// (counted from here until every block is set up: inspect.idle waits for it)
+track('page set-up', new Promise(done => document.addEventListener('DOMContentLoaded', () => done(init()))));

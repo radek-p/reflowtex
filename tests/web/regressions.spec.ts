@@ -6,7 +6,7 @@
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { test, expect, type WebPage } from './fixtures.ts';
-import { BUILD } from './web.ts';
+import { BUILD, idle } from './web.ts';
 
 const block = (page: WebPage, i = 0) => page.locator('.latex-block[data-nodelist-b64]').nth(i);
 
@@ -30,7 +30,7 @@ test('host CSS does not scale the text', async ({ openPage }) => {
 test('host CSS keeps a label in its button', async ({ openPage }) => {
   const page = await openPage('hostile');
   await page.waitForSelector('.rtx-button svg text tspan', { state: 'attached' });
-  await page.waitForTimeout(100);
+  await idle(page);
   const r = await page.evaluate(() => {
     const btn = document.querySelector('.rtx-button')!, b = btn.getBoundingClientRect();
     const base = (t: any) => { const p = t.ownerSVGElement.createSVGPoint(); p.y = parseFloat(t.getAttribute('y'));
@@ -51,7 +51,7 @@ test('resizing rotated text raises nothing', async ({ openPage }) => {
   const page = await openPage('hostile');
   for (const w of [400, 900, 360, 900, 400]) {
     await block(page).evaluate((b: HTMLElement, w) => { b.style.width = `${w}px`; }, w);
-    await page.waitForTimeout(120);
+    await idle(page);
   }
 });
 
@@ -73,7 +73,7 @@ test('the gap in a link is hoverable', async ({ openPage }) => {
   });
   expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)!.tagName, [x, y]), 'the point is on a glyph').not.toBe('tspan');
   await page.mouse.move(x, y);
-  await page.waitForTimeout(100);
+  await idle(page);
   expect(await page.locator('.latex-link-hover').count(), 'pointing between two words of a link hovers nothing').toBeGreaterThan(0);
 });
 
@@ -146,7 +146,7 @@ for (const [os, theme] of [['dark', 'light'], ['light', 'dark']] as const)
     const page = await openPage('notes', { colorScheme: os });
     await page.evaluate(t => window.__setTheme(t), theme);
     await page.locator('[data-footnote]').first().hover();
-    await page.waitForTimeout(200);
+    await idle(page);
     expect(await contrast(page)).toBeGreaterThan(4.5);
   });
 
@@ -159,7 +159,7 @@ for (const name of ['notes', 'live'])
     let worst = 0;
     for (let w = 170; w < 520; w += 35) {
       await page.evaluate(w => { for (const b of document.querySelectorAll<HTMLElement>('.latex-block[data-nodelist-b64]')) b.style.width = `${w}px`; }, w);
-      await page.waitForTimeout(300);             // a resize lays out the rest once it settles (150 ms)
+      await idle(page);                           // a resize lays out the rest once it settles
       worst = Math.max(worst, await page.evaluate(() => new Promise<number>(r => requestAnimationFrame(() => requestAnimationFrame(() => {
         let m = 0;
         for (const b of document.querySelectorAll('.latex-block[data-nodelist-b64]')) {
@@ -188,7 +188,7 @@ test('accordion panes share a baseline', async ({ openPage }) => {
   const pane = '.rtx-pane[data-state="open"]';
   const before = await firstBaseline(page, pane);
   await page.locator('rect.latex-link-hit[data-link-action^="pane:next"]').first().click({ force: true });
-  await page.waitForTimeout(300);
+  await idle(page);
   expect(Math.abs(await firstBaseline(page, pane) - before)).toBeLessThan(0.5);
 });
 
@@ -198,7 +198,7 @@ test('accordion panes share a baseline', async ({ openPage }) => {
 test('print shows hints and hides actions', async ({ openPage }) => {
   let page = await openPage('notes');
   await page.emulateMedia({ media: 'print' });
-  await page.waitForTimeout(300);                         // the blur eases out
+  await idle(page);                                       // the blur eases out
   const s = await page.locator('.latex-stream[data-kind="hint"]').evaluate(h => ({
     blur: getComputedStyle(h.firstElementChild!).filter, label: getComputedStyle(h, '::after').content }));
   expect(s.blur, JSON.stringify(s)).not.toContain('blur');
@@ -217,12 +217,12 @@ test('print shows hints and hides actions', async ({ openPage }) => {
 test('a split widget is whole and hovers as one', async ({ openPage }) => {
   const page = await openPage('live');
   await block(page, 1).evaluate((b: HTMLElement) => { b.style.width = '120px'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   const parts = page.locator('foreignObject.latex-widget');
   expect(await parts.count()).toBeGreaterThanOrEqual(3);
   expect((await page.locator('.badge').allInnerTexts()).map(t => t.trim()).join(' ')).toBe('checked by Lean on 25 September 2026');
   await parts.nth(1).hover();
-  await page.waitForTimeout(100);
+  await idle(page);
   const marked = await page.evaluate(() => [...document.querySelectorAll('foreignObject.latex-widget')]
     .filter(f => f.closest('.latex-widget-hover') || f.classList.contains('latex-widget-hover') || f.querySelector('.latex-widget-hover')).length);
   expect(marked, 'hovering one piece did not mark them all').toBe(await parts.count());
@@ -265,7 +265,7 @@ test('margin notes when fonts come late', async ({ openPage }) => {
 test('a resize keeps the reader in place', async ({ openPage }) => {
   const page = await openPage('long', { width: 1100, height: 800 });
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
-  await page.waitForTimeout(300);
+  await idle(page);
   await page.evaluate(() => { window.__first = [...document.querySelectorAll('.latex-block svg')].find(s => s.getBoundingClientRect().bottom > 40); });
   const top0: number = await page.evaluate(() => window.__first.getBoundingClientRect().top);
   for (let w = 1100; w > 700; w -= 40) {
@@ -275,7 +275,7 @@ test('a resize keeps the reader in place', async ({ openPage }) => {
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `sideways scroll at ${w} px`).toBeLessThanOrEqual(1);
   }
-  await page.waitForTimeout(400);
+  await idle(page);
   const r = await page.evaluate(() => ({ connected: window.__first.isConnected as boolean, top: window.__first.getBoundingClientRect().top as number }));
   expect(r.connected, 'the segment on screen was replaced').toBe(true);
   expect(Math.abs(r.top - top0) < 5 || (r.top >= 0 && r.top < 800), `the reader lost their place: ${top0.toFixed(0)} → ${r.top.toFixed(0)} px`).toBe(true);

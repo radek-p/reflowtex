@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 7878cb157ea5b2e4e7f5be16c864bbec1aeef9d4f0eb86aac60b15d70a0bf4d9
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 1f4dafb14fe21923bee2a0369e032c37043366d178f1ff5e922671622871f9f3
 'use strict';
 "use strict";
 (() => {
@@ -999,6 +999,72 @@
     };
   }
 
+  // src/runtime/pending.js
+  var waiting = /* @__PURE__ */ new Map();
+  var frameTokens = /* @__PURE__ */ new Map();
+  var timerTokens = /* @__PURE__ */ new Map();
+  function frame(name, cb) {
+    const token = { name };
+    waiting.set(token, name);
+    const id = requestAnimationFrame((t) => {
+      waiting.delete(token);
+      frameTokens.delete(id);
+      cb(t);
+    });
+    frameTokens.set(id, token);
+    return id;
+  }
+  function cancelFrame(id) {
+    const token = frameTokens.get(id);
+    if (token) {
+      waiting.delete(token);
+      frameTokens.delete(id);
+    }
+    cancelAnimationFrame(id);
+  }
+  function later(name, cb, ms) {
+    const token = { name };
+    waiting.set(token, name);
+    const id = setTimeout(() => {
+      waiting.delete(token);
+      timerTokens.delete(id);
+      cb();
+    }, ms);
+    timerTokens.set(id, token);
+    return id;
+  }
+  function cancelLater(id) {
+    const token = timerTokens.get(id);
+    if (token) {
+      waiting.delete(token);
+      timerTokens.delete(id);
+    }
+    clearTimeout(id);
+  }
+  function track(name, promise) {
+    const token = { name };
+    waiting.set(token, name);
+    promise.finally(() => waiting.delete(token)).catch(() => {
+    });
+    return promise;
+  }
+  function pending() {
+    const names = [...waiting.values()];
+    if (document.fonts && document.fonts.status !== "loaded") names.push("fonts loading");
+    for (const a of document.getAnimations ? document.getAnimations() : []) {
+      if (a.playState === "running" && a.effect && a.effect.getComputedTiming().endTime !== Infinity)
+        names.push(`animation ${a.animationName || a.transitionProperty || a.id || ""}`.trim());
+    }
+    return names;
+  }
+  async function idle() {
+    for (let quiet = 0; quiet < 3; ) {
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => setTimeout(r, 0));
+      quiet = pending().length ? 0 : quiet + 1;
+    }
+  }
+
   // src/defaults/margin-notes.ts
   var MARGIN = { gap: 28, min: 150, max: 260 };
   function marginHost(it, instance, again) {
@@ -1069,7 +1135,7 @@
     const block = blockOf(el);
     const notes = block ? block.instances({ placement: "detached", place: "margin" }) : [];
     if (!notes.length) return;
-    const again = () => requestAnimationFrame(() => placeMarginNotes(data));
+    const again = () => frame("margin notes", () => placeMarginNotes(data));
     const M = data.margin = data.margin || { layer: document.createElement("div"), items: /* @__PURE__ */ new Map() };
     M.layer.className = "latex-margin";
     if (M.layer.parentNode !== el) el.appendChild(M.layer);
@@ -1433,7 +1499,7 @@
   function scheduleViewportPaint() {
     if (vpScheduled) return;
     vpScheduled = true;
-    requestAnimationFrame(() => {
+    frame("viewport paint", () => {
       vpScheduled = false;
       for (const el of observedBlocks) {
         const data = blockData.get(el);
@@ -1475,7 +1541,7 @@
     const height = Math.max(...glyphs.map(gH)), depth = Math.max(...glyphs.map(gD));
     const spec = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
     if (document.fonts && !document.fonts.check(spec, text)) {
-      document.fonts.load(spec, text).then(() => scheduleSlots(), () => {
+      track("slot face", document.fonts.load(spec, text)).then(() => scheduleSlots(), () => {
       });
     }
     const out = [];
@@ -1582,7 +1648,7 @@
   function scheduleSlots() {
     if (slotScheduled) return;
     slotScheduled = true;
-    requestAnimationFrame(() => {
+    frame("slots", () => {
       slotScheduled = false;
       for (const el of slotBlocks) refreshSlots(el);
     });
@@ -1945,7 +2011,7 @@
     return !!at && at.getAttribute("data-latex-selection") === "bands";
   }
   function update() {
-    frame = 0;
+    frame2 = 0;
     const next = /* @__PURE__ */ new Set(), nextBlocks = /* @__PURE__ */ new Set();
     const sel = getSelection();
     const nextEdges = { start: null, end: null };
@@ -1973,9 +2039,9 @@
     blocks = nextBlocks;
     repaint(touched);
   }
-  var frame = 0;
+  var frame2 = 0;
   var schedule = () => {
-    if (!frame) frame = requestAnimationFrame(update);
+    if (!frame2) frame2 = frame("selection bands", update);
   };
   function installSelection() {
     document.addEventListener("selectionchange", schedule);
@@ -2670,8 +2736,8 @@
   var settleTimer = 0;
   function scheduleSettle(el) {
     unsettled.add(el);
-    clearTimeout(settleTimer);
-    settleTimer = setTimeout(settleAll, SETTLE_MS);
+    cancelLater(settleTimer);
+    settleTimer = later("settle", settleAll, SETTLE_MS);
   }
   function settleAll() {
     settleTimer = 0;
@@ -2693,7 +2759,7 @@
       const d = anchor.el.getBoundingClientRect().top - anchor.top;
       if (d) scroller.scrollTop += d;
     }
-    requestAnimationFrame(restore2);
+    frame("settle: scroll anchoring back", restore2);
     debugLog(`[latex-viewer] settled ${els.length} block(s) in ${(performance.now() - t0).toFixed(1)} ms`);
   }
   function settleBlock(el) {
@@ -2816,7 +2882,7 @@
   function scheduleFontRepaint() {
     if (fontRepaintScheduled) return;
     fontRepaintScheduled = true;
-    requestAnimationFrame(() => {
+    frame("font repaint", () => {
       fontRepaintScheduled = false;
       for (const el of observedBlocks) rerenderBlock(el);
       if (document.fonts && document.fonts.status === "loaded" && document.fonts.removeEventListener) {
@@ -2830,7 +2896,7 @@
     for (const entry of entries) roPending.add(entry.target);
     if (roScheduled) return;
     roScheduled = true;
-    requestAnimationFrame(() => {
+    frame("reflow", () => {
       roScheduled = false;
       const els = [...roPending];
       roPending.clear();
@@ -4077,16 +4143,16 @@
   // src/host/block-hosts.ts
   var records = /* @__PURE__ */ new Set();
   var byBox = /* @__PURE__ */ new WeakMap();
-  var pending = /* @__PURE__ */ new Set();
-  var frame2 = 0;
+  var pending2 = /* @__PURE__ */ new Set();
+  var frame3 = 0;
   function relayoutSoon(owner) {
     if (!owner.relayout) return;
-    pending.add(owner.relayout);
-    if (frame2) return;
-    frame2 = requestAnimationFrame(() => {
-      frame2 = 0;
-      const fns = [...pending];
-      pending.clear();
+    pending2.add(owner.relayout);
+    if (frame3) return;
+    frame3 = frame("host relayout", () => {
+      frame3 = 0;
+      const fns = [...pending2];
+      pending2.clear();
       for (const fn of fns) fn();
     });
   }
@@ -4533,7 +4599,7 @@
       if (mount && mount.parentNode !== s.box) s.box.replaceChildren(mount);
       want.push(s.gap, s.box);
       if (overflows) {
-        requestAnimationFrame(() => updateDisplayOverflowCue(s.wrap));
+        frame("overflow cue", () => updateDisplayOverflowCue(s.wrap));
       }
     });
     if (segs.trailingGap) {
@@ -4610,7 +4676,7 @@
       const { mount, overflows } = sizeSegment(seg, R, prev, ctx.columnPx, ctx.p);
       if (mount.parentNode !== seg.box) seg.box.replaceChildren(mount);
       seg.mount = mount;
-      if (overflows) requestAnimationFrame(() => updateDisplayOverflowCue(seg.wrap));
+      if (overflows) frame("overflow cue", () => updateDisplayOverflowCue(seg.wrap));
     };
     remount(s, real, laid[i - 1]);
     if (laid[i + 1]) remount(cache.dom.segs[i + 1], laid[i + 1], real);
@@ -4713,7 +4779,7 @@
         if (!this.ro) {
           this.ro = new ResizeObserver(() => {
             if (this.frame) return;
-            this.frame = requestAnimationFrame(() => {
+            this.frame = frame("surface relayout", () => {
               this.frame = 0;
               this.relayout();
             });
@@ -4795,7 +4861,7 @@
       if (this.disposed) return;
       this.disposed = true;
       if (this.ro) this.ro.disconnect();
-      if (this.frame) cancelAnimationFrame(this.frame);
+      if (this.frame) cancelFrame(this.frame);
       unobserveAll(this.cache);
       disposePieces(this.cache);
       disposeHosts(this.cache);
@@ -5198,6 +5264,8 @@
     get paints() {
       return paintCount;
     },
+    idle,
+    pending,
     surfaces(el) {
       return [...surfacesOf(el)].filter((s) => !s.isDisposed).map((s) => {
         let key = surfaceKeys.get(s);
@@ -5524,7 +5592,7 @@
     if (blockData.get(el)) return Promise.resolve(null);
     let p = rendering.get(el);
     if (!p) {
-      p = initBlock(el).finally(() => rendering.delete(el));
+      p = track("block set-up", initBlock(el).finally(() => rendering.delete(el)));
       rendering.set(el, p);
     }
     return p;
@@ -5606,5 +5674,5 @@
   }
   installHost();
   installSelection();
-  document.addEventListener("DOMContentLoaded", init);
+  track("page set-up", new Promise((done) => document.addEventListener("DOMContentLoaded", () => done(init()))));
 })();

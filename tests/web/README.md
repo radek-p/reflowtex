@@ -42,10 +42,17 @@ for one engine). On GitHub,
 `.github/workflows/web-tests.yml` runs them in the container image on every
 push and pull request.
 
-Two habits make them reliable: measure a glyph by its SVG coordinates
-(WebKit gives a `<tspan>`'s box as its whole line's), and change a column's
-width by its `.latex-block`'s style, then wait for the resize to settle
-(the viewer finishes off-screen lines 150 ms after a width stops changing).
+Three habits make them reliable. Measure a glyph by its SVG coordinates
+(WebKit gives a `<tspan>`'s box as its whole line's). Change a column's
+width by its `.latex-block`'s style. And after acting on a page, wait with
+`idle(page)` (`web.ts`), never a fixed time: it resolves once the viewer
+has nothing still to come – no reflow, repaint, settling pass, font or
+animation (`reflowtex.inspect.idle()`, `src/viewer/src/runtime/pending.js`).
+Under load a browser can hold frames back for seconds, and a fixed wait then
+measured too early. To look at an animation midway, `seek(page, 0.5)` holds
+every running one halfway; `seek(page, null)` lets them run on. New deferred
+work in the viewer goes through `pending.js` (`frame`, `later`, `track`), so
+that `idle()` waits for it.
 
 ## What is tested
 

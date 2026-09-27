@@ -4,6 +4,7 @@
 import { paintDocument, paintSegment } from '../engine/paint.js';
 import { announceLayout } from './block-data.js';
 import { blockData } from './blocks.js';
+import { frame } from './pending.js';
 // ── end of imports
 
 // ── Per-segment painting (grow-only) ──────────────────────────────────────────
@@ -92,7 +93,7 @@ export let vpScheduled = false;
 export function scheduleViewportPaint() {
     if (vpScheduled) return;
     vpScheduled = true;
-    requestAnimationFrame(() => {
+    frame('viewport paint', () => {
         vpScheduled = false;
         for (const el of observedBlocks) {
             const data = blockData.get(el);

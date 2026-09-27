@@ -14,6 +14,7 @@ import { svgEl } from '../paint.js';
 import { held, linkTargets } from '../../host/links.js';
 import { quickLayout } from '../../runtime/blocks.js';
 import { observeSegments } from '../../runtime/visibility.js';
+import { frame } from '../../runtime/pending.js';
 // ── end of imports
 
 export let blockSeq = 0;              // per-block prefix, so ids from two blocks differ
@@ -411,7 +412,7 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         if (overflows) {
             // Initial layout may still be detached from the document. Check in
             // the next frame, after the wrapper has a meaningful clientWidth.
-            requestAnimationFrame(() => updateDisplayOverflowCue(s.wrap));
+            frame('overflow cue', () => updateDisplayOverflowCue(s.wrap));
         }
     });
 
@@ -500,7 +501,7 @@ export function materializeSegment(cache, i) {
         const { mount, overflows } = sizeSegment(seg, R, prev, ctx.columnPx, ctx.p);
         if (mount.parentNode !== seg.box) seg.box.replaceChildren(mount);
         seg.mount = mount;
-        if (overflows) requestAnimationFrame(() => updateDisplayOverflowCue(seg.wrap));
+        if (overflows) frame('overflow cue', () => updateDisplayOverflowCue(seg.wrap));
     };
     remount(s, real, laid[i-1]);
     if (laid[i+1]) remount(cache.dom.segs[i+1], laid[i+1], real);

@@ -3,6 +3,7 @@
 // API: widget parameters, parts (\webpart), marks (\webid, \webclass), and
 // kinds declared with \NewWebEnvironment and \NewWebAside.
 import { test, expect } from './fixtures.ts';
+import { idle } from './web.ts';
 
 test('a widget with parameters owns its parts', async ({ openPage }) => {
   const page = await openPage('parts');
@@ -65,7 +66,7 @@ test('a mark is styled by CSS, however the lines break', async ({ openPage }) =>
   const page = await openPage('parts');
   await page.addStyleTag({ content: '.latex-block svg .hot { fill: rgb(200, 0, 0) !important; }' });
   await page.locator('.latex-block[data-nodelist-b64]').first().evaluate((b: HTMLElement) => { b.style.width = '220px'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   const fills = await page.evaluate(() => [...new Set([...document.querySelectorAll('.latex-block svg .hot')].map(e => getComputedStyle(e).fill))]);
   expect(fills).toEqual(['rgb(200, 0, 0)']);
 });
@@ -76,7 +77,7 @@ test('a mark is styled by CSS, however the lines break', async ({ openPage }) =>
 test('a mark has a band behind it on every line', async ({ openPage }) => {
   const page = await openPage('parts');
   await page.locator('.latex-block[data-nodelist-b64]').first().evaluate((b: HTMLElement) => { b.style.width = '220px'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   const before = await page.evaluate(() => {
     const bands = [...document.querySelectorAll<SVGRectElement>('rect.latex-mark[data-rtx-id="key"]')];
     return { n: bands.length, lines: reflowtex.host.mark('key').rects().length, fill: getComputedStyle(bands[0]).fill,

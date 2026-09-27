@@ -7,6 +7,7 @@ import { blockData } from '../runtime/blocks.js';
 import { api } from '../runtime/page.js';
 import { surfacesOf } from './surface.ts';
 import { definedKinds } from './kinds.ts';
+import { idle, pending } from '../runtime/pending.js';
 // ── end of imports
 
 // ── Inspection ───────────────────────────────────────────────────────────────
@@ -20,6 +21,14 @@ import { definedKinds } from './kinds.ts';
 //   spToPx                  scaled points → the svg user units below
 //   paints                  a counter, bumped by every segment paint: a tool
 //                           polls it to notice a reflow
+//   idle()                  a promise, resolved once the viewer has nothing
+//                           still to come – no frame, timer, set-up or face it
+//                           waits for, the fonts loaded, no animation running
+//                           on the page – over three frames. A test waits for
+//                           it after acting, instead of a fixed time
+//                           (runtime/pending.js).
+//   pending()               the names of what is still to come, to tell why
+//                           idle() has not resolved
 //   surfaces(el)            the parts of el's instances laid out elsewhere
 //                           (host API surfaces: a popover's footnote, a margin
 //                           note, a pane a component drew): { key, cache,
@@ -48,6 +57,8 @@ api.inspect = {
     blocks: () => [...inspectable].filter(el => el.isConnected),
     state: el => blockData.get(el),
     get paints() { return paintCount; },
+    idle,
+    pending,
     surfaces(el) {
         return [...surfacesOf(el)].filter(s => !s.isDisposed).map(s => {
             let key = surfaceKeys.get(s);

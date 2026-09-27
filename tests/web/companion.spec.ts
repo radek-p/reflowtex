@@ -2,11 +2,12 @@
 // The companion plugin: an InlineButton with a typeset label opening a
 // Popover (the pattern of \mypopover).
 import { test, expect } from './fixtures.ts';
+import { idle } from './web.ts';
 
 test('button fits its label on the baseline', async ({ openPage }) => {
   const page = await openPage('companion');
   await page.waitForSelector('.rtx-button svg text tspan', { state: 'attached' });
-  await page.waitForTimeout(100);
+  await idle(page);
   const r = await page.evaluate(() => {
     const b = document.querySelector('.rtx-button')!, lab = reflowtex.host.instances('popover')[0].part('popover-label');
     const base = (t: any) => { const p = t.ownerSVGElement.createSVGPoint(); p.y = parseFloat(t.getAttribute('y'));

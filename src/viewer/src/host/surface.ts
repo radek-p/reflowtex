@@ -20,6 +20,7 @@ import { disposePieces } from './inline.ts';
 import { disposeHosts, surfaceChanged } from './block-hosts.ts';
 import type { Doc, DocStream } from './instances.ts';
 import type { Instance, MountOptions, Surface, SurfaceMetrics, TypesetPart } from './types.ts';
+import { cancelFrame, frame } from '../runtime/pending.js';
 
 /** What a part needs of its block: the viewer's per-block data. */
 export interface BlockData {
@@ -139,7 +140,7 @@ export class SurfaceImpl implements Surface {
                     // In a frame: laying out changes el's height, which must
                     // not be reported back into this same callback.
                     if (this.frame) return;
-                    this.frame = requestAnimationFrame(() => { this.frame = 0; this.relayout(); });
+                    this.frame = frame('surface relayout', () => { this.frame = 0; this.relayout(); });
                 });
                 this.ro.observe(this.el);
             }
@@ -203,7 +204,7 @@ export class SurfaceImpl implements Surface {
         if (this.disposed) return;
         this.disposed = true;
         if (this.ro) this.ro.disconnect();
-        if (this.frame) cancelAnimationFrame(this.frame);
+        if (this.frame) cancelFrame(this.frame);
         unobserveAll(this.cache);
         disposePieces(this.cache);
         disposeHosts(this.cache);

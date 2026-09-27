@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Asides (\webaside, \marginpar): the API, and side notes.
 import { test, expect, type WebPage } from './fixtures.ts';
+import { idle } from './web.ts';
 
 test('query, width, render, anchor', async ({ openPage }) => {
   const page = await openPage('asides');
@@ -36,7 +37,7 @@ test('layout event', async ({ openPage }) => {
   const page = await openPage('asides');
   await page.evaluate(() => { window.__n = 0; document.addEventListener('reflowtex:layout', () => window.__n++); });
   await page.locator('.latex-block[data-nodelist-b64]').first().evaluate((b: HTMLElement) => { b.style.width = '300px'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   expect(await page.evaluate(() => window.__n)).toBeGreaterThanOrEqual(1);
 });
 
@@ -63,7 +64,7 @@ test('no margin: marks open the note', async ({ openPage }) => {
     for (const b of document.querySelectorAll<HTMLElement>('.latex-block')) b.style.setProperty('--latex-margin-width', '0');
     window.dispatchEvent(new Event('resize'));
   });
-  await page.waitForTimeout(300);
+  await idle(page);
   expect(await page.locator('.latex-margin-note:not([hidden])').count()).toBe(0);
   const marks = page.locator('.latex-margin-mark:not([hidden])');
   expect(await marks.count()).toBe(3);

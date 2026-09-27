@@ -3,8 +3,9 @@
 // instances, parts and surfaces, block kinds, actions, frames, the blocks'
 // lifecycle and the popover – used without the companion.
 import { test, expect, type WebPage } from './fixtures.ts';
+import { idle } from './web.ts';
 
-const settle = (page: WebPage, ms = 250) => page.waitForTimeout(ms);
+const settle = (page: WebPage) => idle(page);
 const worst = (a: number[], b: number[]) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
 
 // The baselines of the first block's lines, from its top, px: every drawn
@@ -105,7 +106,7 @@ test('a surface follows its container', async ({ openPage }) => {
   expect(second.height, 'narrower, so taller').toBeGreaterThan(first.height);
   expect(second.changes).toBeGreaterThanOrEqual(1);
   await page.evaluate(() => { window.__s.dispose(); window.__el.style.width = '400px'; });
-  await page.waitForTimeout(150);
+  await idle(page);
   expect(await page.evaluate(() => window.__el.childElementCount)).toBe(0);
   expect(await page.evaluate(() => window.__s.metrics().width), 'a disposed surface lays out no more').toBeLessThan(181);
 });
@@ -133,7 +134,7 @@ test('a hidden surface is painted when shown', async ({ openPage }) => {
     document.body.prepend(el); window.__el = el;
     reflowtex.host.instances('callout')[0].part('body').mount(el, { width: 300 });
   });
-  await page.waitForTimeout(100);
+  await idle(page);
   expect(await page.evaluate(() => window.__el.querySelectorAll('tspan').length), 'painted while hidden').toBe(0);
   await page.evaluate(() => { window.__el.style.display = 'block'; });
   await page.waitForFunction(() => window.__el.querySelectorAll('tspan').length > 0);
@@ -143,7 +144,7 @@ test('identity survives relayout', async ({ openPage }) => {
   const page = await openPage('host');
   await page.evaluate(() => { window.__ids = reflowtex.host.instances().map((i: any) => i.id); window.__one = reflowtex.host.instances('callout')[0]; });
   await page.locator('.latex-block[data-nodelist-b64]').first().evaluate((b: HTMLElement) => { b.style.width = '320px'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   const r = await page.evaluate(() => ({
     same: JSON.stringify(reflowtex.host.instances().map((i: any) => i.id)) === JSON.stringify(window.__ids),
     obj: reflowtex.host.instances('callout')[0] === window.__one }));
@@ -201,7 +202,7 @@ test('rendered once across relayouts', async ({ openPage }) => {
   const block = page.locator('.latex-block[data-nodelist-b64]').first();
   for (const w of ['320px', '500px', '260px']) {
     await block.evaluate((b: HTMLElement, w) => { b.style.width = w; }, w);
-    await settle(page, 300);
+    await settle(page);
   }
   const r = await page.evaluate(() => ({ renders: window.__renders, undos: window.__undos,
     tag: (document.querySelector('.latex-stream[data-kind="callout"]') as HTMLElement).dataset.tag,
@@ -286,7 +287,7 @@ test('defined before the viewer; an action goes up the instance tree', async ({ 
     acc.onAction('pane', (a: any) => { window.__got.push([a.arg, a.instance && a.instance.kind]); });
     document.addEventListener('reflowtex:action', (e: any) => window.__got.push(['dom', e.detail.handled])); });
   await page.locator('.latex-stream[data-kind="pane"] rect.latex-link-hit[data-link-action="pane:next"]').first().click({ force: true });
-  await page.waitForTimeout(100);
+  await idle(page);
   expect(await page.evaluate(() => window.__got)).toEqual([['next', 'pane'], ['dom', true]]);
   expect(await page.evaluate(() => window.__renders)).toBe(2);
 });
@@ -300,7 +301,7 @@ test('an action passed outward, and one nobody handles', async ({ openPage }) =>
     acc.onAction('other', () => { window.__got.push('never'); });
     document.addEventListener('reflowtex:action', (e: any) => window.__got.push(e.detail.verb + ':' + e.detail.handled)); });
   await page.locator('.latex-stream[data-kind="pane"] rect.latex-link-hit[data-link-action="pane:next"]').first().click({ force: true });
-  await page.waitForTimeout(100);
+  await idle(page);
   expect(await page.evaluate(() => window.__got)).toEqual(['pane', 'accordion', 'pane:true']);
 });
 
@@ -330,7 +331,7 @@ test('nested boxes: end edges flush, start edges stepped', async ({ openPage }) 
 test('nested boxes mirror right to left', async ({ openPage }) => {
   const page = await openPage('boxes');
   await page.evaluate(() => { document.documentElement.dir = 'rtl'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   const fs = await frames(page);
   const proof = fs.filter(f => f.depth === 0)[1];
   for (const f of fs.filter(f => f.depth >= 1)) {
@@ -378,6 +379,6 @@ test('the popover drawn by its kind', async ({ openPage }) => {
   await page.waitForSelector('#latex-footnote-pop .mine');
   expect(await page.locator('#latex-footnote-pop .mine').innerText()).toBe('popover footnote');
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(100);
+  await idle(page);
   expect(await page.evaluate(() => window.__undone)).toBe(1);
 });

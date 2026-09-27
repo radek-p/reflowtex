@@ -3,6 +3,7 @@
 // screen reader is given – the text in reading order with MathML for every
 // formula – and that the drawing is hidden from it, not from the eye.
 import { test, expect } from './fixtures.ts';
+import { idle } from './web.ts';
 
 test('every formula reaches assistive technology as MathML; the drawing does not', async ({ openPage }) => {
   const page = await openPage('mathml');
@@ -84,7 +85,7 @@ test('each paragraph and display of the layer lies over its own lines', async ({
 test('the layer follows a reflow', async ({ openPage }) => {
   const page = await openPage('mathml', { width: 1200, height: 600 });
   await page.setViewportSize({ width: 420, height: 600 });
-  await page.waitForTimeout(600);                                 // the resize settles
+  await idle(page);                                               // the resize settles
   expectPlaced(await layerBoxes(page));
 });
 
@@ -196,7 +197,7 @@ test('each run of the layer covers exactly the glyphs it stands for', async ({ o
 test('spoken formulas, and the text after them, cover their glyphs too', async ({ openPage }) => {
   const page = await openPage('mathml', { height: 900 });
   await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('spoken'));
-  await page.waitForTimeout(300);
+  await idle(page);
   const runs = await coverage(page);
   await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('mathml'));
   expectCovered(runs);
@@ -214,7 +215,7 @@ test('a display lies on its drawing, and still does after a reflow', async ({ op
   }));
   for (const at of [1200, 800, 1200]) {
     await page.setViewportSize({ width: at, height: 900 });
-    await page.waitForTimeout(600);
+    await idle(page);
     for (const d of await check()) {
       expect(Math.abs(d.w - 1), `display width at ${at}px`).toBeLessThan(0.05);
       expect(Math.abs(d.h - 1), `display height at ${at}px`).toBeLessThan(0.05);
@@ -280,7 +281,7 @@ test('formulas as MathML or as spoken text, as the reader chooses', async ({ ope
   expect(await page.evaluate(() => (window as any).reflowtex.accessibleMath())).toBe('mathml');
   expect(await page.locator('.latex-a11y math').count()).toBeGreaterThan(5);
   await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('spoken'));
-  await page.waitForTimeout(200);
+  await idle(page);
   expect(await page.locator('.latex-a11y math').count()).toBe(0);
   const tree = await page.locator('body').ariaSnapshot();
   expect(tree).toContain('x squared plus y squared equals z squared');
@@ -288,11 +289,11 @@ test('formulas as MathML or as spoken text, as the reader chooses', async ({ ope
   // the spoken runs lie where the formulas are drawn
   expect(await page.locator('.latex-a11y [data-run="spoken"]').count()).toBeGreaterThan(3);
   await page.reload();
-  await page.waitForTimeout(1500);
+  await idle(page);
   expect(await page.evaluate(() => (window as any).reflowtex.accessibleMath())).toBe('spoken');
   expect(await page.locator('.latex-a11y math').count()).toBe(0);
   await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('mathml'));
-  await page.waitForTimeout(200);
+  await idle(page);
   expect(await page.locator('.latex-a11y math').count()).toBeGreaterThan(5);
 });
 
@@ -336,7 +337,7 @@ test('a paragraph\'s runs are one flow of text, lines broken, none placed alone'
 test('spoken formulas are spaced as the source is', async ({ openPage }) => {
   const page = await openPage('mathml');
   await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('spoken'));
-  await page.waitForTimeout(300);
+  await idle(page);
   const text = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y [data-para]')].map(p => p.textContent!).find(t => t.startsWith('Short')));
   await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('mathml'));
   expect(text!.trim()).toBe('Short: a ends. The ith one.');

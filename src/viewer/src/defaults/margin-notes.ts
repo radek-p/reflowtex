@@ -24,6 +24,7 @@ import { blockOf } from '../host/host.ts';
 import { kindDef, onKindChange } from '../host/kinds.ts';
 import { surfacesOf, type SurfaceImpl } from '../host/surface.ts';
 import type { Instance, KindDef, NoteHost, Surface } from '../host/types.ts';
+import { frame } from '../runtime/pending.js';
 
 export const MARGIN = { gap: 28, min: 150, max: 260 };   // px, by default
 
@@ -98,7 +99,7 @@ export function placeMarginNotes(data: any) {
     const block = blockOf(el);
     const notes = block ? block.instances({ placement: 'detached', place: 'margin' }) : [];
     if (!notes.length) return;
-    const again = () => requestAnimationFrame(() => placeMarginNotes(data));
+    const again = () => frame('margin notes', () => placeMarginNotes(data));
     const M = data.margin = data.margin || { layer: document.createElement('div'), items: new Map<string, Item>() };
     M.layer.className = 'latex-margin';
     if (M.layer.parentNode !== el) el.appendChild(M.layer);

@@ -554,7 +554,15 @@ inspect.replay(el, 0, {                      // segment 0, drawn again with no D
 
 Coordinates are the segment's `<svg>` user units (`cache.dom.segs[i].svg`);
 `getScreenCTM()` maps them to the viewport. `inspect.paints` counts segment
-paints, so a tool can poll it to notice a reflow. The state objects are
+paints, so a tool can poll it to notice a reflow. `await inspect.idle()`
+resolves once the viewer has nothing still to come: no frame, timer, block
+set-up or face it waits for, the fonts loaded, and no animation running on
+the page (the companion's panes and hints ease with Web Animations and CSS
+transitions), over three frames. A test
+waits for it after acting (a resize, a selection) instead of a fixed time,
+which a busy machine can outlast; `inspect.pending()` names what is still to
+come. The viewer's deferred work goes through `runtime/pending.js` for this.
+The state objects are
 internal and may change between versions; `inspect.version` says which shape
 to expect. Nothing here changes what is drawn.
 

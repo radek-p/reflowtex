@@ -11,6 +11,7 @@ import { debugLog } from './page.js';
 import { alignFromEl } from './params.js';
 import { scheduleSettle } from './settle.js';
 import { observedBlocks, paintVisibleNow, segIO } from './visibility.js';
+import { frame } from './pending.js';
 // ── end of imports
 
 // ── Per-page shared state ─────────────────────────────────────────────────────
@@ -167,7 +168,7 @@ export let fontRepaintScheduled = false;
 export function scheduleFontRepaint() {
     if (fontRepaintScheduled) return;
     fontRepaintScheduled = true;
-    requestAnimationFrame(() => {
+    frame('font repaint', () => {
         fontRepaintScheduled = false;
         for (const el of observedBlocks) rerenderBlock(el);
         if (document.fonts && document.fonts.status === 'loaded' && document.fonts.removeEventListener) {
@@ -187,7 +188,7 @@ export const ro = new ResizeObserver(entries => {
     for (const entry of entries) roPending.add(entry.target);
     if (roScheduled) return;
     roScheduled = true;
-    requestAnimationFrame(() => {
+    frame('reflow', () => {
         roScheduled = false;
         const els = [...roPending];
         roPending.clear();

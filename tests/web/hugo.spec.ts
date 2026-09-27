@@ -2,6 +2,7 @@
 // The Hugo integration, on a small site served under a subpath (/hugo/): what
 // a Hugo site's readers get.
 import { test, expect, type WebPage } from './fixtures.ts';
+import { idle } from './web.ts';
 
 const PAGES = ['hugo/alpha/', 'hugo/beta/'];
 const text = async (page: WebPage) => (await page.locator('.latex-block svg text tspan').allTextContents()).join('');
@@ -36,12 +37,12 @@ test('example controls', async ({ openPage }) => {
   const level = () => fig.evaluate(f => ((f.querySelector('[data-latex-zoom-level]') ?? f) as HTMLElement).dataset.latexZoomLevel);
   const start = await level();
   await fig.locator('[data-rtx="preview-options"] [data-z="out"]').click();
-  await page.waitForTimeout(100);
+  await idle(page);
   const smaller = await level();
   expect(smaller, 'the smaller-text button did nothing').not.toBe(start);
   await fig.locator('[data-rtx="preview-options"] [data-t="dark"]').click();
   await fig.locator('.latex-example-preview').click({ position: { x: 20, y: 60 } });
-  await page.waitForTimeout(300);
+  await idle(page);
   expect(await level(), 'the text size changed on a click elsewhere').toBe(smaller);
   expect(await fig.locator('[data-latex-theme="dark"]').count(), 'the theme did not change').toBeGreaterThan(0);
 });
@@ -55,7 +56,7 @@ test('example handle', async ({ openPage }) => {
   const h0 = await blk.evaluate(b => b.getBoundingClientRect().height);
   await fig.locator('.latex-example-handle').focus();
   for (let i = 0; i < 12; i++) await page.keyboard.press('ArrowLeft');
-  await page.waitForTimeout(400);
+  await idle(page);
   expect(await blk.evaluate(b => b.getBoundingClientRect().height)).toBeGreaterThan(h0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
 });

@@ -3,13 +3,13 @@
 // data-latex-selection="bands" on <html> or a block, and the reader's
 // switch in the companion's reading options. Off, the browser draws it.
 import { test, expect, type WebPage } from './fixtures.ts';
-import { READY, SETTLED } from './web.ts';
+import { READY, idle } from './web.ts';
 
 /** Select glyphs a..b of the first block (all of mark `key` by default).
  *  The viewer draws its bands on selectionchange, which the browser queues
  *  as a task of its own: under the whole suite WebKit could deliver it after
  *  two frames, and a test found no bands yet (3 in 105 runs in the CI
- *  container). So: the event first, then two frames for the drawing. */
+ *  container). So: the event first, then the viewer's drawing (idle). */
 async function select(page: WebPage, glyphs?: [number, number], block = 0) {
   await page.evaluate(([glyphs, block]) => new Promise<void>(done => {
     const els = glyphs || block ? [...document.querySelectorAll('.latex-block')[block as number].querySelectorAll('tspan')]
@@ -26,7 +26,7 @@ async function select(page: WebPage, glyphs?: [number, number], block = 0) {
     getSelection()!.removeAllRanges();
     getSelection()!.addRange(r);
   }), [glyphs || null, block] as const);
-  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await idle(page);
 }
 
 const bands = (page: WebPage, block = 0) => page.evaluate(b =>
@@ -55,7 +55,7 @@ test('bands: one even rect per line, and none once the selection goes', async ({
   const bg = await page.evaluate(() => getComputedStyle(reflowtex.host.mark('key').elements()[0], '::selection').backgroundColor);
   expect(bg).toBe('rgba(0, 0, 0, 0)');
   await page.evaluate(() => getSelection()!.removeAllRanges());
-  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await idle(page);
   expect(await bands(page)).toEqual([]);
 });
 
@@ -64,11 +64,8 @@ test('bands follow the text into new lines', async ({ openPage }) => {
   await page.evaluate(() => document.documentElement.setAttribute('data-latex-selection', 'bands'));
   await select(page);
   const wide = (await bands(page)).length;
-  const before = await page.evaluate(() => reflowtex.inspect.paints);
   await page.evaluate(() => { (document.querySelector('.latex-block') as HTMLElement).style.width = '260px'; });
-  // The reflow's paint, then still frames (a frame can be held back for seconds)
-  await page.waitForFunction(n => reflowtex.inspect.paints > n, before);
-  await page.waitForFunction(SETTLED, undefined, { polling: 50 });
+  await idle(page);
   const lines = await page.evaluate(() => reflowtex.host.mark('key').rects().length);
   expect(lines).toBeGreaterThan(wide);
   expect((await bands(page)).length).toBe(lines);
@@ -120,7 +117,7 @@ test('the reader\'s switch, remembered', async ({ openPage }) => {
   // …and the viewer's repaint for its web fonts, after fonts.ready: it
   // replaces the glyphs, and a selection made before it went with them
   // (WebKit, 3 in 40 runs in the CI container: no bands, no selection left).
-  await page.waitForFunction(SETTLED, undefined, { polling: 50, timeout: 20000 });
+  await idle(page);
   await page.waitForFunction(() => document.documentElement.getAttribute('data-latex-selection') === 'bands');
   await expect(page.getByRole('radio', { name: 'Even' })).toHaveAttribute('aria-checked', 'true');
   await select(page);
@@ -143,8 +140,8 @@ test('a selection over a space: its band reaches the glyphs\' edges', async ({ o
     const text = els.map((e: Element) => e.textContent).join('');
     const d = text.indexOf('Every') + 4, w = d + 1;             // "Every| number": y, then n
     const x = (i: number) => +els[i].getAttribute('x')!;
-    const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    // (as the select above: the selection's event, then the frames the bands are drawn in)
+    const frames = () => reflowtex.inspect.idle();
+    // (as the select above: the selection's event, then the viewer's drawing)
     const select = (a: Node, ao: number, b: Node, bo: number) => new Promise<void>(done => {
       const t = setTimeout(finish, 2000);
       function finish() { clearTimeout(t); document.removeEventListener('selectionchange', seen); done(); }

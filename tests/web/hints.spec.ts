@@ -2,6 +2,7 @@
 // A hint (drawn by the companion, kinds/hint.tsx): blurred, with a label
 // over it, until pressed.
 import { test, expect, type WebPage } from './fixtures.ts';
+import { idle } from './web.ts';
 
 const HINT = '.latex-stream[data-kind="hint"]';
 
@@ -21,7 +22,7 @@ test('hidden, then revealed', async ({ openPage }) => {
   expect(s.labelShown).toBe(true);
   expect(s.revealed).toBe(false);
   await page.locator(HINT).click();
-  await page.waitForTimeout(450);                     // the blur and the label ease out
+  await idle(page);                                   // the blur and the label ease out
   s = await state(page);
   expect(s.revealed && s.pressed === 'true').toBe(true);
   expect(s.blur).not.toContain('blur');
@@ -34,12 +35,12 @@ test('keyboard and label', async ({ openPage }) => {
   const page = await openPage('notes');
   await page.locator(HINT).focus();
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(450);
+  await idle(page);
   expect((await state(page)).revealed).toBe(true);
   expect(await page.evaluate(() => document.activeElement === document.querySelector('.latex-stream[data-kind="hint"]')),
     'the hint lost the keyboard focus').toBe(true);
   await page.evaluate(() => document.documentElement.style.setProperty('--latex-hint-label', '"Show"'));
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(300);
+  await idle(page);
   expect((await state(page)).label).toBe('"Show"');
 });

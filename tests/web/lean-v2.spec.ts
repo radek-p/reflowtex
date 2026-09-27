@@ -3,6 +3,7 @@
 // lean.tsx): switches, parts opening and closing with motion, side by side,
 // the text around moving, the code, print, the space after a hidden proof.
 import { test, expect, type WebPage } from './fixtures.ts';
+import { idle, seek } from './web.ts';
 
 const THM = '.latex-stream[data-kind="leantheorem"]', PRF = '.latex-stream[data-kind="leanproof"]';
 
@@ -39,10 +40,11 @@ test('opening animates and moves the text after', async ({ openPage }) => {
   const page = await openPage('lean-v2');
   const y0 = await lastLineY(page, 0), h0 = (await state(page, THM)).height;
   await press(page, THM, 'Proof');
-  await page.waitForTimeout(110);
+  await seek(page, 0.5);                                // held halfway
   const mid = await state(page, THM);
   expect([mid.animating, mid.parts.tex, mid.pressed[0]]).toEqual([true, 'open', 'true']);
-  await page.waitForTimeout(700);
+  await seek(page, null);
+  await idle(page);
   const end = await state(page, THM);
   expect(end.animating).toBe(false);
   expect(h0 <= mid.height && mid.height < end.height).toBe(true);
@@ -52,10 +54,11 @@ test('opening animates and moves the text after', async ({ openPage }) => {
 test('closing fades, then collapses', async ({ openPage }) => {
   const page = await openPage('lean-v2');
   await press(page, PRF, 'Proof');
-  await page.waitForTimeout(60);
+  await seek(page, 0.5);                                // held halfway through the fade
   let s = await state(page, PRF);
   expect([s.pressed[0], s.parts.tex], 'still drawn while it fades').toEqual(['false', 'open']);
-  await page.waitForTimeout(800);
+  await seek(page, null);
+  await idle(page);
   s = await state(page, PRF);
   expect(s.parts.tex).toBe('closed');
   expect(s.animating).toBe(false);
@@ -65,10 +68,12 @@ test('closing fades, then collapses', async ({ openPage }) => {
 test('reduced motion cuts', async ({ openPage }) => {
   const page = await openPage('lean-v2', { reducedMotion: 'reduce' });
   await press(page, THM, 'Lean');
-  await page.waitForTimeout(30);
-  const s = await state(page, THM);
-  expect(s.parts.code).toBe('open');
-  expect(s.animating).toBe(false);
+  // as soon as the code is open, it is at its end: nothing eases
+  const animating = await page.waitForFunction(s => {
+    const w = document.querySelector(s)!, code = w.querySelector<HTMLElement>('.rtx-lean-part[data-part="code"]')!;
+    return code.dataset.state === 'open' && { animating: 'animating' in (w.querySelector('.rtx-lean-body') as HTMLElement).dataset };
+  }, THM, { polling: 'raf' }).then(h => h.jsonValue());
+  expect(animating).toEqual({ animating: false });
 });
 
 const geometry = (page: WebPage, sel: string) => page.evaluate(s => {
@@ -81,7 +86,7 @@ test('side by side when wide', async ({ openPage }) => {
   const page = await openPage('lean-v2', { width: 1400 });
   await press(page, THM, 'Proof');
   await press(page, THM, 'Lean');
-  await page.waitForTimeout(900);
+  await idle(page);
   const g = await geometry(page, THM);
   expect([g.sameTop, g.sameHeight, g.beside]).toEqual([true, true, true]);
   expect(await overflow(page, THM), 'the proof broken to its column, not under the code').toBe(0);
@@ -96,14 +101,14 @@ const overflow = (page: WebPage, sel: string) => page.evaluate(s => {
 test('stacked when narrow', async ({ openPage }) => {
   const page = await openPage('lean-v2', { width: 600 });
   await press(page, PRF, 'Lean');
-  await page.waitForTimeout(900);
+  await idle(page);
   expect((await geometry(page, PRF)).below).toBe(true);
 });
 
 test('the code', async ({ openPage }) => {
   const page = await openPage('lean-v2');
   await press(page, THM, 'Lean');
-  await page.waitForTimeout(700);
+  await idle(page);
   const r = await page.evaluate(s => { const c = document.querySelector(s + ' .rtx-lean-code')!;
     return { head: c.querySelector('.rtx-lean-head a')?.getAttribute('href'),
              kw: [...c.querySelectorAll('.lean-kw')].map(e => e.textContent).slice(0, 3),
@@ -117,9 +122,9 @@ test('the code', async ({ openPage }) => {
 test('the choice survives relayout', async ({ openPage }) => {
   const page = await openPage('lean-v2');
   await press(page, THM, 'Lean');
-  await page.waitForTimeout(700);
+  await idle(page);
   await page.locator('.latex-block[data-nodelist-b64]').first().evaluate((b: HTMLElement) => { b.style.width = '360px'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   expect((await state(page, THM)).parts).toEqual({ tex: 'closed', code: 'open' });
 });
 
@@ -127,7 +132,7 @@ test('print shows every part', async ({ openPage }) => {
   const page = await openPage('lean-v2');
   await page.emulateMedia({ media: 'print' });
   await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
-  await page.waitForTimeout(100);
+  await idle(page);
   const r = await page.evaluate(() => ({
     parts: [...document.querySelectorAll('.rtx-lean-part')].map(p => getComputedStyle(p).display !== 'none'),
     switches: [...document.querySelectorAll('.rtx-lean-switches')].map(s => getComputedStyle(s).display) }));
@@ -143,7 +148,7 @@ test('the space after a hidden proof is taken back', async ({ openPage }) => {
   const margin = () => page.evaluate(s => parseFloat((document.querySelector(s) as HTMLElement).style.marginBottom) || 0, THM);
   const closed = await margin();
   await press(page, THM, 'Proof');
-  await page.waitForTimeout(800);
+  await idle(page);
   expect(closed).toBeLessThan(-2);
   expect(await margin()).toBe(0);
 });

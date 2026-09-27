@@ -3,6 +3,7 @@
 // accordion.tsx): animated switching, reduced motion, the keyboard, styling
 // from LaTeX, print, nesting, and a component that throws.
 import { test, expect, type WebPage } from './fixtures.ts';
+import { idle, seek } from './web.ts';
 
 const ACC = '.latex-stream[data-kind="accordion"]';
 
@@ -11,6 +12,14 @@ const state = (page: WebPage, n = 0) => page.evaluate(n => {
   return { pane: a.dataset.pane, states: [...a.children].map(p => (p as HTMLElement).dataset.state),
            animating: 'animating' in a.dataset, height: a.getBoundingClientRect().height };
 }, n);
+
+/** The state the accordion first shows after a switch: whatever it is
+ *  when its panes first change (with motion, the old pane still leaving). */
+const next = (page: WebPage, from: string[], n = 0) => page.waitForFunction(([from, n]) => {
+  const a = document.querySelectorAll<HTMLElement>('.rtx-accordion')[n as number];
+  const states = [...a.children].map(p => (p as HTMLElement).dataset.state);
+  return states.join() !== (from as string[]).join() && { states, animating: 'animating' in a.dataset };
+}, [from, n] as const, { polling: 'raf' }).then(h => h.jsonValue() as Promise<{ states: string[]; animating: boolean }>);
 
 /** Click the n-th visible control sending `action` (a prefix). */
 const press = (page: WebPage, action: string, n = 0) =>
@@ -29,25 +38,25 @@ test('a switch animates, then settles', async ({ openPage }) => {
   const page = await openPage('accordion-v2');
   const start = (await state(page)).height;
   await press(page, 'pane:next');
-  await page.waitForTimeout(90);
+  await seek(page, 0.5);                                // held halfway
   const mid = await state(page);
   expect(mid.animating).toBe(true);
   expect(mid.states).toEqual(['leaving', 'open']);
-  await page.waitForTimeout(600);
+  await seek(page, null);
+  await idle(page);
   const end = await state(page);
   expect([end.animating, end.pane]).toEqual([false, 'expanded']);
   expect(end.states).toEqual(['closed', 'open']);
   expect(start < mid.height && mid.height < end.height, 'the height eases from one pane to the other').toBe(true);
   await press(page, 'pane:prev');
-  await page.waitForTimeout(600);
+  await idle(page);
   expect((await state(page)).pane).toBe('collapsed');
 });
 
 test('reduced motion cuts', async ({ openPage }) => {
   const page = await openPage('accordion-v2', { reducedMotion: 'reduce' });
   await press(page, 'pane:next');
-  await page.waitForTimeout(30);
-  const s = await state(page);
+  const s = await next(page, ['open', 'closed']);       // straight to the end: no pane leaving
   expect(s.animating).toBe(false);
   expect(s.states).toEqual(['closed', 'open']);
 });
@@ -56,8 +65,7 @@ test('motion: none from CSS', async ({ openPage }) => {
   const page = await openPage('accordion-v2');
   await page.addStyleTag({ content: '.rtx-accordion { --rtx-accordion-motion: none; }' });
   await press(page, 'pane:next');
-  await page.waitForTimeout(30);
-  expect((await state(page)).animating).toBe(false);
+  expect(await next(page, ['open', 'closed'])).toEqual({ states: ['closed', 'open'], animating: false });
 });
 
 test('what follows moves with it', async ({ openPage }) => {
@@ -70,7 +78,7 @@ test('what follows moves with it', async ({ openPage }) => {
   });
   const y0 = await after();
   await press(page, 'pane:next');
-  await page.waitForTimeout(700);
+  await idle(page);
   expect(await after(), 'the text after the accordion moved down as the taller pane opened').toBeGreaterThan(y0 + 10);
 });
 
@@ -78,7 +86,7 @@ test('the keyboard moves focus to the new pane', async ({ openPage }) => {
   const page = await openPage('accordion-v2');
   await page.locator('.rtx-pane[data-state="open"] .latex-action[tabindex]').first().focus();
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(600);
+  await idle(page);
   const r = await page.evaluate(() => { const a = document.activeElement as HTMLElement;
     return { inOpen: !!a.closest('.rtx-pane[data-state="open"]'), action: a.dataset.linkAction || '' }; });
   expect(r.inOpen).toBe(true);
@@ -104,10 +112,10 @@ test('actions by name and number', async ({ openPage }) => {
   const page = await openPage('accordion-v2');
   const acc = page.locator('.rtx-accordion').nth(1);
   await acc.locator('.rtx-pane[data-state="open"] rect.latex-link-hit[data-link-action="pane:next"]').click({ force: true });
-  await page.waitForTimeout(600);
+  await idle(page);
   expect((await state(page, 1)).pane).toBe('three');
   await acc.locator('.rtx-pane[data-state="open"] rect.latex-link-hit[data-link-action="pane:first"]').first().click({ force: true });
-  await page.waitForTimeout(600);
+  await idle(page);
   expect((await state(page, 1)).pane).toBe('one');
 });
 
@@ -115,7 +123,7 @@ test('nested accordions act alone', async ({ openPage }) => {
   const page = await openPage('accordion-v2');
   const inner = page.locator('.rtx-accordion').nth(2).locator('.rtx-accordion');
   await inner.locator('.rtx-pane[data-state="open"] rect.latex-link-hit[data-link-action="pane:next"]').click({ force: true });
-  await page.waitForTimeout(600);
+  await idle(page);
   const r = await page.evaluate(() => { const o = document.querySelectorAll<HTMLElement>('.rtx-accordion')[2];
     return { outer: o.dataset.pane, inner: (o.querySelector('.rtx-accordion') as HTMLElement).dataset.pane }; });
   expect(r).toEqual({ outer: 'outer-a', inner: 'inner-b' });
@@ -124,9 +132,9 @@ test('nested accordions act alone', async ({ openPage }) => {
 test('the state survives relayout', async ({ openPage }) => {
   const page = await openPage('accordion-v2');
   await press(page, 'pane:next');
-  await page.waitForTimeout(600);
+  await idle(page);
   await page.locator('.latex-block[data-nodelist-b64]').first().evaluate((b: HTMLElement) => { b.style.width = '320px'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   expect((await state(page)).pane).toBe('expanded');
 });
 
@@ -134,7 +142,7 @@ test('print shows the print pane', async ({ openPage }) => {
   const page = await openPage('accordion-v2');
   await page.emulateMedia({ media: 'print' });
   await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
-  await page.waitForTimeout(100);
+  await idle(page);
   const r = await page.evaluate(() => [...document.querySelectorAll('.rtx-accordion')[1].children].map(p => ({
     shown: getComputedStyle(p).display !== 'none', glyphs: p.querySelectorAll('tspan').length })));
   expect(r.map(x => x.shown), 'print= defaults to the last pane').toEqual([false, false, true]);
@@ -147,7 +155,7 @@ test('a component that throws draws the body', async ({ openPage }) => {
     const { define } = await import('reflowtex/companion');
     define('accordion', () => { throw new Error('boom'); });
   })()`);
-  await page.waitForTimeout(400);
+  await idle(page);
   const r = await page.evaluate(() => { const h = document.querySelector('.latex-stream[data-kind="accordion"]')!;
     return { ours: h.querySelectorAll('.rtx-accordion').length, glyphs: h.querySelectorAll('tspan').length }; });
   expect(r.ours).toBe(0);

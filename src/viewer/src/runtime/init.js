@@ -23,6 +23,7 @@ import { fontsPending, loadFontMap, registerFonts } from './fonts.js';
 import { debugLog } from './page.js';
 import { paramsFromEl } from './params.js';
 import { observedBlocks, paintVisibleNow } from './visibility.js';
+import { track } from './pending.js';
 // ── end of imports
 
 export let docSeq = 0;
@@ -169,7 +170,7 @@ const rendering = new WeakMap();        // el → the promise of its initBlock
 function renderOnce(el) {
     if (blockData.get(el)) return Promise.resolve(null);
     let p = rendering.get(el);
-    if (!p) { p = initBlock(el).finally(() => rendering.delete(el)); rendering.set(el, p); }
+    if (!p) { p = track('block set-up', initBlock(el).finally(() => rendering.delete(el))); rendering.set(el, p); }
     return p;
 }
 

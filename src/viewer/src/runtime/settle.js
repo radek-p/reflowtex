@@ -5,6 +5,7 @@ import { layoutDocument } from '../engine/layout/document.js';
 import { blockData } from './blocks.js';
 import { debugLog } from './page.js';
 import { paintVisibleNow } from './visibility.js';
+import { cancelLater, frame, later } from './pending.js';
 // ── end of imports
 
 // ── Settling after a resize ───────────────────────────────────────────────────
@@ -22,8 +23,8 @@ export const unsettled = new Set();
 export let settleTimer = 0;
 export function scheduleSettle(el) {
     unsettled.add(el);
-    clearTimeout(settleTimer);
-    settleTimer = setTimeout(settleAll, SETTLE_MS);
+    cancelLater(settleTimer);
+    settleTimer = later('settle', settleAll, SETTLE_MS);
 }
 export function settleAll() {
     settleTimer = 0;
@@ -45,7 +46,7 @@ export function settleAll() {
         const d = anchor.el.getBoundingClientRect().top - anchor.top;
         if (d) scroller.scrollTop += d;
     }
-    requestAnimationFrame(restore);
+    frame('settle: scroll anchoring back', restore);
     debugLog(`[latex-viewer] settled ${els.length} block(s) in ${(performance.now() - t0).toFixed(1)} ms`);
 }
 // Lay out, at the width it was last reflowed to, every segment of a block

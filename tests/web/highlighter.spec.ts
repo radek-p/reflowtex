@@ -4,6 +4,7 @@
 // reader selects text, picks a colour, and the text has a band behind each
 // of its lines, as the author's \webclass does.
 import { test, expect, type WebPage } from './fixtures.ts';
+import { idle } from './web.ts';
 
 /** Select from the first glyph of mark `key` to its last (or, with `into`,
  *  to the n-th glyph of the second block), as a reader would. */
@@ -50,7 +51,7 @@ test('a selection highlighted: a band on every line, styled, kept through a refl
 
   // A narrower column breaks the text into more lines: a band for each.
   await page.evaluate(() => { (document.querySelector('.latex-block') as HTMLElement).style.width = '260px'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   const narrow = await bands(page);
   const lines = await page.evaluate(() => reflowtex.host.liveMarks()[0].rects().length);
   expect(lines).toBeGreaterThan(r.lines);

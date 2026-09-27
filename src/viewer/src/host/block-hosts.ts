@@ -28,6 +28,7 @@ import { blockOf } from './host.ts';
 import { surfacesOf, type Cache, type Edges, type SurfaceImpl } from './surface.ts';
 import type { BlockHost, KindDef, Instance, Surface } from './types.ts';
 import { kindDef, onKindChange } from './kinds.ts';
+import { frame as nextFrame } from '../runtime/pending.js';
 
 interface HostRecord {
     box: HTMLElement;
@@ -55,7 +56,7 @@ function relayoutSoon(owner: Cache) {
     if (!owner.relayout) return;
     pending.add(owner.relayout);
     if (frame) return;
-    frame = requestAnimationFrame(() => {
+    frame = nextFrame('host relayout', () => {
         frame = 0;
         const fns = [...pending];
         pending.clear();

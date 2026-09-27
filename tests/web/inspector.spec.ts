@@ -3,6 +3,7 @@
 // a component drew, popovers) in the tree; instances, kinds and marks among
 // the resources; the colour maps, shown, edited live, exported and imported.
 import { test, expect, type WebPage } from './fixtures.ts';
+import { idle } from './web.ts';
 
 /** Open the inspector and wait for its page agent. */
 async function agent(page: WebPage) {
@@ -240,7 +241,8 @@ test('the Accessibility layer overlay outlines the hidden text on the page', asy
   const page = await openPage('mathml');
   await agent(page);
   await A(page, 'setOptions', { a11y: true });
-  await page.waitForTimeout(100);
+  await page.waitForFunction(() => document.querySelector('[data-rtx-inspector] [data-a11y="piece"]'));
+  await idle(page);
   const drawn = await page.evaluate(() => ({
     runs: document.querySelectorAll('[data-rtx-inspector] [data-a11y="run"]').length,
     math: document.querySelectorAll('[data-rtx-inspector] [data-a11y="math"]').length,

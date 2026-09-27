@@ -3,7 +3,7 @@
 // (openPage fails the test on any), every block is drawn, and nothing makes
 // the page scroll sideways.
 import { test, expect } from './fixtures.ts';
-import { LINES, names } from './web.ts';
+import { LINES, names, idle } from './web.ts';
 
 for (const name of names())
   for (const width of [1200, 360])
@@ -29,7 +29,7 @@ test('reflows when narrower', async ({ openPage }) => {
   const block = page.locator('.latex-block[data-nodelist-b64]').first();
   const wide = await block.evaluate(LINES);
   await block.evaluate((b: HTMLElement) => { b.style.width = '240px'; });
-  await page.waitForTimeout(400);
+  await idle(page);
   const narrow = await block.evaluate(LINES);
   expect(narrow.length).toBeGreaterThan(wide.length);
   const over = await block.evaluate(b => {

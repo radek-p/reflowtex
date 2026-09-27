@@ -86,36 +86,34 @@ export async function buildHugo(): Promise<string> {
 /** The viewer's API on window (see src/viewer). */
 declare global { const reflowtex: any; interface Window { [k: string]: any } }
 
-/** The page has settled: its fonts are in, and the viewer's paint count has
- *  stayed still for 3 frames and 150 ms. The viewer draws every block again
- *  once its web fonts have arrived, after document.fonts.ready; that repaint
- *  replaces the glyphs, and a selection or a measurement made before it goes
- *  with them. It waits for a frame (requestAnimationFrame), and under load
- *  WebKit can hold frames back for seconds: time alone passed with the repaint
- *  still to come (in the CI container, 3 in 360 runs). Frames that ran
- *  without a paint mean none is waiting: the viewer's callbacks, asked for
- *  first, run first in a frame. (Pages with no inspection API: fonts only.)
- *  For waitForFunction, polling every 50 ms. */
-export const SETTLED = () => {
-  const w = window as any, p = w.reflowtex?.inspect?.paints;
-  if (document.fonts.status !== 'loaded') return false;
-  if (p === undefined) return true;
-  if (w.__rtxFrames === undefined) {
-    w.__rtxFrames = 0;
-    const tick = () => { w.__rtxFrames++; requestAnimationFrame(tick); };
-    requestAnimationFrame(tick);
-  }
-  const now = performance.now();
-  if (w.__rtxLastPaints !== p) { w.__rtxLastPaints = p; w.__rtxSince = now; w.__rtxFrom = w.__rtxFrames; return false; }
-  return now - w.__rtxSince >= 150 && w.__rtxFrames - w.__rtxFrom >= 3;
-};
-
 /** Every block laid out and its visible lines drawn: each .latex-block holds
  *  an <svg> with glyphs. */
 export const READY = () => {
   const blocks = [...document.querySelectorAll('.latex-block[data-nodelist-b64]')];
   return blocks.length > 0 && blocks.every(b => b.querySelector('svg text tspan'));
 };
+
+/** Wait until the viewer has nothing still to come (reflowtex.inspect.idle):
+ *  no reflow, repaint, settling pass, font or animation to wait for. After
+ *  acting on a page, this and not a fixed time: under load a browser can hold
+ *  frames back for seconds, and a fixed wait then measured too early. */
+export const idle = (page: { evaluate: (f: () => Promise<void>) => Promise<void> }) =>
+  page.evaluate(() => reflowtex.inspect.idle());
+
+/** Pause every running animation on the page `at` (0–1) of the way through,
+ *  to look at it midway – then, with at = null, let them run on. Waits for
+ *  the animations to have started first. */
+export async function seek(page: { waitForFunction: Function; evaluate: Function }, at: number | null) {
+  if (at !== null) await page.waitForFunction(() => document.getAnimations().some(a => a.playState === 'running'));
+  await page.evaluate((at: number | null) => {
+    for (const a of document.getAnimations()) {
+      if (at === null) { if (a.playState === 'paused') a.play(); continue; }
+      const end = a.effect?.getComputedTiming().endTime;
+      if (a.playState !== 'running' || typeof end !== 'number' || !isFinite(end)) continue;
+      a.pause(); a.currentTime = end * at;
+    }
+  }, at);
+}
 
 /** The distinct baselines of a block's text lines (rounded to 0.5 px). */
 export const LINES = (block: Element): number[] => {

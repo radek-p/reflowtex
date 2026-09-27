@@ -10,6 +10,7 @@ import { paintVisibleNow } from '../runtime/visibility.js';
 import { docData } from '../runtime/block-data.js';
 import { disposePiece } from './inline.ts';
 import { textHooks } from './instances.ts';
+import { frame, track } from '../runtime/pending.js';
 // ── end of imports
 
 // ── Slots (\webtext) ──────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ export function slotNodes(fontInfo, slot, id, run, text) {
     const spec = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
     // Measured again once the face has loaded, if it had not yet.
     if (document.fonts && !document.fonts.check(spec, text)) {
-        document.fonts.load(spec, text).then(() => scheduleSlots(), () => {});
+        track('slot face', document.fonts.load(spec, text)).then(() => scheduleSlots(), () => {});
     }
     const out = [];
     // Breakable white space separates words; no-break spaces stay inside one.
@@ -151,7 +152,7 @@ export function refreshSlots(el) {
 export function scheduleSlots() {
     if (slotScheduled) return;
     slotScheduled = true;
-    requestAnimationFrame(() => {
+    frame('slots', () => {
         slotScheduled = false;
         for (const el of slotBlocks) refreshSlots(el);
     });

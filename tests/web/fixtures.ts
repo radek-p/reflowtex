@@ -12,7 +12,7 @@
 // answered 4xx/5xx – is collected in page.errors, and fails the test at its
 // end (a test that expects some clears the list).
 import { test as base, expect, type BrowserContextOptions, type Page, type Route } from '@playwright/test';
-import { READY, SETTLED } from './web.ts';
+import { READY, idle } from './web.ts';
 
 export type WebPage = Page & { errors: string[] };
 export interface OpenOptions extends BrowserContextOptions {
@@ -38,13 +38,12 @@ export const test = base.extend<{ openPage: (name: string, o?: OpenOptions) => P
       await page.goto(name.includes('://') ? name : pageUrl(name));
       await page.waitForFunction(READY, undefined, { timeout: 20000 });
       // The viewer draws every block again once its web fonts have loaded
-      // (rerenderBlock): let that happen before a test interacts – until its
-      // paint count stays still (a frame and 50 ms was not always enough).
-      await page.waitForFunction(SETTLED, undefined, { polling: 50, timeout: 20000 });
+      // (rerenderBlock): let that happen before a test interacts.
+      await idle(page);
       if (theme) {
         // As a site's theme switch does: a class on <html> (dark, sepia, contrast).
         await page.evaluate(t => document.documentElement.classList.add(t), theme);
-        await page.waitForTimeout(100);
+        await idle(page);
       }
       return page;
     });
