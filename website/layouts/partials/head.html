@@ -571,7 +571,9 @@
   #lt-content .card .latex-block,
   #lt-content .step .latex-block,
   #lt-content .map-card .latex-block { margin: 0; }
-  #lt-content .card .latex-block + .latex-block { margin-top: 1rem; }
+  /* (a block's accessible layer, .latex-a11y, stands just before it) */
+  #lt-content .card .latex-block + .latex-block,
+  #lt-content .card .latex-block + .latex-a11y + .latex-block { margin-top: 1rem; }
   .span-2 { grid-column: span 2; } .span-3 { grid-column: span 3; }
   .span-4 { grid-column: span 4; } .span-6 { grid-column: span 6; }
   /* The resizable paragraph: CSS resize, and a slider for touch screens. */
@@ -610,7 +612,8 @@
   @media (hover: none) { .resizer-handle::after { opacity: .3; } }
   @media (prefers-reduced-motion: reduce) { .resizer-body { transition: none; } }
   /* A card with two examples: a hairline between them. */
-  #lt-content .card-split .latex-block + .latex-block {
+  #lt-content .card-split .latex-block + .latex-block,
+  #lt-content .card-split .latex-block + .latex-a11y + .latex-block {
     margin-top: 1.1rem; padding-top: 1.1rem;
     border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
   }
