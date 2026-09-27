@@ -24,7 +24,8 @@
 import { signal, useSignal, type Signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 
-const KEYS = { theme: 'reflowtex-theme', zoom: 'reflowtex-zoom', width: 'reflowtex-width', selection: 'reflowtex-selection' };
+const KEYS = { theme: 'reflowtex-theme', zoom: 'reflowtex-zoom', width: 'reflowtex-width', selection: 'reflowtex-selection',
+    math: 'reflowtex-a11y-math' };
 const ZOOM = { min: 0.5, max: 3, step: 1.1 };
 
 export interface Theme { name: string; label?: string }
@@ -33,6 +34,9 @@ export const WIDTHS = ['auto', 'narrow', 'normal', 'wide'];
 /** How selected text looks: the browser's own highlight, or the viewer's
  *  even bands (data-latex-selection on <html>; the viewer's host/selection.ts). */
 export const SELECTIONS = [{ name: 'native', label: 'Browser' }, { name: 'bands', label: 'Even' }];
+// How a screen reader is given formulas, on a page with the accessible layer:
+// the viewer's reflowtex.setAccessibleMath, which remembers it.
+export const MATH_MODES = [{ name: 'mathml', label: 'MathML' }, { name: 'spoken', label: 'Spoken text' }];
 
 const load = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
@@ -64,12 +68,14 @@ export interface ReadingState {
 }
 
 /** The reader's choices, applied to the page as they change. */
-export const reading: ReadingState & { setZoom(z: number): void; selection: Signal<string>; setSelection(s: string): void } = {
+export const reading: ReadingState & { setZoom(z: number): void; selection: Signal<string>; setSelection(s: string): void;
+    math: Signal<string>; setMath(m: string): void } = {
     theme: signal(initialTheme()),
     zoom: signal(initialZoom()),
     width: signal(html().getAttribute('data-width') || load(KEYS.width) || 'auto'),
     // The reader's choice, else the page's default (its data-latex-selection).
     selection: signal(load(KEYS.selection) || html().getAttribute('data-latex-selection') || 'native'),
+    math: signal(load(KEYS.math) === 'spoken' ? 'spoken' : 'mathml'),
     /** The themes a page offers (the class names its CSS styles). */
     themes: THEMES,
 
@@ -104,7 +110,15 @@ export const reading: ReadingState & { setZoom(z: number): void; selection: Sign
         save(KEYS.selection, sel);
         reading.selection!.value = sel;
     },
+    setMath(m: string) {
+        const api = (window.reflowtex as any);
+        if (api?.setAccessibleMath) api.setAccessibleMath(m);        // (it says so: the listener below)
+        else { save(KEYS.math, m); reading.math.value = m; }
+    },
 };
+// The choice made elsewhere (another control on the page): the options show it.
+if (typeof document !== 'undefined')
+    document.addEventListener('reflowtex:accessible-math', e => { reading.math.value = (e as CustomEvent).detail.mode; });
 // A choice the reader made before stands on every page.
 if (load(KEYS.selection)) html().setAttribute('data-latex-selection', reading.selection!.value);
 
@@ -193,6 +207,14 @@ export function ReadingOptions({ state = reading, width = false, selection = fal
                     {SELECTIONS.map(o => (
                         <button type="button" role="radio" data-s={o.name} aria-checked={state.selection!.value === o.name}
                                 onClick={() => state.setSelection!(o.name)}>{o.label}</button>))}
+                </div>
+            </div>}
+            {state === reading && document.querySelector('.latex-a11y') && <div class="rtx-reading-row">
+                <p class="rtx-reading-caption" id="rtx-math-label">Formulas for screen readers</p>
+                <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-math-label">
+                    {MATH_MODES.map(o => (
+                        <button type="button" role="radio" data-m={o.name} aria-checked={reading.math.value === o.name}
+                                onClick={() => reading.setMath(o.name)}>{o.label}</button>))}
                 </div>
             </div>}
             {inspect && inspector && <div class="rtx-reading-row">

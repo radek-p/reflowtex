@@ -51,6 +51,10 @@
                        panel; see the viewer's Theming docs). The companion
                        package draws them: an option of its own, on with
                        params.reflowtexCompanion = true
+    a11y="true"        put the block's accessible layer after it – its text in
+                       reading order, formulas as MathML with a spoken form –
+                       and hide the drawing from screen readers. "false" leaves
+                       it out. Default: the site's params.reflowtexA11y
     plus the Knuth–Plass knobs: line-penalty, adj-demerits,
     double-hyphen-demerits, pretolerance, tolerance, tolerance2,
     emergency-tolerance, last-line-min, last-line-penalty, max-expand,
@@ -82,6 +86,7 @@
   {{- $key = printf "%.16s" ($hashInput | sha256) -}}
 {{- end -}}
 {{- $data := and $key (index hugo.Data.latex_blocks $key) -}}
+{{- $a11y := eq (printf "%v" (.Get "a11y" | default site.Params.reflowtexA11y)) "true" -}}
 {{- $showSource := .Get "show-source" -}}
 {{- $source := "" -}}
 {{- if $showSource -}}
@@ -100,7 +105,7 @@
 <div class="latex-example-options" role="group" aria-label="Preview options" data-rtx="preview-options" data-themes="{{ . }}"></div>
 {{- end }}
 <div class="latex-example-stage">{{ end }}
-<div class="latex-block{{ with .Get "class" }} {{ . }}{{ end }}"
+<div class="latex-block{{ with .Get "class" }} {{ . }}{{ end }}"{{ if $a11y }} aria-hidden="true"{{ end }}
      data-nodelist-b64="{{ $data.nodelist_b64 }}"
      {{- with .Get "width" }}                  data-latex-width="{{ . }}"{{ end }}
      {{- with .Get "align" }}                  data-align="{{ . }}"{{ end }}
@@ -120,6 +125,7 @@
      {{- with .Get "pad" }}                    data-pad="{{ . }}"{{ end }}
      {{- with .Get "protrusion" }}             data-protrusion="{{ . }}"{{ end }}
      {{- with .Get "expansion" }}              data-expansion="{{ . }}"{{ end }}></div>
+{{- if and $a11y $data.a11y_html }}{{ $data.a11y_html | safeHTML }}{{ end }}
 {{- if $showSource }}
 <div class="latex-example-handle" role="slider" tabindex="0" aria-label="Width of the result"
      aria-valuemin="20" aria-valuemax="100" aria-valuenow="100"></div></div></div>

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 c3518f7432b23e47aaa4d8d65174734433f12f21692b819af97776f667531719
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 7878cb157ea5b2e4e7f5be16c864bbec1aeef9d4f0eb86aac60b15d70a0bf4d9
 'use strict';
 "use strict";
 (() => {
@@ -2860,6 +2860,7 @@
       localStorage.setItem(MODE_KEY, mode);
     } catch {
     }
+    document.dispatchEvent(new CustomEvent("reflowtex:accessible-math", { detail: { mode } }));
     for (const data of allData) {
       const layer = layerOf(data.el);
       if (!layer) continue;

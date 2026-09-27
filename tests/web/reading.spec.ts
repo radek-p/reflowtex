@@ -67,3 +67,24 @@ test('the options follow a theme set from outside', async ({ openPage }) => {
   await page.locator('.rtx-reading-button').click();
   await expect(page.locator('.rtx-reading-panel [data-t="dark"]')).toHaveAttribute('aria-checked', 'true');
 });
+
+// On a page with the accessible layer, the options also say how formulas
+// reach a screen reader (the viewer's setAccessibleMath) – and follow the
+// choice made by any other control. Without the layer they do not offer it.
+test('formulas for screen readers: offered with the layer, and kept in step', async ({ openPage }) => {
+  const plain = await openPage('reading');
+  await plain.locator('.rtx-reading-button').click();
+  await plain.waitForSelector('.rtx-reading-panel');
+  expect(await plain.locator('.rtx-reading-panel [data-m]').count(), 'no layer, no choice').toBe(0);
+
+  const page = await openPage('reading-a11y');
+  await page.locator('.rtx-reading-button').click();
+  const panel = page.locator('.rtx-reading-panel');
+  await panel.locator('[data-m="spoken"]').click();
+  expect(await page.evaluate(() => (window as any).reflowtex.accessibleMath())).toBe('spoken');
+  expect(await page.locator('.latex-a11y math').count()).toBe(0);
+  expect(await panel.locator('[data-m="spoken"]').getAttribute('aria-checked')).toBe('true');
+  await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('mathml'));   // another control
+  await expect(panel.locator('[data-m="mathml"]')).toHaveAttribute('aria-checked', 'true');
+  expect(await page.locator('.latex-a11y math').count()).toBeGreaterThan(0);
+});

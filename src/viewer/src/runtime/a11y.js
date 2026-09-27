@@ -65,10 +65,13 @@ let mode = 'mathml';
 try { if (localStorage.getItem(MODE_KEY) === 'spoken') mode = 'spoken'; } catch { /* no storage: the default */ }
 /** 'mathml' or 'spoken'. */
 export const accessibleMath = () => mode;
-/** The reader's choice, remembered; every block's layer is laid again. */
+/** The reader's choice, remembered; every block's layer is laid again, and
+ *  the page told (reflowtex:accessible-math, detail {mode}) so every control
+ *  showing the choice follows. */
 export function setAccessibleMath(m) {
     mode = m === 'spoken' ? 'spoken' : 'mathml';
     try { localStorage.setItem(MODE_KEY, mode); } catch { /* not remembered */ }
+    document.dispatchEvent(new CustomEvent('reflowtex:accessible-math', { detail: { mode } }));
     for (const data of allData) {
         const layer = layerOf(data.el);
         if (!layer) continue;

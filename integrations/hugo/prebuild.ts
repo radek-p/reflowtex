@@ -17,7 +17,7 @@
 //
 // and this writes:
 //
-//     <site>/data/latex_blocks/<key>.json   {nodelist_b64, content_hash, toolchain}
+//     <site>/data/latex_blocks/<key>.json   {nodelist_b64, a11y_html, content_hash, toolchain}
 //     <site>/data/latex_schema.json         {schema_b64}
 //     <site>/data/latex_files.json          {"name.tex": key} for file refs and as="…"
 //     <site>/data/latex_color_maps.json     {name: <colour map>, …}
@@ -37,6 +37,7 @@ import { createHash } from 'node:crypto';
 import { basename, join, relative, resolve, sep } from 'node:path';
 import { Pipeline, contentKey, toolchainHash } from '../../src/pipeline/pipeline.ts';
 import { readSerializerOutput } from '../../src/pipeline/nodes.ts';
+import { a11yLayerFromBytes } from '../../src/pipeline/a11y.ts';
 import { installViewer, passesFor, REF_PASSES, schemaBase64, pyJsonDumps, jsonSorted } from '../../src/pipeline/site.ts';
 
 // Two ways to write a block:
@@ -212,8 +213,11 @@ if (!blocks.size && !batches.size) { console.log('No {{< latex >}} blocks found.
 // that compiled it (the packages, serializer, template, encoder): a block is
 // up to date only when both match, so a new package version recompiles it.
 const toolchain = toolchainHash();
+// With it, the block's accessible layer (src/pipeline/a11y.ts): the shortcode
+// puts it after the block when the site asks (params.reflowtexA11y, a11y="…").
 const writeBlock = (key: string, bytes: Uint8Array, hash: string) =>
-  writeFileSync(join(dataDir, `${key}.json`), JSON.stringify({ nodelist_b64: Buffer.from(bytes).toString('base64'), content_hash: hash, toolchain }, null, 2));
+  writeFileSync(join(dataDir, `${key}.json`), JSON.stringify({ nodelist_b64: Buffer.from(bytes).toString('base64'),
+    a11y_html: a11yLayerFromBytes(bytes), content_hash: hash, toolchain }, null, 2));
 const storedHash = (key: string): string | undefined => {
   const f = join(dataDir, `${key}.json`);
   try {
@@ -224,7 +228,12 @@ const storedHash = (key: string): string | undefined => {
 // An up-to-date block needs no compilation, but its fonts are served all the
 // same: it is declared current to the pipeline, which reads its build output
 // (when there is one – a site may carry its data without its build root).
-const current = (key: string) => { if (existsSync(join(buildRoot, key, 'output.json'))) pipe.useCached(key); };
+// A block's data from before the layer was stored gets it, without recompiling.
+const current = (key: string) => {
+  if (existsSync(join(buildRoot, key, 'output.json'))) pipe.useCached(key);
+  const f = join(dataDir, `${key}.json`), d = JSON.parse(readFileSync(f, 'utf8'));
+  if (typeof d.a11y_html !== 'string') writeBlock(key, Buffer.from(d.nodelist_b64, 'base64'), d.content_hash);
+};
 
 const stale: { key: string; content: string; preamble: string; name: string; passes: number }[] = [];
 for (const [key, b] of blocks) {

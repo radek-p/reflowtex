@@ -104,6 +104,16 @@ writes its own on the viewer's API (`reflowtex.host`).
 result – a text size and the named themes – for that example alone (the
 companion's `<PreviewOptions>`).
 
+### Screen readers: `a11y`
+
+With `reflowtexA11y = true` under `[params]`, every block is followed by its
+accessible layer – its text in reading order, each formula as MathML with a
+spoken form in `alttext` – and the drawing is hidden from screen readers
+(the vanilla build's `--a11y`). `a11y="true"` or `a11y="false"` on a block
+overrides the site. The layer is stored with each block by prebuild, so
+turning it on needs no new compilation. The companion's reading options then
+offer *Formulas for screen readers*: MathML or spoken text.
+
 ### Books in parts: `batch` and `weight`
 
 Blocks with the same `batch="name"` are compiled together as one LaTeX
@@ -178,7 +188,7 @@ matter keeps it out of the site) replaces what would otherwise need a whole
 
 | Path | Contents | Commit? |
 |---|---|---|
-| `data/latex_blocks/<hash>.json` | one compiled block (base64 protobuf) | optional |
+| `data/latex_blocks/<hash>.json` | one compiled block (base64 protobuf) and its accessible layer | optional |
 | `data/latex_schema.json` | the schema the browser parses | optional |
 | `data/latex_files.json` | `file="…"` → block-hash map for the shortcode | optional |
 | `data/latex_color_maps.json` | `name` → parsed colour-map JSON, for every `color-map="…"` in use | optional |
