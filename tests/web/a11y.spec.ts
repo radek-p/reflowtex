@@ -144,9 +144,20 @@ async function coverage(page: import('@playwright/test').Page) {
   return page.evaluate(() => {
     const out: { text: string; across: number; off: number; glyphs: number }[] = [];
     for (const block of document.querySelectorAll('.latex-block[data-nodelist-b64]')) {
-      // a glyph's box: its text's (WebKit gives a <tspan> an empty rectangle)
+      // A glyph's box: across, its text's (WebKit gives a <tspan> an empty
+      // rectangle); up and down, a nominal em on its baseline, 0.75 above and
+      // 0.25 below. Its text's box is the font's ascent and descent, which
+      // macOS and Linux read from different tables: a 14 px glyph's box was
+      // 18 px tall on one and 14 px on the other, and a big operator's middle
+      // fell inside a run on one only – the median glyph moved, and the test
+      // failed on Linux alone.
       const glyphs = [...block.querySelectorAll('svg text, svg tspan')].filter(g => !g.querySelector('tspan')).map(g => {
-        const range = document.createRange(); range.selectNodeContents(g); return range.getBoundingClientRect();
+        const range = document.createRange(); range.selectNodeContents(g); const r = range.getBoundingClientRect();
+        const te = g.closest('text')!, m = te.getScreenCTM()!;
+        const y = parseFloat(g.getAttribute('y') ?? te.getAttribute('y') ?? 'NaN');
+        const size = parseFloat(getComputedStyle(g).fontSize) * Math.hypot(m.b, m.d);
+        const base = new DOMPoint(0, y).matrixTransform(m).y;
+        return { left: r.left, right: r.right, width: r.width, top: base - 0.75 * size, bottom: base + 0.25 * size, height: size };
       }).filter(r => r.width > 0 && r.height > 0);
       for (const run of block.previousElementSibling!.querySelectorAll('[data-run]')) {
         const r = run.getBoundingClientRect();
