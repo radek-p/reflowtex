@@ -1,7 +1,7 @@
 ---
 title: Citations and links
 linkTitle: Citations and links
-weight: 60
+weight: 100
 latexTitle: true
 aliases: ["/docs/typesetting/links-and-footnotes/"]
 ---

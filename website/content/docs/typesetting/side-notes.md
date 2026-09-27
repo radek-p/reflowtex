@@ -1,6 +1,6 @@
 ---
 title: Side notes
-weight: 66
+weight: 90
 latexTitle: true
 ---
 

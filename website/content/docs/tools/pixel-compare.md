@@ -12,7 +12,7 @@ LuaTeX: as a \href{../pageless-pdf/}{pageless PDF}, and in the browser by
 Reflow\,\TeX, with its column exactly as wide as the PDF's. Both are drawn
 at 4 pixels per point, and the two pictures are matched line by line. Where
 each glyph is, the \href{../render-tests/}{render tests} compare without
-pixels; \href{../../getting-started/accuracy/}{Accuracy} describes both.
+pixels; \href{../../project/accuracy/}{Accuracy} describes both.
 
 The browser is photographed with its text in \TeX's black rather than the
 site's dark grey, and without the smoothing macOS adds to thicken letters,

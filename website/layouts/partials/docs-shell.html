@@ -1,18 +1,17 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
 {{- /*
   The documentation area: a sidebar of every docs page, grouped by section
-  (content/docs/<group>/_index.md gives a group its title and weight; the
-  group pages themselves are not rendered), the page, and previous/next links
-  that walk the same order. On a narrow screen the sidebar folds into a
+  (content/docs/<group>/_index.md gives a group its title and weight, and
+  navPages: pages from elsewhere listed first in it – About, Showcase – at
+  their own URLs; the group pages themselves are not rendered), the page, and
+  previous/next links that walk the same order. On a narrow screen the sidebar folds into a
   "Contents" disclosure above the page.
 */ -}}
 {{- $docs := site.GetPage "/docs" -}}
 {{- $order := slice site.Home -}}
 {{- range $docs.Sections.ByWeight -}}
-  {{- range .Pages.ByWeight -}}{{- $order = $order | append . -}}{{- end -}}
+  {{- range partial "docs-group-pages.html" . -}}{{- $order = $order | append . -}}{{- end -}}
 {{- end -}}
-{{- range $docs.RegularPages.ByWeight -}}{{- if not .Params.hideInNav -}}{{- $order = $order | append . -}}{{- end -}}{{- end -}}
-{{- with site.GetPage "/about" -}}{{- $order = $order | append . -}}{{- end -}}
 {{- $here := . -}}
 {{- $idx := -1 -}}
 {{- range $i, $p := $order -}}{{- if eq $p.RelPermalink $here.RelPermalink -}}{{- $idx = $i -}}{{- end -}}{{- end -}}
@@ -61,12 +60,18 @@
 </script>
 {{- end }}
 
+{{- define "partials/docs-group-pages.html" -}}
+  {{- $pages := slice -}}
+  {{- range .Params.navPages -}}{{- with site.GetPage . -}}{{- $pages = $pages | append . -}}{{- end -}}{{- end -}}
+  {{- range .Pages.ByWeight -}}{{- $pages = $pages | append . -}}{{- end -}}
+  {{- return $pages -}}
+{{- end -}}
+
 {{- define "partials/docs-nav.html" -}}
 {{- /* One list, one rhythm: every group open, its pages on a rail under its
        title. The home page is the documentation's introduction, so it
-       opens the first group, as it opens the previous/next order. Pages
-       directly under docs/ (Showcase) and About close the list as a last
-       block without a title. A page with hideInNav (testmath.tex, reached
+       opens the first group, as it opens the previous/next order. A page
+       with hideInNav (testmath.tex, reached
        from Showcase) is left out, and the page it sits under – by URL –
        stays marked while it is read. */ -}}
 <nav class="docs-nav">
@@ -76,18 +81,10 @@
     {{- if eq $i 0 }}
     <li><a href="{{ site.Home.RelPermalink }}"{{ if eq site.Home.RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>Introduction</a></li>
     {{- end }}
-    {{- range $g.Pages.ByWeight }}
-    <li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a></li>
+    {{- range partial "docs-group-pages.html" $g }}
+    <li><a href="{{ .RelPermalink }}"{{ if or (eq .RelPermalink $.here.RelPermalink) (and $.here.Params.hideInNav (hasPrefix $.here.RelPermalink .RelPermalink)) }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a></li>
     {{- end }}
   </ul>
   {{- end }}
-  <ul class="docs-nav-end">
-    {{- range .docs.RegularPages.ByWeight }}{{ if not .Params.hideInNav }}
-    <li><a href="{{ .RelPermalink }}"{{ if or (eq .RelPermalink $.here.RelPermalink) (and $.here.Params.hideInNav (hasPrefix $.here.RelPermalink .RelPermalink)) }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a></li>
-    {{- end }}{{ end }}
-    {{- with site.GetPage "/about" }}
-    <li><a href="{{ .RelPermalink }}"{{ if eq .RelPermalink $.here.RelPermalink }} aria-current="page"{{ end }}>{{ .LinkTitle }}</a></li>
-    {{- end }}
-  </ul>
 </nav>
 {{- end -}}

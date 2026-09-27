@@ -1,6 +1,6 @@
 ---
 title: Pictures
-weight: 40
+weight: 70
 latexTitle: true
 ---
 

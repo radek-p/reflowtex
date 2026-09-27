@@ -1,6 +1,6 @@
 ---
 title: Custom kinds
-weight: 55
+weight: 100
 latexTitle: true
 ---
 

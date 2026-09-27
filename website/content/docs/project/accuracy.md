@@ -1,13 +1,14 @@
 ---
 title: Accuracy
-weight: 50
+weight: 10
 latexTitle: true
 aliases:
   - /docs/showcase/accuracy/
+  - /docs/getting-started/accuracy/
 ---
 
 {{< latex preamble="about" >}}
-\pagetitle[Getting started]{Accuracy}
+\pagetitle[The project]{Accuracy}
 \bigskip
 How closely does the browser follow \TeX? To find out, a document is
 typeset by LuaTeX twice from one run: as a

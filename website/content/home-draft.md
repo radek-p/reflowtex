@@ -234,7 +234,7 @@ runs again.
 \end{enumerate}
 At the width of its PDF, the browser puts every glyph of the AMS sample
 paper within a tenth of a point of where Lua\TeX{} put it; see
-\href{docs/getting-started/accuracy/}{Accuracy}
+\href{docs/project/accuracy/}{Accuracy}
 
 The paragraph below is broken again on every frame while its width
 changes. Press the button to set it moving.

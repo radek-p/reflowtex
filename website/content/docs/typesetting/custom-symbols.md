@@ -1,6 +1,6 @@
 ---
 title: Symbols of your own
-weight: 45
+weight: 50
 latexTitle: true
 ---
 

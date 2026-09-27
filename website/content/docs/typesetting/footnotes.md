@@ -1,6 +1,6 @@
 ---
 title: Footnotes
-weight: 65
+weight: 80
 latexTitle: true
 ---
 

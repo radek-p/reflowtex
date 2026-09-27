@@ -1,6 +1,6 @@
 ---
 title: Inline buttons
-weight: 50
+weight: 60
 latexTitle: true
 ---
 

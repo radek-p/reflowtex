@@ -1,6 +1,6 @@
 ---
 title: Lean beside a proof
-weight: 45
+weight: 90
 latexTitle: true
 ---
 

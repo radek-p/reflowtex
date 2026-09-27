@@ -1,6 +1,6 @@
 ---
 title: Accordion
-weight: 20
+weight: 40
 latexTitle: true
 ---
 

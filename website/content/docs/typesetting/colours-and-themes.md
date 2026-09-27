@@ -1,6 +1,6 @@
 ---
 title: Colours and themes
-weight: 70
+weight: 130
 latexTitle: true
 ---
 

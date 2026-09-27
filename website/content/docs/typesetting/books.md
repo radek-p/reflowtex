@@ -1,11 +1,12 @@
 ---
 title: Books in parts
-weight: 40
+weight: 120
+aliases: [/docs/getting-started/books/]
 latexTitle: true
 ---
 
 {{< latex preamble="docs" >}}
-\pagetitle[Getting started]{Books in parts}
+\pagetitle[Typesetting]{Books in parts}
 \bigskip
 In \LaTeX{} a book is one document: chapter~3 can refer to a theorem in
 chapter~1, continues the numbering where chapter~2 stopped, and uses macros

@@ -1,6 +1,6 @@
 ---
 title: Tables and figures
-weight: 42
+weight: 60
 latexTitle: true
 ---
 

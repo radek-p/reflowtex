@@ -1,6 +1,6 @@
 ---
 title: Boxed theorems
-weight: 40
+weight: 20
 latexTitle: true
 ---
 

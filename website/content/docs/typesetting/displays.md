@@ -1,6 +1,6 @@
 ---
 title: Displays
-weight: 20
+weight: 30
 latexTitle: true
 ---
 

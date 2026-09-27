@@ -1,11 +1,12 @@
 ---
 title: Accessibility
-weight: 50
+weight: 20
+aliases: [/docs/getting-started/accessibility/]
 latexTitle: true
 ---
 
 {{< latex preamble="docs" >}}
-\pagetitle[Getting started]{Accessibility}
+\pagetitle[The project]{Accessibility}
 \bigskip
 A page made with Reflow\,\TeX\ can carry, next to each block, the text a
 screen reader needs: the words in reading order, and every formula as

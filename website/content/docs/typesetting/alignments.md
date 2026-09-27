@@ -1,6 +1,6 @@
 ---
 title: Alignments
-weight: 30
+weight: 40
 latexTitle: true
 ---
 

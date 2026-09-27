@@ -1,6 +1,6 @@
 ---
 title: Headings and spacing
-weight: 50
+weight: 10
 latexTitle: true
 ---
 

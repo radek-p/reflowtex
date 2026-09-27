@@ -1,6 +1,6 @@
 ---
 title: HTML widgets
-weight: 49
+weight: 80
 latexTitle: true
 ---
 

@@ -11,7 +11,7 @@ Every change to Reflow\,\TeX{} is checked against \TeX{} by the render
 tests. Each test document is typeset by LuaTeX as a
 \href{../pageless-pdf/}{pageless PDF} and shown in the browser with its
 column as wide as the PDF's, and every glyph and rule the browser draws is
-matched with the one in the PDF. \href{../../getting-started/accuracy/}{Accuracy}
+matched with the one in the PDF. \href{../../project/accuracy/}{Accuracy}
 says what they find.
 
 The page below shows every test, as run for this version of the site: the
@@ -20,13 +20,13 @@ inspector open on it.
 {{< /latex >}}
 
 <div class="render-tests">
-<a href="{{< siteurl "render-tests/" >}}" class="shot"><img src="{{< siteurl "images/render-tests.webp" >}}" width="1600" height="1000" alt="The render tests: a test's pageless PDF beside the page the browser laid out, TeX's rules the browser draws otherwise marked on the PDF, the list of them on the right, and the inspector open below." loading="lazy"></a>
 <p><a href="{{< siteurl "render-tests/" >}}" class="open">Open the render tests</a> It fills the window; the browser's back button returns here.</p>
+<a href="{{< siteurl "render-tests/" >}}" class="shot"><img src="{{< siteurl "images/render-tests.webp" >}}" width="1600" height="1000" alt="The render tests: a test's pageless PDF beside the page the browser laid out, TeX's rules the browser draws otherwise marked on the PDF, the list of them on the right, and the inspector open below." loading="lazy"></a>
 </div>
 <style>
-  .render-tests .shot { display: block; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px; overflow: hidden; line-height: 0; }
+  .render-tests .shot { display: block; margin-bottom: 2rem; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px; overflow: hidden; line-height: 0; }
   .render-tests .shot img { width: 100%; height: auto; }
-  .render-tests p { font-size: .9rem; margin: .75rem 0 2rem; display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
+  .render-tests p { font-size: .9rem; margin: 0 0 .9rem; display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
   /* the home page's primary button (layouts/partials/head.html) */
   .render-tests .open { display: inline-block; padding: .5rem 1.1rem; border: 1px solid transparent; background: var(--lt-primary); color: #fff; text-decoration: none; font-weight: 600; transition: background .15s ease; }
   .render-tests .open:hover { background: var(--lt-primary-strong); }
