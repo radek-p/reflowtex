@@ -4,7 +4,7 @@
 // button in the corner), the two views, and a bottom bar with the outlines'
 // legend and the status. Loaded by inspector.js the first time it opens;
 // mount() makes it and hands back what the page's API calls.
-import { html, render, useLayoutEffect, useRef, Fragment } from '../vendor/preact.js';
+import { html, render, useLayoutEffect, useRef, useState, Fragment } from '../vendor/preact.js';
 import { call, got, useAsset, assetUrl, pageWindow, setPageWindow } from './bridge.js';
 import { isOpen, view, dark, guides, picking, blocks, noViewer, flash, menu, refs, keep, plain, say, SHORTCUT } from './store.js';
 import { IconButton, IconPick, IconClose, IconCheck, IconDock, Caret, MenuBox, toggleMenu, closeMenu, menuOpen } from './ui.js';
@@ -92,10 +92,20 @@ function Toolbar() {
 // the menu stays open for the next.
 function OverlaysMenu() {
     const g = guides.value;
+    // The reader's text shown on the page (a debugging aid, for a while): the
+    // viewer's own setting, which the reading options change too – read, not
+    // kept here.
+    const [, redraw] = useState(0);
+    const rt = pageWindow() && pageWindow().reflowtex;
+    const debug = rt && rt.setAccessibleDebug && pageWindow().document.querySelector('.latex-a11y') ? !!rt.accessibleDebug() : null;
     return html`<${MenuBox} label="Page overlays">
         ${OVERLAYS.map(([key, label, title]) => html`<button type="button" role="menuitemcheckbox" key=${key} data-overlay=${key}
                 title=${title} aria-checked=${String(!!g[key])} onClick=${() => setGuide(key, !g[key])}>
             <span class="check"><${IconCheck}/></span><span class="label">${label}</span></button>`)}
+        ${debug !== null && html`<button type="button" role="menuitemcheckbox" data-overlay="a11y-text"
+                title="The text a screen reader reads, shown where it lies: each element tinted, to see its bounds (debugging)"
+                aria-checked=${String(debug)} onClick=${() => { rt.setAccessibleDebug(!debug); redraw(n => n + 1); }}>
+            <span class="check"><${IconCheck}/></span><span class="label">Reader text, shown</span></button>`}
     <//>`;
 }
 // Chrome's "Dock side", for a panel too narrow to show the icons.

@@ -309,6 +309,16 @@
   font-size: 13px !important; padding: 6px 6px !important; border-radius: 10px; text-align: left; }
 .rtx-reading-inspect:hover { background: color-mix(in srgb, currentColor 8%, transparent) !important; }
 .rtx-reading-inspect kbd { font: 11px ui-monospace, Menlo, monospace; opacity: .6; }
+/* The inspector, and beside it the reader's text shown (a debugging aid,
+   for a while): the button at three quarters, the switch the rest. */
+.rtx-reading-tools { display: flex; gap: 6px; align-items: stretch; }
+.rtx-reading-tools .rtx-reading-inspect { width: 75%; flex: 0 0 75%; min-width: 0; }
+.rtx-reading-tools .rtx-reading-inspect span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rtx-reading-debug { flex: 1; font-size: 11px !important; line-height: 1.15; padding: 4px 2px !important; border-radius: 10px;
+  opacity: .8; }
+.rtx-reading-debug:hover { background: color-mix(in srgb, currentColor 8%, transparent) !important; }
+.rtx-reading-debug[aria-checked="true"] { opacity: 1; font-weight: 600; color: #d0021b;
+  background: rgb(208 2 27 / .1) !important; }
 /* Text size: small A · percentage · large A. */
 .rtx-reading-size { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; }
 .rtx-reading-size button { height: 36px; border-radius: 10px; }

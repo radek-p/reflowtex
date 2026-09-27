@@ -88,3 +88,25 @@ test('formulas for screen readers: offered with the layer, and kept in step', as
   await expect(panel.locator('[data-m="mathml"]')).toHaveAttribute('aria-checked', 'true');
   expect(await page.locator('.latex-a11y math').count()).toBeGreaterThan(0);
 });
+
+// A debugging aid, for a while: the reader's text shown where it lies, each
+// element tinted – from the corner panel (the Inspect button at three
+// quarters, the switch beside it), not from a card set into the page.
+test('the reader text can be shown, from the corner panel only', async ({ openPage }) => {
+  const page = await openPage('reading-a11y');
+  expect(await page.locator('#inline-options .rtx-reading-debug').count(), 'not in the card').toBe(0);
+  await page.locator('.rtx-reading-button').click();
+  const sw = page.locator('.rtx-reading-panel .rtx-reading-debug');
+  await expect(sw).toHaveAttribute('aria-checked', 'false');
+  const piece = page.locator('.latex-a11y > *').first();
+  expect(await piece.evaluate(p => getComputedStyle(p).opacity)).toBe('0');
+  await sw.click();
+  await expect(sw).toHaveAttribute('aria-checked', 'true');
+  expect(await piece.evaluate(p => getComputedStyle(p).opacity)).toBe('1');
+  expect(await piece.evaluate(p => getComputedStyle(p).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+  await page.reload();
+  await page.waitForSelector('.latex-a11y > *');
+  expect(await page.evaluate(() => (window as any).reflowtex.accessibleDebug()), 'remembered').toBe(true);
+  await page.evaluate(() => (window as any).reflowtex.setAccessibleDebug(false));
+  expect(await page.locator('.latex-a11y > *').first().evaluate(p => getComputedStyle(p).opacity)).toBe('0');
+});

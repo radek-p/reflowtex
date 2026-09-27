@@ -10,8 +10,10 @@
 // laid out, the layer is laid over the drawing, piece by piece and line by
 // line:
 //
-//   * each piece – a paragraph (data-para), a display (data-item) – is placed
-//     over its drawn lines, invisible (opacity 0), letting the pointer through;
+//   * each piece – a paragraph (data-para), a display (data-item), a stream
+//     standing in the flow (data-stream: a box, a hint, an accordion) – is
+//     placed over its drawn lines or its box, invisible (opacity 0), letting
+//     the pointer through; a stream's text is fitted into its box whole;
 //   * inside a paragraph near the window, the text is rebuilt from the drawn
 //     lines, as one flow of text – as an ordinary paragraph's, so VoiceOver
 //     reads it through rather than stopping, with its click, at every
@@ -34,7 +36,7 @@
 // (a screen reader skips clipped text). Without the viewer the layer keeps its
 // shipped form.
 
-import { SP_TO_PX, useGlyphMetrics } from '../engine/core.js';
+import { BREAK_NODES, SP_TO_PX, useGlyphMetrics } from '../engine/core.js';
 import { renderNodes } from '../engine/paint.js';
 import { api } from './page.js';
 import { allData } from './block-data.js';
@@ -82,6 +84,134 @@ export function setAccessibleMath(m) {
 api.accessibleMath = accessibleMath;
 api.setAccessibleMath = setAccessibleMath;
 
+// ── Seeing it (a debugging aid, for a while) ─────────────────────────────────
+// reflowtex.setAccessibleDebug(true) shows the layer where it lies: its text
+// in red over the drawing, each piece outlined, each run – the elements a
+// screen reader frames – tinted, neighbours in turn blue and pink (formulas
+// green), each stream a purple frame. Remembered; for checking the placement
+// on a phone (the reading options offer it, as the inspector does).
+const DEBUG_KEY = 'reflowtex-a11y-debug';
+const DEBUG_CSS = `
+html.latex-a11y-debug .latex-a11y > * { opacity: 1 !important; color: #d0021b !important; background: rgb(255 170 0 / .12);
+  outline: 1px dashed rgb(255 120 0 / .9); outline-offset: -1px; }
+html.latex-a11y-debug .latex-a11y [data-run]:nth-child(odd) { background: rgb(0 120 255 / .24); }
+html.latex-a11y-debug .latex-a11y [data-run]:nth-child(even) { background: rgb(255 0 150 / .2); }
+html.latex-a11y-debug .latex-a11y [data-run="math"], html.latex-a11y-debug .latex-a11y [data-run="display"],
+html.latex-a11y-debug .latex-a11y > div > math { background: rgb(0 170 70 / .3); }
+html.latex-a11y-debug .latex-a11y [data-stream] { outline: 2px solid rgb(130 0 255 / .7); }
+html.latex-a11y-debug .latex-a11y [role="note"] { background: rgb(130 0 255 / .1); }`;
+let debug = false;
+try { debug = localStorage.getItem(DEBUG_KEY) === '1'; } catch { /* no storage: off */ }
+/** Whether the layer is shown (a debugging aid). */
+export const accessibleDebug = () => debug;
+/** Show the layer or hide it again; remembered, and the page told
+ *  (reflowtex:accessible-debug, detail {on}). */
+export function setAccessibleDebug(on) {
+    debug = !!on;
+    try { if (debug) localStorage.setItem(DEBUG_KEY, '1'); else localStorage.removeItem(DEBUG_KEY); } catch { /* not remembered */ }
+    showDebug();
+    document.dispatchEvent(new CustomEvent('reflowtex:accessible-debug', { detail: { on: debug } }));
+}
+function showDebug() {
+    if (typeof document === 'undefined') return;
+    if (debug && !document.getElementById('latex-a11y-debug-css')) {
+        const st = document.createElement('style');
+        st.id = 'latex-a11y-debug-css';
+        st.textContent = DEBUG_CSS;
+        document.head.appendChild(st);
+    }
+    document.documentElement.classList.toggle('latex-a11y-debug', debug);
+}
+if (debug) showDebug();
+api.accessibleDebug = accessibleDebug;
+api.setAccessibleDebug = setAccessibleDebug;
+
+// ── Screen reader mode ───────────────────────────────────────────────────────
+// Google Docs' way, while WebKit lets VoiceOver onto hidden text (its text
+// navigation ignores aria-hidden: WebKit bug 161740). A click lands
+// VoiceOver where the text under the pointer is – on the drawing's glyphs,
+// selectable text though hidden – and it reads on from there past the
+// block. With the mode on (reflowtex.setScreenReaderMode, remembered; the
+// reading options and a prompt at the page's start offer it), the layer
+// takes the clicks and the selection instead: its words lie on the drawn
+// ones, selectable, with the selection shown over them; the drawing's text
+// is not selectable; a click on a drawn link, footnote mark or control goes
+// on to it, under the layer. Off, everything is as it was – the drawing's
+// text is what a reader selects.
+const READER_KEY = 'reflowtex-a11y-reader';
+const READER_CSS = `
+html.latex-reader-mode .latex-block svg { -webkit-user-select: none; user-select: none; }
+html.latex-reader-mode .latex-a11y > *, html.latex-reader-mode .latex-a11y > * * {
+  pointer-events: auto !important; -webkit-user-select: text !important; user-select: text !important; }
+html.latex-reader-mode .latex-a11y > * { opacity: 1 !important; color: transparent !important; }
+html.latex-reader-mode .latex-a11y ::selection { background: rgb(0 110 255 / .3); color: transparent; }
+html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { pointer-events: none !important; }
+.latex-reader-prompt { position: absolute; left: -9999px; top: 0; }
+.latex-reader-prompt:focus { left: 8px; top: 8px; z-index: 2147483647; padding: 8px 12px; font: 14px system-ui, sans-serif;
+  background: Canvas; color: CanvasText; border: 2px solid Highlight; border-radius: 6px; }`;
+let reader = false;
+try { reader = localStorage.getItem(READER_KEY) === '1'; } catch { /* no storage: off */ }
+/** Whether the layer takes clicks and the selection (screen reader mode). */
+export const screenReaderMode = () => reader;
+/** Screen reader mode on or off; remembered, and the page told
+ *  (reflowtex:screen-reader-mode, detail {on}). */
+export function setScreenReaderMode(on) {
+    reader = !!on;
+    try { if (reader) localStorage.setItem(READER_KEY, '1'); else localStorage.removeItem(READER_KEY); } catch { /* not remembered */ }
+    showReader();
+    document.dispatchEvent(new CustomEvent('reflowtex:screen-reader-mode', { detail: { on: reader } }));
+}
+function readerStyle() {
+    if (document.getElementById('latex-reader-css')) return;
+    const st = document.createElement('style');
+    st.id = 'latex-reader-css';
+    st.textContent = READER_CSS;
+    document.head.appendChild(st);
+}
+function showReader() {
+    readerStyle();
+    document.documentElement.classList.toggle('latex-reader-mode', reader);
+    const b = document.querySelector('.latex-reader-prompt');
+    if (b) b.textContent = reader ? 'Screen reader mode is on: turn it off' : 'Turn on screen reader mode: click a word to hear it, and read on from there';
+}
+// The prompt: a page with a layer begins with a button a screen reader meets
+// first (visible when it has the keyboard's focus, as a skip link is).
+function addPrompt() {
+    if (document.querySelector('.latex-reader-prompt') || !document.querySelector('.latex-a11y')) return;
+    readerStyle();
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'latex-reader-prompt';
+    b.addEventListener('click', () => setScreenReaderMode(!reader));
+    document.body.prepend(b);
+    showReader();
+}
+// A click on the layer that is a click, not a selection, goes on to what the
+// drawing has there: a link, a footnote mark, a control.
+function passClick(e) {
+    if (!reader || !e.isTrusted || !(e.target instanceof Element) || !e.target.closest('.latex-a11y')) return;
+    if (e.target.closest('summary, a, button, [role="button"]')) return;     // the layer's own (a hint's disclosure)
+    const sel = document.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    const root = document.documentElement;
+    root.classList.add('latex-reader-probe');
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    root.classList.remove('latex-reader-probe');
+    if (!under || !under.closest('.latex-block')) return;
+    e.stopPropagation();
+    e.preventDefault();
+    under.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window,
+        clientX: e.clientX, clientY: e.clientY, button: 0 }));
+}
+if (typeof document !== 'undefined') {
+    document.addEventListener('click', passClick, true);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addPrompt);
+    else addPrompt();
+    if (reader) showReader();
+}
+api.screenReaderMode = screenReaderMode;
+api.setScreenReaderMode = setScreenReaderMode;
+
 const unescape = s => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 /** A formula's words: its alttext. */
 const wordsOf = mathml => { const m = /\balttext="([^"]*)"/.exec(mathml); return m ? unescape(m[1]) : ''; };
@@ -121,11 +251,12 @@ export function placeAccessibleLayer(data) {
     const segs = laid.map(L => L.seg);
 
     // What each segment draws: its paragraphs (by number, with their place in
-    // the segment), or the display whose first row it starts with.
-    const byPara = new Map(), byItem = new Map();
+    // the segment), the display whose first row it starts with, or a stream.
+    const byPara = new Map(), byItem = new Map(), byStream = new Map();
     segs.forEach((seg, i) => {
         if (seg.kind === 'text') seg.items.forEach((it, j) => byPara.set(it.index, [i, j]));
         else if (seg.kind === 'display') byItem.set(seg.rows[0].item, i);
+        else if (seg.kind === 'stream') byStream.set(seg.index, i);
     });
     const content = data.doc.content || [];
 
@@ -136,6 +267,7 @@ export function placeAccessibleLayer(data) {
         let i, j = -1;
         if (piece.dataset.para) [i, j] = byPara.get(+piece.dataset.para) || [];
         else if (piece.dataset.item) i = byItem.get(content[+piece.dataset.item - 1]);
+        else if (piece.dataset.stream) i = byStream.get(+piece.dataset.stream);
         const s = i === undefined ? null : cache.dom.segs[i];
         if (!s || !s.box) return null;
         const r = s.box.getBoundingClientRect();
@@ -223,7 +355,7 @@ function textOf(nodes) {
     let s = '';
     for (const n of nodes || []) {
         if (n.type === 'glyph' && n.char !== undefined) s += glyphText(n.char);
-        else if (n.type === 'glue' && (n.width || 0) > 0) s += ' ';
+        else if (n.type === 'glue' && ((n.width || 0) > 0 || (n.stretch || 0) > 0)) s += ' ';   // as runsOf
         else if (n.type === 'disc') s += textOf(n.replace);
         else if (n.children) s += textOf(n.children);
     }
@@ -240,7 +372,24 @@ function runsOf(data, i, a, b) {
     useGlyphMetrics(data.cache.metrics);
     const noop = () => {};
     const runs = [];
-    let inFormula = 0;                    // depth of a formula carried over from the line before
+    // A formula going on past a line's end: where it ends in its paragraph's
+    // nodes. Every node up to there on the next lines is the formula's. (Its
+    // end cannot be looked for on the lines themselves: a formula that ends
+    // where the line breaks loses its end-math node, as TeX discards a math
+    // node at a break – and the rest of the paragraph read as formula, that
+    // is, not at all.)
+    let carryEnd = -1;
+    const order = paragraphOrder(data, L);
+    // A word hyphenated at a line's end is read whole, on its first line: the
+    // run there takes the letters of the next line up to its first space
+    // (the run after them starts where they end). "para- graph" would be read
+    // as two words.
+    let joinTo = null;
+    // Word by word: each word its own run, placed on its drawn word (VoiceOver
+    // frames, and steps through, the words it reads: a run spread over several
+    // drawn words matched them only at its ends). A space between two runs is
+    // noted on the second (`sp`) and put in as text of no width.
+    let spaceNext = false;
     // A space is owed after a formula when the source had one before the next
     // words (a glue, or a line break), and not before punctuation, which has
     // none: a run after a formula then starts with it.
@@ -268,22 +417,36 @@ function runsOf(data, i, a, b) {
         const addText = (s, n) => {
             const p = pos.get(n);
             if (!s) return;
+            if (joinTo) {
+                if (s.trim()) { joinTo.text += s; return; }
+                joinTo.text += ' ';                          // the space after the word
+                joinTo = null;
+                return;
+            }
+            if (text && !s.trim()) {                          // a word ends
+                if (text.text.trim()) { flush(); spaceNext = true; }
+                return;
+            }
             if (!text) {
-                if (!s.trim()) { owed = runs.length > 0 && !!runs[runs.length - 1].mathml; return; }
+                if (!s.trim()) { owed = runs.length > 0 && !!runs[runs.length - 1].mathml; if (runs.length) spaceNext = true; return; }
                 // a run starts with a space only where one is owed after a formula
-                text = { text: owed ? ' ' : '', lead: owed, x0: Infinity, x1: -Infinity, y0, y1, line: j, ly0: y0, ly1: y1 };
+                text = { text: owed ? ' ' : '', lead: owed, sp: spaceNext && !owed, x0: Infinity, x1: -Infinity, y0, y1, line: j, ly0: y0, ly1: y1 };
+                spaceNext = false;
             }
             owed = false;
             text.text += s;
             if (p && s.trim()) { text.x0 = Math.min(text.x0, p.x); text.x1 = Math.max(text.x1, p.x + p.w); }
         };
+        const at = order(j);
         for (let k = 0; k < nodes.length; k++) {
             const n = nodes[k];
-            if (inFormula) {                                 // the rest of a formula begun above
-                if (n.type === 'math') inFormula += (n.subtype || 0) === 0 ? 1 : -1;
-                continue;
+            if (carryEnd >= 0) {                             // the rest of a formula begun above
+                const p = at.get(n);
+                if (p === undefined || p <= carryEnd) continue;
+                carryEnd = -1;
             }
             if (n.type === 'math' && (n.subtype || 0) === 0 && n.mathml) {
+                joinTo = null;
                 flush();
                 let depth = 1, e = k + 1;
                 for (; e < nodes.length; e++) {
@@ -298,9 +461,18 @@ function runsOf(data, i, a, b) {
                 // and fractions reach past the line
                 const my0 = Math.min(y0, ...mine.map(g => g.top));
                 const my1 = Math.max(y1, ...mine.map(g => g.bottom));
-                runs.push({ mathml: n.mathml, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1, line: j, ly0: y0, ly1: y1 });
-                if (e >= nodes.length) inFormula = depth;    // it goes on on the next line
+                runs.push({ mathml: n.mathml, sp: spaceNext, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1, line: j, ly0: y0, ly1: y1 });
+                spaceNext = false;
+                if (e >= nodes.length) carryEnd = formulaEndIn(at, n);   // it goes on on the next line
                 k = e;
+                continue;
+            }
+            // what the line break put at the line's end (breaker.js): the
+            // hyphen of a word broken here, no part of it; or a hyphen the
+            // author typed, kept. The word goes on on the next line.
+            if (BREAK_NODES.has(n)) {
+                if (BREAK_NODES.get(n) === 'keep') addText(glyphText(n.char ?? 0x2D), n);
+                if (text) text.hyphen = true;
                 continue;
             }
             if (n.type === 'glyph' && n.char !== undefined) addText(glyphText(n.char), n);
@@ -316,9 +488,46 @@ function runsOf(data, i, a, b) {
         if (text) text.text = text.text.replace(/^\s+/, text.lead ? ' ' : '');
         // a line that ends with a formula: the line break is the space owed
         if (!text && runs.length && runs[runs.length - 1].mathml) owed = true;
+        const hyphenated = text && text.hyphen ? text : null;
         flush();
+        joinTo = hyphenated;
     }
     return runs;
+}
+
+/** For line j of a laid-out text segment, each node of its paragraph with its
+ *  place in the paragraph (the lines hold the paragraph's own nodes). */
+function paragraphOrder(data, L) {
+    const maps = new Map();
+    const paras = data.doc.paragraphs || [];
+    return j => {
+        let k = 0;
+        const starts = L.itemStarts || [0];
+        while (k + 1 < starts.length && starts[k + 1] <= j) k++;
+        const item = L.seg.items && L.seg.items[k];
+        if (!item) return new Map();
+        if (!maps.has(item.index)) {
+            const m = new Map();
+            (paras[item.index - 1]?.nodes || []).forEach((n, i) => m.set(n, i));
+            maps.set(item.index, m);
+        }
+        return maps.get(item.index);
+    };
+}
+
+/** Where the formula begun by math node `n` ends in its paragraph: the place
+ *  of its end-math node. -1 when `n` is not found (the formula is then taken
+ *  to end with its line: text is never lost to it). */
+function formulaEndIn(at, n) {
+    const start = at.get(n);
+    if (start === undefined) return -1;
+    const nodes = [...at.keys()];
+    let depth = 0;
+    for (let i = start; i < nodes.length; i++) {
+        if (nodes[i].type === 'math') depth += (nodes[i].subtype || 0) === 0 ? 1 : -1;
+        if (depth === 0) return i;
+    }
+    return nodes.length;
 }
 
 /** A display segment's ink, in svg units: from its leftmost glyph to its
@@ -366,6 +575,7 @@ function layOutRuns({ piece, p, runs, origin }) {
         flowTop += lh;
         let x = 0;
         for (const r of ln.runs) {
+            if (r.sp) frag.appendChild(document.createTextNode(' '));   // (the piece's font has no size: no width)
             const left = m.a * r.x0 + m.e - pieceLeft, w = Math.max(1, m.a * (r.x1 - r.x0));
             // where it does not start where the last ended (an indent, a gap
             // the runs leave out): a margin of its own – no element between

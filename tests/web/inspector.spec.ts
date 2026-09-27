@@ -326,3 +326,19 @@ test('the Accessibility tab never scrolls sideways', async ({ openPage }) => {
     expect(over, `${mode}: the tab scrolls sideways by ${over}px`).toBeLessThanOrEqual(1);
   }
 });
+
+// A debugging aid, for a while: Overlays → "Reader text, shown" is the
+// viewer's own setting (the reading options offer it too), read, not kept.
+test('the Overlays menu shows the reader text, the viewer’s own setting', async ({ openPage }) => {
+  const page = await openPage('mathml');
+  await agent(page);
+  await page.locator('[data-rtx-ui] button.overlays').click();
+  const item = page.locator('[data-rtx-ui] [data-overlay="a11y-text"]');
+  await expect(item).toHaveAttribute('aria-checked', 'false');
+  await item.click();
+  await expect(item).toHaveAttribute('aria-checked', 'true');
+  expect(await page.evaluate(() => (window as any).reflowtex.accessibleDebug())).toBe(true);
+  expect(await page.locator('.latex-a11y > *').first().evaluate(p => getComputedStyle(p).opacity)).toBe('1');
+  await item.click();
+  expect(await page.evaluate(() => (window as any).reflowtex.accessibleDebug())).toBe(false);
+});

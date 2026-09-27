@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 1f4dafb14fe21923bee2a0369e032c37043366d178f1ff5e922671622871f9f3
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 a10fefedad08d4ebd5c97871469671525bd4f10ddfa567daf3ae50efbdf8717f
 'use strict';
 "use strict";
 (() => {
   // src/engine/core.js
   var ZOOM = 2;
   var SP_TO_PX = ZOOM / 65536;
+  var BREAK_NODES = /* @__PURE__ */ new WeakMap();
+  var AUTOMATIC_DISC = 2;
+  var breakKind = (disc) => (disc && disc.subtype) === AUTOMATIC_DISC ? "keep" : "drop";
   var RUNNING_RULE = -1073741824;
   var DEFAULT_ALIGN = "justify";
   var DEFAULT_LINE_PENALTY = 10;
@@ -926,7 +929,13 @@
     }
     const to = endBC.nodeIdx - (endBC.trailN || 0);
     for (let i = from; i < to; i++) if (nodes[i].type !== "local_par") result.push(nodes[i]);
-    if (endBC.kind === "disc") for (const pn of endBC.preNodes || nodes[endBC.nodeIdx].pre) result.push(pn);
+    if (endBC.kind === "disc") {
+      const kind = breakKind(nodes[endBC.nodeIdx]);
+      for (const pn of endBC.preNodes || nodes[endBC.nodeIdx].pre) {
+        BREAK_NODES.set(pn, kind);
+        result.push(pn);
+      }
+    }
     return result;
   }
   function greedyFallback(bcs, nodes, lineWidthSp, p) {
@@ -2187,6 +2196,7 @@
           el = svgEl("tspan", { x, y, "font-family": fi?.family ?? "serif", "font-size": fi?.size_px ?? 12 });
           el.textContent = n.text !== void 0 ? n.text : String.fromCodePoint(n.char);
           if (n.color) el.style.fill = colorFill(n.color);
+          if (BREAK_NODES.has(n)) el.dataset.break = BREAK_NODES.get(n) === "keep" ? "keep" : "";
           if (n.stream) registerStreamSource(el, n.stream, cache);
           if (n.link) registerLinkGlyph(el, n.link, cache);
           if (n.mark) applyMark(el, n.mark, cache);
@@ -2940,6 +2950,124 @@
   }
   api.accessibleMath = accessibleMath;
   api.setAccessibleMath = setAccessibleMath;
+  var DEBUG_KEY = "reflowtex-a11y-debug";
+  var DEBUG_CSS = `
+html.latex-a11y-debug .latex-a11y > * { opacity: 1 !important; color: #d0021b !important; background: rgb(255 170 0 / .12);
+  outline: 1px dashed rgb(255 120 0 / .9); outline-offset: -1px; }
+html.latex-a11y-debug .latex-a11y [data-run]:nth-child(odd) { background: rgb(0 120 255 / .24); }
+html.latex-a11y-debug .latex-a11y [data-run]:nth-child(even) { background: rgb(255 0 150 / .2); }
+html.latex-a11y-debug .latex-a11y [data-run="math"], html.latex-a11y-debug .latex-a11y [data-run="display"],
+html.latex-a11y-debug .latex-a11y > div > math { background: rgb(0 170 70 / .3); }
+html.latex-a11y-debug .latex-a11y [data-stream] { outline: 2px solid rgb(130 0 255 / .7); }
+html.latex-a11y-debug .latex-a11y [role="note"] { background: rgb(130 0 255 / .1); }`;
+  var debug = false;
+  try {
+    debug = localStorage.getItem(DEBUG_KEY) === "1";
+  } catch {
+  }
+  var accessibleDebug = () => debug;
+  function setAccessibleDebug(on) {
+    debug = !!on;
+    try {
+      if (debug) localStorage.setItem(DEBUG_KEY, "1");
+      else localStorage.removeItem(DEBUG_KEY);
+    } catch {
+    }
+    showDebug();
+    document.dispatchEvent(new CustomEvent("reflowtex:accessible-debug", { detail: { on: debug } }));
+  }
+  function showDebug() {
+    if (typeof document === "undefined") return;
+    if (debug && !document.getElementById("latex-a11y-debug-css")) {
+      const st = document.createElement("style");
+      st.id = "latex-a11y-debug-css";
+      st.textContent = DEBUG_CSS;
+      document.head.appendChild(st);
+    }
+    document.documentElement.classList.toggle("latex-a11y-debug", debug);
+  }
+  if (debug) showDebug();
+  api.accessibleDebug = accessibleDebug;
+  api.setAccessibleDebug = setAccessibleDebug;
+  var READER_KEY = "reflowtex-a11y-reader";
+  var READER_CSS = `
+html.latex-reader-mode .latex-block svg { -webkit-user-select: none; user-select: none; }
+html.latex-reader-mode .latex-a11y > *, html.latex-reader-mode .latex-a11y > * * {
+  pointer-events: auto !important; -webkit-user-select: text !important; user-select: text !important; }
+html.latex-reader-mode .latex-a11y > * { opacity: 1 !important; color: transparent !important; }
+html.latex-reader-mode .latex-a11y ::selection { background: rgb(0 110 255 / .3); color: transparent; }
+html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { pointer-events: none !important; }
+.latex-reader-prompt { position: absolute; left: -9999px; top: 0; }
+.latex-reader-prompt:focus { left: 8px; top: 8px; z-index: 2147483647; padding: 8px 12px; font: 14px system-ui, sans-serif;
+  background: Canvas; color: CanvasText; border: 2px solid Highlight; border-radius: 6px; }`;
+  var reader = false;
+  try {
+    reader = localStorage.getItem(READER_KEY) === "1";
+  } catch {
+  }
+  var screenReaderMode = () => reader;
+  function setScreenReaderMode(on) {
+    reader = !!on;
+    try {
+      if (reader) localStorage.setItem(READER_KEY, "1");
+      else localStorage.removeItem(READER_KEY);
+    } catch {
+    }
+    showReader();
+    document.dispatchEvent(new CustomEvent("reflowtex:screen-reader-mode", { detail: { on: reader } }));
+  }
+  function readerStyle() {
+    if (document.getElementById("latex-reader-css")) return;
+    const st = document.createElement("style");
+    st.id = "latex-reader-css";
+    st.textContent = READER_CSS;
+    document.head.appendChild(st);
+  }
+  function showReader() {
+    readerStyle();
+    document.documentElement.classList.toggle("latex-reader-mode", reader);
+    const b = document.querySelector(".latex-reader-prompt");
+    if (b) b.textContent = reader ? "Screen reader mode is on: turn it off" : "Turn on screen reader mode: click a word to hear it, and read on from there";
+  }
+  function addPrompt() {
+    if (document.querySelector(".latex-reader-prompt") || !document.querySelector(".latex-a11y")) return;
+    readerStyle();
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "latex-reader-prompt";
+    b.addEventListener("click", () => setScreenReaderMode(!reader));
+    document.body.prepend(b);
+    showReader();
+  }
+  function passClick(e) {
+    if (!reader || !e.isTrusted || !(e.target instanceof Element) || !e.target.closest(".latex-a11y")) return;
+    if (e.target.closest('summary, a, button, [role="button"]')) return;
+    const sel = document.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    const root = document.documentElement;
+    root.classList.add("latex-reader-probe");
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    root.classList.remove("latex-reader-probe");
+    if (!under || !under.closest(".latex-block")) return;
+    e.stopPropagation();
+    e.preventDefault();
+    under.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      button: 0
+    }));
+  }
+  if (typeof document !== "undefined") {
+    document.addEventListener("click", passClick, true);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addPrompt);
+    else addPrompt();
+    if (reader) showReader();
+  }
+  api.screenReaderMode = screenReaderMode;
+  api.setScreenReaderMode = setScreenReaderMode;
   var unescape = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   var wordsOf = (mathml) => {
     const m = /\balttext="([^"]*)"/.exec(mathml);
@@ -2976,10 +3104,11 @@
     const laid = cache.layout && cache.layout.laid;
     if (!laid || !cache.dom) return;
     const segs = laid.map((L) => L.seg);
-    const byPara = /* @__PURE__ */ new Map(), byItem = /* @__PURE__ */ new Map();
+    const byPara = /* @__PURE__ */ new Map(), byItem = /* @__PURE__ */ new Map(), byStream = /* @__PURE__ */ new Map();
     segs.forEach((seg, i) => {
       if (seg.kind === "text") seg.items.forEach((it, j) => byPara.set(it.index, [i, j]));
       else if (seg.kind === "display") byItem.set(seg.rows[0].item, i);
+      else if (seg.kind === "stream") byStream.set(seg.index, i);
     });
     const content = data.doc.content || [];
     if (layer.dataset.placed !== "1") {
@@ -2991,6 +3120,7 @@
       let i, j = -1;
       if (piece.dataset.para) [i, j] = byPara.get(+piece.dataset.para) || [];
       else if (piece.dataset.item) i = byItem.get(content[+piece.dataset.item - 1]);
+      else if (piece.dataset.stream) i = byStream.get(+piece.dataset.stream);
       const s = i === void 0 ? null : cache.dom.segs[i];
       if (!s || !s.box) return null;
       const r = s.box.getBoundingClientRect();
@@ -3081,7 +3211,7 @@
     let s = "";
     for (const n of nodes || []) {
       if (n.type === "glyph" && n.char !== void 0) s += glyphText(n.char);
-      else if (n.type === "glue" && (n.width || 0) > 0) s += " ";
+      else if (n.type === "glue" && ((n.width || 0) > 0 || (n.stretch || 0) > 0)) s += " ";
       else if (n.type === "disc") s += textOf3(n.replace);
       else if (n.children) s += textOf3(n.children);
     }
@@ -3094,7 +3224,10 @@
     const noop = () => {
     };
     const runs = [];
-    let inFormula = 0;
+    let carryEnd = -1;
+    const order = paragraphOrder(data, L);
+    let joinTo = null;
+    let spaceNext = false;
     let owed = false;
     for (let j = a; j <= b; j++) {
       const pos = /* @__PURE__ */ new Map(), ink = [];
@@ -3127,12 +3260,30 @@
       const addText = (s, n) => {
         const p = pos.get(n);
         if (!s) return;
+        if (joinTo) {
+          if (s.trim()) {
+            joinTo.text += s;
+            return;
+          }
+          joinTo.text += " ";
+          joinTo = null;
+          return;
+        }
+        if (text && !s.trim()) {
+          if (text.text.trim()) {
+            flush();
+            spaceNext = true;
+          }
+          return;
+        }
         if (!text) {
           if (!s.trim()) {
             owed = runs.length > 0 && !!runs[runs.length - 1].mathml;
+            if (runs.length) spaceNext = true;
             return;
           }
-          text = { text: owed ? " " : "", lead: owed, x0: Infinity, x1: -Infinity, y0, y1, line: j, ly0: y0, ly1: y1 };
+          text = { text: owed ? " " : "", lead: owed, sp: spaceNext && !owed, x0: Infinity, x1: -Infinity, y0, y1, line: j, ly0: y0, ly1: y1 };
+          spaceNext = false;
         }
         owed = false;
         text.text += s;
@@ -3141,13 +3292,16 @@
           text.x1 = Math.max(text.x1, p.x + p.w);
         }
       };
+      const at = order(j);
       for (let k = 0; k < nodes.length; k++) {
         const n = nodes[k];
-        if (inFormula) {
-          if (n.type === "math") inFormula += (n.subtype || 0) === 0 ? 1 : -1;
-          continue;
+        if (carryEnd >= 0) {
+          const p = at.get(n);
+          if (p === void 0 || p <= carryEnd) continue;
+          carryEnd = -1;
         }
         if (n.type === "math" && (n.subtype || 0) === 0 && n.mathml) {
+          joinTo = null;
           flush();
           let depth = 1, e = k + 1;
           for (; e < nodes.length; e++) {
@@ -3160,9 +3314,15 @@
           const mine = ink.filter((g) => g.x >= start.x - 0.5 && g.x1 <= x1 + 0.5);
           const my0 = Math.min(y0, ...mine.map((g) => g.top));
           const my1 = Math.max(y1, ...mine.map((g) => g.bottom));
-          runs.push({ mathml: n.mathml, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1, line: j, ly0: y0, ly1: y1 });
-          if (e >= nodes.length) inFormula = depth;
+          runs.push({ mathml: n.mathml, sp: spaceNext, x0: start.x, x1: Math.max(x1, start.x + 1), y0: my0, y1: my1, line: j, ly0: y0, ly1: y1 });
+          spaceNext = false;
+          if (e >= nodes.length) carryEnd = formulaEndIn(at, n);
           k = e;
+          continue;
+        }
+        if (BREAK_NODES.has(n)) {
+          if (BREAK_NODES.get(n) === "keep") addText(glyphText(n.char ?? 45), n);
+          if (text) text.hyphen = true;
           continue;
         }
         if (n.type === "glyph" && n.char !== void 0) addText(glyphText(n.char), n);
@@ -3176,9 +3336,39 @@
       if (text && !text.hyphen) text.text = text.text.replace(/\s*$/, " ");
       if (text) text.text = text.text.replace(/^\s+/, text.lead ? " " : "");
       if (!text && runs.length && runs[runs.length - 1].mathml) owed = true;
+      const hyphenated = text && text.hyphen ? text : null;
       flush();
+      joinTo = hyphenated;
     }
     return runs;
+  }
+  function paragraphOrder(data, L) {
+    const maps = /* @__PURE__ */ new Map();
+    const paras = data.doc.paragraphs || [];
+    return (j) => {
+      let k = 0;
+      const starts = L.itemStarts || [0];
+      while (k + 1 < starts.length && starts[k + 1] <= j) k++;
+      const item = L.seg.items && L.seg.items[k];
+      if (!item) return /* @__PURE__ */ new Map();
+      if (!maps.has(item.index)) {
+        const m = /* @__PURE__ */ new Map();
+        (paras[item.index - 1]?.nodes || []).forEach((n, i) => m.set(n, i));
+        maps.set(item.index, m);
+      }
+      return maps.get(item.index);
+    };
+  }
+  function formulaEndIn(at, n) {
+    const start = at.get(n);
+    if (start === void 0) return -1;
+    const nodes = [...at.keys()];
+    let depth = 0;
+    for (let i = start; i < nodes.length; i++) {
+      if (nodes[i].type === "math") depth += (nodes[i].subtype || 0) === 0 ? 1 : -1;
+      if (depth === 0) return i;
+    }
+    return nodes.length;
   }
   function inkOf(data, i) {
     const L = data.cache.layout.laid[i];
@@ -3228,6 +3418,7 @@
       flowTop += lh;
       let x = 0;
       for (const r of ln.runs) {
+        if (r.sp) frag.appendChild(document.createTextNode(" "));
         const left = m.a * r.x0 + m.e - pieceLeft, w = Math.max(1, m.a * (r.x1 - r.x0));
         const gap = Math.abs(left - x) > 0.25 ? `;margin-left:${left - x}px` : "";
         if (r.mathml && mode === "mathml") {
@@ -5312,6 +5503,42 @@
       return true;
     }
   };
+
+  // src/runtime/copy.js
+  var SENTINEL = "⁣";
+  var JOIN = new RegExp(`${SENTINEL}+[ \\t]*(?:\\r?\\n[ \\t]*)?`, "g");
+  function copiedText(sel) {
+    const marks = [...document.querySelectorAll(".latex-block tspan[data-break]")].filter((t) => t.firstChild && sel.containsNode(t, true));
+    if (!marks.length) return null;
+    const kept = marks.map((t) => ({ node: t.firstChild, data: t.firstChild.data, keep: t.dataset.break === "keep" }));
+    for (const k of kept) k.node.data = SENTINEL.repeat(k.data.length);
+    let text;
+    try {
+      text = sel.toString();
+    } finally {
+      for (const k of kept) k.node.data = k.data;
+    }
+    let i = 0;
+    return text.replace(JOIN, (run) => {
+      let n = run.replace(/[^\u2063]/g, "").length, out = "";
+      while (n > 0 && i < kept.length) {
+        const k = kept[i++];
+        if (k.keep) out += k.data.slice(0, n);
+        n -= k.data.length;
+      }
+      return out;
+    });
+  }
+  if (typeof document !== "undefined") {
+    document.addEventListener("copy", (e) => {
+      const sel = document.getSelection();
+      if (!sel || sel.isCollapsed || !e.clipboardData) return;
+      const text = copiedText(sel);
+      if (text === null) return;
+      e.clipboardData.setData("text/plain", text);
+      e.preventDefault();
+    });
+  }
 
   // src/runtime/decode.js
   var sharedDocType = null;

@@ -69,13 +69,16 @@ export interface ReadingState {
 
 /** The reader's choices, applied to the page as they change. */
 export const reading: ReadingState & { setZoom(z: number): void; selection: Signal<string>; setSelection(s: string): void;
-    math: Signal<string>; setMath(m: string): void } = {
+    math: Signal<string>; setMath(m: string): void; debug: Signal<boolean>; setDebug(on: boolean): void;
+    reader: Signal<boolean>; setReader(on: boolean): void } = {
     theme: signal(initialTheme()),
     zoom: signal(initialZoom()),
     width: signal(html().getAttribute('data-width') || load(KEYS.width) || 'auto'),
     // The reader's choice, else the page's default (its data-latex-selection).
     selection: signal(load(KEYS.selection) || html().getAttribute('data-latex-selection') || 'native'),
     math: signal(load(KEYS.math) === 'spoken' ? 'spoken' : 'mathml'),
+    debug: signal(load('reflowtex-a11y-debug') === '1'),
+    reader: signal(load('reflowtex-a11y-reader') === '1'),
     /** The themes a page offers (the class names its CSS styles). */
     themes: THEMES,
 
@@ -110,6 +113,14 @@ export const reading: ReadingState & { setZoom(z: number): void; selection: Sign
         save(KEYS.selection, sel);
         reading.selection!.value = sel;
     },
+    setReader(on: boolean) {
+        const api = (window.reflowtex as any);
+        if (api?.setScreenReaderMode) api.setScreenReaderMode(on);      // (it says so: the listener below)
+    },
+    setDebug(on: boolean) {
+        const api = (window.reflowtex as any);
+        if (api?.setAccessibleDebug) api.setAccessibleDebug(on);        // (it says so: the listener below)
+    },
     setMath(m: string) {
         const api = (window.reflowtex as any);
         if (api?.setAccessibleMath) api.setAccessibleMath(m);        // (it says so: the listener below)
@@ -119,6 +130,10 @@ export const reading: ReadingState & { setZoom(z: number): void; selection: Sign
 // The choice made elsewhere (another control on the page): the options show it.
 if (typeof document !== 'undefined')
     document.addEventListener('reflowtex:accessible-math', e => { reading.math.value = (e as CustomEvent).detail.mode; });
+if (typeof document !== 'undefined')
+    document.addEventListener('reflowtex:accessible-debug', e => { reading.debug.value = (e as CustomEvent).detail.on; });
+if (typeof document !== 'undefined')
+    document.addEventListener('reflowtex:screen-reader-mode', e => { reading.reader.value = (e as CustomEvent).detail.on; });
 // A choice the reader made before stands on every page.
 if (load(KEYS.selection)) html().setAttribute('data-latex-selection', reading.selection!.value);
 
@@ -169,6 +184,9 @@ export interface ReadingOptionsProps {
     selection?: boolean;
     /** Offer the inspector (when the page has it). Default true. */
     inspect?: boolean;
+    /** Offer showing the reader's text (the viewer's setAccessibleDebug) –
+     *  a debugging aid, for a while; the corner panel's only. */
+    debug?: boolean;
     themes?: Theme[];
     /** Called after a choice that should close a panel holding these. */
     onDone?: () => void;
@@ -176,8 +194,10 @@ export interface ReadingOptionsProps {
 }
 
 /** The controls: text size, colour theme, (column width), (inspector). */
-export function ReadingOptions({ state = reading, width = false, selection = false, inspect = true, themes = state.themes, onDone, class: cls }: ReadingOptionsProps) {
+export function ReadingOptions({ state = reading, width = false, selection = false, inspect = true, debug = false, themes = state.themes, onDone, class: cls }: ReadingOptionsProps) {
     const inspector = (window.reflowtex as any)?.inspector;
+    const api = window.reflowtex as any;
+    const showDebug = debug && state === reading && !!api?.setAccessibleDebug && !!document.querySelector('.latex-a11y');
     return (
         <div class={cls ? `rtx-reading ${cls}` : 'rtx-reading'}>
             <div class="rtx-reading-row rtx-reading-size" role="group" aria-label="Text size">
@@ -217,11 +237,23 @@ export function ReadingOptions({ state = reading, width = false, selection = fal
                                 onClick={() => reading.setMath(o.name)}>{o.label}</button>))}
                 </div>
             </div>}
-            {inspect && inspector && <div class="rtx-reading-row">
-                <button type="button" class="rtx-reading-inspect" title="The boxes and glue behind the page"
+            {state === reading && document.querySelector('.latex-a11y') && api?.setScreenReaderMode && <div class="rtx-reading-row">
+                <p class="rtx-reading-caption" id="rtx-reader-label">Screen reader mode</p>
+                <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-reader-label">
+                    {[{ on: false, label: 'Off' }, { on: true, label: 'On' }].map(o => (
+                        <button type="button" role="radio" data-reader={String(o.on)} aria-checked={reading.reader.value === o.on}
+                                title={o.on ? 'A click reaches the text a screen reader reads, word by word; the drawing’s text is not selectable' : 'The drawing’s text is selected and clicked, as it is shown'}
+                                onClick={() => reading.setReader(o.on)}>{o.label}</button>))}
+                </div>
+            </div>}
+            {((inspect && inspector) || showDebug) && <div class="rtx-reading-row rtx-reading-tools">
+                {inspect && inspector && <button type="button" class="rtx-reading-inspect" title="The boxes and glue behind the page"
                         onClick={() => { onDone?.(); inspector.open(); }}>
                     <span>Inspect boxes and glue</span><kbd>{inspector.shortcut || ''}</kbd>
-                </button>
+                </button>}
+                {showDebug && <button type="button" role="switch" class="rtx-reading-debug" aria-checked={reading.debug.value}
+                        title="Show the text a screen reader reads, where it lies, each element tinted (debugging)"
+                        onClick={() => reading.setDebug(!reading.debug.value)}>Reader text</button>}
             </div>}
         </div>);
 }
@@ -247,7 +279,7 @@ export function ReadingButton(props: ReadingOptionsProps) {
     return (
         <div ref={root} class="rtx-reading-corner">
             {open.value && <div ref={panel} class="rtx-panel rtx-reading-panel" role="dialog" aria-label="Reading options">
-                <ReadingOptions {...props} onDone={() => close()} />
+                <ReadingOptions debug {...props} onDone={() => close()} />
             </div>}
             <button ref={button} type="button" class="rtx-reading-button" aria-haspopup="dialog" aria-expanded={open.value}
                     title="Reading options" onClick={() => { open.value = !open.value; }}>

@@ -237,7 +237,13 @@ test('the words after a formula keep their space, and punctuation none', async (
   expect(after[0], 'x²+y²=z² then " and"').toMatch(/^ and/);
   expect(after[1], 'f:ℝ→ℝ then ","').toMatch(/^,/);
   // the words after a formula that end their line keep it too ("Short: a ends.")
-  const last = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y [data-para]')].map(p => p.textContent).find(t => t!.startsWith('Short')));
+  // (each formula's text without the whitespace between its elements –
+  // LaTeX writes its MathML pretty-printed; to a reader it is nothing)
+  const last = await page.evaluate(() => [...document.querySelectorAll('.latex-a11y [data-para]')].map(p => {
+    const c = p.cloneNode(true) as Element;
+    for (const m of c.querySelectorAll('math')) m.replaceWith((m.textContent ?? '').replace(/\s+/g, ''));
+    return c.textContent;
+  }).find(t => t!.startsWith('Short')));
   expect(last).toMatch(/𝑎 ends\./);
 });
 
@@ -361,4 +367,163 @@ test('the layer is anchored at its block\'s start, its pieces below the anchor',
     expect(x.height, 'and takes no room').toBeLessThanOrEqual(0.5);
     expect(x.negative, 'pieces above the anchor').toBe(0);
   }
+});
+
+// Streams (a boxed theorem, a hint, a footnote): the drawing is hidden from
+// screen readers, so the layer must say what they say – they were once
+// skipped whole. A box is read where it stands, and laid over its box.
+test('boxes, hints and footnotes are in the layer, in reading order', async ({ openPage }) => {
+  const page = await openPage('a11y-streams');
+  const tree = await page.locator('body').ariaSnapshot();
+  const at = (s: string) => { const i = tree.indexOf(s); expect(i, `"${s}" read`).toBeGreaterThanOrEqual(0); return i; };
+  const order = [at('Some text before the box'), at('The body of the footnote'), at('Every box is read where it stands'),
+                 at('Hint'), at('Some text after the box')];
+  expect([...order].sort((a, b) => a - b)).toEqual(order);
+  expect(tree).not.toContain('The hint is opened on purpose');     // closed: opened on purpose
+  const box = page.locator('.latex-a11y [data-stream][data-kind="theorem"]');
+  const drawn = page.locator('.latex-stream[data-kind="theorem"]');
+  const [b, d] = [await box.boundingBox(), await drawn.boundingBox()];
+  expect(Math.abs(b!.y - d!.y), 'laid over its box').toBeLessThan(3);
+});
+
+// A formula that ends where a line breaks loses its end-math node (TeX
+// discards a math node at a break): the rest of the paragraph was once taken
+// for the formula and not read at all. At every width the paragraph is read
+// to its end.
+test('a paragraph is read to its end, whatever the line a formula ends', async ({ openPage }) => {
+  const page = await openPage('a11y-streams', { width: 900 });
+  for (let w = 260; w <= 620; w += 12) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.waitForTimeout(150);
+    const text = await page.locator('.latex-a11y p').first().textContent();
+    expect(text, `at ${w}px`).toContain('up to the very end');
+  }
+});
+
+// A word the viewer hyphenates at a line's end is read, and copied, whole:
+// "para- graph" was read as two words. A hyphen the author wrote stays.
+test('a word broken at a line end is read and copied whole', async ({ openPage }) => {
+  const page = await openPage('a11y-streams', { width: 300 });
+  await page.waitForTimeout(300);
+  const block = page.locator('.latex-block[data-nodelist-b64]').nth(2);
+  expect(await block.locator('tspan[data-break]').count(), 'the narrow column breaks words').toBeGreaterThan(0);
+  const layer = page.locator('.latex-a11y').nth(2);
+  await expect.poll(() => layer.locator('[data-run]').count()).toBeGreaterThan(0);   // laid line by line
+  const read = (await layer.textContent())!;
+  expect(read).not.toMatch(/\p{L}-\s/u);
+  for (const w of ['Incomprehensibility', 'uncompromising', 'representatives', 'counterrevolutionary', 'well-known'])
+    expect(read, w).toContain(w);
+  const copied = await block.evaluate(el => {
+    const sel = getSelection()!, r = document.createRange();
+    r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r);
+    const dt = new DataTransfer();
+    document.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+    return dt.getData('text/plain');
+  });
+  expect(copied).not.toMatch(/\p{L}-\s/u);
+  for (const w of ['Incomprehensibility', 'representatives', 'counterrevolutionary', 'well-known']) expect(copied, w).toContain(w);
+});
+
+// A document whose author did not enable luamml: no MathML – nothing is made
+// up for it – but its text, the formula's characters among it, is all there.
+test('without luamml: the text, no MathML', async ({ openPage }) => {
+  const page = await openPage('a11y-plain');
+  expect(await page.locator('.latex-a11y math').count()).toBe(0);
+  const text = (await page.locator('.latex-a11y').textContent())!.replace(/\s+/g, ' ');
+  expect(text).toContain('Without luamml the formula');
+  expect(text).toContain('is read as its text, and every word is kept.');
+});
+
+// Word by word: each word of the layer lies on its own drawn word – the
+// glyphs under it are exactly its letters. (A run spread over several drawn
+// words matched them only at its ends, and VoiceOver's word-by-word reading
+// framed the wrong glyphs.)
+test('each word of the layer lies on its drawn word', async ({ openPage }) => {
+  const page = await openPage('a11y-streams', { width: 700 });
+  await page.waitForTimeout(300);
+  const bad = await page.evaluate(() => {
+    const layer = document.querySelectorAll('.latex-a11y')[2];          // c-hyphen: plain words
+    const block = layer.nextElementSibling!;
+    // each glyph's own box (WebKit gives a tspan its whole line's)
+    const glyphs = [...block.querySelectorAll('svg text tspan')].map(t => {
+      const e = (t as SVGTextContentElement).getExtentOfChar(0), m = (t as SVGGraphicsElement).getScreenCTM()!;
+      const left = m.a * e.x + m.e, top = m.d * e.y + m.f;
+      return { ch: t.textContent!, r: { left, right: left + m.a * e.width, top, bottom: top + m.d * e.height } };
+    });
+    const out: string[] = [];
+    let words = 0;
+    for (const run of layer.querySelectorAll('[data-run="text"]')) {
+      const r = run.getBoundingClientRect(), word = run.textContent!.trim();
+      if (!/^[\p{L}-]+[,.]?$/u.test(word)) continue;
+      words++;
+      const under = glyphs.filter(g => { const cx = (g.r.left + g.r.right) / 2, cy = (g.r.top + g.r.bottom) / 2;
+        return cx > r.left && cx < r.right && cy > r.top - 4 && cy < r.bottom + 4; }).map(g => g.ch).join('');
+      if (!under || !word.startsWith(under.replace(/-$/, ''))) out.push(`${word} ~ ${under}`);
+    }
+    return { words, out };
+  });
+  expect(bad.words).toBeGreaterThan(10);
+  expect(bad.out).toEqual([]);
+});
+
+
+// Screen reader mode (Google Docs' way, while WebKit lets VoiceOver onto the
+// drawing's hidden glyphs – bug 161740): off, the drawing's text is what a
+// click and a selection reach; on, the layer's words, lying on the drawn
+// ones, do – so VoiceOver lands on the word clicked – and a click on a drawn
+// footnote mark (or link, or control) still reaches it.
+async function whatIsUnder(page: import('@playwright/test').Page, word: string) {
+  return page.evaluate(w => {
+    const layer = [...document.querySelectorAll('.latex-a11y')][2];
+    const run = [...layer.querySelectorAll('[data-run="text"]')].find(r => r.textContent!.trim().startsWith(w))!;
+    const r = run.getBoundingClientRect();
+    const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)!;
+    return { inLayer: !!el.closest('.latex-a11y'), text: el.closest('[data-run]')?.textContent?.trim() ?? '',
+             // (WebKit has it under its prefix only)
+             drawnSelect: (cs => cs.userSelect || (cs as any).webkitUserSelect)(getComputedStyle(document.querySelector('.latex-block svg')!)) };
+  }, word);
+}
+test('screen reader mode: clicks and the selection reach the layer’s words, and only then', async ({ openPage }) => {
+  const page = await openPage('a11y-streams', { width: 700 });
+  await page.waitForTimeout(300);
+  const off = await whatIsUnder(page, 'uncompromising');
+  expect(off.inLayer, 'off: the drawing is clicked').toBe(false);
+  expect(off.drawnSelect).not.toBe('none');
+  await page.evaluate(() => (window as any).reflowtex.setScreenReaderMode(true));
+  const on = await whatIsUnder(page, 'uncompromising');
+  expect(on).toEqual({ inLayer: true, text: 'uncompromising', drawnSelect: 'none' });
+  await page.reload();
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => (window as any).reflowtex.screenReaderMode()), 'remembered').toBe(true);
+  await page.evaluate(() => (window as any).reflowtex.setScreenReaderMode(false));
+});
+
+test('screen reader mode: a click on a drawn footnote mark still opens the footnote', async ({ openPage }) => {
+  const page = await openPage('a11y-streams', { width: 900 });
+  await page.evaluate(() => (window as any).reflowtex.setScreenReaderMode(true));
+  await page.waitForTimeout(300);
+  const mark = page.locator('.latex-block [data-footnote]').first();
+  const box = (await mark.boundingBox())!;
+  expect(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)!.closest('.latex-a11y'), [box.x + box.width / 2, box.y + box.height / 2]),
+    'the layer is on top of it').toBe(true);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator('#latex-footnote-pop')).toHaveClass(/latex-footnote-open/);
+  await page.evaluate(() => (window as any).reflowtex.setScreenReaderMode(false));
+});
+
+test('screen reader mode: a prompt at the page’s start, and the reading options, turn it on and off', async ({ openPage }) => {
+  const page = await openPage('reading-a11y');
+  const prompt = page.locator('body > .latex-reader-prompt');
+  expect(await page.evaluate(() => document.body.firstElementChild!.classList.contains('latex-reader-prompt')), 'first in the page').toBe(true);
+  await expect(prompt).toHaveText(/Turn on screen reader mode/);
+  await prompt.focus();
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => (window as any).reflowtex.screenReaderMode())).toBe(true);
+  await expect(prompt).toHaveText(/is on/);
+  await page.locator('.rtx-reading-button').click();
+  const off = page.locator('.rtx-reading-panel [data-reader="false"]');
+  await expect(page.locator('.rtx-reading-panel [data-reader="true"]')).toHaveAttribute('aria-checked', 'true');
+  await off.click();
+  expect(await page.evaluate(() => (window as any).reflowtex.screenReaderMode())).toBe(false);
+  await expect(prompt).toHaveText(/Turn on/);
 });

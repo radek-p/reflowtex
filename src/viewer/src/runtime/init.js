@@ -18,6 +18,7 @@ import {
     NATURAL_PROBE_PT, blockData, naturalWidthPt, reflowBlock, remeasureStreams, ro, scheduleFontRepaint, unobserveAll,
 } from './blocks.js';
 import { installColorMaps } from './colour.js';
+import './copy.js';                 // (a broken word copied whole)
 import { decodeBlock, loadSchema } from './decode.js';
 import { fontsPending, loadFontMap, registerFonts } from './fonts.js';
 import { debugLog } from './page.js';

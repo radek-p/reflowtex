@@ -4,6 +4,15 @@
 
 export const ZOOM         = 2;
 export const SP_TO_PX     = ZOOM / 65536;
+// The nodes a line break put at a line's end – a discretionary's pre-break
+// text (breaker.js) – and what they are: 'drop', the hyphen of a word broken
+// there, no part of the text; 'keep', a hyphen the author typed ("well-" of
+// "well-known", LuaTeX's automatic discretionary), text. Either way the word
+// goes on on the next line: the painter marks their glyphs (data-break), so
+// that copying joins it again (runtime/copy.js), as reading does (a11y.js).
+export const BREAK_NODES = new WeakMap();
+const AUTOMATIC_DISC = 2;           // LuaTeX's discretionary for a typed "-"
+export const breakKind = disc => ((disc && disc.subtype) === AUTOMATIC_DISC ? 'keep' : 'drop');
 export const RUNNING_RULE = -1073741824;
 
 // ── KP algorithm defaults (overridable per-block via data attributes) ─────────
