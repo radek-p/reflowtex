@@ -13,3 +13,12 @@ test('every placeholder of the page is filled, each wherever it is used', () => 
   assert.equal(page.split('A &lt;title&gt;').length - 1, 2, 'the title in <title> and in the heading');
   assert.equal(page.split('https://example.org/src').length - 1, 2);
 });
+
+// The page loaded inspector/inspector.js whether or not it was installed:
+// the render tests' pages (site-from-run.ts) and testmath's asked for a
+// script that was not there, a 404 on every one of them.
+test('the page loads the inspector only where it is installed', () => {
+  const o = { title: 't', blocks: [], fontMap: {}, sourceUrl: 'https://example.org/src', fontsBase: 'fonts/' };
+  assert.ok(renderPage({ ...o, inspector: true }).includes('<script src="inspector/inspector.js">'));
+  assert.ok(!renderPage(o).includes('inspector/inspector.js"'), 'no inspector: no script tag for it');
+});

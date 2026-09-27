@@ -90,6 +90,6 @@ await pipe.finishFonts();
 installViewer(out, { inspector: true });
 writeFileSync(join(out, 'index.html'), renderPage({
   title: o.title!, blocks: jobs.map(j => blockHtml(blobs.get(j.key)!, {}, { a11y: o.a11y })), fontMap: pipe.fontMap(),
-  sourceUrl: o['source-url']!, fontsBase: o['fonts-base']!,
+  sourceUrl: o['source-url']!, fontsBase: o['fonts-base']!, inspector: true,
 }));
 console.log(`reflowtex: wrote ${join(out, 'index.html')} (${snippets.length} block(s)); open it, or serve ${out} with any static server`);

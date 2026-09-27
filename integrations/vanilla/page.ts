@@ -20,10 +20,14 @@ export interface PageOptions {
   fontsBase: string;
   /** more scripts, loaded right after the viewer (an alternative breaker) */
   extraScripts?: string[];
+  /** the inspector is installed beside the page (installViewer's `inspector`):
+   *  without it, the page does not load it – a script that is not there */
+  inspector?: boolean;
 }
 
 export function renderPage(o: PageOptions): string {
   const viewerTag = '<script src="latex-viewer.js"></script>';
+  const inspectorTag = '<script src="inspector/inspector.js"></script>\n';
   // every use of a placeholder (the title is the <title> and the heading); the
   // blocks last, so that nothing in them is taken for one
   let page = readFileSync(TEMPLATE, 'utf8')
@@ -33,6 +37,10 @@ export function renderPage(o: PageOptions): string {
     .replaceAll('{{SOURCE_URL}}', () => escapeHtml(o.sourceUrl))
     .replaceAll('{{FONTS_BASE}}', () => escapeHtml(o.fontsBase))
     .replace('{{BLOCKS}}', () => o.blocks.join('\n'));
+  if (!o.inspector) {
+    if (!page.includes(inspectorTag)) throw new Error(`page.template.html has no ${inspectorTag.trim()} to leave out`);
+    page = page.replace(inspectorTag, '');
+  }
   if (o.extraScripts?.length) {
     if (!page.includes(viewerTag)) throw new Error(`page.template.html has no ${viewerTag} to load extra scripts after`);
     page = page.replace(viewerTag, () => viewerTag + o.extraScripts!.map(s => `\n<script src="${escapeHtml(s)}"></script>`).join(''));
