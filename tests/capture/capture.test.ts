@@ -13,7 +13,8 @@ import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
 
 type Node = { type: string; char?: number; color?: string; link?: number; stream?: number; mathml?: unknown;
               width?: number; children?: Node[]; replace?: Node[]; pre?: Node[]; post?: Node[] };
-type Item = { kind: string; para?: number; box?: Node; mathml?: unknown };
+type Item = { kind: string; para?: number; box?: Node; mathml?: unknown;
+              display_used_above?: number; display_used_below?: number; display_below?: number };
 type Output = { fonts: Record<string, unknown>; paragraphs: { nodes: Node[] }[]; content: Item[];
                 links: { label?: string; url?: string }[]; anchors: string[]; slots: unknown[];
                 source_width: number };
@@ -276,10 +277,28 @@ test('Lean: the parts are marked, decl and url on the widget', async () => {
 });
 
 // ── MathML ──────────────────────────────────────────────────────────────────
-// Every formula a reader meets carries MathML (src/extract/mathml.lua records
-// luamml's conversion of TeX's own math lists; src/pipeline/mathml.ts makes
-// the strings): the begin-math node of each inline formula, each display
-// item – an alignment's first row for all its rows. Typesetting is untouched.
+// LaTeX's, as LaTeX writes it. An author who enables tagging and luamml –
+// \DocumentMetadata{tagging=on}, and \tagpdfsetup{math/mathml/luamml/load=true}
+// for classic fonts (LaTeX loads it itself with unicode-math) – gets every
+// formula's MathML: LaTeX writes it (<jobname>-luamml-mathml.html),
+// src/extract/mathml.lua notes which formula is which, src/pipeline/mathml.ts
+// puts each on its begin-math node or display item, unchanged. The preamble's
+// \DocumentMetadata is moved before the class by the pipeline. A document
+// without it gets none. Needs luamml 0.9 (TeX Live 2026).
+
+import { execFileSync } from 'node:child_process';
+import { readFileSync as readText } from 'node:fs';
+/** luamml's version, as its package declares it (0 when there is none). */
+const luammlVersion = (() => {
+  try {
+    const sty = execFileSync('kpsewhich', ['luamml.sty'], { encoding: 'utf8' }).trim();
+    const m = /ProvidesExplPackage\s*\{luamml\}\s*\{[^}]*\}\s*\{(\d+)\.(\d+)/.exec(readText(sty, 'utf8'));
+    return m ? Number(m[1]) + Number(m[2]) / 10 : 0;
+  } catch { return 0; }
+})();
+const OLD = luammlVersion < 0.8 && 'luamml older than 0.8 (TeX Live 2025): tagging with it breaks amsmath';
+const luamml09 = luammlVersion >= 0.9;
+const LUAMML = '\\DocumentMetadata{tagging=on}\n\\tagpdfsetup{math/mathml/luamml/load=true}';
 
 const noMathml = new Pipeline({ buildRoot: join(root, 'build-nomathml'), fontsDir: join(root, 'fonts'), log: () => {}, mathml: false });
 
@@ -292,12 +311,15 @@ async function captureWithoutMathml(body: string, preamble = '', passes = 1): Pr
 }
 
 const NS = ' xmlns="http://www.w3.org/1998/Math/MathML"';
-/** Without the namespace and the spoken form (checked on its own, below). */
-const structure = (m: unknown) => String(m).replaceAll(NS, '').replace(/ alttext="[^"]*"/g, '');
+/** For comparing: without the namespace, the spoken form (checked on its own),
+ *  LaTeX's pretty-printing and the spacing attributes. */
+const structure = (m: unknown) => String(m).replaceAll(NS, '').replace(/ alttext="[^"]*"/g, '')
+  .replace(/ (lspace|rspace)="[^"]*"/g, '').replace(/\s+(?=<)/g, '').replace(/(?<=>)\s+/g, '').replace(/<(\w+) >/g, '<$1>');
 /** The MathML of each top-level inline formula, paragraph by paragraph. */
 const inlineMathml = (d: Output) => d.paragraphs.map(p =>
   [...walk(p.nodes)].filter(n => n.type === 'math' && n.mathml !== undefined).map(n => structure(n.mathml)));
 const displayMathml = (d: Output) => d.content.filter(i => i.kind === 'display').map(i => i.mathml === undefined ? undefined : structure(i.mathml));
+const allMathml = (d: Output) => d.paragraphs.flatMap(p => [...walk(p.nodes)].filter(n => n.type === 'math' && n.mathml !== undefined).map(n => String(n.mathml)));
 
 const FORMULAS = [
   'Inline $x^2+y^2=z^2$, $\\alpha_i \\le \\sum_{k=1}^n k$, $f\\colon \\mathbb{R}\\to\\mathbb{R}$,',
@@ -314,79 +336,162 @@ const FORMULAS = [
 
 /** Drops what MathML adds, for comparing with a build without it. */
 function withoutMathml(d: Output): unknown {
-  return JSON.parse(JSON.stringify(d, (k, v) => (k === 'mathml' || k === 'mathml_box' || k === 'display_no') ? undefined : v));
+  return JSON.parse(JSON.stringify(d, (k, v) => (k === 'mathml' || k === 'display_no') ? undefined : v));
 }
 
-test('MathML: typesetting is untouched', async () => {
-  const [a, b] = await Promise.all([capture(FORMULAS, '', 2), captureWithoutMathml(FORMULAS, '', 2)]);
+test('MathML: none unless the author enables luamml', async () => {
+  const d = await capture(FORMULAS, '', 2);
+  assert.deepEqual(allMathml(d), []);
+  assert.deepEqual(displayMathml(d).filter(Boolean), []);
+});
+
+test('MathML: none with tagging but not luamml (classic fonts: LaTeX loads it only with unicode-math)', { skip: OLD }, async () => {
+  const d = await capture(FORMULAS, '\\DocumentMetadata{tagging=on}', 2);
+  assert.deepEqual(allMathml(d), []);
+  assert.deepEqual(displayMathml(d).filter(Boolean), []);
+});
+
+// Tagging leaves what a reader gets as it was: the text, links (hyperref), a
+// cross-reference, a footnote, colour, displays. (LaTeX builds some things
+// differently with it – a heading's line has a penalty and kerns where it had
+// glue – which the render tests see if it shows.)
+type Anything = { [k: string]: unknown };
+const readerView = (d: Output) => ({
+  text: d.paragraphs.map(p => glyphText(p.nodes)),
+  links: linkedRuns(d).map(([t, l]) => [t, l.url ?? l.label]),
+  colours: paragraphRuns(d, 'color'),
+  items: d.content.filter(i => i.kind !== 'vspace').map(i => i.kind),
+  streams: ((d as unknown as Anything).streams as { kind: string; content?: Item[] }[] ?? [])
+    .map(st => [st.kind, (st.content ?? []).map(i => (i.para ? glyphText(d.paragraphs[i.para - 1].nodes) : i.kind))]),
+  anchors: d.anchors,
+});
+const MIXED = [
+  '\\section{One}\\label{s:one}',
+  'See \\href{https://example.org}{a page}, Section~\\ref{s:one}, and \\textcolor{red}{red}.\\footnote{A note, with $a+b$.}',
+  '\\[ x = y \\]',
+  'Then \\begin{align} a &= 1 \\\\ b &= 2 \\end{align} and the end.',
+].join('\n');
+test('tagging, with or without luamml, captures links, footnotes, colours and displays as without', { skip: OLD }, async () => {
+  const pre = '\\usepackage{xcolor}\n\\usepackage{hyperref}';
+  const [plain, tagged, withLuamml] = await Promise.all([capture(MIXED, pre, 2),
+    capture(MIXED, `\\DocumentMetadata{tagging=on}\n${pre}`, 2), capture(MIXED, `${LUAMML}\n${pre}`, 2)]);
+  assert.deepEqual(readerView(tagged), readerView(plain));
+  assert.deepEqual(readerView(withLuamml), readerView(plain));
+  assert.ok(linkedRuns(plain).length >= 2, 'the links are there to compare');
+  assert.ok(allMathml(withLuamml).length >= 1 && displayMathml(withLuamml).filter(Boolean).length === 2, 'and the MathML with luamml');
+});
+
+test('MathML: typesetting is untouched by the capture', { skip: OLD }, async () => {
+  const [a, b] = await Promise.all([capture(FORMULAS, LUAMML, 2), captureWithoutMathml(FORMULAS, LUAMML, 2)]);
   assert.deepEqual(withoutMathml(a), withoutMathml(b));
 });
 
-test('MathML: every inline formula, and nothing nested twice', async () => {
-  const d = await capture(FORMULAS, '', 2);
+// Tagging typesets the same. After a display LaTeX's tagging code cancels
+// TeX's below-display skip and puts it in again (latex-lab-math): the gap's
+// glue is made differently – its components, which tools show – but its
+// amount, and the skip TeX chose, are the same.
+test('MathML: tagging and luamml give the same text and displays', { skip: OLD }, async () => {
+  const [a, b] = await Promise.all([capture(FORMULAS, LUAMML, 2), capture(FORMULAS, '', 2)]);
+  assert.deepEqual(readerView(a), readerView(b));
+  const skips = (d: Output) => d.content.filter(i => i.kind === 'display').map(i => [i.display_used_above, i.display_used_below, i.display_below]);
+  assert.deepEqual(skips(a), skips(b), 'the skips TeX chose around each display');
+});
+
+test('MathML: every inline formula, as LaTeX gives it', { skip: OLD }, async () => {
+  const d = await capture(FORMULAS, LUAMML, 2);
   const [first] = inlineMathml(d);
   const see = d.paragraphs.find(p => glyphText(p.nodes).startsWith('See'))!;
   assert.equal(first.length, 6);
   assert.equal(first[0], '<math><msup><mi>𝑥</mi><mn>2</mn></msup><mo>+</mo><msup><mi>𝑦</mi><mn>2</mn></msup><mo>=</mo><msup><mi>𝑧</mi><mn>2</mn></msup></math>');
-  assert.match(first[2], /<mi mathvariant="normal">ℝ<\/mi>|<mi>ℝ<\/mi>/, '\\mathbb in the classic fonts');
-  assert.match(first[3], /<mi mathvariant="normal">Φ<\/mi>/, 'upright Greek from OT1');
-  assert.doesNotMatch(first[4], /<math>.*<math>/, 'the formula inside \\text is part of the outer one');
-  assert.match(first[4], /<mtext>the set<\/mtext>.*<mi>𝑆<\/mi>/);
-  assert.match(first[5], /<mfrac linethickness="0"><mi>𝑛<\/mi><mi>𝑘<\/mi><\/mfrac>/);
+  assert.match(first[4], /<mtext>the\sset\s*<math>\s*<mi>𝑆<\/mi>\s*<\/math>\s*<\/mtext>/u, 'a formula in \\text is inside the outer one');
   assert.deepEqual(inlineMathml({ ...d, paragraphs: [see] }), [[]], '\\eqref is text');
-  for (const m of d.paragraphs.flatMap(p => inlineMathml({ ...d, paragraphs: [p] }).flat()))
-    assert.doesNotMatch(m, /mglyph|�|[-]/, m);
 });
 
-test('MathML: displays, and an alignment read as one table', async () => {
-  const d = await capture(FORMULAS, '', 2);
+test('MathML: displays; an alignment one table, with luamml’s intents', { skip: OLD }, async () => {
+  const d = await capture(FORMULAS, LUAMML, 2);
   const [integral, equation, align1, align2, gather] = displayMathml(d);
-  assert.match(integral!, /^<math display="block"><msubsup><mo>∫<\/mo><mn>0<\/mn><mi>∞<\/mi><\/msubsup>.*<mfrac><msqrt><mi>𝜋<\/mi><\/msqrt><mn>2<\/mn><\/mfrac><\/math>$/);
+  assert.match(integral!, /^<math display="block"><msubsup><mo>[^<]*<\/mo><mn>0<\/mn><mi[^>]*>∞<\/mi><\/msubsup>/);
   assert.match(equation!, /^<math display="block">.*<mfrac><mn>1<\/mn><mn>2<\/mn><\/mfrac>/);
-  assert.match(align1!, /^<math display="block"><mtable><mtr>.*<mtable>.*otherwise.*<\/mtr><mtr>.*<mi>𝑔<\/mi>.*<mtable>.*<\/mtr><\/mtable><\/math>$/,
-    'rows of align, with cases and pmatrix as tables inside');
-  assert.match(align1!, /<mtext>\(2\)<\/mtext>/, 'the equation number (the equation above is 1)');
+  assert.match(align1!, /^<math display="block"><mtable[^>]*intent=":system-of-equations"/);
+  assert.match(align1!, /<mtd intent=":equation-label"><mtext>\(2\)<\/mtext><\/mtd>/, 'the equation number (the equation above is 1)');
+  assert.match(align1!, /otherwise.*<mi>𝑔<\/mi>.*<mtable>/, 'cases and pmatrix as tables inside');
   assert.equal(align2, undefined, 'the second row is read with the first');
-  assert.match(gather!, /<munder><mi>lim<\/mi>/);
-  for (const m of [integral, equation, align1, gather]) assert.doesNotMatch(m!, /mglyph|�|<math[^>]*>.*<math/);
+  assert.match(gather!, /lim/);
 });
 
-test('MathML: formulas in footnotes', async () => {
-  const d = await capture('Text.\\footnote{With $a+b$ inside.}');
-  const all = d.paragraphs.flatMap(p => inlineMathml({ ...d, paragraphs: [p] }).flat());
-  assert.deepEqual(all, ['<math><mi>𝑎</mi><mo>+</mo><mi>𝑏</mi></math>']);
+// LaTeX reads the last run's MathML file back in (for the PDF); a classic
+// font's double accent is a raw DEL in it, which TeX cannot read: a document
+// run twice failed. The pipeline starts each run without it.
+test('MathML: a document run twice, with what luamml writes as a raw control character', { skip: OLD }, async () => {
+  const d = await capture('Let $x$ and \\[ \\Ddot{\\Ddot{D}} \\quad \\Hat{\\Hat{H}} \\]', LUAMML, 2);
+  assert.equal(displayMathml(d).filter(Boolean).length, 1);
+  assert.equal(allMathml(d).length, 1);
 });
 
-test('MathML: unicode-math', async () => {
-  const pre = '\\usepackage{unicode-math}';
-  const d = await capture('Roots $\\sqrt[3]{x}$ and $\\mathbb{R}$ and $\\underbrace{a+b}_{2}$.', pre);
+// The url package sets a URL in math mode (for its line breaks); LaTeX does
+// not count it as a formula and writes no MathML for it. It once got the
+// formula before's (its counter still at that one), in place of its text.
+test('MathML: a URL (math LaTeX does not count as a formula) has none, and keeps its text', { skip: OLD }, async () => {
+  const d = await capture('First $x^2$, then \\url{https://example.org} and $y$.', `${LUAMML}\n\\usepackage{hyperref}`);
+  const [ms] = inlineMathml(d);
+  assert.deepEqual(ms.map(m => /<mi>(.)<\/mi>/u.exec(m)?.[1]), ['𝑥', '𝑦'], 'x² and y, nothing for the URL');
+  assert.match(glyphText(d.paragraphs[0].nodes), /example\.org/);
+});
+
+test('MathML: formulas in footnotes', { skip: OLD }, async () => {
+  const d = await capture('Text.\\footnote{With $a+b$ inside.}', LUAMML);
+  assert.deepEqual(d.paragraphs.flatMap(p => inlineMathml({ ...d, paragraphs: [p] }).flat()), ['<math><mi>𝑎</mi><mo>+</mo><mi>𝑏</mi></math>']);
+});
+
+test('MathML: unicode-math', { skip: OLD }, async () => {
+  const d = await capture('Roots $\\sqrt[3]{x}$ and $\\mathbb{R}$ and $\\underbrace{a+b}_{2}$.', '\\DocumentMetadata{tagging=on}\n\\usepackage{unicode-math}');
   const [ms] = inlineMathml(d);
   assert.equal(ms[0], '<math><mroot><mi>𝑥</mi><mn>3</mn></mroot></math>');
   assert.match(ms[1], /ℝ/);
   assert.match(ms[2], /<munder>.*⏟.*<mn>2<\/mn><\/munder>/);
-  const [a, b] = await Promise.all([capture('Roots $\\sqrt[3]{x}$ and $\\mathbb{R}$ and $\\underbrace{a+b}_{2}$.', pre),
-    captureWithoutMathml('Roots $\\sqrt[3]{x}$ and $\\mathbb{R}$ and $\\underbrace{a+b}_{2}$.', pre)]);
-  assert.deepEqual(withoutMathml(a), withoutMathml(b));
 });
 
-test('MathML: each formula carries its spoken form (alttext)', async () => {
-  const d = await capture(FORMULAS, '', 2);
-  const inline = d.paragraphs.flatMap(p => [...walk(p.nodes)].filter(n => n.type === 'math' && n.mathml !== undefined).map(n => String(n.mathml)));
+test('MathML: each formula carries its spoken form (alttext)', { skip: OLD }, async () => {
+  const d = await capture(FORMULAS, LUAMML, 2);
   const displays = d.content.filter(i => i.kind === 'display' && i.mathml !== undefined).map(i => String(i.mathml));
-  for (const m of [...inline, ...displays]) assert.match(m, /^<math alttext="[^"]+"/, m.slice(0, 80));
-  assert.match(inline[0], /alttext="x squared plus y squared equals z squared"/);
+  for (const m of [...allMathml(d), ...displays]) assert.match(m, /^<math alttext="[^"]+"/, m.slice(0, 80));
+  assert.match(allMathml(d)[0], /alttext="x squared plus y squared equals z squared"/);
 });
 
-// Scripts on an accented symbol (\hat k_{ij}): TeX puts them on the accent,
-// and luamml 0.5 (TeX Live 2025) left them out – a reader heard "k hat" for
-// k̂ᵢⱼ. luamml 0.9 (TeX Live 2026, the project's image) keeps them.
-import { execFileSync } from 'node:child_process';
-const luamml09 = (() => { try { execFileSync('kpsewhich', ['luamml-mathflatten.lua']); return true; } catch { return false; } })();
-test('MathML: scripts on an accented symbol, and a negated relation', { skip: !luamml09 && 'luamml older than 0.9 (TeX Live 2025) drops them' }, async () => {
-  const d = await capture('Let $\\hat k_{ij}=k_{ij}\\hat x_j$ and $j\\not=i$ and $j \\neq i$.');
+// Scripts on an accented symbol (\hat k_{ij}): TeX puts them on the accent;
+// luamml 0.9 keeps them (0.5 left them out – "k hat" for k̂ᵢⱼ).
+test('MathML: scripts on an accented symbol', { skip: !luamml09 && 'luamml older than 0.9 drops them' }, async () => {
+  const d = await capture('Let $\\hat k_{ij}=k_{ij}\\hat x_j$.', LUAMML);
   const [ms] = inlineMathml(d);
   assert.match(ms[0], /^<math><msub><mover><mi>𝑘<\/mi><mo[^>]*>\^<\/mo><\/mover><mrow><mi>𝑖<\/mi><mi>𝑗<\/mi><\/mrow><\/msub>/);
-  assert.match(ms[0], /<msub><mover><mi>𝑥<\/mi><mo[^>]*>\^<\/mo><\/mover><mi>𝑗<\/mi><\/msub><\/math>$/);
-  assert.equal(ms[1], '<math><mi>𝑗</mi><mo>≠</mo><mi>𝑖</mi></math>');
-  assert.equal(ms[2], '<math><mi>𝑗</mi><mo>≠</mo><mi>𝑖</mi></math>');
+});
+
+// With unicode-math, LaTeX gives \not= as "≠", \dots as "…", \Phi as "Φ",
+// \int as "∫". With the classic fonts it gives what those fonts are made of
+// – a negating slash and "=", three periods – and maps only two of their
+// families (oml, oms: upright Greek and big operators are left as codes), and
+// a reader hears that: the author's fix is unicode-math. The classic cases are expected to fail (no rewriting of our
+// own: the MathML is LaTeX's).
+const SYMBOLS = 'Let $j \\not= i$, $i = 1, \\dots, n$, $x \\mapsto ax$, $\\Phi$, $\\int_0^1 x$.';
+test('MathML: with unicode-math, \\not= is "≠", \\dots "…", \\mapsto "↦"', { skip: OLD }, async () => {
+  const d = await capture(SYMBOLS, '\\DocumentMetadata{tagging=on}\n\\usepackage{unicode-math}');
+  const [ms] = inlineMathml(d);
+  assert.match(ms[0], /<mo>≠<\/mo>/);
+  assert.match(ms[1], /<mo>…<\/mo>/);
+  assert.match(ms[2], /<mo[^>]*>↦<\/mo>/);
+  assert.match(ms[3], /<mi[^>]*>Φ<\/mi>/);
+  assert.match(ms[4], /∫/);
+});
+test('MathML: with the classic fonts too', { skip: OLD, todo: 'LaTeX gives the classic fonts’ pieces: a slash and "=", three periods; upright Greek and big operators unmapped' }, async () => {
+  const d = await capture(SYMBOLS, LUAMML);
+  const [ms] = inlineMathml(d);
+  assert.match(ms[0], /<mo>≠<\/mo>/);
+  assert.match(ms[1], /<mo>…<\/mo>/);
+  assert.match(ms[2], /<mo[^>]*>↦<\/mo>/);
+  assert.match(ms[3], /<mi[^>]*>Φ<\/mi>/);
+  assert.match(ms[4], /∫/);
+});
+test('MathML: \\dddot is a three-dot accent', { skip: OLD }, async () => {
+  const d = await capture('Let $\\dddot Q$ be given.', '\\DocumentMetadata{tagging=on}\n\\usepackage{amsmath}\n\\usepackage{unicode-math}');
+  assert.doesNotMatch(allMathml(d)[0], /alttext="[^"]*period/);
 });

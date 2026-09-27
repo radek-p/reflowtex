@@ -20,7 +20,7 @@ import { encodeDocument } from './encode.ts';
 import { runLuaLatex } from './lualatex.ts';
 import * as DM from './display-model.ts';
 import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from './transforms.ts';
-import { attachMathML, speaker } from './mathml.ts';
+import { attachMathML, readMathmlFile, speaker } from './mathml.ts';
 import { convertPictures } from './pictures.ts';
 import { Fonts, glyphRequirements, drawnCodepoints } from './fonts/fonts.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
@@ -38,6 +38,27 @@ const LATEX_DIR = join(SRC, 'latex');                                  // the co
 export const PREAMBLE_MARK = '%%PREAMBLE%%';
 export const CONTENT_MARK = '%%CONTENT%%';
 export const WIDTH_EXTRA_MARK = '%%WIDTH-EXTRA-SP%%';
+/** Where the author's \\DocumentMetadata goes: the template's first line, as
+ *  LaTeX wants it before \\documentclass. An author who enables tagging and
+ *  luamml there (\\DocumentMetadata{tagging=on}, and
+ *  \\tagpdfsetup{math/mathml/luamml/load=true} for classic fonts) gets LaTeX's
+ *  MathML for every formula (src/pipeline/mathml.ts reads it); a document
+ *  without it gets none. */
+export const METADATA_MARK = '%%DOCUMENT-METADATA%%';
+
+/** An author's \\DocumentMetadata{…} in `tex` (its braces balanced), and
+ *  `tex` without it. */
+export function takeMetadata(tex: string): [string, string] {
+  const m = /\\DocumentMetadata\s*\{/.exec(tex);
+  if (!m) return ['', tex];
+  let depth = 0, end = -1;
+  for (let i = m.index + m[0].length - 1; i < tex.length; i++) {
+    if (tex[i] === '{') depth++;
+    else if (tex[i] === '}' && --depth === 0) { end = i + 1; break; }
+  }
+  if (end < 0) return ['', tex];
+  return [tex.slice(m.index, end), tex.slice(0, m.index) + tex.slice(end)];
+}
 /** Display samples are taken at an additive step, not 2× or 3×: the fits stay
  *  well-conditioned without nearing TeX's \maxdimen. */
 export const DISPLAY_SAMPLE_STEP_SP = 128 * 65536;
@@ -239,14 +260,22 @@ export class Pipeline {
     let template = readFileSync(this.template, 'utf8');
     // A complete document: its class replaces the template's, its preamble
     // becomes the preamble (the caller's, if any, follows), its body the content.
+    // The author's \DocumentMetadata: before their class, at the template's top.
+    let metadata = '';
     const doc = splitDocument(content);
     if (doc) {
+      // (the document's own, else the caller's preamble's)
+      metadata = takeMetadata(content.slice(0, DOCCLASS_RE.exec(content)!.index))[0];
+      const [callers, rest] = takeMetadata(preamble);
+      preamble = rest;
+      metadata ||= callers;
       const [classLine, docPreamble, body] = doc;
       let replaced = false;
       template = template.replace(TEMPLATE_CLASS_RE, () => { replaced = true; return classLine; });
       preamble = (replaced ? '' : `${classLine}\n`) + docPreamble + (preamble ? `\n${preamble}` : '');
       content = body;
     } else {
+      [metadata, preamble] = takeMetadata(preamble);
       // A preamble may bring its own class (a book's chapters: \documentclass{book}).
       const m = DOCCLASS_RE.exec(preamble);
       if (m) {
@@ -257,7 +286,8 @@ export class Pipeline {
     }
     const input = (widthExtraSp: number) => template
       .replaceAll(PREAMBLE_MARK, () => preamble).replaceAll(CONTENT_MARK, () => content)
-      .replaceAll(WIDTH_EXTRA_MARK, () => String(widthExtraSp));
+      .replaceAll(WIDTH_EXTRA_MARK, () => String(widthExtraSp))
+      .replaceAll(METADATA_MARK, () => metadata);
 
     // Always refreshed: a stale serializer would silently lack newer features.
     copyFileSync(this.serializer, join(dir, 'serializer.lua'));
@@ -311,7 +341,7 @@ export class Pipeline {
    *  'unknown' fonts real files, which the glyph addressing and provisioning
    *  that follow then see), address glyphs. Changes `data`. */
   async transform(data: SerializerOutput, dir: string, o: { block?: string; docTag?: string } = {}): Promise<void> {
-    const nMathml = attachMathML(data, { speak: (await speaker()) ?? undefined });
+    const nMathml = attachMathML(data, { speak: (await speaker()) ?? undefined, formulas: readMathmlFile(dir) });
     const nDropped = dropUnreferencedParagraphs(data);
     const nPictures = await convertPictures(data, dir, o.block, o.docTag);
     const nStripped = stripUnsupportedNodes(data);

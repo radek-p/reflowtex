@@ -258,8 +258,8 @@ local ASIDE_MARK_ATTR    = 915 -- the empty box a \webaside leaves where it stoo
 -- A \webid / \webclass (reflowtex.sty): every glyph typeset inside carries
 -- the mark's number (the innermost; its classes include the outer ones').
 local MARK_ATTR          = 916
--- MathML (mathml.lua, when the pipeline put it here): the formula number on
--- an inline formula's begin-math node, and on a box its conversion refers to.
+-- MathML (mathml.lua, when the pipeline put it here): an inline formula's
+-- number in LaTeX's MathML file, on its begin-math node; each display's.
 local MathML = lfs.isfile("mathml.lua") and dofile("mathml.lua") or nil
 local RULE_IMAGE  = 2
 local picture_files = {}
@@ -831,7 +831,6 @@ local function serialize_nodelist(head)
                 -- A \webaside's mark, likewise an empty box: where the aside
                 -- stood, for a page to place it by.
                 aside      = node.get_attribute(n, ASIDE_MARK_ATTR),
-                mathml_box = MathML and node.get_attribute(n, MathML.BOX_ATTR) or nil,
                 children   = n.head and serialize_nodelist(n.head) or {},
             }
 
@@ -1583,7 +1582,13 @@ local function walk_flow(head, pending, ctx)
             if n.subtype == GLUE_ABOVEDISPLAY or n.subtype == GLUE_ABOVEDISPLAYSHORT then
                 pending.above_skip = n.width or 0
             elseif (n.subtype == GLUE_BELOWDISPLAY or n.subtype == GLUE_BELOWDISPLAYSHORT) and last_display then
-                last_display.display_used_below = n.width or 0
+                -- Which of the two skips TeX chose, by the glue's kind (its
+                -- width is not the skip itself with tagging on: LaTeX then
+                -- negates both as the display ends, cancels TeX's glue and puts
+                -- the skip in again as its own – latex-lab-math). The glue is
+                -- kept as it is, in the gap.
+                local short = n.subtype == GLUE_BELOWDISPLAYSHORT
+                last_display.display_used_below = (short and last_display.display_below_short or last_display.display_below) or n.width or 0
             elseif n.subtype == GLUE_BASELINESKIP or n.subtype == GLUE_LINESKIP then
                 -- the interline glue TeX put before a box: the display's own
                 -- when it comes next, the next line's after a display

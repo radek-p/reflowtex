@@ -1,206 +1,72 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// src/pipeline/mathml.ts: from the formulas the capture recorded (luamml's
-// trees, with placeholders for the boxes it could not read) to one MathML
-// string per formula a reader meets – each inline formula of a paragraph,
-// each display (an alignment's rows together).
+// src/pipeline/mathml.ts: LaTeX's MathML (its <jobname>-luamml-mathml.html,
+// written with tagging on and luamml loaded) put where each formula is, as
+// LaTeX wrote it – nothing converted, completed or cleaned up – with its
+// spoken form as alttext.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toXml, cleanup, attachMathML, type MathNode } from '../../src/pipeline/mathml.ts';
-import { readSerializerOutput, type TexNode } from '../../src/pipeline/nodes.ts';
+import { attachMathML, parseMathmlFile } from '../../src/pipeline/mathml.ts';
+import type { SerializerOutput, TexNode } from '../../src/pipeline/nodes.ts';
 
-const el = (name: string, children: MathNode[] = [], attrs?: Record<string, string>): MathNode =>
-  ({ name, children, ...(attrs ? { attrs } : {}) });
-const NS = ' xmlns="http://www.w3.org/1998/Math/MathML"';
-/** Drops the namespace, for shorter expectations. */
-const bare = (s: unknown) => String(s).replaceAll(NS, '');
+const NS = 'xmlns="http://www.w3.org/1998/Math/MathML"';
+// As LaTeX (latex-lab-math) writes the file: a <div> per top-level formula.
+const entry = (n: number, source: string, math: string) =>
+  `<div>\n<h2>\\mml ${n}</h2>\n<p>${source}</p>\n<p>D34B06587E3A7167AE362781C497C98A </p>\n\n${math}\n</div>\n`;
+const FILE = '<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml">\n'
+  + entry(1, '$x$', `<math ${NS}>\n <mi>𝑥</mi>\n</math>`)
+  + entry(2, '$\\text {a $y$ b}$', `<math ${NS}>\n <mtext>\n a \n <math ${NS}>\n <mi>𝑦</mi>\n </math>\n  b\n </mtext>\n</math>`)
+  + entry(3, '\\begin {align}…\\end {align}', `<math display="block" ${NS}>\n <mtable intent=":system-of-equations">\n <mtr><mtd><mi>𝑎</mi></mtd></mtr>\n </mtable>\n</math>`)
+  + '</html>';
 
-const glyph = (ch: string): TexNode => ({ type: 'glyph', char: ch.codePointAt(0) });
-const begin = (id: number): TexNode => ({ type: 'math', subtype: 0, mathml: id });
-const end = (): TexNode => ({ type: 'math', subtype: 1 });
-const cell = (...children: TexNode[]): TexNode => ({ type: 'hlist', subtype: 5, children });
-const row = (...cells: TexNode[]): TexNode => ({ type: 'hlist', subtype: 4, children: cells });
-
-function doc(o: Record<string, unknown>) {
-  return readSerializerOutput(JSON.stringify({ fonts: {}, paragraphs: [], content: [], streams: [], ...o }));
-}
-
-// ── serialisation ───────────────────────────────────────────────────────────
-
-test('toXml: sorted attributes, escaped text, namespace on the root only', () => {
-  const t = el('math', [el('mi', ['x']), el('mo', ['<'], { stretchy: 'false', form: 'infix' }), el('mtext', ['a & b'])]);
-  assert.equal(toXml(t),
-    `<math${NS}><mi>x</mi><mo form="infix" stretchy="false">&lt;</mo><mtext>a &amp; b</mtext></math>`);
-  assert.equal(toXml(el('math', [], { display: 'block' })), `<math display="block"${NS}/>`);
+test('the file: each \\mml N to its <math>, as written (a formula in \\text inside it)', () => {
+  const f = parseMathmlFile(FILE);
+  assert.deepEqual([...f.keys()], [1, 2, 3]);
+  assert.equal(f.get(1), `<math ${NS}>\n <mi>𝑥</mi>\n</math>`);
+  assert.match(f.get(2)!, /^<math [^>]*>\n <mtext>\n a \n <math [^>]*>\n <mi>𝑦<\/mi>\n <\/math>\n  b\n <\/mtext>\n<\/math>$/);
+  assert.match(f.get(3)!, /intent=":system-of-equations"/);
 });
 
-// ── cleanup: what a speech engine would read as noise ───────────────────────
+const begin = (mathml?: number): TexNode => ({ type: 'math', subtype: 0, ...(mathml ? { mathml } : {}) });
+const end: TexNode = { type: 'math', subtype: 1 };
+const glyph = (c: string): TexNode => ({ type: 'glyph', char: c.codePointAt(0) });
+const doc = (o: Partial<SerializerOutput>): SerializerOutput => ({ fonts: {}, paragraphs: [], content: [], streams: [], ...o } as SerializerOutput);
 
-test('cleanup: zero-width spaces go, single-child rows flatten, empty rows go', () => {
-  const t = cleanup(el('mrow', [el('mspace', [], { width: '0.000pt' }), el('mrow', [el('mi', ['x'])]), el('mrow')]));
-  assert.deepEqual(t, el('mi', ['x']));
-});
-
-test('cleanup: mathvariant="normal" stays on letters only ("normal infinity")', () => {
-  const t = cleanup(el('mrow', [el('mi', ['∞'], { mathvariant: 'normal' }), el('mi', ['R'], { mathvariant: 'normal' }),
-    el('mi', ['sin'], { mathvariant: 'normal' })]));
-  assert.deepEqual(t, el('mrow', [el('mi', ['∞']), el('mi', ['R'], { mathvariant: 'normal' }), el('mi', ['sin'])]));
-});
-
-test('cleanup: an operator wrapping a whole formula (\\Bigl) gives way to it', () => {
-  const t = cleanup(el('mo', [el('mrow', [el('mo', ['('], { fence: 'true' }), el('mi', ['x'])])]));
-  assert.deepEqual(t, el('mrow', [el('mo', ['('], { fence: 'true' }), el('mi', ['x'])]));
-});
-
-test('cleanup: a token element holding one element gives way to it; an empty one goes', () => {
-  // luamml wraps a box it could not read in <mi>; once the box is read, the
-  // <mi> holds a table – or nothing, when the box was empty
-  assert.deepEqual(cleanup(el('mrow', [el('mi', [el('mtable')]), el('mi'), el('mo', ['+'])])),
-    el('mrow', [el('mtable'), el('mo', ['+'])]));
-});
-
-test('cleanup: text is trimmed at its ends and its spaces are plain, rows inside rows are one row', () => {
-  assert.deepEqual(cleanup(el('mrow', [el('mrow', [el('mtext', ['the\u00A0set\u00A0']), el('mi', ['𝑆'])]), el('mo', ['='])])),
-    el('mrow', [el('mtext', ['the set']), el('mi', ['𝑆']), el('mo', ['='])]));
-});
-
-test('cleanup: spacing hints are dropped, fixed-arity children kept', () => {
-  const t = cleanup(el('msup', [el('mi', ['x']), el('mrow')]));
-  assert.deepEqual(t, el('msup', [el('mi', ['x']), el('mrow')]));
-  assert.deepEqual(cleanup(el('mo', ['='], { lspace: '0.278em', rspace: '0.278em' })), el('mo', ['=']));
-});
-
-// ── attaching formulas to the document ──────────────────────────────────────
-
-test('an inline formula: its begin-math node gets the MathML, the table goes', () => {
-  const d = doc({
-    paragraphs: [{ nodes: [glyph('a'), begin(1), glyph('x'), end(), glyph('b')] }],
-    content: [{ kind: 'paragraph', para: 1 }],
-    mathml: [{ tree: el('mi', ['𝑥']) }],
-  });
-  assert.equal(attachMathML(d), 1);
-  assert.equal(bare(d.paragraphs[0].nodes[1].mathml), '<math><mi>𝑥</mi></math>');
-  assert.equal(d.mathml, undefined);
-});
-
-test('a formula nested in another (\\text{…$y$…}) is covered by the outer one', () => {
-  const d = doc({
-    paragraphs: [{ nodes: [begin(2), { type: 'hlist', children: [begin(1), glyph('y'), end()] }, end()] }],
-    content: [{ kind: 'paragraph', para: 1 }],
-    mathml: [{ tree: el('mi', ['𝑦']) }, { tree: el('mrow', [el('mi', ['𝑥']), el('mtext', ['if'])]) }],
-  });
-  attachMathML(d);
-  const outer = d.paragraphs[0].nodes[0], inner = d.paragraphs[0].nodes[1].children![0];
-  assert.equal(bare(outer.mathml), '<math><mi>𝑥</mi><mtext>if</mtext></math>');
+test('an inline formula: its MathML on its begin-math node, unchanged; one nested in it has none', () => {
+  const inner = begin(2);
+  const d = doc({ paragraphs: [{ nodes: [begin(1), glyph('x'), end, glyph(' '), begin(2), { type: 'hlist', children: [inner, glyph('y'), end] }, end] }] });
+  const n = attachMathML(d, { formulas: parseMathmlFile(FILE) });
+  assert.equal(n, 2);
+  const [a, , , , b] = d.paragraphs[0].nodes;
+  assert.equal(a.mathml, `<math ${NS}>\n <mi>𝑥</mi>\n</math>`);
+  assert.match(String(b.mathml), /<mtext>/);
   assert.equal(inner.mathml, undefined);
 });
 
-test('a box luamml could not read: an alignment becomes a table, from its cells', () => {
-  // cases: the formula holds a \vcenter luamml saw only as a box; the box's
-  // rows and cells, with the formulas typeset in them, are in the node tree.
-  const vbox: TexNode = { type: 'vlist', mathml_box: 7, children: [
-    row(cell(begin(1), end()), cell(begin(2), end())),
-    row(cell(begin(3), end()), cell(glyph('o'), glyph('k'))),
-  ] };
-  const d = doc({
-    paragraphs: [{ nodes: [begin(4), vbox, end()] }],
-    content: [{ kind: 'paragraph', para: 1 }],
-    mathml: [{ tree: el('mn', ['1']) }, { tree: el('mi', ['𝑥']) }, { tree: el('mn', ['0']) },
-      { tree: el('mrow', [el('mo', ['{']), { name: 'mglyph', box: 7 }]) }],
-  });
-  attachMathML(d);
-  assert.equal(bare(d.paragraphs[0].nodes[0].mathml),
-    '<math><mo>{</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mi>𝑥</mi></mtd></mtr>' +
-    '<mtr><mtd><mn>0</mn></mtd><mtd><mtext>ok</mtext></mtd></mtr></mtable></math>');
-  assert.equal(d.paragraphs[0].nodes[1].children![0].children![0].children![0].mathml, undefined, 'cells carry no MathML of their own');
+test('a display: its item gets the MathML; an alignment’s rows share a number, the first carries the table', () => {
+  const row = (t: string) => ({ kind: 'display', display_no: 7, box: { type: 'hlist', subtype: 4, children: [glyph(t)] } });
+  const d = doc({ content: [row('a'), { kind: 'vspace', amount: 1 }, row('b')], mathml: [{ n: 3, display: 7 }] } as never);
+  assert.equal(attachMathML(d, { formulas: parseMathmlFile(FILE) }), 1);
+  assert.match(String(d.content[0].mathml), /^<math display="block"[^>]*>\n <mtable intent=":system-of-equations">/);
+  assert.equal(d.content[2].mathml, undefined);
+  assert.equal(d.content[0].display_no, undefined, 'the numbers are bookkeeping');
+  assert.equal((d as { mathml?: unknown }).mathml, undefined);
 });
 
-test('an empty box (the strut in \\big) disappears', () => {
-  const d = doc({
-    paragraphs: [{ nodes: [begin(1), { type: 'vlist', mathml_box: 3, children: [] }, end()] }],
-    content: [{ kind: 'paragraph', para: 1 }],
-    mathml: [{ tree: el('mrow', [el('mo', ['(']), { name: 'mglyph', box: 3 }]) }],
-  });
-  attachMathML(d);
-  assert.equal(bare(d.paragraphs[0].nodes[0].mathml), '<math><mo>(</mo></math>');
+test('streams (footnotes, boxes) get theirs too', () => {
+  const d = doc({ streams: [{ kind: 'footnote', content: [{ kind: 'display', display_no: 1, box: { type: 'hlist' } }] }], mathml: [{ n: 1, display: 1 }] } as never);
+  attachMathML(d, { formulas: parseMathmlFile(FILE) });
+  assert.match(String(d.streams[0].content![0].mathml), /<mi>𝑥<\/mi>/);
 });
 
-test('a display gets its formula as block MathML', () => {
-  const d = doc({
-    content: [{ kind: 'display', display_no: 2, box: { type: 'hlist', subtype: 6, children: [] } }],
-    mathml: [{ tree: el('mi', ['𝑥']) }, { tree: el('mn', ['2']), display: 2 }],
-  });
-  attachMathML(d);
-  assert.equal(bare(d.content[0].mathml), '<math display="block"><mn>2</mn></math>');
-});
-
-test('an alignment: its rows are display items of one number, read as one table', () => {
-  const d = doc({
-    content: [
-      { kind: 'display', display_no: 5, box: row(cell(begin(1), end()), cell(begin(2), end()), cell(glyph('('), glyph('1'), glyph(')'))) },
-      { kind: 'vspace', amount: 0 },
-      { kind: 'display', display_no: 5, box: row(cell(begin(3), end()), cell(begin(4), end())) },
-      { kind: 'display', display_no: 6, box: { type: 'hlist', subtype: 6, children: [] } },
-    ],
-    mathml: [{ tree: el('mi', ['𝑓']) }, { tree: el('mn', ['1']) }, { tree: el('mi', ['𝑔']) }, { tree: el('mn', ['2']) },
-      { tree: el('mi', ['𝑦']), display: 6 }],
-  });
-  attachMathML(d);
-  assert.equal(bare(d.content[0].mathml),
-    '<math display="block"><mtable><mtr><mtd><mi>𝑓</mi></mtd><mtd><mn>1</mn></mtd><mtd><mtext>(1)</mtext></mtd></mtr>' +
-    '<mtr><mtd><mi>𝑔</mi></mtd><mtd><mn>2</mn></mtd></mtr></mtable></math>');
-  assert.equal(d.content[2].mathml, undefined, 'the second row is read with the first');
-  assert.equal(bare(d.content[3].mathml), '<math display="block"><mi>𝑦</mi></math>');
-  assert.equal((d.content[0].box!.children![0].children![0]).mathml, undefined, 'cells carry no MathML of their own');
-});
-
-test('a formula made of text only is text (\\textsuperscript, a footnote mark)', () => {
-  const d = doc({
-    paragraphs: [{ nodes: [glyph('a'), begin(1), glyph('1'), end()] }],
-    content: [{ kind: 'paragraph', para: 1 }],
-    mathml: [{ tree: el('msup', [el('mrow'), el('mtext', ['1'])]) }],
-  });
+test('no file (the author did not enable luamml): no MathML, and the numbers go', () => {
+  const d = doc({ paragraphs: [{ nodes: [begin(1), glyph('x'), end] }], content: [{ kind: 'display', display_no: 1 }], mathml: [{ n: 1, display: 1 }] } as never);
   assert.equal(attachMathML(d), 0);
-  assert.equal(d.paragraphs[0].nodes[1].mathml, undefined);
+  assert.equal(d.paragraphs[0].nodes[0].mathml, undefined);
+  assert.equal(d.content[0].display_no, undefined);
 });
 
-test('streams (footnotes) get theirs too', () => {
-  const d = doc({
-    paragraphs: [{ nodes: [begin(1), end()] }],
-    streams: [{ kind: 'footnote', content: [{ kind: 'paragraph', para: 1 }] }],
-    mathml: [{ tree: el('mi', ['𝑥']) }],
-  });
-  attachMathML(d);
-  assert.equal(bare(d.paragraphs[0].nodes[0].mathml), '<math><mi>𝑥</mi></math>');
-});
-
-test('a document without formulas is left as it was', () => {
-  const d = doc({ paragraphs: [{ nodes: [glyph('a')] }], content: [{ kind: 'paragraph', para: 1 }] });
-  const before = JSON.stringify(d.paragraphs);
-  assert.equal(attachMathML(d), 0);
-  assert.equal(JSON.stringify(d.paragraphs), before);
-});
-
-// ── What a reader says ──────────────────────────────────────────────────────
-
-test('alttext: each formula carries its spoken form, from the speaker given', () => {
-  const d = doc({
-    paragraphs: [{ nodes: [begin(1), end()] }],
-    content: [{ kind: 'paragraph', para: 1 }, { kind: 'display', display_no: 1, box: { type: 'hlist', subtype: 6, children: [] } }],
-    mathml: [{ tree: el('msup', [el('mi', ['𝑥']), el('mn', ['2'])]) }, { tree: el('mn', ['1']), display: 1 }],
-  });
-  const heard: string[] = [];
-  attachMathML(d, { speak: xml => { heard.push(xml); return xml.includes('msup') ? 'x squared' : 'one'; } });
-  assert.equal(bare(d.paragraphs[0].nodes[0].mathml), '<math alttext="x squared"><msup><mi>𝑥</mi><mn>2</mn></msup></math>');
-  assert.equal(bare(d.content[1].mathml), '<math alttext="one" display="block"><mn>1</mn></math>');
-  assert.ok(heard.every(x => !x.includes('alttext')), 'spoken from the MathML itself');
-});
-
-test('cleanup: a negating slash (classic \\not) is one character with the operator after it', () => {
-  // \not= in the 8-bit fonts is a combining slash drawn over "=": luamml
-  // gives the two as neighbours; a reader should get "≠" ("not equals")
-  const t = cleanup(el('mrow', [el('mi', ['𝑗']), el('mo', ['̸']), el('mo', ['=']), el('mi', ['𝑖'])]));
-  assert.deepEqual(t, el('mrow', [el('mi', ['𝑗']), el('mo', ['≠']), el('mi', ['𝑖'])]));
-  // one with no precomposed form keeps the combining slash on it
-  const u = cleanup(el('mrow', [el('mo', ['\u0338']), el('mo', ['\u22B8'])]));   // ⊸
-  assert.deepEqual(u, el('mo', ['\u22B8\u0338']));
+test('alttext: each formula carries its spoken form, from the speaker given, on its root', () => {
+  const d = doc({ paragraphs: [{ nodes: [begin(1), glyph('x'), end] }] });
+  attachMathML(d, { formulas: parseMathmlFile(FILE), speak: () => 'x "quoted" & <more>' });
+  assert.equal(d.paragraphs[0].nodes[0].mathml, `<math alttext="x &quot;quoted&quot; &amp; &lt;more>" ${NS}>\n <mi>𝑥</mi>\n</math>`);
 });

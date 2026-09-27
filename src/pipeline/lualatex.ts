@@ -68,6 +68,11 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<s
   const log = join(dir, 'input.log');
   const expect = join(dir, opts.expect ?? 'output.json');
   for (let n = 0; n < Math.max(1, opts.passes); n++) {
+    // LaTeX's MathML (tagging with luamml, src/pipeline/mathml.ts) is written
+    // afresh each run – and LaTeX reads the last run's back in, to embed in
+    // the PDF, which fails on a character it cannot read (luamml's raw DEL
+    // for a classic font's double accent). The PDF here needs none: gone.
+    rmSync(join(dir, 'input-luamml-mathml.html'), { force: true });
     result = await lualatex(dir, env);
     opts.onPass?.(n + 1, existsSync(log) ? readFileSync(log, 'utf8') : '');
     const after = readBack(dir);

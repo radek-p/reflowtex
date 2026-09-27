@@ -13,6 +13,13 @@ screen reader needs: the words in reading order, and every formula as
 MathML. VoiceOver reads MathML aloud and lets the reader
 step through a formula part by part.
 
+The MathML is written by \LaTeX\ itself, with the \texttt{luamml} package,
+where the author asks for it at the top of the document:
+\texttt{\textbackslash DocumentMetadata\{tagging=on\}}, and for the classic
+fonts \texttt{\textbackslash tagpdfsetup\{math/mathml/luamml/load=true\}}.
+Every block on this site does. A document without it keeps its text for
+the reader, formulas as their characters, and no MathML is made up for it.
+
 Each formula also carries its spoken form, written when the page is built.
 A reader who would rather hear that can choose it: the formula is then
 read as part of the sentence, without a stop at every symbol. The choice

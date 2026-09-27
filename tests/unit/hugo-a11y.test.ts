@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
+const luamml09 = (() => { try { execFileSync('kpsewhich', ['luamml-mathflatten.lua']); return true; } catch { return false; } })();
 const hasHugo = (() => { try { execFileSync('hugo', ['version'], { stdio: 'ignore' }); return true; } catch { return false; } })();
 
 test('Hugo blocks carry the accessible layer when the site asks', { skip: !hasHugo && 'no hugo' }, () => {
@@ -22,8 +23,11 @@ test('Hugo blocks carry the accessible layer when the site asks', { skip: !hasHu
     mkdirSync(join(site, 'layouts/_default'), { recursive: true });
     cpSync(join(REPO, 'integrations/hugo/layouts/shortcodes'), join(site, 'layouts/shortcodes'), { recursive: true });
     writeFileSync(join(site, 'layouts/_default/single.html'), '{{ .Content }}');
-    writeFileSync(join(site, 'content/a.md'), '---\ntitle: A\n---\n{{< latex >}}Let $x^2$ be big.{{< /latex >}}\n\n'
-      + '{{< latex a11y="false" >}}Not this one.{{< /latex >}}\n');
+    // the first block's author enables luamml (its preamble), the second's not
+    mkdirSync(join(site, 'latex-preambles'), { recursive: true });
+    writeFileSync(join(site, 'latex-preambles/luamml.tex'), '\\DocumentMetadata{tagging=on}\n\\tagpdfsetup{math/mathml/luamml/load=true}\n');
+    writeFileSync(join(site, 'content/a.md'), '---\ntitle: A\n---\n{{< latex preamble="luamml" >}}Let $x^2$ be big.{{< /latex >}}\n\n'
+      + '{{< latex >}}And $y$ without.{{< /latex >}}\n\n{{< latex a11y="false" >}}Not this one.{{< /latex >}}\n');
     const prebuild = () => execFileSync('node', [join(REPO, 'integrations/hugo/prebuild.ts'), site], { stdio: 'pipe' });
     const hugo = (a11y: boolean) => {
       writeFileSync(join(site, 'hugo.toml'), `baseURL = "/"\ndisableKinds = ["taxonomy", "term", "RSS", "sitemap"]\n`
@@ -34,20 +38,26 @@ test('Hugo blocks carry the accessible layer when the site asks', { skip: !hasHu
     prebuild();
     const dataDir = join(site, 'data/latex_blocks');
     const files = readdirSync(dataDir).map(f => join(dataDir, f));
-    assert.equal(files.length, 2);
+    assert.equal(files.length, 3);
     for (const f of files) assert.match(JSON.parse(readFileSync(f, 'utf8')).a11y_html, /^<div class="latex-a11y"/);
 
     let page = hugo(true);
-    assert.equal((page.match(/class="latex-a11y"/g) ?? []).length, 1, 'a layer for the first block, none for a11y="false"');
+    assert.equal((page.match(/class="latex-a11y"/g) ?? []).length, 2, 'a layer for each block, none for a11y="false"');
     assert.match(page, /aria-hidden="true"\s+data-nodelist-b64="[^"]+"><\/div><div class="latex-a11y"/);
-    assert.match(page, /<math[^>]*alttext="x squared"/);
+    // MathML where the author enabled luamml (it needs luamml 0.9, TeX Live
+    // 2026); the other block's formula is its text
+    if (luamml09) assert.match(page, /<math[^>]*alttext="x squared"/);
+    assert.match(page, /<p data-para="1">And y without\.<\/p>/);
     page = hugo(false);
     assert.doesNotMatch(page, /latex-a11y|aria-hidden/, 'off unless asked');
 
-    // A block's data from before: its layer is added, and nothing compiled.
-    for (const f of files) { const d = JSON.parse(readFileSync(f, 'utf8')); delete d.a11y_html; writeFileSync(f, JSON.stringify(d)); }
+    // A block's data from before the layer, or from an older layer builder:
+    // its layer is made again, and nothing compiled.
+    const layers = files.map(f => JSON.parse(readFileSync(f, 'utf8')).a11y_html);
+    files.forEach((f, k) => { const d = JSON.parse(readFileSync(f, 'utf8'));
+      if (k) d.a11y_html = '<div class="latex-a11y">old</div>'; else delete d.a11y_html; writeFileSync(f, JSON.stringify(d)); });
     const out = String(prebuild());
     assert.doesNotMatch(out, /compiling/);
-    for (const f of files) assert.equal(typeof JSON.parse(readFileSync(f, 'utf8')).a11y_html, 'string');
+    assert.deepEqual(files.map(f => JSON.parse(readFileSync(f, 'utf8')).a11y_html), layers);
   } finally { rmSync(site, { recursive: true, force: true }); }
 });

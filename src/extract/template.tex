@@ -18,6 +18,11 @@
 % capture) is set up *here*, before the user preamble, so a
 % preamble is free to load its own packages and TikZ libraries on top.
 
+% The author's \DocumentMetadata, if they gave one (the pipeline moves it here
+% from their document or preamble: LaTeX wants it before the class). With
+% tagging on and luamml loaded there, LaTeX writes every formula's MathML,
+% which the pipeline reads (src/pipeline/mathml.ts); without, there is none.
+%%DOCUMENT-METADATA%%
 \documentclass{article}
 
 % ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
@@ -680,18 +685,24 @@
 \makeatletter
 \newcount\reflowtexFootnoteCount
 \newcount\reflowtexCurrentFootnote
-\let\reflowtexOrigFootnotemark\@footnotemark
-\def\@footnotemark{%
-  \global\advance\reflowtexFootnoteCount by 1
-  \global\reflowtexCurrentFootnote=\reflowtexFootnoteCount
-  \begingroup\attribute906=\reflowtexCurrentFootnote\relax
+% At the end of \begin{document}: with tagging on, LaTeX's footnote code
+% (latex-lab-footnotes) sets \@footnotemark and \@footnotetext as the
+% document begins, and wrapping the definitions before would be lost.
+\AddToHook{begindocument/end}{%
+  \let\reflowtexOrigFootnotemark\@footnotemark
+  % (the attribute set and unset, no group: with tagging, LaTeX finishes
+  % the mark later, and needs what it began with – \@x@sf – then)
+  \def\@footnotemark{%
+    \global\advance\reflowtexFootnoteCount by 1
+    \global\reflowtexCurrentFootnote=\reflowtexFootnoteCount
+    \attribute906=\reflowtexCurrentFootnote\relax
     \reflowtexOrigFootnotemark
-  \endgroup}
-\let\reflowtexOrigFootnotetext\@footnotetext
-\long\def\@footnotetext#1{%
-  \begingroup\attribute907=\reflowtexCurrentFootnote\relax
+    \attribute906=-"7FFFFFFF\relax}%
+  \let\reflowtexOrigFootnotetext\@footnotetext
+  \long\def\@footnotetext#1{%
+    \attribute907=\reflowtexCurrentFootnote\relax
     \reflowtexOrigFootnotetext{#1}%
-  \endgroup}
+    \attribute907=-"7FFFFFFF\relax}}
 \makeatother
 
 % ── Margin notes ─────────────────────────────────────────────────────────────

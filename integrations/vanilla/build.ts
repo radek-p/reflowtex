@@ -46,9 +46,10 @@ if (o.help || positionals.length !== 1) {
   --fonts-base  URL prefix @font-face fetches fonts from (default fonts/,
                 relative to latex-viewer.js's URL; an absolute URL for a CDN)
   --source-url  the published source (the AGPL-3.0 §13 offer in the footer)
-  --a11y        after each block, its text and formulas (MathML) for screen
-                readers, and the drawing hidden from them (links, footnote
-                marks and hints are not in that layer yet)`);
+  --a11y        after each block, its text for screen readers, and the
+                drawing hidden from them; formulas as MathML where the
+                document enables luamml (\\DocumentMetadata{tagging=on}, and
+                \\tagpdfsetup{math/mathml/luamml/load=true} for classic fonts)`);
   process.exit(o.help ? 0 : 2);
 }
 

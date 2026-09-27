@@ -81,9 +81,11 @@ follows the reader's column.
 
 \begin{figure}[h]
 \centering
-\begin{tikzcd}
-  A \arrow[r, "f"] \arrow[d, "g"'] & B \arrow[d, "h"] \\
-  C \arrow[r, "k"'] & D
+% (math mode=false: with tagging on, tikz-cd's own math in its labels breaks
+% every formula after it – a LaTeX bug; written out, it does not)
+\begin{tikzcd}[math mode=false]
+  $A$ \arrow[r, "$f$"] \arrow[d, "$g$"'] & $B$ \arrow[d, "$h$"] \\
+  $C$ \arrow[r, "$k$"'] & $D$
 \end{tikzcd}
 \qquad
 \begin{tikzpicture}[>=stealth, thick, baseline=(p.base), every loop/.style={looseness=6}]

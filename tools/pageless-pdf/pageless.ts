@@ -38,7 +38,7 @@ import { parseArgs } from 'node:util';
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONTENT_MARK, PREAMBLE_MARK, WIDTH_EXTRA_MARK, TEMPLATE_CLASS_RE, DEFAULT_TEMPLATE, DEFAULT_SERIALIZER, splitDocument } from '../../src/pipeline/pipeline.ts';
+import { CONTENT_MARK, PREAMBLE_MARK, WIDTH_EXTRA_MARK, METADATA_MARK, takeMetadata, TEMPLATE_CLASS_RE, DEFAULT_TEMPLATE, DEFAULT_SERIALIZER, splitDocument } from '../../src/pipeline/pipeline.ts';
 import { runLuaLatex } from '../../src/pipeline/lualatex.ts';
 import { stack } from './stack.ts';
 
@@ -66,11 +66,14 @@ export function fill(template: string, document: string, widthExtraSp: number): 
   const doc = splitDocument(document);
   if (!doc) throw new Error('not a complete document (\\documentclass … \\begin{document} … \\end{document})');
   let [classLine, preamble, body] = doc;
+  const metadata = takeMetadata(document.slice(0, document.indexOf(classLine)))[0];
   let replaced = false;
   template = template.replace(TEMPLATE_CLASS_RE, () => { replaced = true; return classLine; });
   if (!replaced) preamble = classLine + preamble;
   return template.replaceAll(PREAMBLE_MARK, () => preamble).replaceAll(CONTENT_MARK, () => body)
-    .replaceAll(WIDTH_EXTRA_MARK, () => String(widthExtraSp));
+    .replaceAll(WIDTH_EXTRA_MARK, () => String(widthExtraSp))
+    // the author's \DocumentMetadata, before their class, as the pipeline puts it
+    .replaceAll(METADATA_MARK, () => metadata);
 }
 
 /** A TeX dimension (pt, bp, mm, cm, in, pc) in sp. */

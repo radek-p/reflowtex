@@ -114,6 +114,21 @@ overrides the site. The layer is stored with each block by prebuild, so
 turning it on needs no new compilation. The companion's reading options then
 offer *Formulas for screen readers*: MathML or spoken text.
 
+The MathML is LaTeX's own. It comes where the block's author enables tagging
+and luamml – in its preamble or document, before or after the class:
+
+```latex
+\DocumentMetadata{tagging=on}
+\tagpdfsetup{math/mathml/luamml/load=true}   % classic fonts; unicode-math loads luamml itself
+```
+
+LaTeX then writes every formula's MathML – amsmath alignments as tables, with
+luamml's intents – and prebuild puts each where its formula is, unchanged,
+with its spoken form (Speech Rule Engine) in `alttext`. A block without it
+has no MathML: its formulas are read as their text. Nothing is made up for
+it. luamml 0.8 or later (TeX Live 2026) is needed; older versions break
+amsmath's alignments with tagging on.
+
 ### Books in parts: `batch` and `weight`
 
 Blocks with the same `batch="name"` are compiled together as one LaTeX

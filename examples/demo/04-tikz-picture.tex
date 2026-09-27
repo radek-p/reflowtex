@@ -16,9 +16,9 @@ a box can; here it is an automaton inside \texttt{align*}:
 
 The same capture works for front ends such as \texttt{tikz-cd}, with no need
 for PGF externalisation:
-\[
-\begin{tikzcd}
-  A^* \arrow[r, bend left, "f"] \arrow[r, bend right, "g"']
-    & B^* \arrow[r, hookrightarrow, "\iota"] & \mathbb{R}
+\begin{center}
+\begin{tikzcd}[math mode=false]
+  $A^*$ \arrow[r, bend left, "$f$"] \arrow[r, bend right, "$g$"']
+    & $B^*$ \arrow[r, hookrightarrow, "$\iota$"] & $\mathbb{R}$
 \end{tikzcd}
-\]
+\end{center}

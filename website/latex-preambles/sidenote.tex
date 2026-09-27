@@ -1,4 +1,9 @@
 % SPDX-License-Identifier: AGPL-3.0-or-later
+% Accessible formulas: tagging on and luamml loaded, so that LaTeX writes
+% every formula's MathML (with classic fonts LaTeX loads luamml only when
+% asked). Reflow TeX reads it for screen readers.
+\DocumentMetadata{tagging=on}
+\tagpdfsetup{math/mathml/luamml/load=true}
 % Preamble for the \mysidenote example (content/docs/typesetting/side-notes.md).
 \usepackage{microtype}
 \usepackage{reflowtex}

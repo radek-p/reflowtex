@@ -55,12 +55,12 @@ Displayed equations look as they do in the PDF.
 
 {{< latex preamble="home" >}}
 \cardtitle*{TikZ pictures}
-\[
-\begin{tikzcd}
-  A \arrow[r, "f"] \arrow[d, "g"'] & B \arrow[d, "h"] \\
-  C \arrow[r, "k"'] & D
+\begin{center}
+\begin{tikzcd}[math mode=false]
+  $A$ \arrow[r, "$f$"] \arrow[d, "$g$"'] & $B$ \arrow[d, "$h$"] \\
+  $C$ \arrow[r, "$k$"'] & $D$
 \end{tikzcd}
-\]
+\end{center}
 {{< /latex >}}
 
 {{< latex preamble="home" >}}

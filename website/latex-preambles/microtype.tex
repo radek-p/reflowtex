@@ -1,4 +1,9 @@
 % SPDX-License-Identifier: AGPL-3.0-or-later
+% Accessible formulas: tagging on and luamml loaded, so that LaTeX writes
+% every formula's MathML (with classic fonts LaTeX loads luamml only when
+% asked). Reflow TeX reads it for screen readers.
+\DocumentMetadata{tagging=on}
+\tagpdfsetup{math/mathml/luamml/load=true}
 % Character protrusion and font expansion, which the viewer reproduces when
 % it re-breaks: appended to testmath.tex's own preamble on the Showcase page,
 % and the whole preamble of a block that needs nothing else (the hero, the

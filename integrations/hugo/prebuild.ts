@@ -228,11 +228,14 @@ const storedHash = (key: string): string | undefined => {
 // An up-to-date block needs no compilation, but its fonts are served all the
 // same: it is declared current to the pipeline, which reads its build output
 // (when there is one – a site may carry its data without its build root).
-// A block's data from before the layer was stored gets it, without recompiling.
+// A block's layer is made again from its document, without recompiling: a
+// block's data from before the layer was stored, or from an older layer
+// builder, gets the current one.
 const current = (key: string) => {
   if (existsSync(join(buildRoot, key, 'output.json'))) pipe.useCached(key);
   const f = join(dataDir, `${key}.json`), d = JSON.parse(readFileSync(f, 'utf8'));
-  if (typeof d.a11y_html !== 'string') writeBlock(key, Buffer.from(d.nodelist_b64, 'base64'), d.content_hash);
+  const bytes = Buffer.from(d.nodelist_b64, 'base64');
+  if (d.a11y_html !== a11yLayerFromBytes(bytes)) writeBlock(key, bytes, d.content_hash);
 };
 
 const stale: { key: string; content: string; preamble: string; name: string; passes: number }[] = [];

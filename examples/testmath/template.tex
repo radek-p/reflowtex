@@ -18,6 +18,12 @@
 % The serializer is the only thing added, injected *after*
 % the document's preamble so nothing in it is overridden.
 
+% testmath.tex's MathML: tagging on, and luamml loaded (below, with
+% microtype) – LaTeX then writes every formula's MathML, which the pipeline
+% reads (src/pipeline/mathml.ts). testmath.tex itself is not changed. The
+% metadata must come before the document's class.
+\DocumentMetadata{tagging=on}
+
 % ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
 % See the identical block in src/extract/template.tex for the full explanation.
 % luaotfload defaults to preferring OS-installed fonts (location_precedence
@@ -75,6 +81,10 @@
 \makeatletter
 \@ifpackageloaded{microtype}{}{\usepackage{microtype}}
 \makeatother
+% ── luamml: every formula's MathML (with the tagging switched on at the top) ──
+% LaTeX loads luamml itself only with unicode-math; testmath.tex keeps its
+% classic Computer Modern, so it is asked for here.
+\tagpdfsetup{math/mathml/luamml/load=true}
 
 % ── reflowtex node-list serializer (the only addition to the document) ────────
 \directlua{dofile("serializer.lua")}
@@ -121,18 +131,23 @@
 \makeatletter
 \newcount\reflowtexFootnoteCount
 \newcount\reflowtexCurrentFootnote
-\let\reflowtexOrigFootnotemark\@footnotemark
-\def\@footnotemark{%
-  \global\advance\reflowtexFootnoteCount by 1
-  \global\reflowtexCurrentFootnote=\reflowtexFootnoteCount
-  \begingroup\attribute906=\reflowtexCurrentFootnote\relax
+% As src/extract/template.tex does it: at the end of \begin{document} (with
+% tagging on, LaTeX's footnote code sets the commands as the document
+% begins), the attribute set and unset without a group (LaTeX finishes the
+% mark later, with what it began with).
+\AddToHook{begindocument/end}{%
+  \let\reflowtexOrigFootnotemark\@footnotemark
+  \def\@footnotemark{%
+    \global\advance\reflowtexFootnoteCount by 1
+    \global\reflowtexCurrentFootnote=\reflowtexFootnoteCount
+    \attribute906=\reflowtexCurrentFootnote\relax
     \reflowtexOrigFootnotemark
-  \endgroup}
-\let\reflowtexOrigFootnotetext\@footnotetext
-\long\def\@footnotetext#1{%
-  \begingroup\attribute907=\reflowtexCurrentFootnote\relax
+    \attribute906=-"7FFFFFFF\relax}%
+  \let\reflowtexOrigFootnotetext\@footnotetext
+  \long\def\@footnotetext#1{%
+    \attribute907=\reflowtexCurrentFootnote\relax
     \reflowtexOrigFootnotetext{#1}%
-  \endgroup}
+    \attribute907=-"7FFFFFFF\relax}}
 \makeatother
 
 \begin{document}
