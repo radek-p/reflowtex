@@ -5,18 +5,24 @@
 import { test, expect, type WebPage } from './fixtures.ts';
 import { READY } from './web.ts';
 
-/** Select glyphs a..b of the first block (all of mark `key` by default). */
+/** Select glyphs a..b of the first block (all of mark `key` by default).
+ *  The viewer draws its bands on selectionchange, which the browser queues
+ *  as a task of its own: under the whole suite WebKit could deliver it after
+ *  two frames, and a test found no bands yet (3 in 105 runs in the CI
+ *  container). So: the event first, then two frames for the drawing. */
 async function select(page: WebPage, glyphs?: [number, number], block = 0) {
-  await page.evaluate(([glyphs, block]) => {
+  await page.evaluate(([glyphs, block]) => new Promise<void>(done => {
     const els = glyphs || block ? [...document.querySelectorAll('.latex-block')[block as number].querySelectorAll('tspan')]
                                 : reflowtex.host.mark('key').elements();
     const [a, b] = glyphs ? [els[glyphs[0]], els[glyphs[1]]] : [els[0], els[els.length - 1]];
     const r = document.createRange();
     r.setStart(a.firstChild!, 0);
     r.setEnd(b.firstChild!, b.textContent!.length);
+    const timer = setTimeout(done, 2000);           // (no event: the selection did not change)
+    document.addEventListener('selectionchange', () => { clearTimeout(timer); done(); }, { once: true });
     getSelection()!.removeAllRanges();
     getSelection()!.addRange(r);
-  }, [glyphs || null, block] as const);
+  }), [glyphs || null, block] as const);
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
@@ -106,6 +112,16 @@ test('the reader\'s switch, remembered', async ({ openPage }) => {
   // slow load under the whole suite had nothing drawn to select yet).
   await page.waitForFunction(READY, undefined, { timeout: 20000 });
   await page.evaluate(() => document.fonts.ready);
+  // …and the viewer's repaint for its web fonts, which comes after
+  // fonts.ready: it replaces the glyphs, and a selection made before it went
+  // with them (WebKit, 3 in 40 runs in the CI container: no bands, and no
+  // selection left). Until its paint count stays still.
+  await page.waitForFunction(() => {
+    const w = window as any, p = w.reflowtex.inspect.paints;
+    const still = w.__lastPaints === p && performance.now() - w.__since > 250;
+    if (w.__lastPaints !== p) { w.__lastPaints = p; w.__since = performance.now(); }
+    return still;
+  }, undefined, { polling: 50, timeout: 10000 });
   await page.waitForFunction(() => document.documentElement.getAttribute('data-latex-selection') === 'bands');
   await expect(page.getByRole('radio', { name: 'Even' })).toHaveAttribute('aria-checked', 'true');
   await select(page);
