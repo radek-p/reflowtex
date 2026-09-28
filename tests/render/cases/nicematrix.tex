@@ -1,0 +1,23 @@
+% nicematrix: the rules of hvlines, \Block contents (a rotated one across two
+% rows, multi-line ones) and a matrix's dotted lines are PGF pictures placed
+% from positions the cells' own pictures leave in the .aux. The rules and dots
+% were lost, and the blocks piled up at one point.
+\documentclass{article}
+\usepackage{nicematrix}
+\begin{document}
+A paragraph before the table, long enough to break across lines
+differently at every width the test tries, so that the table moves when
+the text is reflowed.
+
+\begin{center}
+\begin{NiceTabular}{|c|c|c|}[hvlines]
+  & \textbf{sparse} & \textbf{dense} \\
+  \Block{2-1}{\rotate \textbf{local}} & \Block[l]{}{first line\\second line} & one \\
+  & two & \Block[l]{}{three\\four} \\
+\end{NiceTabular}
+\end{center}
+Text between the table and the matrix, with a few more words to fill the
+line, and a matrix with dotted lines:
+\[ \begin{pNiceMatrix} 1 & \Cdots & 1 \\ \Vdots & & \Vdots \\ 0 & \Cdots & 0 \end{pNiceMatrix} \]
+and a last line after it.
+\end{document}

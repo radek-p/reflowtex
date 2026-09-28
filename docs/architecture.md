@@ -33,7 +33,10 @@ metric-identical picture placeholder. This works for ordinary `tikzpicture` and
 front ends such as `tikz-cd`; their PDF drawing operators are opaque to the node
 renderer and are not reproduced individually. Only the outermost picture is
 captured: a picture inside another (a `\tikz` in a node, the one a pgfplots axis
-opens) is drawn as part of the outer one.
+opens) is drawn as part of the outer one. A `nicematrix` environment (its
+rules, `\Block`s and dotted lines are PGF pictures placed from the positions its
+cells record in the `.aux`) is captured the same way, whole, and the snippet
+gets a second pass (`site.ts` `passesFor`).
 
 The template loads the serializer and TikZ before substituting the caller's
 preamble, so the preamble can add packages and TikZ libraries on top. It installs

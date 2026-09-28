@@ -389,13 +389,27 @@
   \else
     \expandafter\reflowtexOrigEndtikzpicture
   \fi}
-\def\reflowtexCaptureTikzpicture{%
+\def\reflowtexCaptureTikzpicture{\reflowtexCaptureBegin\reflowtexOrigTikzpicture}
+\def\reflowtexCaptureEndtikzpicture{\reflowtexOrigEndtikzpicture\reflowtexCaptureEnd}
+% The capture itself, for anything PGF draws: \reflowtexCaptureBegin opens the
+% box, \reflowtexCaptureEnd closes it, ships it and leaves the placeholder. In
+% maths the box is a formula in the style it was begun in (LuaTeX's
+% \mathstyle), so a matrix keeps its size and its axis.
+\newif\ifreflowtexCaptureMath
+\def\reflowtexCaptureBegin{%
   \global\advance\reflowtexPicCount by 1
   \edef\reflowtexThisPic{\the\reflowtexPicCount}%
-  \setbox\reflowtexTikzBox=\hbox\bgroup
-    \reflowtexOrigTikzpicture}
-\def\reflowtexCaptureEndtikzpicture{%
-    \reflowtexOrigEndtikzpicture
+  \ifmmode
+    \reflowtexCaptureMathtrue
+    \edef\reflowtexCaptureStyle{\ifcase\numexpr\mathstyle/2\relax
+      \noexpand\displaystyle\or\noexpand\textstyle\or\noexpand\scriptstyle\else\noexpand\scriptscriptstyle\fi}%
+    \setbox\reflowtexTikzBox=\hbox\bgroup$\reflowtexCaptureStyle\m@th
+  \else
+    \reflowtexCaptureMathfalse
+    \setbox\reflowtexTikzBox=\hbox\bgroup
+  \fi}
+\def\reflowtexCaptureEnd{%
+  \ifreflowtexCaptureMath$\fi
   \egroup
   \reflowtexTikzWidth=\wd\reflowtexTikzBox
   \reflowtexTikzHeight=\ht\reflowtexTikzBox
@@ -425,6 +439,29 @@
     \dp\reflowtexTikzBox=\reflowtexTikzDepth
     \box\reflowtexTikzBox
   \endgroup}
+
+% nicematrix draws with PGF too, but not in one picture: every cell has a
+% small picture of its own, remembering its place on the page (remember
+% picture), and the rules (hvlines), \Block contents, dotted lines and
+% \CodeAfter's drawing are pictures placed from those positions. Captured
+% cell by cell, each would be on a page of its own and nothing could find its
+% place; left in the text, the drawing (PDF literals) is lost. So the whole
+% environment is the picture, captured like the outermost TikZ picture (a
+% TikZ picture inside it is part of it). Its positions come from the .aux,
+% as in any document: the snippet needs a second pass (site.ts passesFor).
+\def\reflowtexCaptureEnvBegin{%
+  \global\advance\reflowtexTikzNesting by 1
+  \ifnum\reflowtexTikzNesting=1 \expandafter\reflowtexCaptureBegin\fi}
+\def\reflowtexCaptureEnvEnd{%
+  \global\advance\reflowtexTikzNesting by -1
+  \ifnum\reflowtexTikzNesting=0 \expandafter\reflowtexCaptureEnd\fi}
+\def\reflowtexCaptureEnvironment#1{%
+  \AddToHook{env/#1/before}{\reflowtexCaptureEnvBegin}%
+  \AddToHook{env/#1/after}{\reflowtexCaptureEnvEnd}}
+\@for\reflowtex@env:={NiceTabular,NiceTabular*,NiceTabularX,NiceArray,NiceArrayWithDelims,%
+    NiceMatrix,pNiceMatrix,bNiceMatrix,BNiceMatrix,vNiceMatrix,VNiceMatrix,%
+    pNiceArray,bNiceArray,BNiceArray,vNiceArray,VNiceArray}\do
+  {\expandafter\reflowtexCaptureEnvironment\expandafter{\reflowtex@env}}
 \makeatother
 
 % ── Cross-reference capture ──────────────────────────────────────────────────

@@ -22,7 +22,13 @@ export const DEFAULT_SOURCE_URL = process.env.REFLOWTEX_SOURCE_URL ?? 'https://g
  *  column from the pass before), stopping as soon as nothing changes. */
 export const REF_RE = /\\(?:(?:eq|auto|c|C|name|page)?ref\*?\{|tableofcontents|listof(?:figures|tables)|cite)/;
 export const REF_PASSES = 3;
-export const passesFor = (content: string): number => (REF_RE.test(content) ? REF_PASSES : 1);
+/** PGF pictures that remember their position on the page (`remember
+ *  picture`, and nicematrix, which places its rules, blocks and dotted lines
+ *  by the nodes of its cells): each writes where it was shipped to the .aux,
+ *  and the pictures of the next run are drawn from those positions. In the
+ *  first run every one is taken to be at the same point. */
+export const POSITIONS_RE = /remember\s*picture|\\pgfrememberpicturepositiononpagetrue|\\begin\{[pbBvV]?Nice(?:Tabular\*?|TabularX|Array|ArrayWithDelims|Matrix)\}|\\tikzmark/;
+export const passesFor = (content: string): number => (REF_RE.test(content) || POSITIONS_RE.test(content) ? REF_PASSES : 1);
 
 /** The schema as a page embeds it. */
 export const schemaBase64 = (): string => Buffer.from(protoText(), 'utf8').toString('base64');

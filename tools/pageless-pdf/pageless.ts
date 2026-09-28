@@ -46,13 +46,14 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 const LATEX_DIR = resolve(HERE, '../../src/latex');
 
 /** The template with the shipper loaded and the end-of-document hook (and,
- *  unless `capture`, TikZ's own \tikzpicture back). */
+ *  unless `capture`, TikZ's own \tikzpicture back, and nicematrix's environments
+ *  drawn by TeX in the galley too). */
 export function instrument(template: string, margin: string, capture = true): string {
   const serializerLine = '\\directlua{dofile("serializer.lua")}';
   if (!template.includes(serializerLine)) throw new Error('template does not load serializer.lua');
   template = template.replace(serializerLine, () => `${serializerLine}\n\\directlua{dofile("pageless_pdf.lua")}`);
   if (!capture && !template.includes('\\let\\reflowtexOrigTikzpicture\\tikzpicture')) throw new Error('template does not capture TikZ pictures');
-  const restore = capture ? '' : '\\let\\tikzpicture\\reflowtexOrigTikzpicture\n\\let\\endtikzpicture\\reflowtexOrigEndtikzpicture\n';
+  const restore = capture ? '' : '\\let\\tikzpicture\\reflowtexOrigTikzpicture\n\\let\\endtikzpicture\\reflowtexOrigEndtikzpicture\n\\let\\reflowtexCaptureEnvBegin\\relax\n\\let\\reflowtexCaptureEnvEnd\\relax\n';
   const hook = restore + '\\AddToHook{enddocument/afterlastpage}{%\n'
     + `  \\pdfvariable horigin=${margin} \\pdfvariable vorigin=0pt\n`
     + `  \\directlua{Pageless.ship{margin = tex.sp("${margin}")}}}\n`;
