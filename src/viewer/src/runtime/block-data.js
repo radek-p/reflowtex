@@ -24,7 +24,8 @@ export const allData = [];                     // every block's data, in page or
 // times a second, not on every frame: placing it rebuilds and measures the
 // text of every paragraph near the window, which on a phone cost frames. A
 // placement is always due after the last reflow, so the layer ends where the
-// lines are.
+// lines are. reflowtex:layout says whether the reflow was a quick one (detail
+// quick); each placement of the layer sends reflowtex:layer (runtime/a11y.js).
 const LAYER_MS = 200;
 const layerTimers = new Map();                 // a block → its placement to come
 export function announceLayout(el, quick = false) {
@@ -40,5 +41,5 @@ export function announceLayout(el, quick = false) {
         layerTimers.delete(el);
         placeAccessibleLayer(data);
     }
-    el.dispatchEvent(new CustomEvent('reflowtex:layout', { bubbles: true, detail: { block: el } }));
+    el.dispatchEvent(new CustomEvent('reflowtex:layout', { bubbles: true, detail: { block: el, quick } }));
 }

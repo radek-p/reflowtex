@@ -92,28 +92,47 @@ test('the layer follows a reflow', async ({ openPage }) => {
 // A column that animates its width (the website's breathing hero) reflows
 // its block on every frame. Placing the layer rebuilds and measures the text
 // of each paragraph near the window, and done on every frame it cost a phone
-// frames: the animation stuttered. It is placed a few times a second while
-// the width moves, and once more after the last reflow.
-test('while the width moves, the layer is placed now and then, and on the lines at the end', async ({ openPage }) => {
+// frames: the animation stuttered. While the width moves (a quick reflow), a
+// reflow does not place the layer: one placement at a time waits for its
+// timer; after the last reflow the layer is placed on the lines. Told by the
+// events, not by counting frames against time: a slow browser (CI's WebKit
+// drew 14 frames a second) passes and fails as a fast one does. A placement
+// inside a reflow sends reflowtex:layer in the same call as its
+// reflowtex:layout, before the microtasks run.
+test('while the width moves, the layer waits for its timer, and is placed on the lines at the end', async ({ openPage }) => {
   const page = await openPage('mathml', { width: 900, height: 600 });
-  const counts = await page.evaluate(() => new Promise<{ reflows: number; placings: number }>(resolve => {
+  await page.evaluate(() => new Promise<void>(resolve => {
     const block = document.querySelector<HTMLElement>('.latex-block[data-nodelist-b64]')!;
-    const layer = block.previousElementSibling!;
-    let reflows = 0, placings = 0, placed = false;
-    block.addEventListener('reflowtex:layout', () => { reflows++; });
-    new MutationObserver(() => { placed = true; }).observe(layer, { attributes: true, subtree: true, childList: true });
+    const w = window as any;
+    const log = w.__layer = { quick: 0, placedInQuick: 0, waiting: 0, seq: 0, lastQuick: 0, lastPlaced: 0 };
+    let justPlaced = false;
+    block.addEventListener('reflowtex:layer', () => {
+      log.lastPlaced = ++log.seq;
+      justPlaced = true;
+      queueMicrotask(() => { justPlaced = false; });
+    });
+    block.addEventListener('reflowtex:layout', e => {
+      if (!(e as CustomEvent).detail.quick) return;                // the settling pass places it at once
+      log.quick++;
+      log.lastQuick = ++log.seq;
+      if (justPlaced) log.placedInQuick++;
+      const n = w.reflowtex.inspect.pending().filter((s: string) => s === 'accessible layer').length;
+      log.waiting = Math.max(log.waiting, n);
+    });
     const t0 = performance.now();
+    let i = 0;
     (function step(now: number) {
-      if (placed) { placings++; placed = false; }                  // frames in which the layer moved
-      if (now - t0 > 1000) { resolve({ reflows, placings }); return; }
-      block.style.width = `${600 - 200 * Math.sin((now - t0) / 1000 * Math.PI)}px`;
+      if (log.quick >= 30 || now - t0 > 10000) { resolve(); return; }
+      block.style.width = `${600 - 200 * Math.sin(i++ / 10)}px`;
       requestAnimationFrame(step);
     })(t0);
   }));
-  expect(counts.reflows).toBeGreaterThan(20);
-  expect(counts.placings).toBeGreaterThan(0);
-  expect(counts.placings).toBeLessThan(counts.reflows / 3);
   await idle(page);
+  const log = await page.evaluate(() => (window as any).__layer);
+  expect(log.quick, 'the width moved').toBeGreaterThanOrEqual(30);
+  expect(log.placedInQuick, 'placed by a quick reflow').toBe(0);
+  expect(log.waiting, 'one placement waiting at a time').toBe(1);
+  expect(log.lastPlaced, 'placed after the last reflow').toBeGreaterThan(log.lastQuick);
   expectPlaced(await layerBoxes(page));
 });
 

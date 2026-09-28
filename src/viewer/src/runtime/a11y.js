@@ -242,7 +242,8 @@ export function layerOf(el) {
     return null;
 }
 
-/** Lay the block's accessible layer, if it has one, over its lines. */
+/** Lay the block's accessible layer, if it has one, over its lines; then
+ *  send reflowtex:layer (bubbling, detail { block }). */
 export function placeAccessibleLayer(data) {
     const el = data && data.el;
     const layer = layerOf(el);
@@ -341,6 +342,7 @@ export function placeAccessibleLayer(data) {
     fitText(refit);
     fitRuns(runs);
     scaleOnto(scaled);
+    el.dispatchEvent(new CustomEvent('reflowtex:layer', { bubbles: true, detail: { block: el } }));
 }
 
 // ── Line by line ─────────────────────────────────────────────────────────────

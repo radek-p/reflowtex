@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 0cb2a168ceb6443c3926501a1d9117090aaa0e2e8af9e632bd287f30066dd015
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 1eae994252bd35370538793dc4054389e06f272b7c4cf4b62ac400b2ee435f05
 'use strict';
 "use strict";
 (() => {
@@ -3201,6 +3201,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     fitText(refit);
     fitRuns(runs);
     scaleOnto(scaled);
+    el.dispatchEvent(new CustomEvent("reflowtex:layer", { bubbles: true, detail: { block: el } }));
   }
   function glyphText(cp) {
     if (cp >= 57344 && cp <= 63743 || cp >= 983040) return "";
@@ -3548,7 +3549,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       layerTimers.delete(el);
       placeAccessibleLayer(data);
     }
-    el.dispatchEvent(new CustomEvent("reflowtex:layout", { bubbles: true, detail: { block: el } }));
+    el.dispatchEvent(new CustomEvent("reflowtex:layout", { bubbles: true, detail: { block: el, quick } }));
   }
 
   // src/host/widgets.js
