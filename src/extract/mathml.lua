@@ -34,6 +34,20 @@ local function env()
     return ok and v or nil
 end
 
+-- Whether this math is typeset inside a formula still being built: LaTeX
+-- sets an accent's base in a box of its own inside the formula (luamml 0.9
+-- converts it too), at the same count and level, before the formula ends.
+local math_mode
+for k, v in pairs(tex.getmodevalues and tex.getmodevalues() or {}) do
+    if v == 'math' then math_mode = k end
+end
+local function inside_formula()
+    for i = 0, tex.nest.ptr - 1 do
+        if math.abs(tex.nest[i].mode) == math_mode then return true end
+    end
+    return false
+end
+
 local displays, seen, given = {}, {}, {}
 luatexbase.add_to_callback('pre_mlist_to_hlist_filter', function(mlist, style)
     local n, level = count('g__math_math_total_int'), count('@math@level')
@@ -50,7 +64,8 @@ luatexbase.add_to_callback('pre_mlist_to_hlist_filter', function(mlist, style)
     -- A number already given is not this math's: math LaTeX does not count
     -- as a formula (the url package sets a URL in math mode, for its breaks)
     -- leaves the counter at the formula before.
-    elseif level == 1 and not given[n] then
+    -- An accent's base, boxed inside the formula, is not the formula either.
+    elseif level == 1 and not given[n] and not inside_formula() then
         local startmath = tex.nest.top.tail
         if startmath and startmath.id == math_t and startmath.subtype == 0 then
             given[n] = true
