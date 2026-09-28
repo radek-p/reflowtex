@@ -1205,7 +1205,7 @@ function stopPick() {
 // An element (the Elements panel's $0) → the node it draws.
 function fromElement(el) {
     if (!el || !el.closest) return null;
-    const block = el.closest('[data-nodelist-b64]');
+    const block = el.closest('[data-nodelist-b64], [data-latex-view]');
     if (!block || !I.state(block)) return null;
     const bid = blockId(block);
     for (const sid of segmentsOf(bid)) {

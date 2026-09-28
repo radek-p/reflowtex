@@ -29,6 +29,7 @@ import { surfacesOf, type Cache, type Edges, type SurfaceImpl } from './surface.
 import type { BlockHost, KindDef, Instance, Surface } from './types.ts';
 import { kindDef, onKindChange } from './kinds.ts';
 import { frame as nextFrame } from '../runtime/pending.js';
+import { BLOCK_SELECTOR } from '../runtime/page.js';
 
 interface HostRecord {
     box: HTMLElement;
@@ -185,7 +186,7 @@ export function layoutHostedSegment(s: any, seg: any, widthPt: number, cache: Ca
 // Rebuild every block with instances of `kind`, so they are drawn anew.
 function redraw(kind: string) {
     for (const rec of [...records]) if (rec.kind === kind) dispose(rec);
-    for (const el of document.querySelectorAll<HTMLElement>('[data-nodelist-b64]')) {
+    for (const el of document.querySelectorAll<HTMLElement>(BLOCK_SELECTOR)) {
         const block = blockOf(el);
         if (block && blockData.get(el) && block.instances({ kind, placement: 'block' }).length) rerenderBlock(el);
     }

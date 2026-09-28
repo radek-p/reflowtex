@@ -30,12 +30,12 @@
 // with for=key becomes one of its parts, by the aside's kind.
 
 import type {
-    Action, Block, DataPart, Instance, InstanceQuery, Part, Placement, Presentation, TypesetPart,
+    Action, Block, DataPart, Instance, InstanceQuery, Part, Placement, Presentation, TextOptions, TypesetPart,
 } from './types.ts';
 import { onAction } from './actions.ts';
 
 /** Set by the viewer's slots (slots.js): a text instance's own text. */
-export const textHooks = { set: (_id: string, _text: string | null) => {} };
+export const textHooks = { set: (_id: string, _text: string | null, _mirror?: boolean) => {} };
 
 // The decoded document, as far as the normaliser reads it (protobuf.js
 // objects: unset fields absent, enums as lowercase names).
@@ -86,9 +86,9 @@ export class InstanceImpl implements Instance {
     ) {}
     part(role: string) { return this.parts.get(role); }
     onAction(verb: string, fn: (a: Action) => boolean | void) { return onAction(this, verb, fn); }
-    setText(text: string | null) {
+    setText(text: string | null, options: TextOptions = {}) {
         if (this.placement !== 'text') throw new TypeError(`setText: ${this.id} is not a \\webtext`);
-        textHooks.set(this.id, text === null || text === undefined ? null : String(text));
+        textHooks.set(this.id, text === null || text === undefined ? null : String(text), !!options.mirror);
     }
     anchor() { return this.source.type === 'none' ? null : this.anchorOf(this.source); }
 }

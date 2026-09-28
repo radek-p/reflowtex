@@ -68,8 +68,16 @@ export interface Instance {
     onAction(verb: string, fn: (action: Action) => boolean | void): () => void;
     /** A text instance (\webtext): show `text` instead of the default, set
      *  the way a browser sets text, the paragraph broken again around it;
-     *  null brings the default back. Wins over Host.setText for its name. */
-    setText(text: string | null): void;
+     *  null brings the default back. Wins over Host.setText for its name.
+     *  In this view of its block only, unless `mirror` (TextOptions). */
+    setText(text: string | null, options?: TextOptions): void;
+}
+
+export interface TextOptions {
+    /** The same text in this instance of every view of the block
+     *  (Block.views), those mounted later too; a text a view is given of its
+     *  own afterwards wins there. */
+    mirror?: boolean;
 }
 
 /** A colour map: per theme, the colours TeX produced (#rrggbb) → what that
@@ -92,7 +100,8 @@ export interface MarkHandle {
  *  glyph of the block (footnotes and boxes included) numbered from 0 in
  *  reading order, the same on every load of the same document. */
 export interface TextRange {
-    /** Block.key. */
+    /** Block.key: of the view the range is in (each view of a block has a
+     *  key of its own; the positions are the same in all of them). */
     readonly block: string;
     /** The first glyph and the last (inclusive). */
     readonly from: number;
@@ -108,6 +117,10 @@ export interface LiveMarkOptions {
     id?: string;
     /** Space-separated, as \webclass's: in the bands' data-mark. */
     classes?: string;
+    /** Show the mark in every view of each range's block (Block.views),
+     *  those mounted later too, not only in the view the range names.
+     *  Default false: a mark is its view's own. */
+    mirror?: boolean;
 }
 
 /** A mark made while the page is open (host.addMark): a reader's
@@ -118,6 +131,8 @@ export interface LiveMark extends MarkHandle {
     readonly classes: string;
     /** Where it is, as it was resolved: save these to make it again. */
     readonly ranges: readonly TextRange[];
+    /** Made with `mirror`: shown in every view of its blocks. */
+    readonly mirror: boolean;
     /** False once removed (or replaced by a mark of the same id). */
     readonly live: boolean;
     setClasses(classes: string): void;
@@ -216,6 +231,12 @@ export interface Block {
     readonly el: HTMLElement;
     /** Unique on the page, stable for its life. Instance ids start with it. */
     readonly key: string;
+    /** Its name among the views of its block (host.mount(el, { of, view })):
+     *  as given, else v1, v2, … in the order mounted. */
+    readonly view: string;
+    /** Every view of the same compiled block now on the page, this one
+     *  included, in the order mounted; a block shown nowhere else has one. */
+    views(): Block[];
     /** Top-level instances, in document order. */
     readonly roots: readonly Instance[];
     /** Every instance of the block, depth first, matching the query. */
@@ -226,6 +247,8 @@ export interface Block {
      *  instances is undone, its observers stop, and its element is emptied.
      *  The element may then be removed, or mounted again. */
     destroy(): void;
+    /** The same as destroy: this view goes; the block's other views stay. */
+    unmount(): void;
 }
 
 /** Where the viewer shows a detached instance, for its kind to draw in:
@@ -379,8 +402,26 @@ export interface Host {
     /** Render a block element added after the page loaded (a framework's,
      *  say): one carrying data-nodelist-b64, as the integrations write it.
      *  Resolves when it is laid out; a block already rendered resolves at
-     *  once. */
-    mount(el: HTMLElement): Promise<Block>;
+     *  once. With `of`, `el` (an empty element) becomes another view of that
+     *  block instead: see BlockMountOptions. */
+    mount(el: HTMLElement, options?: BlockMountOptions): Promise<Block>;
+    /** Every view of a block (a Block, its element, or any view's key), in
+     *  the order mounted; [] when it is not on the page. */
+    views(of: Block | Element | string): Block[];
+}
+
+export interface BlockMountOptions {
+    /** The block to show again (a Block, its element, or its key). The new
+     *  view is laid out at its own width and re-broken on its own, with its
+     *  own instances, live marks and accessible layer; it shares the block's
+     *  compiled data, fonts and glyph metrics. host.setText reaches every
+     *  view; Instance.setText and host.addMark the one view unless mirrored.
+     *  Its anchors' ids end in `--<its key>` (the block's own view has the
+     *  plain ones), and a reference in it goes to its own anchor.
+     *  Unmounting it (Block.unmount) leaves the other views as they are. */
+    of?: Block | Element | string;
+    /** Its name among the block's views (Block.view); unique among them. */
+    view?: string;
 }
 
 declare global {

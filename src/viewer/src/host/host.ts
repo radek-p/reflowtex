@@ -18,7 +18,12 @@ import { destroyBlock, mountBlock } from '../runtime/init.js';
 import { blockData } from '../runtime/blocks.js';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
 
-interface ViewerBlockData extends BlockData { cache: { blockKey?: string } }
+interface ViewerBlockData extends BlockData {
+    cache: { blockKey?: string };
+    /** Its name among its block's views, and what they share (init.js). */
+    view: string;
+    source: { views: ViewerBlockData[] };
+}
 
 // A point in an SVG element's own coordinates, in the window's: through its
 // transform, as WebKit gives an empty or text element's box wrongly.
@@ -36,6 +41,10 @@ class BlockImpl implements Block {
     constructor(readonly data: ViewerBlockData) {}
     get el() { return this.data.el; }
     get key() { return this.data.cache.blockKey || ''; }
+    get view() { return this.data.view; }
+    views(): Block[] {
+        return this.data.source.views.map(d => byEl.get(d.el)).filter((b): b is BlockImpl => !!b && blocks.includes(b));
+    }
     get roots(): readonly Instance[] {
         if (!this._roots) {
             this._roots = normalise(this.data.doc, this, this.key,
@@ -52,6 +61,7 @@ class BlockImpl implements Block {
         return this.byId.get(id);
     }
     destroy() { destroyBlock(this.el); }
+    unmount() { destroyBlock(this.el); }
     on<E extends keyof BlockEvents>(event: E, fn: BlockEvents[E]): () => void {
         // 'layout' is the block's reflowtex:layout DOM event (announceLayout).
         const h = (e: Event) => { if ((e as CustomEvent).detail?.block === this.el) fn(); };
@@ -93,6 +103,12 @@ export function blockOf(el: Element): BlockImpl | undefined {
     }
     return b;
 }
+// A block given as itself, its element or its key (any view's).
+function blockFrom(of: Block | Element | string): BlockImpl | undefined {
+    const b = typeof of === 'string' ? blocks.find(x => x.key === of)
+        : of instanceof Element ? byEl.get(of) : of as BlockImpl;
+    return b && blocks.includes(b) ? b : undefined;
+}
 const blockListeners = new Set<(b: Block) => void>();
 
 export const host: Host = {
@@ -113,8 +129,14 @@ export const host: Host = {
         const b = blocks.find(b => id.startsWith(b.key + '/'));
         return b && b.find(id);
     },
-    async mount(el) {
-        await mountBlock(el);
+    views(of) {
+        const b = blockFrom(of);
+        return b ? b.views() : [];
+    },
+    async mount(el, options = {}) {
+        const of = options.of === undefined ? null : blockFrom(options.of);
+        if (options.of !== undefined && !of) throw new Error('host.mount: `of` is not a block on the page');
+        await mountBlock(el, of ? of.data : null, options.view ?? null);
         const b = blockOf(el);
         if (!b) throw new Error('host.mount: not a block (no data-nodelist-b64, or it failed to render)');
         return b;

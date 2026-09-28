@@ -21,3 +21,7 @@ export const api = window.reflowtex = window.reflowtex || {};
 if (/[?&]reflowtex-debug\b/.test(location.search)) api.debug = true;
 export const debugLog = (...a) => { if (api.debug) console.debug(...a); };
 debugLog(`[latex-viewer] build ${BUILD}`);
+
+// A block element: one the integrations wrote (data-nodelist-b64), or a view
+// of it a page mounted elsewhere (host.mount(el, { of }), data-latex-view).
+export const BLOCK_SELECTOR = '[data-nodelist-b64], [data-latex-view]';

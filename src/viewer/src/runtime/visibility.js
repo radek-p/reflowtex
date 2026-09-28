@@ -5,6 +5,7 @@ import { paintDocument, paintSegment } from '../engine/paint.js';
 import { announceLayout } from './block-data.js';
 import { blockData } from './blocks.js';
 import { frame } from './pending.js';
+import { BLOCK_SELECTOR } from './page.js';
 // ── end of imports
 
 // ── Per-segment painting (grow-only) ──────────────────────────────────────────
@@ -35,7 +36,7 @@ export const segIO = new IntersectionObserver(entries => {
         s.intersecting = e.isIntersecting;
         if (e.isIntersecting && (!s.painted || s.dirty)) {
             paintSegment(ref.cache.fontInfo, ref.cache, ref.i);
-            const block = ref.cache.dom.root.closest('[data-nodelist-b64]');
+            const block = ref.cache.dom.root.closest(BLOCK_SELECTOR);
             if (block) painted.add(block);
         }
     }

@@ -11,8 +11,10 @@ import { disposeHosts } from '../host/block-hosts.ts';
 import { disposePieces } from '../host/inline.ts';
 import { removeMarginNotes } from '../defaults/margin-notes.ts';
 import { inspectable } from '../host/inspect.js';
-import { installLinks, installWidgetStates, pageLabels } from '../host/links.js';
-import { applySlots, slotBlocks } from '../host/slots.js';
+import { installLinks, installWidgetStates, pageLabels, viewSuffix } from '../host/links.js';
+import { applySlots, slotBlocks, forgetInstanceTexts } from '../host/slots.js';
+import { viewAdded, viewRemoved } from '../host/marks.ts';
+import { copyLayer, dropLayer, layerOf } from './a11y.js';
 import { installViewerStyles } from '../index.js';
 import {
     NATURAL_PROBE_PT, blockData, naturalWidthPt, reflowBlock, remeasureStreams, ro, scheduleFontRepaint, unobserveAll,
@@ -52,12 +54,26 @@ export function resolvePictures(doc) {
 }
 
 
-export async function initBlock(el) {
-    const nodelistB64 = el.dataset.nodelistB64;
+// ── Views ─────────────────────────────────────────────────────────────────────
+// A block may be shown in several elements at once (host.mount(el, { of })):
+// each a *view*, laid out at its own width, with its own layout, drawing,
+// instances, marks and accessible layer. What they share is the block's
+// source: the compiled bytes, the fonts, the glyph metrics and pictures,
+// which nothing changes. Each view decodes its own working copy of the node
+// lists, which live text, widgets and line breaks change per view.
+function newSource(b64, doc, fontInfo, el) {
+    return { b64, glyph_metrics: doc.glyph_metrics, pictures: doc.pictures, fontInfo,
+             layer: layerOf(el), views: [], seq: 0 };
+}
+
+export async function initBlock(el, of = null, viewName = null) {
+    const nodelistB64 = of ? of.b64 : el.dataset.nodelistB64;
     if (!nodelistB64) throw new Error('Missing data-nodelist-b64 attribute');
 
     const t0        = performance.now();
     const doc       = decodeBlock(nodelistB64);
+    // A view: the tables no view changes are the source's, not a copy.
+    if (of) { doc.glyph_metrics = of.glyph_metrics; doc.pictures = of.pictures; }
     resolvePictures(doc);
     // Declare this block's labels before anything of it is painted, so its own
     // references resolve without needing the page map at all. Blocks initialise
@@ -66,7 +82,7 @@ export async function initBlock(el) {
     for (const label of doc.anchors || []) pageLabels.add(label);
     const t1        = performance.now();
     const fontsData = Object.fromEntries(doc.fonts.map(f => [String(f.id), f]));
-    const fontInfo  = await registerFonts(fontsData);
+    const fontInfo  = of ? of.fontInfo : await registerFonts(fontsData);
     const t2        = performance.now();
 
     const params  = paramsFromEl(el);
@@ -83,6 +99,22 @@ export async function initBlock(el) {
                     relayout: () => { if (blockData.get(el)) { blockData.get(el).lastWidth = -1; reflowBlock(el); } } };
     const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false,
                     seq: ++docSeq, el };
+    const source = data.source = of || newSource(nodelistB64, doc, fontInfo, el);
+    data.view = viewName || `v${source.seq + 1}`;
+    source.seq++;
+    source.views.push(data);
+    if (of) {
+        // Its anchors' ids are its own (the block's view has the plain ones).
+        el.dataset.latexView = data.view;
+        cache.anchorSuffix = `--${cache.blockKey}`;
+        viewSuffix.set(el, cache.anchorSuffix);
+        // Its own accessible layer: then its drawing is hidden from a screen
+        // reader, as the block's is.
+        if (copyLayer(of.layer, el) && !el.hasAttribute('aria-hidden')) {
+            el.setAttribute('aria-hidden', 'true');
+            data.hidAria = true;
+        }
+    }
     blockData.set(el, data);
     docData.set(doc, data);
     allData.push(data);
@@ -91,6 +123,8 @@ export async function initBlock(el) {
         slotBlocks.add(el);
         applySlots(fontInfo, doc);
     }
+    // Live marks made to show in every view of the block have this one too.
+    if (of) viewAdded(data);
     // Layout first (this sets the svg's final height), then decide from the
     // block's resulting position whether to paint now or on approach. Blocks
     // are initialised top to bottom, so earlier blocks already have their
@@ -111,7 +145,7 @@ export async function initBlock(el) {
         const entries = doc.outline.map(e => ({
             kind: e.kind || '', env: e.env || '', level: e.level || 0,
             number: e.number || '', title: e.title || '',
-            id: (doc.anchors || [])[(e.anchor || 0) - 1] || null,
+            id: ((doc.anchors || [])[(e.anchor || 0) - 1] || null) && doc.anchors[e.anchor - 1] + (cache.anchorSuffix || ''),
         }));
         el.reflowtexOutline = entries;
         el.dispatchEvent(new CustomEvent('reflowtex:outline', { bubbles: true, detail: { block: el, entries } }));
@@ -175,10 +209,23 @@ function renderOnce(el) {
     return p;
 }
 
-/** host.mount: render one block element, added after the page loaded. */
-export async function mountBlock(el) {
+/** host.mount: render one block element, added after the page loaded; with
+ *  `of` (another block's data), a view of that block, named `viewName`.
+ *  @param {HTMLElement} el
+ *  @param {any} [of]
+ *  @param {string | null} [viewName]
+ */
+export async function mountBlock(el, of = null, viewName = null) {
     installPage();
-    await renderOnce(el);
+    if (of && !blockData.get(el) && !rendering.get(el)) {
+        if (viewName && of.source.views.some(d => d.view === viewName))
+            throw new Error(`host.mount: the block already has a view "${viewName}"`);
+        const p = track('block set-up', initBlock(el, of.source, viewName).finally(() => rendering.delete(el)));
+        rendering.set(el, p);
+        await p;
+    } else {
+        await renderOnce(el);
+    }
     watchFonts();
 }
 
@@ -215,6 +262,14 @@ export function destroyBlock(el) {
     if (!data) return;
     closeFootnote();
     removeMarginNotes(data);
+    // A view's own: its place among the block's views, the marks and texts
+    // shown in it, its copy of the accessible layer.
+    viewRemoved(data);
+    forgetInstanceTexts(data.cache.blockKey);
+    const views = data.source.views, v = views.indexOf(data);
+    if (v >= 0) views.splice(v, 1);
+    dropLayer(el);
+    if (data.hidAria) el.removeAttribute('aria-hidden');
     disposeSurfaces(el);
     disposeHosts(data.cache);
     disposePieces(data.cache);
@@ -231,4 +286,5 @@ export function destroyBlock(el) {
     el.replaceChildren();
     el.style.removeProperty('width');
     el.style.removeProperty('padding-bottom');
+    if (!el.dataset.nodelistB64) delete el.dataset.latexView;
 }

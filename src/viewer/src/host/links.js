@@ -23,6 +23,9 @@ import { dispatchAction } from './actions.ts';
 export let linkMap    = {};        // label → href, from the page (#latex-link-map)
 export const pageLabels = new Set();  // labels defined by some block on this page
 export const linkTargets = new Map(); // label → the anchor element, once one exists
+// A view mounted from another (host.mount(el, { of })) → the suffix of its
+// anchors' ids: a reference in it goes to its own anchor.
+export const viewSuffix = new WeakMap();
 // The directory the viewer was loaded from, which is the site root. Same trick
 // as fontBase, and for the same reason: resolving from the script's own URL is
 // the one thing that is true whether the site is at a domain root, under a
@@ -199,7 +202,9 @@ export function installLinks() {
         const href = el && el.dataset.linkHref;
         if (!href) return;
         e.preventDefault();
-        const local = el.dataset.linkLabel && linkTargets.get(el.dataset.linkLabel);
+        const label = el.dataset.linkLabel, view = el.closest('[data-latex-view]');
+        const suffix = view && viewSuffix.get(view);
+        const local = label && ((suffix && document.getElementById(label + suffix)) || linkTargets.get(label));
         if (local) {
             local.scrollIntoView({ behavior: 'smooth', block: 'start' });
             // Leave the fragment in the address bar so the position is

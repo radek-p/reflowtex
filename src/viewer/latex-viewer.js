@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 1eae994252bd35370538793dc4054389e06f272b7c4cf4b62ac400b2ee435f05
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 d7172418c5938510e16b38ba44b8c7ade72fd88af3febf198bdf8bcc72c46df0
 'use strict';
 "use strict";
 (() => {
@@ -161,6 +161,7 @@
     if (api.debug) console.debug(...a);
   };
   debugLog(`[latex-viewer] build ${BUILD}`);
+  var BLOCK_SELECTOR = "[data-nodelist-b64], [data-latex-view]";
 
   // src/host/actions.ts
   var handlers = /* @__PURE__ */ new WeakMap();
@@ -206,7 +207,7 @@
   }
 
   // src/host/instances.ts
-  var textHooks = { set: (_id, _text) => {
+  var textHooks = { set: (_id, _text, _mirror) => {
   } };
   var InstanceImpl = class {
     constructor(id, kind, attrs, presentation, placement, parent, block, source, anchorOf) {
@@ -241,9 +242,9 @@
     onAction(verb, fn) {
       return onAction(this, verb, fn);
     }
-    setText(text) {
+    setText(text, options = {}) {
       if (this.placement !== "text") throw new TypeError(`setText: ${this.id} is not a \\webtext`);
-      textHooks.set(this.id, text === null || text === void 0 ? null : String(text));
+      textHooks.set(this.id, text === null || text === void 0 ? null : String(text), !!options.mirror);
     }
     anchor() {
       return this.source.type === "none" ? null : this.anchorOf(this.source);
@@ -1217,6 +1218,7 @@
   var linkMap = {};
   var pageLabels = /* @__PURE__ */ new Set();
   var linkTargets = /* @__PURE__ */ new Map();
+  var viewSuffix = /* @__PURE__ */ new WeakMap();
   var siteBase = document.currentScript && document.currentScript.src ? new URL(".", document.currentScript.src).href : typeof location !== "undefined" ? location.href : "/";
   function loadLinkMap() {
     const el = document.getElementById("latex-link-map");
@@ -1359,7 +1361,9 @@
       const href = el && el.dataset.linkHref;
       if (!href) return;
       e.preventDefault();
-      const local = el.dataset.linkLabel && linkTargets.get(el.dataset.linkLabel);
+      const label = el.dataset.linkLabel, view = el.closest("[data-latex-view]");
+      const suffix = view && viewSuffix.get(view);
+      const local = label && (suffix && document.getElementById(label + suffix) || linkTargets.get(label));
       if (local) {
         local.scrollIntoView({ behavior: "smooth", block: "start" });
         history.pushState(null, "", href);
@@ -1466,7 +1470,7 @@
       s.intersecting = e.isIntersecting;
       if (e.isIntersecting && (!s.painted || s.dirty)) {
         paintSegment(ref.cache.fontInfo, ref.cache, ref.i);
-        const block = ref.cache.dom.root.closest("[data-nodelist-b64]");
+        const block = ref.cache.dom.root.closest(BLOCK_SELECTOR);
         if (block) painted.add(block);
       }
     }
@@ -1663,20 +1667,36 @@
     });
   }
   var instanceTexts = /* @__PURE__ */ new Map();
+  var mirroredTexts = /* @__PURE__ */ new WeakMap();
   function setSlotText(name, text) {
     if (text === null || text === void 0) slotValues.delete(String(name));
     else slotValues.set(String(name), String(text));
     scheduleSlots();
   }
-  textHooks.set = (id, text) => {
-    if (text === null) instanceTexts.delete(id);
+  textHooks.set = (id, text, mirror = false) => {
+    const data = mirror && allData.find((d) => id.startsWith(d.cache.blockKey + "/"));
+    if (data && data.source) {
+      const local = id.slice(data.cache.blockKey.length + 1);
+      let texts = mirroredTexts.get(data.source);
+      if (!texts) mirroredTexts.set(data.source, texts = /* @__PURE__ */ new Map());
+      if (text === null) texts.delete(local);
+      else texts.set(local, text);
+      for (const v of data.source.views) instanceTexts.delete(`${v.cache.blockKey}/${local}`);
+    } else if (text === null) instanceTexts.delete(id);
     else instanceTexts.set(id, text);
     scheduleSlots();
   };
+  function forgetInstanceTexts(key) {
+    for (const id of [...instanceTexts.keys()]) if (id.startsWith(key + "/")) instanceTexts.delete(id);
+  }
   function textOf(doc, id, slot) {
-    const key = ((docData.get(doc) || {}).cache || {}).blockKey;
+    const data = docData.get(doc) || {};
+    const key = (data.cache || {}).blockKey;
     const own = key && instanceTexts.get(`${key}/t${id}`);
-    return own !== void 0 && own !== null ? own : slotValues.get(slot.name);
+    if (own !== void 0 && own !== null) return own;
+    const mirrored = data.source && mirroredTexts.get(data.source);
+    const shared = mirrored && mirrored.get(`t${id}`);
+    return shared !== void 0 ? shared : slotValues.get(slot.name);
   }
 
   // src/host/inline.ts
@@ -1739,7 +1759,7 @@
   }
   onKindChange((kind) => {
     let any = false;
-    for (const el of document.querySelectorAll("[data-nodelist-b64]")) {
+    for (const el of document.querySelectorAll(BLOCK_SELECTOR)) {
       const block = blockOf(el);
       for (const i of block ? block.instances({ kind, placement: "inline" }) : []) {
         versions.set(i.id, inlineVersion(i) + 1);
@@ -1938,6 +1958,9 @@
       get live() {
         return live.get(m.id) === m;
       },
+      get mirror() {
+        return m.mirror;
+      },
       setClasses(classes) {
         if (live.get(m.id) !== m || m.classes === classes) return;
         m.classes = classes;
@@ -1956,22 +1979,51 @@
       }
     };
   }
+  function markNodes(m, data, from, to) {
+    const ix = glyphIndex(data.doc);
+    m.blocks.add(data);
+    for (let i = from; i <= Math.min(to, ix.nodes.length - 1); i++) {
+      const n = ix.nodes[i];
+      const ids = onNode.get(n);
+      onNode.set(n, ids ? [...ids, m.id] : [m.id]);
+      m.nodes.push(n);
+    }
+  }
+  function viewAdded(data) {
+    for (const m of live.values())
+      for (const s of m.spans) if (s.source === data.source) markNodes(m, data, s.from, s.to);
+  }
+  function viewRemoved(data) {
+    for (const m of live.values()) {
+      if (!m.blocks.delete(data)) continue;
+      const at = glyphIndex(data.doc).at;
+      m.nodes = m.nodes.filter((n) => !at.has(n));
+    }
+  }
   function addMark(ranges, options = {}) {
     const id = options.id || `rtx-live-${++seq}`;
     live.get(id) && liveHandle(live.get(id)).remove();
-    const m = { id, classes: options.classes || "", ranges: [], nodes: [], blocks: /* @__PURE__ */ new Set() };
+    const m = {
+      id,
+      classes: options.classes || "",
+      ranges: [],
+      nodes: [],
+      blocks: /* @__PURE__ */ new Set(),
+      mirror: !!options.mirror,
+      spans: []
+    };
     for (const r of ranges) {
       const at = resolve(r);
       if (!at) continue;
       const ix = glyphIndex(at.data.doc);
       m.ranges.push({ block: r.block, from: at.from, to: at.to, text: textOf2(ix, at.from, at.to) });
-      m.blocks.add(at.data);
-      for (let i = at.from; i <= at.to; i++) {
-        const n = ix.nodes[i];
-        const ids = onNode.get(n);
-        onNode.set(n, ids ? [...ids, id] : [id]);
-        m.nodes.push(n);
+      const source = m.mirror && at.data.source;
+      if (!source) {
+        markNodes(m, at.data, at.from, at.to);
+        continue;
       }
+      m.spans.push({ source, from: at.from, to: at.to });
+      for (const d of source.views) if (d.el.isConnected || d === at.data) markNodes(m, d, at.from, at.to);
     }
     if (!m.nodes.length) return null;
     live.set(id, m);
@@ -1980,13 +2032,15 @@
     return liveHandle(m);
   }
   var overlaps = (a, b) => a.block === b.block && a.from <= b.to && b.from <= a.to;
+  var sourceOfKey = (key) => allData.find((d) => d.cache.blockKey === key)?.source;
+  var meets = (m, q) => m.ranges.some((r) => overlaps(r, q)) || m.spans.length > 0 && m.spans.some((s) => s.source === sourceOfKey(q.block) && s.from <= q.to && q.from <= s.to);
   function liveMarks(at) {
     let ms = [...live.values()];
     if (at instanceof Element) {
       const n = nodeOfEl.get(at), ids = n ? onNode.get(n) || [] : [];
       ms = ms.filter((m) => ids.includes(m.id));
     } else if (at) {
-      ms = ms.filter((m) => m.ranges.some((r) => at.some((q) => overlaps(r, q))));
+      ms = ms.filter((m) => at.some((q) => meets(m, q)));
     }
     return ms.map(liveHandle);
   }
@@ -3074,6 +3128,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     return m ? unescape(m[1]) : "";
   };
   var shipped = /* @__PURE__ */ new WeakMap();
+  var shippedStyle = /* @__PURE__ */ new WeakMap();
   function remember(piece) {
     if (!shipped.has(piece)) shipped.set(piece, piece.innerHTML);
   }
@@ -3091,7 +3146,9 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     }
   }
   var maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
+  var ownLayers = /* @__PURE__ */ new WeakMap();
   function layerOf(el) {
+    if (el && ownLayers.has(el)) return ownLayers.get(el);
     for (const s of el ? [el.previousElementSibling, el.nextElementSibling] : []) if (s && s.classList.contains("latex-a11y")) return s;
     return null;
   }
@@ -3112,6 +3169,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     });
     const content = data.doc.content || [];
     if (layer.dataset.placed !== "1") {
+      shippedStyle.set(layer, layer.getAttribute("style"));
       layer.style.cssText = ANCHOR;
       layer.dataset.placed = "1";
     }
@@ -3529,6 +3587,32 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         return true;
       });
     }
+  }
+  function copyLayer(layer, el) {
+    if (!layer || ownLayers.has(el)) return null;
+    const copy = layer.cloneNode(true);
+    if (copy.dataset.placed === "1") {
+      delete copy.dataset.placed;
+      const style = shippedStyle.get(layer);
+      if (style == null) copy.removeAttribute("style");
+      else copy.setAttribute("style", style);
+    }
+    [...copy.children].forEach((piece, i) => {
+      const shippedHTML = shipped.get(layer.children[i]);
+      if (shippedHTML !== void 0) piece.innerHTML = shippedHTML;
+      delete piece.dataset.lines;
+      delete piece.dataset.size;
+      piece.removeAttribute("style");
+    });
+    el.after(copy);
+    ownLayers.set(el, copy);
+    return copy;
+  }
+  function dropLayer(el) {
+    const copy = ownLayers.get(el);
+    if (!copy) return;
+    ownLayers.delete(el);
+    copy.remove();
   }
 
   // src/runtime/block-data.js
@@ -4495,7 +4579,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
   }
   function redraw(kind) {
     for (const rec of [...records]) if (rec.kind === kind) dispose(rec);
-    for (const el of document.querySelectorAll("[data-nodelist-b64]")) {
+    for (const el of document.querySelectorAll(BLOCK_SELECTOR)) {
       const block = blockOf(el);
       if (block && blockData.get(el) && block.instances({ kind, placement: "block" }).length) rerenderBlock(el);
     }
@@ -4513,6 +4597,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         layout: null,
         stats: null,
         hosts: cache.hosts,
+        anchorSuffix: cache.anchorSuffix,
         blockEl: cache.blockEl,
         relayout: cache.relayout
       };
@@ -4794,9 +4879,9 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         if (!a) {
           a = document.createElement("div");
           a.className = "latex-anchor";
-          a.id = label;
+          a.id = label + (cache.anchorSuffix || "");
           dom.anchors.set(label, a);
-          linkTargets.set(label, a);
+          if (!cache.anchorSuffix) linkTargets.set(label, a);
         }
         want.push(a);
       }
@@ -5107,6 +5192,12 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     get key() {
       return this.data.cache.blockKey || "";
     }
+    get view() {
+      return this.data.view;
+    }
+    views() {
+      return this.data.source.views.map((d) => byEl.get(d.el)).filter((b) => !!b && blocks2.includes(b));
+    }
     get roots() {
       if (!this._roots) {
         this._roots = normalise(
@@ -5128,6 +5219,9 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       return this.byId.get(id);
     }
     destroy() {
+      destroyBlock(this.el);
+    }
+    unmount() {
       destroyBlock(this.el);
     }
     on(event, fn) {
@@ -5166,6 +5260,10 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     }
     return b;
   }
+  function blockFrom(of) {
+    const b = typeof of === "string" ? blocks2.find((x) => x.key === of) : of instanceof Element ? byEl.get(of) : of;
+    return b && blocks2.includes(b) ? b : void 0;
+  }
   var blockListeners = /* @__PURE__ */ new Set();
   var host = {
     version: 1,
@@ -5185,8 +5283,14 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       const b = blocks2.find((b2) => id.startsWith(b2.key + "/"));
       return b && b.find(id);
     },
-    async mount(el) {
-      await mountBlock(el);
+    views(of) {
+      const b = blockFrom(of);
+      return b ? b.views() : [];
+    },
+    async mount(el, options = {}) {
+      const of = options.of === void 0 ? null : blockFrom(options.of);
+      if (options.of !== void 0 && !of) throw new Error("host.mount: `of` is not a block on the page");
+      await mountBlock(el, of ? of.data : null, options.view ?? null);
       const b = blockOf(el);
       if (!b) throw new Error("host.mount: not a block (no data-nodelist-b64, or it failed to render)");
       return b;
@@ -5290,7 +5394,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       const el = sourceAt(e.target);
       if (el) {
         e.preventDefault();
-        const block = el.closest("[data-nodelist-b64]");
+        const block = el.closest(BLOCK_SELECTOR);
         const id = el.dataset.footnote;
         if (pinnedFootnote && pinnedFootnote.block === block && pinnedFootnote.id === id) {
           closeFootnote();
@@ -5399,7 +5503,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     footnoteArrow.style.left = Math.max(12, Math.min(box.width - 12, cx - box.left)) + "px";
   }
   function openFootnote(anchor, pin) {
-    const block = anchor.closest("[data-nodelist-b64]");
+    const block = anchor.closest(BLOCK_SELECTOR);
     const id = anchor.dataset.footnote;
     if (!block || !renderFootnote(block, id)) return;
     footnotePop.classList.add("latex-footnote-open");
@@ -5721,16 +5825,31 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       for (const it of st.content || []) if (it.box) walk2(it.box.children || []);
     }
   }
-  async function initBlock(el) {
-    const nodelistB64 = el.dataset.nodelistB64;
+  function newSource(b64, doc, fontInfo, el) {
+    return {
+      b64,
+      glyph_metrics: doc.glyph_metrics,
+      pictures: doc.pictures,
+      fontInfo,
+      layer: layerOf(el),
+      views: [],
+      seq: 0
+    };
+  }
+  async function initBlock(el, of = null, viewName = null) {
+    const nodelistB64 = of ? of.b64 : el.dataset.nodelistB64;
     if (!nodelistB64) throw new Error("Missing data-nodelist-b64 attribute");
     const t0 = performance.now();
     const doc = decodeBlock(nodelistB64);
+    if (of) {
+      doc.glyph_metrics = of.glyph_metrics;
+      doc.pictures = of.pictures;
+    }
     resolvePictures(doc);
     for (const label of doc.anchors || []) pageLabels.add(label);
     const t1 = performance.now();
     const fontsData = Object.fromEntries(doc.fonts.map((f) => [String(f.id), f]));
-    const fontInfo = await registerFonts(fontsData);
+    const fontInfo = of ? of.fontInfo : await registerFonts(fontsData);
     const t2 = performance.now();
     const params = paramsFromEl(el);
     const natural = el.dataset.latexWidth === "natural";
@@ -5760,6 +5879,19 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       seq: ++docSeq,
       el
     };
+    const source = data.source = of || newSource(nodelistB64, doc, fontInfo, el);
+    data.view = viewName || `v${source.seq + 1}`;
+    source.seq++;
+    source.views.push(data);
+    if (of) {
+      el.dataset.latexView = data.view;
+      cache.anchorSuffix = `--${cache.blockKey}`;
+      viewSuffix.set(el, cache.anchorSuffix);
+      if (copyLayer(of.layer, el) && !el.hasAttribute("aria-hidden")) {
+        el.setAttribute("aria-hidden", "true");
+        data.hidAria = true;
+      }
+    }
     blockData.set(el, data);
     docData.set(doc, data);
     allData.push(data);
@@ -5768,6 +5900,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       slotBlocks.add(el);
       applySlots(fontInfo, doc);
     }
+    if (of) viewAdded(data);
     el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
     if (natural) {
       widthPt = data.naturalPt = naturalWidthPt(el, fontInfo, cache, widthPt);
@@ -5783,7 +5916,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         level: e.level || 0,
         number: e.number || "",
         title: e.title || "",
-        id: (doc.anchors || [])[(e.anchor || 0) - 1] || null
+        id: ((doc.anchors || [])[(e.anchor || 0) - 1] || null) && doc.anchors[e.anchor - 1] + (cache.anchorSuffix || "")
       }));
       el.reflowtexOutline = entries;
       el.dispatchEvent(new CustomEvent("reflowtex:outline", { bubbles: true, detail: { block: el, entries } }));
@@ -5837,9 +5970,17 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     }
     return p;
   }
-  async function mountBlock(el) {
+  async function mountBlock(el, of = null, viewName = null) {
     installPage();
-    await renderOnce(el);
+    if (of && !blockData.get(el) && !rendering.get(el)) {
+      if (viewName && of.source.views.some((d) => d.view === viewName))
+        throw new Error(`host.mount: the block already has a view "${viewName}"`);
+      const p = track("block set-up", initBlock(el, of.source, viewName).finally(() => rendering.delete(el)));
+      rendering.set(el, p);
+      await p;
+    } else {
+      await renderOnce(el);
+    }
     watchFonts();
   }
   async function init() {
@@ -5869,6 +6010,12 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     if (!data) return;
     closeFootnote();
     removeMarginNotes(data);
+    viewRemoved(data);
+    forgetInstanceTexts(data.cache.blockKey);
+    const views = data.source.views, v = views.indexOf(data);
+    if (v >= 0) views.splice(v, 1);
+    dropLayer(el);
+    if (data.hidAria) el.removeAttribute("aria-hidden");
     disposeSurfaces(el);
     disposeHosts(data.cache);
     disposePieces(data.cache);
@@ -5885,6 +6032,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     el.replaceChildren();
     el.style.removeProperty("width");
     el.style.removeProperty("padding-bottom");
+    if (!el.dataset.nodelistB64) delete el.dataset.latexView;
   }
 
   // src/index.js

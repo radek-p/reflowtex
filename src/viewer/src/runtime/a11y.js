@@ -220,6 +220,8 @@ const unescape = s => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&
 const wordsOf = mathml => { const m = /\balttext="([^"]*)"/.exec(mathml); return m ? unescape(m[1]) : ''; };
 /** A piece as shipped, before any of this changed it: kept, to lay again. */
 const shipped = new WeakMap();
+/** A layer's own style as shipped (hidden), before it was first placed. */
+const shippedStyle = new WeakMap();
 function remember(piece) { if (!shipped.has(piece)) shipped.set(piece, piece.innerHTML); }
 function restore(piece) { if (shipped.has(piece)) piece.innerHTML = shipped.get(piece); }
 /** A shipped piece in the reader's mode: spoken, each formula becomes its words. */
@@ -236,8 +238,13 @@ function inMode(piece) {
 
 const maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
 
-/** A block's accessible layer: before it once placed, after it as shipped. */
+/** The layers the viewer made for views (copyLayer), by their element. */
+const ownLayers = new WeakMap();
+
+/** A block's accessible layer: before it once placed, after it as shipped;
+ *  a view's its own copy. */
 export function layerOf(el) {
+    if (el && ownLayers.has(el)) return ownLayers.get(el);
     for (const s of el ? [el.previousElementSibling, el.nextElementSibling] : []) if (s && s.classList.contains('latex-a11y')) return s;
     return null;
 }
@@ -264,7 +271,10 @@ export function placeAccessibleLayer(data) {
     });
     const content = data.doc.content || [];
 
-    if (layer.dataset.placed !== '1') { layer.style.cssText = ANCHOR; layer.dataset.placed = '1'; }
+    if (layer.dataset.placed !== '1') {
+        shippedStyle.set(layer, layer.getAttribute('style'));
+        layer.style.cssText = ANCHOR; layer.dataset.placed = '1';
+    }
     // All reads first, then all writes: one layout pass, however long the block.
     const origin = layer.getBoundingClientRect();
     const places = [...layer.children].map(piece => {
@@ -703,4 +713,36 @@ function fitText(fits) {
             return true;
         });
     }
+}
+
+/** For a view of a block mounted elsewhere (host.mount(el, { of })): a copy
+ *  of the block's layer as shipped, after `el`, laid over the view's own
+ *  lines from then on. The pieces are the shipped ones, not what placing
+ *  made of them (those were fitted to the other view's lines). */
+export function copyLayer(layer, el) {
+    if (!layer || ownLayers.has(el)) return null;
+    const copy = layer.cloneNode(true);
+    if (copy.dataset.placed === '1') {
+        delete copy.dataset.placed;
+        const style = shippedStyle.get(layer);
+        if (style == null) copy.removeAttribute('style'); else copy.setAttribute('style', style);
+    }
+    [...copy.children].forEach((piece, i) => {
+        const shippedHTML = shipped.get(layer.children[i]);
+        if (shippedHTML !== undefined) piece.innerHTML = shippedHTML;
+        delete piece.dataset.lines;
+        delete piece.dataset.size;
+        piece.removeAttribute('style');
+    });
+    el.after(copy);
+    ownLayers.set(el, copy);
+    return copy;
+}
+
+/** A view unmounted: its copy of the layer goes too. */
+export function dropLayer(el) {
+    const copy = ownLayers.get(el);
+    if (!copy) return;
+    ownLayers.delete(el);
+    copy.remove();
 }

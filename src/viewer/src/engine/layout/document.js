@@ -400,9 +400,12 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
             if (!a) {
                 a = document.createElement('div');
                 a.className = 'latex-anchor';
-                a.id = label;
+                // A view mounted from another (host.mount(el, { of })) suffixes
+                // its ids, which the block's own view holds; its links find
+                // them (links.js).
+                a.id = label + (cache.anchorSuffix || '');
                 dom.anchors.set(label, a);
-                linkTargets.set(label, a);
+                if (!cache.anchorSuffix) linkTargets.set(label, a);
             }
             want.push(a);
         }

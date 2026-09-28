@@ -13,6 +13,7 @@ import { scheduleSlots } from './slots.js';
 import { measureHTML } from './widgets.js';
 import { blockOf } from './host.ts';
 import { kindDef, onKindChange } from './kinds.ts';
+import { BLOCK_SELECTOR } from '../runtime/page.js';
 import type { InlineEnv, Instance, KindDef, PieceHost } from './types.ts';
 
 const versions = new Map<string, number>();      // instance id → bumped by invalidate
@@ -86,7 +87,7 @@ export function disposePieces(cache: any) {
 // old pieces then go, the new ones are drawn by the new definition).
 onKindChange(kind => {
     let any = false;
-    for (const el of document.querySelectorAll('[data-nodelist-b64]')) {
+    for (const el of document.querySelectorAll(BLOCK_SELECTOR)) {
         const block = blockOf(el);
         for (const i of block ? block.instances({ kind, placement: 'inline' }) : []) {
             versions.set(i.id, inlineVersion(i) + 1);

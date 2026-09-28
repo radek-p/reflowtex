@@ -36,6 +36,7 @@ export function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
     if (!s.sub) {
         s.sub = { bcs: cache.bcs, dom: null, layout: null, stats: null,
                   hosts: cache.hosts,
+                  anchorSuffix: cache.anchorSuffix,
                   blockEl: cache.blockEl, relayout: cache.relayout };
     }
     // clientWidth includes the padding a kind's CSS may add; the measure is

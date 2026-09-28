@@ -7,7 +7,7 @@ import { widgetNodes } from './widgets.js';
 import { blockData } from '../runtime/blocks.js';
 import { api } from '../runtime/page.js';
 import { paintVisibleNow } from '../runtime/visibility.js';
-import { docData } from '../runtime/block-data.js';
+import { allData, docData } from '../runtime/block-data.js';
 import { disposePiece } from './inline.ts';
 import { textHooks } from './instances.ts';
 import { frame, track } from '../runtime/pending.js';
@@ -160,20 +160,39 @@ export function scheduleSlots() {
 
 // The page's side (host API): host.setText(name, text) gives every \webtext
 // of that name, in every block, a text (null: the default again);
-// instance.setText(text) gives one, and wins over its name's. Updates within
-// one frame are applied together.
+// instance.setText(text) gives one, and wins over its name's; with
+// { mirror: true }, that instance in every view of its block (host.mount(el,
+// { of })), those mounted later too. Updates within one frame are applied
+// together.
 const instanceTexts = new Map();       // instance id → string
+const mirroredTexts = new WeakMap();   // a block's source → Map(its id past the key → string)
 export function setSlotText(name, text) {
     if (text === null || text === undefined) slotValues.delete(String(name));
     else slotValues.set(String(name), String(text));
     scheduleSlots();
 }
-textHooks.set = (id, text) => {
-    if (text === null) instanceTexts.delete(id); else instanceTexts.set(id, text);
+textHooks.set = (id, text, mirror = false) => {
+    const data = mirror && allData.find(d => id.startsWith(d.cache.blockKey + '/'));
+    if (data && data.source) {
+        const local = id.slice(data.cache.blockKey.length + 1);
+        let texts = mirroredTexts.get(data.source);
+        if (!texts) mirroredTexts.set(data.source, texts = new Map());
+        if (text === null) texts.delete(local); else texts.set(local, text);
+        // (what a view was given of its own gives way)
+        for (const v of data.source.views) instanceTexts.delete(`${v.cache.blockKey}/${local}`);
+    } else if (text === null) instanceTexts.delete(id); else instanceTexts.set(id, text);
     scheduleSlots();
 };
+/** From destroyBlock: the texts given to a block's (a view's) own instances. */
+export function forgetInstanceTexts(key) {
+    for (const id of [...instanceTexts.keys()]) if (id.startsWith(key + '/')) instanceTexts.delete(id);
+}
 function textOf(doc, id, slot) {
-    const key = ((docData.get(doc) || {}).cache || {}).blockKey;
+    const data = docData.get(doc) || {};
+    const key = (data.cache || {}).blockKey;
     const own = key && instanceTexts.get(`${key}/t${id}`);
-    return own !== undefined && own !== null ? own : slotValues.get(slot.name);
+    if (own !== undefined && own !== null) return own;
+    const mirrored = data.source && mirroredTexts.get(data.source);
+    const shared = mirrored && mirrored.get(`t${id}`);
+    return shared !== undefined ? shared : slotValues.get(slot.name);
 }

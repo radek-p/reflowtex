@@ -62,7 +62,9 @@ type GNode = { type?: string; char?: number; text?: string; stream?: number;
               children?: GNode[]; pre?: GNode[]; post?: GNode[]; replace?: GNode[] };
 type Item = { kind?: string; para?: number; box?: GNode; stream?: number };
 type Doc = { paragraphs?: { nodes?: GNode[] }[]; content?: Item[]; streams?: { content?: Item[] }[] };
-export interface BlockData { doc: Doc; el: HTMLElement; fontInfo: unknown; cache: { blockKey?: string } }
+/** A block's source: what every view of it shares (runtime/init.js). */
+export interface Source { views: BlockData[] }
+export interface BlockData { doc: Doc; el: HTMLElement; fontInfo: unknown; cache: { blockKey?: string }; source?: Source }
 
 interface GlyphIndex {
     nodes: GNode[];
@@ -198,7 +200,11 @@ function resolve(r: TextRange): { data: BlockData; from: number; to: number } | 
 
 // ── Live marks ──────────────────────────────────────────────────────────────
 
-interface Live { id: string; classes: string; ranges: TextRange[]; nodes: GNode[]; blocks: Set<BlockData> }
+// A mirrored mark (addMark with mirror) keeps its glyphs by source, so a
+// view mounted later has it too, and one unmounted takes only its own away.
+interface Span { source: Source; from: number; to: number }
+interface Live { id: string; classes: string; ranges: TextRange[]; nodes: GNode[]; blocks: Set<BlockData>;
+                 mirror: boolean; spans: Span[] }
 const live = new Map<string, Live>();
 const onNode = new WeakMap<GNode, string[]>();
 let seq = 0;
@@ -249,6 +255,7 @@ function liveHandle(m: Live): LiveMark {
         get classes() { return m.classes; },
         get ranges() { return m.ranges.slice(); },
         get live() { return live.get(m.id) === m; },
+        get mirror() { return m.mirror; },
         setClasses(classes: string) {
             if (live.get(m.id) !== m || m.classes === classes) return;
             m.classes = classes;
@@ -268,23 +275,49 @@ function liveHandle(m: Live): LiveMark {
     };
 }
 
+// The glyphs from..to of one view's text, marked with m.
+function markNodes(m: Live, data: BlockData, from: number, to: number) {
+    const ix = glyphIndex(data.doc);
+    m.blocks.add(data);
+    for (let i = from; i <= Math.min(to, ix.nodes.length - 1); i++) {
+        const n = ix.nodes[i];
+        const ids = onNode.get(n);
+        onNode.set(n, ids ? [...ids, m.id] : [m.id]);
+        m.nodes.push(n);
+    }
+}
+
+/** From initBlock: a new view of a block has the block's mirrored marks
+ *  (drawn with its first lines: nothing to repaint). */
+export function viewAdded(data: BlockData) {
+    for (const m of live.values())
+        for (const s of m.spans) if (s.source === data.source) markNodes(m, data, s.from, s.to);
+}
+/** From destroyBlock: a block (a view) is gone; the marks let go of its
+ *  glyphs. A mark shown in other views stays there. */
+export function viewRemoved(data: BlockData) {
+    for (const m of live.values()) {
+        if (!m.blocks.delete(data)) continue;
+        const at = glyphIndex(data.doc).at;
+        m.nodes = m.nodes.filter(n => !at.has(n));
+    }
+}
+
 /** From host.addMark. */
 export function addMark(ranges: readonly TextRange[], options: LiveMarkOptions = {}): LiveMark | null {
     const id = options.id || `rtx-live-${++seq}`;
     live.get(id) && liveHandle(live.get(id)!).remove();
-    const m: Live = { id, classes: options.classes || '', ranges: [], nodes: [], blocks: new Set() };
+    const m: Live = { id, classes: options.classes || '', ranges: [], nodes: [], blocks: new Set(),
+                      mirror: !!options.mirror, spans: [] };
     for (const r of ranges) {
         const at = resolve(r);
         if (!at) continue;
         const ix = glyphIndex(at.data.doc);
         m.ranges.push({ block: r.block, from: at.from, to: at.to, text: textOf(ix, at.from, at.to) });
-        m.blocks.add(at.data);
-        for (let i = at.from; i <= at.to; i++) {
-            const n = ix.nodes[i];
-            const ids = onNode.get(n);
-            onNode.set(n, ids ? [...ids, id] : [id]);
-            m.nodes.push(n);
-        }
+        const source = m.mirror && at.data.source;
+        if (!source) { markNodes(m, at.data, at.from, at.to); continue; }
+        m.spans.push({ source, from: at.from, to: at.to });
+        for (const d of source.views) if (d.el.isConnected || d === at.data) markNodes(m, d, at.from, at.to);
     }
     if (!m.nodes.length) return null;
     live.set(id, m);
@@ -294,6 +327,10 @@ export function addMark(ranges: readonly TextRange[], options: LiveMarkOptions =
 }
 
 const overlaps = (a: TextRange, b: TextRange) => a.block === b.block && a.from <= b.to && b.from <= a.to;
+// A mirrored mark is in every view of its block: a range in any of them meets it.
+const sourceOfKey = (key: string) => (allData as BlockData[]).find(d => d.cache.blockKey === key)?.source;
+const meets = (m: Live, q: TextRange) => m.ranges.some(r => overlaps(r, q))
+    || (m.spans.length > 0 && m.spans.some(s => s.source === sourceOfKey(q.block) && s.from <= q.to && q.from <= s.to));
 
 /** From host.liveMarks: all, or those on a glyph element, or touching ranges. */
 export function liveMarks(at?: Element | readonly TextRange[]): LiveMark[] {
@@ -302,7 +339,7 @@ export function liveMarks(at?: Element | readonly TextRange[]): LiveMark[] {
         const n = nodeOfEl.get(at), ids = n ? onNode.get(n) || [] : [];
         ms = ms.filter(m => ids.includes(m.id));
     } else if (at) {
-        ms = ms.filter(m => m.ranges.some(r => at.some(q => overlaps(r, q))));
+        ms = ms.filter(m => at.some(q => meets(m, q)));
     }
     return ms.map(liveHandle);
 }
