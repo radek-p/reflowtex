@@ -573,9 +573,12 @@
     \expandafter\endgroup\reflowtex@bx@hook
   \fi}
 % The package option: every theorem-like environment (they all begin through
-% \@begintheorem, amsthm's or the kernel's) and proof.
+% \@begintheorem, amsthm's or the kernel's – or, with tagging on and
+% latex-lab's block module of 2026-06 or later, which replaces amsthm,
+% through \ParseLaTeXeTheoremlike) and proof.
 \ifreflowtex@boxed\ifreflowtex
   \AddToHook{cmd/@begintheorem/before}{\reflowtex@box@open{theorem}{}}
+  \AddToHook{cmd/ParseLaTeXeTheoremlike/before}{\reflowtex@box@open{theorem}{}}
   \AddToHook{env/proof/begin}{\reflowtex@box@open{proof}{}}
 \fi\fi
 
