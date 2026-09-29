@@ -64,7 +64,9 @@ type Item = { kind?: string; para?: number; box?: GNode; stream?: number };
 type Doc = { paragraphs?: { nodes?: GNode[] }[]; content?: Item[]; streams?: { content?: Item[] }[] };
 /** A block's source: what every view of it shares (runtime/init.js). */
 export interface Source { views: BlockData[] }
-export interface BlockData { doc: Doc; el: HTMLElement; fontInfo: unknown; cache: { blockKey?: string }; source?: Source }
+export interface BlockData { doc: Doc; el: HTMLElement; fontInfo: unknown; cache: { blockKey?: string }; source?: Source;
+                            /** Mounted as a view of another (host.mount(el, { of })). */
+                            mountedOf?: boolean }
 
 interface GlyphIndex {
     nodes: GNode[];
@@ -294,13 +296,23 @@ export function viewAdded(data: BlockData) {
         for (const s of m.spans) if (s.source === data.source) markNodes(m, data, s.from, s.to);
 }
 /** From destroyBlock: a block (a view) is gone; the marks let go of its
- *  glyphs. A mark shown in other views stays there. */
+ *  glyphs. A mark shown in other views stays there, its ranges naming one
+ *  of them if they named this one. A mark left in no view is removed when
+ *  the view was one mounted of another (host.mount(el, { of })): its key
+ *  never comes back. (A block's own element keeps its marks, as ever: a
+ *  page's saved highlights name it.) */
 export function viewRemoved(data: BlockData) {
-    for (const m of live.values()) {
+    let any = false;
+    for (const m of [...live.values()]) {
         if (!m.blocks.delete(data)) continue;
         const at = glyphIndex(data.doc).at;
         m.nodes = m.nodes.filter(n => !at.has(n));
+        const key = data.cache.blockKey, other = [...m.blocks].find(d => d.source && d.source === data.source);
+        if (other) m.ranges = m.ranges.map(r => r.block === key ? { ...r, block: other.cache.blockKey || '' } : r);
+        if (!m.blocks.size && data.mountedOf) live.delete(m.id);
+        any = any || !!other || !live.has(m.id);
     }
+    if (any) changed();
 }
 
 /** From host.addMark. */
@@ -317,7 +329,7 @@ export function addMark(ranges: readonly TextRange[], options: LiveMarkOptions =
         const source = m.mirror && at.data.source;
         if (!source) { markNodes(m, at.data, at.from, at.to); continue; }
         m.spans.push({ source, from: at.from, to: at.to });
-        for (const d of source.views) if (d.el.isConnected || d === at.data) markNodes(m, d, at.from, at.to);
+        for (const d of source.views) markNodes(m, d, at.from, at.to);
     }
     if (!m.nodes.length) return null;
     live.set(id, m);

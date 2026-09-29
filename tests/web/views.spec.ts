@@ -241,3 +241,64 @@ test('mounting and unmounting a view a hundred times leaves nothing behind', asy
   // The block itself still works.
   expect(await page.evaluate(() => reflowtex.host.views(window.__B).length)).toBe(2);
 });
+
+test('unmounting a view: its own marks go, a mirrored one names another view', async ({ openPage }) => {
+  const page = await openPage('views');
+  await twoViews(page);
+  const r = await page.evaluate(() => {
+    const h = reflowtex.host, A = window.__A, B = window.__B;
+    const range = (b: any) => ({ block: b.key, from: 10, to: 40, text: '' });
+    const onA = h.addMark([range(A)], { id: 'onA' })!, onB = h.addMark([range(B)], { id: 'onB' })!;
+    const both = h.addMark([range(B)], { id: 'both', mirror: true })!;
+    let events = 0;
+    document.addEventListener('reflowtex:marks', () => events++);
+    B.unmount();
+    return { live: [onA.live, onB.live, both.live], ids: h.liveMarks().map((m: any) => m.id).sort(),
+             bothIn: both.ranges.map((x: any) => x.block), aKey: A.key, events,
+             inA: [...A.el.querySelectorAll('[data-rtx-marks]')].some(e => (e as HTMLElement).dataset.rtxMarks!.includes('both')) };
+  });
+  expect(r).toEqual({ live: [true, false, true], ids: ['both', 'onA'], bothIn: [r.aKey], aKey: r.aKey, events: 1, inA: true });
+  // The block's own element destroyed: its marks are kept, as before views.
+  const kept = await page.evaluate(() => { window.__A.destroy(); return reflowtex.host.liveMarks().map((m: any) => m.id).sort(); });
+  expect(kept).toEqual(['both', 'onA']);
+});
+
+test('a default view name never takes one a page gave', async ({ openPage }) => {
+  const page = await openPage('views');
+  const names = await page.evaluate(async () => {
+    const h = reflowtex.host, A = h.block(document.querySelector('.latex-block[data-nodelist-b64]')!)!;
+    const mount = (view?: string) => h.mount(document.body.appendChild(Object.assign(document.createElement('div'), { className: 'latex-block' })), { of: A, view });
+    await mount('v2');
+    await mount();
+    let clash = '';
+    try { await mount('v2'); } catch (e) { clash = String(e); }
+    return { names: A.views().map((v: any) => v.view), clash: /already has a view/.test(clash) };
+  });
+  expect(names).toEqual({ names: ['v1', 'v2', 'v3'], clash: true });
+});
+
+test('the selection is its view\'s own: its ranges and bands', async ({ openPage }) => {
+  const page = await openPage('views');
+  await twoViews(page);
+  await page.evaluate(() => document.documentElement.setAttribute('data-latex-selection', 'bands'));
+  await page.evaluate(() => new Promise<void>(done => {
+    const ts = [...window.__B.el.querySelectorAll('tspan')];
+    const r = document.createRange();
+    r.setStart(ts[5].firstChild!, 0);
+    r.setEnd(ts[80].firstChild!, ts[80].textContent!.length);
+    const seen = () => { const s = getSelection()!; if (s.rangeCount && !s.isCollapsed) { document.removeEventListener('selectionchange', seen); done(); } };
+    document.addEventListener('selectionchange', seen);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(r);
+  }));
+  await idle(page);
+  const r = await page.evaluate(() => ({
+    blocks: [...new Set(reflowtex.host.rangesOf(getSelection()!.getRangeAt(0)).map((x: any) => x.block))],
+    key: window.__B.key,
+    bandsA: window.__A.el.querySelectorAll('rect.latex-selection').length,
+    bandsB: window.__B.el.querySelectorAll('rect.latex-selection').length,
+  }));
+  expect(r.blocks).toEqual([r.key]);
+  expect(r.bandsA).toBe(0);
+  expect(r.bandsB).toBeGreaterThan(1);
+});

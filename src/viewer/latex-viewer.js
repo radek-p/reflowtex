@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 d7172418c5938510e16b38ba44b8c7ade72fd88af3febf198bdf8bcc72c46df0
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 2cbafa2e4b3e35440d5b648123ca0dde7e68ce780316524e02504662699ef0ad
 'use strict';
 "use strict";
 (() => {
@@ -1994,11 +1994,17 @@
       for (const s of m.spans) if (s.source === data.source) markNodes(m, data, s.from, s.to);
   }
   function viewRemoved(data) {
-    for (const m of live.values()) {
+    let any = false;
+    for (const m of [...live.values()]) {
       if (!m.blocks.delete(data)) continue;
       const at = glyphIndex(data.doc).at;
       m.nodes = m.nodes.filter((n) => !at.has(n));
+      const key = data.cache.blockKey, other = [...m.blocks].find((d) => d.source && d.source === data.source);
+      if (other) m.ranges = m.ranges.map((r) => r.block === key ? { ...r, block: other.cache.blockKey || "" } : r);
+      if (!m.blocks.size && data.mountedOf) live.delete(m.id);
+      any = any || !!other || !live.has(m.id);
     }
+    if (any) changed2();
   }
   function addMark(ranges, options = {}) {
     const id = options.id || `rtx-live-${++seq}`;
@@ -2023,7 +2029,7 @@
         continue;
       }
       m.spans.push({ source, from: at.from, to: at.to });
-      for (const d of source.views) if (d.el.isConnected || d === at.data) markNodes(m, d, at.from, at.to);
+      for (const d of source.views) markNodes(m, d, at.from, at.to);
     }
     if (!m.nodes.length) return null;
     live.set(id, m);
@@ -5880,10 +5886,13 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       el
     };
     const source = data.source = of || newSource(nodelistB64, doc, fontInfo, el);
-    data.view = viewName || `v${source.seq + 1}`;
-    source.seq++;
+    do
+      source.seq++;
+    while (!viewName && source.views.some((d) => d.view === `v${source.seq}`));
+    data.view = viewName || `v${source.seq}`;
     source.views.push(data);
     if (of) {
+      data.mountedOf = true;
       el.dataset.latexView = data.view;
       cache.anchorSuffix = `--${cache.blockKey}`;
       viewSuffix.set(el, cache.anchorSuffix);
@@ -5910,13 +5919,14 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     }
     remeasureStreams(fontInfo, doc, widthPt, params, cache);
     if (doc.outline && doc.outline.length) {
+      const anchorId = (label) => label ? label + (cache.anchorSuffix || "") : null;
       const entries = doc.outline.map((e) => ({
         kind: e.kind || "",
         env: e.env || "",
         level: e.level || 0,
         number: e.number || "",
         title: e.title || "",
-        id: ((doc.anchors || [])[(e.anchor || 0) - 1] || null) && doc.anchors[e.anchor - 1] + (cache.anchorSuffix || "")
+        id: anchorId((doc.anchors || [])[(e.anchor || 0) - 1])
       }));
       el.reflowtexOutline = entries;
       el.dispatchEvent(new CustomEvent("reflowtex:outline", { bubbles: true, detail: { block: el, entries } }));

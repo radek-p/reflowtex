@@ -100,10 +100,12 @@ export async function initBlock(el, of = null, viewName = null) {
     const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false,
                     seq: ++docSeq, el };
     const source = data.source = of || newSource(nodelistB64, doc, fontInfo, el);
-    data.view = viewName || `v${source.seq + 1}`;
-    source.seq++;
+    // (a name not taken: a page may have named a view v2 itself)
+    do source.seq++; while (!viewName && source.views.some(d => d.view === `v${source.seq}`));
+    data.view = viewName || `v${source.seq}`;
     source.views.push(data);
     if (of) {
+        data.mountedOf = true;
         // Its anchors' ids are its own (the block's view has the plain ones).
         el.dataset.latexView = data.view;
         cache.anchorSuffix = `--${cache.blockKey}`;
@@ -142,10 +144,11 @@ export async function initBlock(el, of = null, viewName = null) {
     // anchor element, which exists once the block is laid out – now. Also
     // kept on the element for a script that attaches later.
     if (doc.outline && doc.outline.length) {
+        const anchorId = label => label ? label + (cache.anchorSuffix || '') : null;
         const entries = doc.outline.map(e => ({
             kind: e.kind || '', env: e.env || '', level: e.level || 0,
             number: e.number || '', title: e.title || '',
-            id: ((doc.anchors || [])[(e.anchor || 0) - 1] || null) && doc.anchors[e.anchor - 1] + (cache.anchorSuffix || ''),
+            id: anchorId((doc.anchors || [])[(e.anchor || 0) - 1]),
         }));
         el.reflowtexOutline = entries;
         el.dispatchEvent(new CustomEvent('reflowtex:outline', { bubbles: true, detail: { block: el, entries } }));

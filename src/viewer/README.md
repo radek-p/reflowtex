@@ -253,6 +253,29 @@ everything a page draws:
   `host.mount(el)` renders a block element added after the page loaded (a
   framework's), and `block.destroy()` undoes everything drawn for one and
   forgets it.
+- **Views**: one block shown in several elements at once, a split view say.
+  `host.mount(el, { of, view? })` makes an empty `el` another view of a
+  block on the page (`of`: a `Block`, its element or its key; `view`: a
+  name, unique among its views, `v2`, `v3`, … by default). Each view is a
+  block of its own in the API (its own `key`, instances and outline), laid
+  out and broken at its own width, re-laid out alone when its width
+  changes, with its own drawing, selection and accessible layer (a copy of
+  the block's, laid over its own lines; its drawing then `aria-hidden`).
+  What the views share is only what nothing changes: the compiled data,
+  fonts, glyph metrics and pictures. `block.views()` / `host.views(of)`
+  list them in the order mounted, `block.view` is the name, and
+  `el.dataset.latexView` marks a view's element. State is per view unless
+  asked otherwise: `host.setText(name, …)` reaches every view,
+  `instance.setText(text)` its view only, `instance.setText(text, { mirror:
+  true })` that instance in every view (those mounted later too);
+  `host.addMark(ranges)` marks the view the ranges name, `{ mirror: true }`
+  every view. A view's anchors' ids end in `--<its key>` (the block's own
+  element keeps the plain ones), and a reference in a view goes to its own
+  anchor. `block.unmount()` (the same as `destroy()`) takes one view away
+  and leaves the others as they are, the block's own element included; a
+  mark shown in no view is then removed, and a mirrored mark whose ranges
+  named the view names another. Mounting and unmounting views leaves
+  nothing behind.
 - **Instances**: everything the companion package makes, and the footnotes
   and `\marginpar`s the pipeline makes, one instance each – `{ id, kind,
   attrs, presentation, placement, parts, parent, children, spaceBefore,
