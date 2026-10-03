@@ -38,8 +38,16 @@ export function inlineEnv(instance: Instance, fontSize: number, color: string | 
             content(el);
             return measureHTML(el, fontSize);
         },
+        // A widget's size is its content's, not its view's: the same
+        // instance in every view of its block (host.mount(el, { of })) is
+        // measured again and re-broken, whichever view's env was asked.
         invalidate() {
-            versions.set(instance.id, inlineVersion(instance) + 1);
+            const block = instance.block, local = instance.id.slice(block.key.length + 1);
+            const views = block.views();
+            for (const v of views.length ? views : [block]) {
+                const id = `${v.key}/${local}`;
+                versions.set(id, (versions.get(id) || 0) + 1);
+            }
             scheduleSlots();
         },
     };

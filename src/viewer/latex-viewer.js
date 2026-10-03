@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 2cbafa2e4b3e35440d5b648123ca0dde7e68ce780316524e02504662699ef0ad
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 42cf56fb9c75d70637b41889f34fed06ed27664d85674b7084ff6cff2826f7b6
 'use strict';
 "use strict";
 (() => {
@@ -1718,8 +1718,16 @@
         content(el);
         return measureHTML(el, fontSize);
       },
+      // A widget's size is its content's, not its view's: the same
+      // instance in every view of its block (host.mount(el, { of })) is
+      // measured again and re-broken, whichever view's env was asked.
       invalidate() {
-        versions.set(instance.id, inlineVersion(instance) + 1);
+        const block = instance.block, local = instance.id.slice(block.key.length + 1);
+        const views = block.views();
+        for (const v of views.length ? views : [block]) {
+          const id = `${v.key}/${local}`;
+          versions.set(id, (versions.get(id) || 0) + 1);
+        }
         scheduleSlots();
       }
     };

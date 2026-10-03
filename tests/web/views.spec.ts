@@ -5,18 +5,18 @@
 import { test, expect, type WebPage } from './fixtures.ts';
 import { idle } from './web.ts';
 
-/** The page's block A at `a` px, and a view B of it at `b` px, below it
+/** The page's block A (its `nth`) at `a` px, and a view B of it at `b` px, below it
  *  (window.__A, window.__B); window.__lines(el) gives an element's lines as
  *  text, from its layout. */
-async function twoViews(page: WebPage, a = 600, b = 300) {
-  await page.evaluate(async ([a, b]) => {
+async function twoViews(page: WebPage, a = 600, b = 300, nth = 0) {
+  await page.evaluate(async ([a, b, nth]) => {
     window.__lines = (el: HTMLElement) => {
       const text = (ns: any[]): string => ns.map(n => n.type === 'glyph' ? (n.text ?? String.fromCodePoint(n.char || 63))
         : n.type === 'glue' ? ' ' : text(n.children || [])).join('');
       return reflowtex.inspect.state(el).cache.layout.laid
         .flatMap((L: any) => (L.lines || []).map((ln: any) => text(ln.nodes).replace(/\s+/g, ' ').trim()));
     };
-    const A = document.querySelector('.latex-block[data-nodelist-b64]') as HTMLElement;
+    const A = document.querySelectorAll('.latex-block[data-nodelist-b64]')[nth] as HTMLElement;
     A.style.width = a + 'px';
     const el = document.createElement('div');
     el.className = 'latex-block';
@@ -24,7 +24,7 @@ async function twoViews(page: WebPage, a = 600, b = 300) {
     document.body.append(el);
     window.__A = reflowtex.host.block(A);
     window.__B = await reflowtex.host.mount(el, { of: A, view: 'right' });
-  }, [a, b]);
+  }, [a, b, nth]);
   await idle(page);
 }
 const setWidth = (page: WebPage, which: string, px: number) =>
@@ -39,10 +39,10 @@ test('two views break at their own widths, each as the block alone would', async
     return { views: h.views(A).map((v: any) => v.view), viaKey: h.views(B.key).length, own: B.views().includes(B),
              keys: A.key !== B.key, docs: sa.doc !== sb.doc, metrics: sa.doc.glyph_metrics === sb.doc.glyph_metrics,
              fonts: sa.fontInfo === sb.fontInfo, drawn: B.el.querySelectorAll('svg text tspan').length > 0,
-             attr: B.el.dataset.latexView, blocks: h.blocks().length };
+             attr: B.el.dataset.latexView, blocks: h.blocks().length - document.querySelectorAll('[data-nodelist-b64]').length };
   });
   expect(shared).toEqual({ views: ['v1', 'right'], viaKey: 2, own: true, keys: true, docs: true, metrics: true,
-                           fonts: true, drawn: true, attr: 'right', blocks: 2 });
+                           fonts: true, drawn: true, attr: 'right', blocks: 1 });
   const wideA = await lines(page, '__A'), narrowB = await lines(page, '__B');
   expect(narrowB.length).toBeGreaterThan(wideA.length);
   // Each as the block alone at that width: A narrowed to B's, B widened to A's.
@@ -143,10 +143,10 @@ test('unmounting one view leaves the others working', async ({ openPage }) => {
   const page = await openPage('views');
   await twoViews(page);
   const gone = await page.evaluate(() => {
-    const B = window.__B, el = B.el;
+    const B = window.__B, el = B.el, layers = document.querySelectorAll('.latex-a11y').length;
     B.unmount();
     return { children: el.childElementCount, views: reflowtex.host.views(window.__A).length, block: reflowtex.host.block(el) === undefined,
-             attr: el.hasAttribute('data-latex-view'), layers: document.querySelectorAll('.latex-a11y').length };
+             attr: el.hasAttribute('data-latex-view'), layers: layers - document.querySelectorAll('.latex-a11y').length };
   });
   expect(gone).toEqual({ children: 0, views: 1, block: true, attr: false, layers: 1 });
   const before = (await lines(page, '__A')).length;
@@ -301,4 +301,85 @@ test('the selection is its view\'s own: its ranges and bands', async ({ openPage
   expect(r.blocks).toEqual([r.key]);
   expect(r.bandsA).toBe(0);
   expect(r.bandsB).toBeGreaterThan(1);
+});
+
+// Widgets (\webwidget) in views: the page's `tag` kind (pages/views/body.html)
+// in the page's second block. window.__pieces: every piece drawn and not yet
+// ended, with its view's key, its piece and its element; piecesOf, those of
+// a view on its lines now (a piece off them is kept, undrawn, for reuse).
+const TAG = 1;
+const piecesOf = (page: WebPage, which: string): Promise<Record<string, any>[]> =>
+  page.evaluate(w => window.__pieces.filter((p: any) => p.view === window[w].key && p.el.isConnected)
+    .map((p: any) => ({ ...p.piece, inside: window[w].el.contains(p.el) && p.el.isConnected,
+                         text: p.el.textContent })), which);
+
+test('a widget draws in every view, into each view\'s own element', async ({ openPage }) => {
+  const page = await openPage('views');
+  await twoViews(page, 600, 600, TAG);
+  const [a, b] = [await piecesOf(page, '__A'), await piecesOf(page, '__B')];
+  expect(a).toHaveLength(1);
+  expect(b).toEqual(a);
+  expect(a[0]).toMatchObject({ inside: true, left: 'cap', right: 'cap', text: 'checked by Lean on 25 September 2026' });
+  const r = await page.evaluate(() => ({
+    instances: [window.__A, window.__B].map((v: any) => v.instances({ kind: 'tag', placement: 'inline' }).map((i: any) => [i.id, i.attrs.key])),
+    drawn: [window.__A, window.__B].map((v: any) => v.el.querySelectorAll('foreignObject.latex-widget .tag').length),
+  }));
+  expect(r.instances[0][0][1]).toBe('proof');
+  expect(r.instances[1][0][1]).toBe('proof');
+  expect(r.instances[0][0][0]).not.toBe(r.instances[1][0][0]);          // an instance per view
+  expect(r.drawn).toEqual([1, 1]);
+});
+
+test('a widget\'s pieces in each view follow that view\'s own line breaks', async ({ openPage }) => {
+  const page = await openPage('views');
+  await twoViews(page, 600, 170, TAG);
+  const whole = await piecesOf(page, '__A'), split = await piecesOf(page, '__B');
+  expect(whole).toEqual([expect.objectContaining({ left: 'cap', right: 'cap', inside: true })]);
+  expect(split.length).toBeGreaterThan(1);
+  expect(split.every(p => p.inside)).toBe(true);
+  expect(split[0]).toMatchObject({ left: 'cap', right: 'cut' });
+  expect(split.at(-1)).toMatchObject({ left: 'cut', right: 'cap' });
+  expect(split.map(p => p.text).join(' ')).toBe(whole[0].text);
+  // Swapped: each view breaks it again at its new width, the other untouched.
+  await setWidth(page, '__A', 170);
+  await setWidth(page, '__B', 600);
+  await idle(page);
+  expect(await piecesOf(page, '__A')).toEqual(split);
+  expect(await piecesOf(page, '__B')).toEqual(whole);
+});
+
+test('unmounting a view ends only its widget pieces', async ({ openPage }) => {
+  const page = await openPage('views');
+  await twoViews(page, 600, 170, TAG);
+  const a = await piecesOf(page, '__A');
+  const r = await page.evaluate(() => {
+    const B = window.__B, key = B.key, renders = window.__renders;
+    B.unmount();
+    return { inB: window.__pieces.filter((p: any) => p.view === key).length, renders: window.__renders - renders };
+  });
+  expect(r).toEqual({ inB: 0, renders: 0 });
+  expect(await piecesOf(page, '__A')).toEqual(a);
+  await setWidth(page, '__A', 170);
+  await idle(page);
+  expect((await piecesOf(page, '__A')).length).toBeGreaterThan(1);        // and still breaks
+});
+
+test('state kept by attrs.key and invalidated in one view re-breaks every view', async ({ openPage }) => {
+  // invalidate() measured again only the instance of the view it was called
+  // in: the other view kept the old size and the old pieces.
+  const page = await openPage('views');
+  await twoViews(page, 600, 170, TAG);
+  expect((await piecesOf(page, '__B')).length).toBeGreaterThan(1);
+  await page.evaluate(() => window.__tag.set('short', window.__A.instances('tag')[0]));
+  await idle(page);
+  const a = await piecesOf(page, '__A'), b = await piecesOf(page, '__B');
+  expect(a).toEqual([expect.objectContaining({ text: 'short', left: 'cap', right: 'cap', inside: true })]);
+  expect(b, 'the other view kept its old size').toEqual(a);
+  // The old pieces were ended in both: only the new ones are left.
+  expect(await page.evaluate(() => window.__pieces.map((p: any) => p.el.textContent))).toEqual(['short', 'short']);
+  // And from the other view, back to a long label: both measure again.
+  await page.evaluate(() => window.__tag.set('checked by Lean on 25 September 2026', window.__B.instances('tag')[0]));
+  await idle(page);
+  expect((await piecesOf(page, '__A')).map(p => p.text)).toEqual(['checked by Lean on 25 September 2026']);
+  expect((await piecesOf(page, '__B')).length).toBeGreaterThan(1);
 });

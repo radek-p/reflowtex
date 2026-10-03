@@ -269,7 +269,11 @@ everything a page draws:
   `instance.setText(text)` its view only, `instance.setText(text, { mirror:
   true })` that instance in every view (those mounted later too);
   `host.addMark(ranges)` marks the view the ranges name, `{ mirror: true }`
-  every view. A view's anchors' ids end in `--<its key>` (the block's own
+  every view. A widget is an instance in each view (state shared between
+  them is the page's, by `attrs.key` say), its pieces drawn on that view's
+  own lines and ended when the view is unmounted; its size is its
+  content's, so `env.invalidate()` measures it again and re-breaks it in
+  every view, whichever view's env is asked. A view's anchors' ids end in `--<its key>` (the block's own
   element keeps the plain ones), and a reference in a view goes to its own
   anchor. `block.unmount()` (the same as `destroy()`) takes one view away
   and leaves the others as they are, the block's own element included; a

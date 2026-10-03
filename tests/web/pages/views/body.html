@@ -1,0 +1,42 @@
+<script>
+  // A tag drawn with the viewer's host API alone: an inline kind whose label
+  // may break at its spaces (the segments form). The label is the page's own
+  // state, kept by attrs.key, outside the DOM and outside any view:
+  // window.__tag.set(text, instance) changes it and invalidates that one
+  // instance (one view's). window.__pieces holds every piece drawn and not
+  // yet ended: { view (its block's key), piece, el }.
+  (function () {
+    var LABEL = 'checked by Lean on 25 September 2026';
+    var labels = {}, envs = {};
+    window.__pieces = [];
+    window.__renders = 0;
+    function words(i) { return (labels[i.attrs.key] || LABEL).split(' '); }
+    function define(host) {
+      host.define('tag', {
+        measure: function (instance, env) {
+          envs[instance.id] = env;
+          var m = function (t) { return env.measure('<span class="tag" style="padding:0">' + t + '</span>'); };
+          var space = m('a b').width - m('ab').width;
+          return {
+            segments: words(instance).map(function (w) { return m(w); }),
+            gaps: words(instance).slice(1).map(function () { return { width: space, penalty: 100 }; }),
+            ends: { left: { cap: 4, cut: 4 }, right: { cap: 4, cut: 4 } },
+          };
+        },
+        render: function (instance, host) {
+          var p = host.piece;
+          host.el.innerHTML = '<span class="tag' + (p.left === 'cut' ? ' cut-left' : '') + (p.right === 'cut' ? ' cut-right' : '')
+            + '">' + words(instance).slice(p.from, p.to + 1).join(' ') + '</span>';
+          var rec = { view: instance.block.key, piece: p, el: host.el };
+          window.__pieces.push(rec);
+          window.__renders++;
+          return function () { window.__pieces.splice(window.__pieces.indexOf(rec), 1); };
+        },
+      });
+      window.__tag = { set: function (text, instance) { labels[instance.attrs.key] = text; envs[instance.id].invalidate(); } };
+    }
+    if (window.reflowtex && reflowtex.host) define(reflowtex.host);
+    else document.addEventListener('reflowtex:host', function (e) { define(e.detail.host); }, { once: true });
+  })();
+</script>
+<style>.tag { display: inline-block; padding: 0 4px; background: #2f2ccd; color: #fff; font: 600 .7em/1.6 sans-serif; border-radius: 99px; }</style>
