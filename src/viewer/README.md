@@ -412,11 +412,16 @@ instance.setText('12:05');                  // one of them; wins over its name's
 Every glyph of a slot, TeX's default or a given text, is drawn with
 `data-slot="name"`, so a page can find where it stands or style it.
 
-A given text is set as a browser sets it: split at breakable white space
-(not at a no-break space), each word one node measured with the canvas in the
-default's font and colour, with no kerning, ligatures or font expansion across
-words; between words, the font's interword glue (`\fontdimen2–4`), so the
-line justifies with the rest. The words keep the default's height and depth.
+A given text is set as a browser sets it: split at breakable white space,
+each word one node measured with the canvas in the default's font and colour,
+with no kerning, ligatures or font expansion across words; between words, the
+font's interword glue (`\fontdimen2–4`), so the line justifies with the rest.
+A no-break space (U+00A0) is TeX's `~`: it splits the words too, and stands
+as the same glue after a penalty 10000, so it never breaks and is exactly as
+wide as TeX's tie. The narrow no-break space (U+202F), the figure space
+(U+2007), the word joiner (U+2060) and U+FEFF stay inside their word, at the
+browser's fixed advance, and do not break. The words keep the default's
+height and depth.
 Changes within one animation frame are applied together, and only the
 segments holding an affected paragraph are laid out and painted again. A text
 set before its block is initialised is applied when the block is. A slot

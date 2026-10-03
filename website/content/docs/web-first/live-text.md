@@ -155,10 +155,10 @@ field.addEventListener('input', () => { n = Math.max(0, parseInt(field.value, 10
 \TeX{} sets the default as it sets any text. A text the page gives instead
 is set the way a browser sets it: in the default's font and colour, word by
 word, each word measured by the browser, with no kerning or ligatures from
-one word to the next. It breaks only at its spaces (a no-break space
-keeps two words together), and between its words stands the interword glue
-of that font, with the stretch and shrink \TeX{} would give it, so the line
-it lands on is justified with the rest.
+one word to the next. It breaks only at its spaces, and between its words
+stands the interword glue of that font, with the stretch and shrink \TeX{}
+would give it, so the line it lands on is justified with the rest. A
+no-break space (U+00A0) is a tie, as in \TeX: the same glue, never broken.
 \begin{description}
 \item[\texttt{reflowtex.host.setText(name, text)}] shows \emph{text} in every
   \cs{webtext} of that name, in every block of the page; several changes

@@ -36,6 +36,19 @@ export function measureSlotText(fi, text) {
     return Math.round(slotMeasure.measureText(text).width / SP_TO_PX);
 }
 
+// The white space of a slot's text. Breakable white space (a run of it is
+// one interword glue, as a browser collapses it) separates words. A no-break
+// space (U+00A0) is TeX's ~: two words, joined by the interword glue with a
+// penalty 10000 before it, each one its own glue (~~ is two). The other
+// characters that forbid a break are not interword spaces, so they stay
+// inside their word, measured by the browser at their fixed advance: the
+// narrow no-break space U+202F (French typography's thin space, TeX's \,)
+// and the figure space U+2007 (a digit's width), neither of which stretches;
+// the word joiner U+2060 and U+FEFF, which have no width. (JavaScript's \s
+// counts U+2007 and U+FEFF as white space: they are taken out here too.)
+const SLOT_SPACES = /([^\S\u00A0\u2007\u202F\uFEFF]+|\u00A0)/;
+const SLOT_BREAK = /^[^\S\u00A0\u2007\u202F\uFEFF]+$/;
+
 // The nodes a slot's text becomes. The font and colour are those of the
 // default's first glyph; height and depth the default's own, so replacing a
 // text never moves the line's baseline.
@@ -54,12 +67,16 @@ export function slotNodes(fontInfo, slot, id, run, text) {
         track('slot face', document.fonts.load(spec, text)).then(() => scheduleSlots(), () => {});
     }
     const out = [];
-    // Breakable white space separates words; no-break spaces stay inside one.
-    for (const part of String(text).split(/([^\S\u00A0\u202F]+)/)) {
+    const glue = () => ({ type: 'glue', subtype: 13, width: slot.space || 0,
+                          stretch: slot.stretch || 0, shrink: slot.shrink || 0, slot: id });
+    for (const part of String(text).split(SLOT_SPACES)) {
         if (!part) continue;
-        if (/^[^\S\u00A0\u202F]+$/.test(part)) {
-            out.push({ type: 'glue', subtype: 13, width: slot.space || 0,
-                       stretch: slot.stretch || 0, shrink: slot.shrink || 0, slot: id });
+        if (part === '\u00A0') {
+            // A tie, as TeX sets ~ (\nobreak\ ): no break here, and the
+            // interword glue between the words, not the browser's advance.
+            out.push({ type: 'penalty', penalty: 10000, slot: id }, glue());
+        } else if (SLOT_BREAK.test(part)) {
+            out.push(glue());
         } else {
             out.push({ type: 'glyph', text: part, font: t.font, color: t.color, slot: id,
                        width: measureSlotText(fi, part), height, depth });
@@ -104,6 +121,7 @@ export function applySlots(fontInfo, doc) {
         const key = made.map(n => n.text !== undefined ? n.text + '\u0002' + n.width
                                 : n.type === 'wdisc' || n.type === 'widget' ? 'w' + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace[0].version, n.width ?? n.replace[0].width, n.options && n.options.map(o => [o.pre[0].width, o.post[0].width])])
                                 : n.type === 'disc' && n.slot ? 'd' + JSON.stringify([n.slot, n.penalty, n.pre.map(x => x.width), n.post.map(x => x.width), n.replace.map(x => x.width)])
+                                : n.type === 'penalty' ? '~'
                                 : ' ').join('\u0001');
         if (key === sp.key && sp.made.length === made.length) continue;
         sp.key = key;

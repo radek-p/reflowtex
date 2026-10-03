@@ -63,7 +63,7 @@ that `idle()` waits for it.
 | Footnotes: hover, click to pin, Escape, keyboard, ARIA | `footnotes.spec.ts` |
 | Hints: blurred with a label, click and Enter, `--latex-hint-label`, print | `hints.spec.ts`, `regressions.spec.ts` |
 | Cross-references: `\eqref` goes to its anchor | `links.spec.ts` |
-| Live text: `reflowtex.setText`, and back to the default | `live.spec.ts` |
+| Live text: `reflowtex.setText`, and back to the default; a no-break space as a tie (interword glue, never broken, as wide as TeX) | `live.spec.ts` |
 | Live marks and the highlighter: selection to ranges, bands through a reflow, two blocks, saved and restored, re-found by text, eraser, recolour | `highlighter.spec.ts` |
 | The selection as bands (flag): off by default, even bands per line, through a reflow, a block kept native, beside marks, the reader's switch | `selection.spec.ts` |
 | Widgets: drawn, split across lines, `invalidate()` | `live.spec.ts`, `regressions.spec.ts` |

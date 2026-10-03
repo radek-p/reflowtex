@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 42cf56fb9c75d70637b41889f34fed06ed27664d85674b7084ff6cff2826f7b6
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 28ad660cf0260977557e0df69c81ef745d4aa5501b4e93ebbab4a5afe4676f81
 'use strict';
 "use strict";
 (() => {
@@ -1538,6 +1538,8 @@
     slotMeasure.font = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
     return Math.round(slotMeasure.measureText(text).width / SP_TO_PX);
   }
+  var SLOT_SPACES = /([^\S\u00A0\u2007\u202F\uFEFF]+|\u00A0)/;
+  var SLOT_BREAK = /^[^\S\u00A0\u2007\u202F\uFEFF]+$/;
   function slotNodes(fontInfo, slot, id, run, text) {
     const glyphs = [];
     const walk2 = (ns) => {
@@ -1558,17 +1560,20 @@
       });
     }
     const out = [];
-    for (const part of String(text).split(/([^\S\u00A0\u202F]+)/)) {
+    const glue = () => ({
+      type: "glue",
+      subtype: 13,
+      width: slot.space || 0,
+      stretch: slot.stretch || 0,
+      shrink: slot.shrink || 0,
+      slot: id
+    });
+    for (const part of String(text).split(SLOT_SPACES)) {
       if (!part) continue;
-      if (/^[^\S\u00A0\u202F]+$/.test(part)) {
-        out.push({
-          type: "glue",
-          subtype: 13,
-          width: slot.space || 0,
-          stretch: slot.stretch || 0,
-          shrink: slot.shrink || 0,
-          slot: id
-        });
+      if (part === " ") {
+        out.push({ type: "penalty", penalty: 1e4, slot: id }, glue());
+      } else if (SLOT_BREAK.test(part)) {
+        out.push(glue());
       } else {
         out.push({
           type: "glyph",
@@ -1616,7 +1621,7 @@
         made.push(...nodes);
         i = j;
       }
-      const key = made.map((n) => n.text !== void 0 ? n.text + "" + n.width : n.type === "wdisc" || n.type === "widget" ? "w" + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace[0].version, n.width ?? n.replace[0].width, n.options && n.options.map((o) => [o.pre[0].width, o.post[0].width])]) : n.type === "disc" && n.slot ? "d" + JSON.stringify([n.slot, n.penalty, n.pre.map((x) => x.width), n.post.map((x) => x.width), n.replace.map((x) => x.width)]) : " ").join("");
+      const key = made.map((n) => n.text !== void 0 ? n.text + "" + n.width : n.type === "wdisc" || n.type === "widget" ? "w" + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace[0].version, n.width ?? n.replace[0].width, n.options && n.options.map((o) => [o.pre[0].width, o.post[0].width])]) : n.type === "disc" && n.slot ? "d" + JSON.stringify([n.slot, n.penalty, n.pre.map((x) => x.width), n.post.map((x) => x.width), n.replace.map((x) => x.width)]) : n.type === "penalty" ? "~" : " ").join("");
       if (key === sp.key && sp.made.length === made.length) continue;
       sp.key = key;
       sp.stale = sp.made;
