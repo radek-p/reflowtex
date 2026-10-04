@@ -68,16 +68,33 @@ export function roundXnOverD(x, n, d) {
 // paragraph was set with \protrudechars on – so a document without microtype
 // does not protrude at all, just as in its PDF. An older bundle without that
 // information keeps the viewer's own table of hanging punctuation.
+//
+// A word of live text (a slot's node: host/slots.js) is one glyph-like node
+// carrying its text instead of a character. TeX would have set it as a run
+// of characters of the same font, and protruded the first or the last of
+// them: so its codes are those of its first character at a line's start and
+// of its last at a line's end ("[Gaj+20," hangs by the comma's \rpcode).
+export function edgeChar(g, left) {
+    if (g.text === undefined) return g.char;
+    // (a word joiner or U+FEFF at its edge has no width: past it)
+    const cps = [...String(g.text).replace(/^[\u2060\uFEFF]+|[\u2060\uFEFF]+$/g, '')];
+    const c = left ? cps[0] : cps[cps.length - 1];
+    return c === undefined ? undefined : c.codePointAt(0);
+}
 export function protrusionOf(fontInfo, para, g, left) {
     if (!g) return 0;
     const fi = fontInfo && fontInfo[String(g.font)];
+    const ch = edgeChar(g, left);
     if (fi && fi.quad > 0) {
         if (!(para && para.protrude_chars > 0)) return 0;
-        const c = fi.codes && fi.codes.get(g.char);
+        const c = fi.codes && fi.codes.get(ch);
         const code = c ? (left ? c.lp : c.rp) || 0 : 0;
         return code ? roundXnOverD(fi.quad, code, 1000) : 0;
     }
-    return ((left ? LEFT_PROTRUSION : RIGHT_PROTRUSION)[g.char] || 0) * gW(g);
+    // (the fallback is a share of the character's own width, which a word
+    // of live text does not record: it protrudes nothing there)
+    if (g.text !== undefined) return 0;
+    return ((left ? LEFT_PROTRUSION : RIGHT_PROTRUSION)[ch] || 0) * gW(g);
 }
 
 // ── Font expansion in the breaker ────────────────────────────────────────────

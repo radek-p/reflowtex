@@ -85,6 +85,10 @@ end
 -- The characters each font was used for, so the microtypography pass below
 -- only has to look those up.
 local used_chars = {}
+-- The fonts a \webtext slot's default is set in (reflowtex.sty): a page may
+-- give the slot any text, in that font, so its characters' protrusion codes
+-- are recorded for the whole font, not only for those the document used.
+local slot_fonts = {}
 
 local function note_char(font_id, ch)
     local t = used_chars[font_id]
@@ -138,6 +142,20 @@ local function annotate_fonts()
                         codes[#codes + 1] = { char = c, lp = lp, rp = rp, ef = ef }
                     end
                 end
+            end
+            -- A slot's font: every other character that protrudes, too (a
+            -- live text's word is never expanded, so \efcode is left out).
+            if slot_fonts[id] then
+                local more = {}
+                for c, ch in pairs(chars) do
+                    if type(c) == "number" and not (used_chars[id] or {})[c] then
+                        local lp = ch.left_protruding or 0
+                        local rp = ch.right_protruding or 0
+                        if lp ~= 0 or rp ~= 0 then more[#more + 1] = { char = c, lp = lp, rp = rp, ef = 1000 } end
+                    end
+                end
+                for _, e in ipairs(more) do codes[#codes + 1] = e end
+                table.sort(codes, function(a, b) return a.char < b.char end)
             end
             if #codes > 0 then info.codes = codes end
         end
@@ -697,6 +715,7 @@ local function serialize_nodelist(head)
         elseif t == "glyph" then
             note_font(n.font)
             note_char(n.font, n.char)
+            if node.get_attribute(n, SLOT_ATTR) then slot_fonts[n.font] = true end
             local fdata = font.getfont(n.font)
             local cinfo = fdata and fdata.characters and fdata.characters[n.char]
             local g = {

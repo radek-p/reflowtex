@@ -204,7 +204,9 @@ message FontInfo {
   // protrudes and expands exactly as TeX did. `quad` (sp) is what protrusion
   // codes are relative to. expand_* are \expandglyphsinfont's three
   // arguments (thousandths); all absent = the font does not expand. `codes`
-  // lists only the characters with a non-default code.
+  // lists only the characters with a non-default code, among those the
+  // document used in this font – and, for a font a \webtext slot is set in,
+  // every character that protrudes, since a page may give the slot any text.
   optional int32     quad           = 5;
   optional int32     expand_stretch = 6;
   optional int32     expand_shrink  = 7;

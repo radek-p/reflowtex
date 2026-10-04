@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 28ad660cf0260977557e0df69c81ef745d4aa5501b4e93ebbab4a5afe4676f81
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 9ee5720b9c22fac1b0e8dfae2085e85d9547fef0ff4a4aeba1436783c6e439cf
 'use strict';
 "use strict";
 (() => {
@@ -67,6 +67,11 @@
     if (n.type === "kern" && (n.subtype || 0) === 0)
       return n.kern * (kernExpandScale(fontInfo, ns[i - 1], ns[i + 1], 1) - 1);
     return 0;
+  }
+  function sumExpandableSp(fontInfo, ns) {
+    let w = 0;
+    for (let i = 0; i < (ns || []).length; i++) w += expandableSp(fontInfo, ns, i);
+    return w;
   }
   var gH = (n) => n.height !== void 0 ? n.height : glyphMetrics[n.metrics - 1].height;
   var gD = (n) => n.depth !== void 0 ? n.depth : glyphMetrics[n.metrics - 1].depth;
@@ -569,16 +574,24 @@
     const s = x < 0 ? -1 : 1;
     return s * Math.floor((Math.abs(x) * n + Math.floor(d / 2)) / d);
   }
+  function edgeChar(g, left) {
+    if (g.text === void 0) return g.char;
+    const cps = [...String(g.text).replace(/^[\u2060\uFEFF]+|[\u2060\uFEFF]+$/g, "")];
+    const c = left ? cps[0] : cps[cps.length - 1];
+    return c === void 0 ? void 0 : c.codePointAt(0);
+  }
   function protrusionOf(fontInfo, para, g, left) {
     if (!g) return 0;
     const fi = fontInfo && fontInfo[String(g.font)];
+    const ch = edgeChar(g, left);
     if (fi && fi.quad > 0) {
       if (!(para && para.protrude_chars > 0)) return 0;
-      const c = fi.codes && fi.codes.get(g.char);
+      const c = fi.codes && fi.codes.get(ch);
       const code = c ? (left ? c.lp : c.rp) || 0 : 0;
       return code ? roundXnOverD(fi.quad, code, 1e3) : 0;
     }
-    return ((left ? LEFT_PROTRUSION : RIGHT_PROTRUSION)[g.char] || 0) * gW(g);
+    if (g.text !== void 0) return 0;
+    return ((left ? LEFT_PROTRUSION : RIGHT_PROTRUSION)[ch] || 0) * gW(g);
   }
   function efCodeOf(fi, n) {
     const c = fi && fi.codes && fi.codes.get(n.char);
@@ -4015,14 +4028,14 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         const ratio = justify ? ln.ratio : Math.min(0, ln.ratio);
         const er = ln.expand !== void 0 ? ln.expand : p.useExpansion && !ln.exact ? ratio * p.maxExpand : 0;
         const protX = -(p.useProtrusion ? ln.leftProtrusion * SP_TO_PX : 0);
-        const natSp = sumWidthSp(ln.nodes);
+        const natSp = sumWidthSp(ln.nodes) + (er ? Math.round(er * sumExpandableSp(fontInfo, ln.nodes)) : 0);
         const natPx = natSp * SP_TO_PX;
+        const lpPx = -protX;
+        const rpPx = p.useProtrusion ? (ln.rightProtrusion || 0) * SP_TO_PX : 0;
         let x0, fillRatio = 0, fillOrder = 0;
-        if (ratio < 0 || natPx > availPx) {
+        if (ratio < 0 || natPx - lpPx - rpPx > availPx) {
           x0 = protX;
         } else {
-          const lpPx = -protX;
-          const rpPx = p.useProtrusion ? (ln.rightProtrusion || 0) * SP_TO_PX : 0;
           switch (align) {
             case "right":
               x0 = availPx - natPx + rpPx;
@@ -4037,7 +4050,8 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
           const fi = fillInfo(ln.nodes);
           if (fi.order > 0 && fi.stretch > 0) {
             const leftKernSp = p.useProtrusion ? ln.leftProtrusion || 0 : 0;
-            const slackSp = availSp - (natSp - leftKernSp);
+            const rightKernSp = p.useProtrusion ? ln.rightProtrusion || 0 : 0;
+            const slackSp = availSp - (natSp - leftKernSp - rightKernSp);
             if (slackSp > 0) {
               fillRatio = slackSp / fi.stretch;
               fillOrder = fi.order;
