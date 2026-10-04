@@ -16,10 +16,11 @@ import { addMark, liveMarks, markHandle, rangesOf } from './marks.ts';
 import { getColorMaps, setColorMaps } from '../runtime/colour.js';
 import { destroyBlock, mountBlock } from '../runtime/init.js';
 import { blockData } from '../runtime/blocks.js';
+import { applyFade, displayFadeDefault, displayFadeOf, forgetFade, revealInDisplay, setDisplayFadeDefault, setDisplayFadeOf } from './displays.ts';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
 
 interface ViewerBlockData extends BlockData {
-    cache: { blockKey?: string };
+    cache: { blockKey?: string } & Parameters<typeof revealInDisplay>[0];
     /** Its name among its block's views, and what they share (init.js). */
     view: string;
     source: { views: ViewerBlockData[] };
@@ -62,6 +63,11 @@ class BlockImpl implements Block {
     }
     destroy() { destroyBlock(this.el); }
     unmount() { destroyBlock(this.el); }
+    displayFade() { return displayFadeOf(this.el); }
+    setDisplayFade(on: boolean | null) { setDisplayFadeOf(this.el, on); }
+    revealInDisplay(display: number | Element, x?: number, options?: { margin?: number }) {
+        return revealInDisplay(this.data.cache, displayFadeOf(this.el), display, x, options);
+    }
     on<E extends keyof BlockEvents>(event: E, fn: BlockEvents[E]): () => void {
         // 'layout' is the block's reflowtex:layout DOM event (announceLayout).
         const h = (e: Event) => { if ((e as CustomEvent).detail?.block === this.el) fn(); };
@@ -136,11 +142,15 @@ export const host: Host = {
     async mount(el, options = {}) {
         const of = options.of === undefined ? null : blockFrom(options.of);
         if (options.of !== undefined && !of) throw new Error('host.mount: `of` is not a block on the page');
+        // (before it is drawn, so that it never shows the other way first)
+        if (options.displayFade !== undefined) setDisplayFadeOf(el, options.displayFade);
         await mountBlock(el, of ? of.data : null, options.view ?? null);
         const b = blockOf(el);
         if (!b) throw new Error('host.mount: not a block (no data-nodelist-b64, or it failed to render)');
         return b;
     },
+    displayFade: () => displayFadeDefault(),
+    setDisplayFade(on) { setDisplayFadeDefault(on, blocks.map(b => b.el)); },
     onBlock(fn) {
         blockListeners.add(fn);
         for (const b of blocks) fn(b);
@@ -156,11 +166,13 @@ export function unregisterBlock(el: Element) {
     const i = blocks.indexOf(b);
     if (i >= 0) blocks.splice(i, 1);
     byEl.delete(el);
+    forgetFade(el);
 }
 
 export function registerBlock(data: ViewerBlockData) {
     const b = blockOf(data.el);
     if (!b || blocks.includes(b)) return;
+    applyFade(data.el);
     blocks.push(b);
     for (const fn of [...blockListeners]) {
         try { fn(b); } catch (e) { console.error('[latex-viewer] onBlock listener:', e); }

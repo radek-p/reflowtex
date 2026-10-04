@@ -100,7 +100,10 @@ A display wider than its column (beyond the configurable rounding tolerance) is
 wrapped by the viewer in a `.latex-display` scroll box. The supplied CSS lets it
 peek up to 100px into each available page margin and fades the currently hidden
 edge; scroll-state classes remove each cue when that end is reached. Override
-`--latex-display-peek` to change the visual allowance.
+`--latex-display-peek` to change the visual allowance. A page can turn the
+fade off – for one block or view, or by default – through the host API
+(`setDisplayFade`, below): the block element then carries `latex-no-fade`,
+and the viewer's own rule takes the mask away.
 
 Whatever that allowance is, the box always pans by exactly the distance the
 display overflows the column, so its last glyphs can be brought level with the
@@ -280,6 +283,25 @@ everything a page draws:
   mark shown in no view is then removed, and a mirrored mark whose ranges
   named the view names another. Mounting and unmounting views leaves
   nothing behind.
+- **Wide displays**: a display too wide for its column scrolls sideways
+  and fades where its box cuts it off (see Overflow). A host that needs a
+  formula shown whole turns the fade off: `block.setDisplayFade(false)`
+  for that block, or that view only (each view is a block, so a split view
+  can show one side whole), or `host.mount(el, { of, view, displayFade:
+  false })` to mount it so; `block.setDisplayFade(null)` follows the
+  host's default again, which is `host.setDisplayFade(on)` (on unless set;
+  `host.displayFade()` reads it, `block.displayFade()` what a block
+  does now). Off, the display shows all its box holds, still scrolling
+  sideways when it is wider, with no mask. Either way only a class changes:
+  nothing is laid out again or repainted, and the scroll position stays.
+  `block.revealInDisplay(display, x?, { margin? })` scrolls a display so
+  that a point of it is in view, a caret say: `display` is its index among
+  the block's displays (top-level, in document order, whether they overflow
+  now or not) or a glyph element drawn in it, `x` px from its left edge
+  (its `<svg>`'s user units); without `x`, the element whole. In view
+  is within the column while the display fades, anywhere in its box when it
+  does not, less `margin` on each side; it moves only as far as needed,
+  and returns false when there is no such display.
 - **Instances**: everything the companion package makes, and the footnotes
   and `\marginpar`s the pipeline makes, one instance each – `{ id, kind,
   attrs, presentation, placement, parts, parent, children, spaceBefore,

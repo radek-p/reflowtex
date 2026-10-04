@@ -249,6 +249,28 @@ export interface Block {
     destroy(): void;
     /** The same as destroy: this view goes; the block's other views stay. */
     unmount(): void;
+    /** Whether its wide displays (those that scroll sideways in a
+     *  .latex-display box) fade where they are cut off: its own setting,
+     *  else the host's (Host.displayFade). */
+    displayFade(): boolean;
+    /** Turn the fade off (false) or on (true) for this block, this view
+     *  only; null follows the host again. Off, a wide display shows all
+     *  its box holds, still scrolling sideways, with no mask over it. Only
+     *  a class changes (latex-no-fade on el): nothing is laid out again,
+     *  and every scroll position is kept. */
+    setDisplayFade(on: boolean | null): void;
+    /** Scroll a wide display sideways so that a point of it is in view, for
+     *  example to keep a caret visible. `display` is its index among
+     *  the block's displays (the top-level ones, in document order, whether
+     *  or not they overflow now) or an element drawn in it (a glyph). `x`
+     *  is in the display's own px, from its left edge (its <svg>'s user
+     *  units); without it, the element given is brought into view whole.
+     *  "In view" is within the column while the display fades (the faded
+     *  peek is not counted), the whole box when it does not, less
+     *  `margin` px on each side (default 0). Moves only as far as needed;
+     *  a display that fits is all in view already. False when there is no
+     *  such display. */
+    revealInDisplay(display: number | Element, x?: number, options?: { margin?: number }): boolean;
 }
 
 /** Where the viewer shows a detached instance, for its kind to draw in:
@@ -408,6 +430,13 @@ export interface Host {
     /** Every view of a block (a Block, its element, or any view's key), in
      *  the order mounted; [] when it is not on the page. */
     views(of: Block | Element | string): Block[];
+    /** Whether wide displays fade where they are cut off, in every block
+     *  that has no setting of its own (Block.setDisplayFade). On by
+     *  default. */
+    displayFade(): boolean;
+    /** Set that default; the blocks that follow it change at once, with no
+     *  layout. */
+    setDisplayFade(on: boolean): void;
 }
 
 export interface BlockMountOptions {
@@ -422,6 +451,9 @@ export interface BlockMountOptions {
     of?: Block | Element | string;
     /** Its name among the block's views (Block.view); unique among them. */
     view?: string;
+    /** Its own display fade (Block.setDisplayFade), set before it is first
+     *  drawn; without it, it follows the host's. */
+    displayFade?: boolean;
 }
 
 declare global {

@@ -35,6 +35,9 @@ export function installViewerStyles() {
         font: 600 .75em/1 ui-sans-serif, system-ui, sans-serif; }
       .latex-margin-mark:hover, .latex-margin-mark:focus-visible { opacity: 1; background: color-mix(in srgb, currentColor 10%, transparent); }
       .latex-margin-mark[hidden], .latex-margin-note[hidden] { display: none; }
+      /* A block whose wide displays do not fade (Block.setDisplayFade):
+         whatever mask the page gives .latex-display goes. Paint only. */
+      .latex-no-fade .latex-display { -webkit-mask-image: none !important; mask-image: none !important; }
       @media print {
         .latex-margin { display: none; }
         /* Controls do nothing on paper. More specific than the page's

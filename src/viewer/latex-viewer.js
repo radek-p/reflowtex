@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 9ee5720b9c22fac1b0e8dfae2085e85d9547fef0ff4a4aeba1436783c6e439cf
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 5a2da2dbde027ded82e78a1156fbef7ebd70469859b7f0acafa6a85a6c5c4b53
 'use strict';
 "use strict";
 (() => {
@@ -5204,6 +5204,94 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     for (const s of all) s.paintAll();
   });
 
+  // src/host/displays.ts
+  var NO_FADE_CLASS = "latex-no-fade";
+  var fadeDefault = true;
+  var fadeOwn = /* @__PURE__ */ new WeakMap();
+  var displayFadeDefault = () => fadeDefault;
+  function setDisplayFadeDefault(on, els) {
+    fadeDefault = !!on;
+    for (const el of els) applyFade(el);
+  }
+  var displayFadeOf = (el) => fadeOwn.get(el) ?? fadeDefault;
+  function setDisplayFadeOf(el, on) {
+    if (on === null || on === void 0) fadeOwn.delete(el);
+    else fadeOwn.set(el, !!on);
+    applyFade(el);
+  }
+  function applyFade(el) {
+    const off = !displayFadeOf(el);
+    if (el.classList.contains(NO_FADE_CLASS) !== off) el.classList.toggle(NO_FADE_CLASS, off);
+  }
+  function forgetFade(el) {
+    fadeOwn.delete(el);
+    el.classList.remove(NO_FADE_CLASS);
+  }
+  function screenX(el, x) {
+    const ctm = el.getScreenCTM?.();
+    return ctm ? new DOMPoint(x, 0).matrixTransform(ctm).x : null;
+  }
+  function extent(el) {
+    const ax = el.getAttribute("x");
+    if (ax !== null && el instanceof SVGElement) {
+      const x = parseFloat(ax) || 0;
+      let w = parseFloat(el.getAttribute("width") || "");
+      if (!(w >= 0) && el instanceof SVGTextContentElement) {
+        try {
+          w = el.getComputedTextLength();
+        } catch {
+          w = 0;
+        }
+      }
+      const a = screenX(el, x), b = screenX(el, x + (w > 0 ? w : 0));
+      if (a !== null && b !== null) return [Math.min(a, b), Math.max(a, b)];
+    }
+    const r = el.getBoundingClientRect();
+    return [r.left, r.right];
+  }
+  function revealInDisplay(cache, fades, display, x, options = {}) {
+    const segs = cache.dom?.segs, kinds2 = cache.layoutCtx?.segs;
+    if (!segs || !kinds2) return false;
+    let i = -1;
+    if (typeof display === "number") {
+      let n = -1;
+      for (let k = 0; k < kinds2.length; k++) {
+        if (kinds2[k].kind === "display" && ++n === display) {
+          i = k;
+          break;
+        }
+      }
+    } else if (display instanceof Element) {
+      i = segs.findIndex((s2) => s2.svg.contains(display));
+      if (i >= 0 && kinds2[i].kind !== "display") i = -1;
+    }
+    if (i < 0) return false;
+    if (cache.layout?.laid[i]?.deferred) materializeSegment(cache, i);
+    const s = segs[i], wrap = s.wrap;
+    if (!wrap || s.mount !== wrap || !wrap.isConnected) return true;
+    let span;
+    if (typeof x === "number") {
+      const p = screenX(s.svg, x);
+      span = p === null ? null : [p, p];
+    } else {
+      span = display instanceof Element ? extent(display) : null;
+    }
+    if (!span) return true;
+    const r = wrap.getBoundingClientRect();
+    const scale = wrap.offsetWidth ? r.width / wrap.offsetWidth : 1;
+    const peek = fades ? parseFloat(getComputedStyle(wrap).paddingLeft) || 0 : 0;
+    const inset = (peek + Math.max(0, options.margin || 0)) * scale;
+    const lo = r.left + wrap.clientLeft * scale + inset;
+    const hi = r.left + (wrap.clientLeft + wrap.clientWidth) * scale - inset;
+    const [a, b] = span;
+    let d = 0;
+    if (b - a > hi - lo || a < lo) d = a - lo;
+    else if (b > hi) d = b - hi;
+    if (d) wrap.scrollLeft += d / scale;
+    updateDisplayOverflowCue(wrap);
+    return true;
+  }
+
   // src/host/host.ts
   function screenPoint(el, x, y) {
     const ctm = el && el.getScreenCTM && el.getScreenCTM();
@@ -5256,6 +5344,15 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     }
     unmount() {
       destroyBlock(this.el);
+    }
+    displayFade() {
+      return displayFadeOf(this.el);
+    }
+    setDisplayFade(on) {
+      setDisplayFadeOf(this.el, on);
+    }
+    revealInDisplay(display, x, options) {
+      return revealInDisplay(this.data.cache, displayFadeOf(this.el), display, x, options);
     }
     on(event, fn) {
       const h = (e) => {
@@ -5323,10 +5420,15 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     async mount(el, options = {}) {
       const of = options.of === void 0 ? null : blockFrom(options.of);
       if (options.of !== void 0 && !of) throw new Error("host.mount: `of` is not a block on the page");
+      if (options.displayFade !== void 0) setDisplayFadeOf(el, options.displayFade);
       await mountBlock(el, of ? of.data : null, options.view ?? null);
       const b = blockOf(el);
       if (!b) throw new Error("host.mount: not a block (no data-nodelist-b64, or it failed to render)");
       return b;
+    },
+    displayFade: () => displayFadeDefault(),
+    setDisplayFade(on) {
+      setDisplayFadeDefault(on, blocks2.map((b) => b.el));
     },
     onBlock(fn) {
       blockListeners.add(fn);
@@ -5342,10 +5444,12 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     const i = blocks2.indexOf(b);
     if (i >= 0) blocks2.splice(i, 1);
     byEl.delete(el);
+    forgetFade(el);
   }
   function registerBlock(data) {
     const b = blockOf(data.el);
     if (!b || blocks2.includes(b)) return;
+    applyFade(data.el);
     blocks2.push(b);
     for (const fn of [...blockListeners]) {
       try {
@@ -6088,6 +6192,9 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         font: 600 .75em/1 ui-sans-serif, system-ui, sans-serif; }
       .latex-margin-mark:hover, .latex-margin-mark:focus-visible { opacity: 1; background: color-mix(in srgb, currentColor 10%, transparent); }
       .latex-margin-mark[hidden], .latex-margin-note[hidden] { display: none; }
+      /* A block whose wide displays do not fade (Block.setDisplayFade):
+         whatever mask the page gives .latex-display goes. Paint only. */
+      .latex-no-fade .latex-display { -webkit-mask-image: none !important; mask-image: none !important; }
       @media print {
         .latex-margin { display: none; }
         /* Controls do nothing on paper. More specific than the page's

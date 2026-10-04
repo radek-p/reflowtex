@@ -73,6 +73,7 @@ that `idle()` waits for it.
 | Host API: instances, parts, surfaces; block kinds (TeX spacing kept, one render, edges, frames, fallback); actions routed; nested frames flush, rtl; mount and destroy; the popover drawn by a kind | `host.spec.ts` |
 | What the author declares: widget parameters, `\webpart`, marks, `\NewWebEnvironment`, `\NewWebAside` | `parts.spec.ts` |
 | Views: one block in several elements (`host.mount(el, { of })`), each broken at its own width and laid out alone, live text and marks per view or mirrored, widgets drawn and broken per view and invalidated in all, the selection per view, own accessible layer and anchors, unmount leaves nothing behind | `views.spec.ts` |
+| Wide displays: the fade on by default, off per block, per view and by the host default, toggled with no relayout and the scroll position kept; `revealInDisplay` brings a point or a glyph into view | `displays.spec.ts` |
 | Companion accordion: animation, reduced motion, keyboard, styling from LaTeX, nesting, print; a throwing component | `accordion-v2.spec.ts` |
 | Companion Lean widgets: switches, motion, side by side, the code, print, the space after a hidden proof | `lean-v2.spec.ts` |
 | Reading options: corner button, panel, card, the page following theme, width and size | `reading.spec.ts` |
