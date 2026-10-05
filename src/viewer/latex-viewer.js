@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 5a2da2dbde027ded82e78a1156fbef7ebd70469859b7f0acafa6a85a6c5c4b53
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 da33dff5a5ab95b549a78351c3a3bec7f8605385af1c2d775abf3036da46f065
 'use strict';
 "use strict";
 (() => {
@@ -4730,6 +4730,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       s.wrap.classList.remove("latex-overflow-left", "latex-overflow-right");
       s.svg.remove();
     }
+    setStyle(s.box, "containerType", mount === s.wrap ? "inline-size" : "");
     setStyle(s.gap, "height", `${gap.r}px`);
     setStyle(s.svg, "marginTop", "");
     if (s.wrap) {

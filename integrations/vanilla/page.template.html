@@ -254,7 +254,12 @@
   .latex-display {
     /* Use at most 100px of each page margin, but never extend past the viewport.
        The inline padding keeps x=0 aligned with the prose column. */
-    --latex-display-peek: clamp(0px, calc(50vw - 50%), 100px);
+    /* In cqw, not %: 100cqw is the column (the viewer makes the box around
+       the scroll box its container), wherever the peek is used. A % would be
+       the column here but the box's content in the ::after below, and the
+       trailing peek would come out too short (by half, on a phone): the pan
+       would end with the display still past the column's right edge. */
+    --latex-display-peek: clamp(0px, calc(50vw - 50cqw), 100px);
     box-sizing: border-box;
     margin-inline: calc(0px - var(--latex-display-peek));
     /* The trailing peek is a real box (the ::after below), not padding on this

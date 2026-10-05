@@ -134,6 +134,14 @@ export function sizeSegment(s, L, prev, columnPx, p) {
         s.wrap.classList.remove('latex-overflow-left', 'latex-overflow-right');
         s.svg.remove();          // no longer overflowing: shed the scroll box
     }
+    // The box around a scroll box is a size container, so that the page's
+    // rules can size the scroll box by the column in cqw: a % in
+    // --latex-display-peek would be the column in the scroll box's own
+    // margins and padding, but its content box in the ::after spacer, and
+    // the display could not be panned to the column's right edge (README,
+    // Overflow). Only while it holds one: containment is not for ordinary
+    // segments.
+    setStyle(s.box, 'containerType', mount === s.wrap ? 'inline-size' : '');
     // The space above the segment lives in its spacer, not in a margin on the
     // element itself (scroll anchoring again, see layoutDocument).
     setStyle(s.gap, 'height', `${gap.r}px`);

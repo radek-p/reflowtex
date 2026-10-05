@@ -111,6 +111,12 @@ text edge. That is why the trailing peek is a `::after` flex item rather than
 padding on the scroll box: a scroll container's end padding is not part of the
 scrollable overflow in every engine (WebKit drops it), and where it is dropped
 the pan comes up short by that much. Keep the spacer if you rewrite these rules.
+And size the peek by the column in `cqw`, not `%` (the default is
+`clamp(0px, calc(50vw - 50cqw), 100px)`): the viewer makes the box around a
+scroll box a size container, so `100cqw` is the column wherever the peek is
+used, while a `%` in it is the column in the scroll box's margins but the
+box's content in the `::after`, whose peek then comes out short – on a phone
+by half, and the display can no longer be panned to the column's edge.
 
 Because setting
 `overflow-x` forces `overflow-y: auto` (which would clip ascenders/descenders),

@@ -184,3 +184,44 @@ test('a view turns the fade off for itself only, and reveals on its own', async 
   const cls = await page.evaluate(() => { const el = window.__V.el; window.__V.setDisplayFade(false); window.__V.unmount(); return el.className; });
   expect(cls).toBe('latex-block');
 });
+
+/** At the page's own width (no style on the blocks): each block's display
+ *  panned to its end, with the edges that matter, on screen. */
+const atEnd = (page: WebPage) => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.latex-display')].map(w => {
+  w.scrollLeft = w.scrollWidth;
+  const svg = w.querySelector(':scope > svg') as SVGSVGElement, col = w.parentElement!.getBoundingClientRect();
+  // the rightmost glyph's end, from its own coordinates
+  let ink = -Infinity;
+  for (const t of svg.querySelectorAll<SVGTextContentElement>('tspan')) {
+    const x = parseFloat(t.getAttribute('x')!) + t.getComputedTextLength();
+    ink = Math.max(ink, new DOMPoint(x, 0).matrixTransform(t.getScreenCTM()!).x);
+  }
+  return { col: col.right, svg: svg.getBoundingClientRect().right, ink, pan: w.scrollLeft,
+           overflow: svg.width.baseVal.value - col.width, cue: w.classList.contains('latex-overflow-right') };
+}));
+
+for (const width of [360, 390]) {
+  test(`at ${width} px a display panned to its end is flush with the column's right edge`, async ({ openPage }) => {
+    const page = await openPage('displays', { width });
+    for (const fade of [true, false]) {
+      await page.evaluate(f => reflowtex.host.setDisplayFade(f), fade);
+      await idle(page);
+      const ends = await atEnd(page);
+      await idle(page);
+      expect(ends.length).toBe(2);
+      for (const e of ends) {
+        // It pans exactly as far as it overflows the column (the trailing
+        // peek is as wide as the leading one), so its box ends on the
+        // column's edge, and so does its last glyph, near enough.
+        expect(e.pan).toBeGreaterThan(0);
+        expect(Math.abs(e.pan - e.overflow)).toBeLessThanOrEqual(1);
+        expect(Math.abs(e.svg - e.col)).toBeLessThanOrEqual(0.5);
+        expect(e.ink).toBeLessThanOrEqual(e.col + 0.5);
+        expect(e.ink).toBeGreaterThan(e.col - 4);
+      }
+      // nothing left to fade on the right
+      expect((await page.evaluate(() => [...document.querySelectorAll('.latex-display')]
+        .map(w => w.classList.contains('latex-overflow-right'))))).toEqual([false, false]);
+    }
+  });
+}
