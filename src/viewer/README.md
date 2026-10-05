@@ -103,7 +103,12 @@ edge; scroll-state classes remove each cue when that end is reached. Override
 `--latex-display-peek` to change the visual allowance. A page can turn the
 fade off – for one block or view, or by default – through the host API
 (`setDisplayFade`, below): the block element then carries `latex-no-fade`,
-and the viewer's own rule takes the mask away.
+and the viewer's own rule takes the mask away. It can also have a display's
+box fitted to the display rather than the column (`setDisplayFit('natural')`,
+below): the box widens into the room beside the column, up to the edges of
+the element the block sits in, and scrolls only when the display is wider
+than that – with no peek, spacer or fade; the block element carries
+`latex-fit-natural`, and the viewer's own rules size each box.
 
 Whatever that allowance is, the box always pans by exactly the distance the
 display overflows the column, so its last glyphs can be brought level with the
@@ -308,6 +313,23 @@ everything a page draws:
   is within the column while the display fades, anywhere in its box when it
   does not, less `margin` on each side; it moves only as far as needed,
   and returns false when there is no such display.
+  A host with room beside the column can show a wide display at its own
+  width instead: `block.setDisplayFit('natural')` (that block or view;
+  `host.mount(el, { of, view, displayFit: 'natural' })` to mount it so;
+  `null` follows the host again, `host.setDisplayFit('natural' |
+  'column')` sets the default, `'column'` unless set; `displayFit()` on
+  either reads it). Each wide display's box then widens to the display's
+  natural width, centred on the column as far as the room on each side
+  allows, up to the padding box of the element the block sits in and never
+  past the window; only a display wider than that scrolls, and none fades.
+  The room is measured when the fit is set, when the block is laid out at a
+  new width, and when the window or that element is resized (a host that
+  moves a block some other way sets the fit again). `'column'` is the
+  scroll box the column's width, with the page's peek and the fade.
+  Switching changes only classes and styles: no line is broken or laid out
+  again, nothing else on the page moves, and each display's glyphs stay
+  where they were on screen as far as its box lets them (its scrollLeft
+  follows).
 - **Instances**: everything the companion package makes, and the footnotes
   and `\marginpar`s the pipeline makes, one instance each – `{ id, kind,
   attrs, presentation, placement, parts, parent, children, spaceBefore,

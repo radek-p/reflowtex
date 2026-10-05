@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 da33dff5a5ab95b549a78351c3a3bec7f8605385af1c2d775abf3036da46f065
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 aed3059b880c9f2ec270de6f3e6c639bdaae47e9b404229c2f98ef83d8b6ac75
 'use strict';
 "use strict";
 (() => {
@@ -4725,6 +4725,8 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       }
       s.wrap.classList.add("latex-display", "latex-overflow-right");
       if (s.svg.parentNode !== s.wrap) s.wrap.replaceChildren(s.svg);
+      if (!L.held && s.wrap.style.getPropertyValue("--latex-display-width") !== `${surfaceW}px`)
+        s.wrap.style.setProperty("--latex-display-width", `${surfaceW}px`);
       mount = s.wrap;
     } else if (s.wrap && s.svg.parentNode === s.wrap) {
       s.wrap.classList.remove("latex-overflow-left", "latex-overflow-right");
@@ -5228,6 +5230,104 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     fadeOwn.delete(el);
     el.classList.remove(NO_FADE_CLASS);
   }
+  var FIT_NATURAL_CLASS = "latex-fit-natural";
+  var ROOM_LEFT = "--latex-display-room-left";
+  var ROOM_RIGHT = "--latex-display-room-right";
+  var fitDefault = "column";
+  var fitOwn = /* @__PURE__ */ new WeakMap();
+  var naturals = /* @__PURE__ */ new Set();
+  function checkFit(fit) {
+    if (fit === "natural" || fit === "column") return fit;
+    throw new TypeError(`setDisplayFit: 'natural', 'column' or null, not ${String(fit)}`);
+  }
+  var displayFitDefault = () => fitDefault;
+  function setDisplayFitDefault(fit, els) {
+    fitDefault = checkFit(fit);
+    for (const el of els) applyFit(el);
+  }
+  var displayFitOf = (el) => fitOwn.get(el) ?? fitDefault;
+  function setDisplayFitOf(el, fit) {
+    if (fit === null || fit === void 0) fitOwn.delete(el);
+    else fitOwn.set(el, checkFit(fit));
+    applyFit(el);
+  }
+  var fadesNow = (el) => displayFadeOf(el) && displayFitOf(el) !== "natural";
+  function measureRoom(el) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !el.offsetWidth) return;
+    const scale = r.width / el.offsetWidth;
+    const cs = getComputedStyle(el);
+    const colL = r.left + (el.clientLeft + (parseFloat(cs.paddingLeft) || 0)) * scale;
+    const colR = colL + (el.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0)) * scale;
+    let lo = 0, hi = document.documentElement.clientWidth;
+    let p = el.parentElement;
+    while (p && p !== document.documentElement && getComputedStyle(p).display === "contents") p = p.parentElement;
+    if (p && p !== document.documentElement) {
+      const pr = p.getBoundingClientRect(), ps = pr.width / (p.offsetWidth || pr.width || 1);
+      lo = Math.max(lo, pr.left + p.clientLeft * ps);
+      hi = Math.min(hi, pr.left + (p.clientLeft + p.clientWidth) * ps);
+    }
+    const px = (v) => `${Math.max(0, Math.floor(v / scale * 100) / 100)}px`;
+    const st = el.style;
+    if (st.getPropertyValue(ROOM_LEFT) !== px(colL - lo)) st.setProperty(ROOM_LEFT, px(colL - lo));
+    if (st.getPropertyValue(ROOM_RIGHT) !== px(hi - colR)) st.setProperty(ROOM_RIGHT, px(hi - colR));
+  }
+  var listening = false;
+  var parents = null;
+  var observed = /* @__PURE__ */ new WeakSet();
+  function listen(el) {
+    const p = el.parentElement;
+    if (p && typeof ResizeObserver === "function") {
+      parents ??= new ResizeObserver((es) => {
+        const ps = new Set(es.map((e) => e.target));
+        for (const n of naturals) if (n.parentElement && ps.has(n.parentElement)) measureRoom(n);
+      });
+      if (!observed.has(p)) {
+        observed.add(p);
+        parents.observe(p);
+      }
+    }
+    if (listening) return;
+    listening = true;
+    const again = () => {
+      for (const n of naturals) measureRoom(n);
+    };
+    addEventListener("resize", again, { passive: true });
+    document.addEventListener("reflowtex:layout", (e) => {
+      const el2 = e.detail?.block;
+      if (naturals.has(el2)) measureRoom(el2);
+    });
+  }
+  function applyFit(el) {
+    const on = displayFitOf(el) === "natural";
+    const h = el;
+    if (on) {
+      naturals.add(h);
+      listen(h);
+      measureRoom(h);
+    } else naturals.delete(h);
+    if (h.classList.contains(FIT_NATURAL_CLASS) === on) return;
+    const wraps = h.isConnected ? [...h.querySelectorAll(".latex-display")] : [];
+    const at = wraps.map((w) => w.firstElementChild?.getBoundingClientRect().left ?? 0);
+    h.classList.toggle(FIT_NATURAL_CLASS, on);
+    if (!on) {
+      h.style.removeProperty(ROOM_LEFT);
+      h.style.removeProperty(ROOM_RIGHT);
+    }
+    wraps.forEach((w, i) => {
+      const now = w.firstElementChild?.getBoundingClientRect().left ?? 0;
+      const r = w.getBoundingClientRect(), scale = w.offsetWidth ? r.width / w.offsetWidth : 1;
+      if (now !== at[i]) w.scrollLeft += (now - at[i]) / scale;
+      updateDisplayOverflowCue(w);
+    });
+  }
+  function forgetFit(el) {
+    fitOwn.delete(el);
+    naturals.delete(el);
+    el.classList.remove(FIT_NATURAL_CLASS);
+    el.style?.removeProperty(ROOM_LEFT);
+    el.style?.removeProperty(ROOM_RIGHT);
+  }
   function screenX(el, x) {
     const ctm = el.getScreenCTM?.();
     return ctm ? new DOMPoint(x, 0).matrixTransform(ctm).x : null;
@@ -5353,7 +5453,13 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       setDisplayFadeOf(this.el, on);
     }
     revealInDisplay(display, x, options) {
-      return revealInDisplay(this.data.cache, displayFadeOf(this.el), display, x, options);
+      return revealInDisplay(this.data.cache, fadesNow(this.el), display, x, options);
+    }
+    displayFit() {
+      return displayFitOf(this.el);
+    }
+    setDisplayFit(fit) {
+      setDisplayFitOf(this.el, fit);
     }
     on(event, fn) {
       const h = (e) => {
@@ -5422,6 +5528,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       const of = options.of === void 0 ? null : blockFrom(options.of);
       if (options.of !== void 0 && !of) throw new Error("host.mount: `of` is not a block on the page");
       if (options.displayFade !== void 0) setDisplayFadeOf(el, options.displayFade);
+      if (options.displayFit !== void 0) setDisplayFitOf(el, options.displayFit);
       await mountBlock(el, of ? of.data : null, options.view ?? null);
       const b = blockOf(el);
       if (!b) throw new Error("host.mount: not a block (no data-nodelist-b64, or it failed to render)");
@@ -5430,6 +5537,10 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     displayFade: () => displayFadeDefault(),
     setDisplayFade(on) {
       setDisplayFadeDefault(on, blocks2.map((b) => b.el));
+    },
+    displayFit: () => displayFitDefault(),
+    setDisplayFit(fit) {
+      setDisplayFitDefault(fit, blocks2.map((b) => b.el));
     },
     onBlock(fn) {
       blockListeners.add(fn);
@@ -5446,11 +5557,13 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     if (i >= 0) blocks2.splice(i, 1);
     byEl.delete(el);
     forgetFade(el);
+    forgetFit(el);
   }
   function registerBlock(data) {
     const b = blockOf(data.el);
     if (!b || blocks2.includes(b)) return;
     applyFade(data.el);
+    applyFit(data.el);
     blocks2.push(b);
     for (const fn of [...blockListeners]) {
       try {
@@ -6196,6 +6309,22 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       /* A block whose wide displays do not fade (Block.setDisplayFade):
          whatever mask the page gives .latex-display goes. Paint only. */
       .latex-no-fade .latex-display { -webkit-mask-image: none !important; mask-image: none !important; }
+      /* A block whose wide displays are fitted naturally (Block.setDisplayFit):
+         each scroll box is as wide as its display (--latex-display-width,
+         from the layout), reaching into the room beside the column (from
+         host/displays.ts), centred on the column as far as each side's room
+         allows. W - 100% is how far the display overflows the column (a %
+         in a margin is the column's), taken half from each side, or what
+         one side cannot give from the other. No peek, no spacer, no fade. */
+      .latex-fit-natural .latex-display {
+        --latex-display-over: max(0px, calc(var(--latex-display-width, 0px) - 100%));
+        margin-left: calc(0px - min(var(--latex-display-room-left, 0px),
+          max(var(--latex-display-over) / 2, var(--latex-display-over) - var(--latex-display-room-right, 0px)))) !important;
+        margin-right: calc(0px - min(var(--latex-display-room-right, 0px),
+          max(var(--latex-display-over) / 2, var(--latex-display-over) - var(--latex-display-room-left, 0px)))) !important;
+        padding-left: 0 !important; padding-right: 0 !important;
+        -webkit-mask-image: none !important; mask-image: none !important; }
+      .latex-fit-natural .latex-display::after { display: none !important; }
       @media print {
         .latex-margin { display: none; }
         /* Controls do nothing on paper. More specific than the page's

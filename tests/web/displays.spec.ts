@@ -6,7 +6,7 @@
 import { test, expect, type WebPage } from './fixtures.ts';
 import { idle } from './web.ts';
 
-/** The page's two blocks at 400 px, as window.__A and window.__B. */
+/** The page's first two blocks at 400 px, as window.__A and window.__B. */
 async function narrow(page: WebPage) {
   await page.evaluate(() => {
     const els = document.querySelectorAll<HTMLElement>('.latex-block[data-nodelist-b64]');
@@ -208,7 +208,7 @@ for (const width of [360, 390]) {
       await idle(page);
       const ends = await atEnd(page);
       await idle(page);
-      expect(ends.length).toBe(2);
+      expect(ends.length).toBe(3);                // every block's
       for (const e of ends) {
         // It pans exactly as far as it overflows the column (the trailing
         // peek is as wide as the leading one), so its box ends on the
@@ -221,7 +221,197 @@ for (const width of [360, 390]) {
       }
       // nothing left to fade on the right
       expect((await page.evaluate(() => [...document.querySelectorAll('.latex-display')]
-        .map(w => w.classList.contains('latex-overflow-right'))))).toEqual([false, false]);
+        .map(w => w.classList.contains('latex-overflow-right'))))).toEqual([false, false, false]);
     }
   });
 }
+
+// ── The fit: a display's box the column's width, or its own ──────────────
+
+/** The page at 1200 px with its blocks 400 px wide and centred in the
+ *  page's column (736 px, so 188 px of room each side, the content's
+ *  padding included): A and B too wide even for that, C (window.__C) not. */
+async function centred(page: WebPage) {
+  await narrow(page);
+  await page.evaluate(() => {
+    const els = document.querySelectorAll<HTMLElement>('.latex-block[data-nodelist-b64]');
+    for (const el of els) el.style.marginInline = 'auto';
+    window.__C = reflowtex.host.block(els[2]);
+  });
+  await idle(page);
+}
+/** A block's display box, its <svg>, its rightmost glyph's end, the column
+ *  (the block) and the host (its parent's padding box), on screen. */
+const fit = (page: WebPage, which: string) => page.evaluate(w => {
+  const b = window[w], wrap = window.__wrap(b), svg = wrap.querySelector(':scope > svg') as SVGSVGElement;
+  const rect = (e: Element) => { const r = e.getBoundingClientRect(); return [r.left, r.right]; };
+  let ink = -Infinity;
+  for (const t of svg.querySelectorAll<SVGTextContentElement>('tspan')) {
+    const x = parseFloat(t.getAttribute('x')!) + t.getComputedTextLength();
+    ink = Math.max(ink, new DOMPoint(x, 0).matrixTransform(t.getScreenCTM()!).x);
+  }
+  const p = b.el.parentElement!, pr = p.getBoundingClientRect();
+  return { api: b.displayFit(), box: rect(wrap), svg: rect(svg), ink, col: rect(b.el),
+           host: [pr.left + p.clientLeft, pr.left + p.clientLeft + p.clientWidth],
+           scrolls: wrap.scrollWidth > wrap.clientWidth + 1, scrollLeft: wrap.scrollLeft,
+           masked: window.__masked(wrap), top: wrap.getBoundingClientRect().top, height: wrap.offsetHeight };
+}, which);
+
+test('fitted naturally, a wide display is shown whole, centred on the column and inside the host', async ({ openPage }) => {
+  const page = await openPage('displays');
+  await centred(page);
+  expect(await page.evaluate(() => reflowtex.host.displayFit())).toBe('column');
+  const before = await fit(page, '__C');
+  expect(before).toMatchObject({ api: 'column', scrolls: true, masked: true });
+  await page.evaluate(() => window.__C.setDisplayFit('natural'));
+  await idle(page);
+  const f = await fit(page, '__C');
+  expect(f).toMatchObject({ api: 'natural', scrolls: false, masked: false });
+  // The box is the display's own width, past the column on both sides ...
+  expect(Math.abs((f.box[1] - f.box[0]) - (f.svg[1] - f.svg[0]))).toBeLessThanOrEqual(1);
+  expect(f.box[0]).toBeLessThan(f.col[0] - 10);
+  expect(f.box[1]).toBeGreaterThan(f.col[1] + 10);
+  expect(Math.abs((f.svg[0] + f.svg[1]) / 2 - (f.col[0] + f.col[1]) / 2)).toBeLessThanOrEqual(1);
+  // ... and its last glyph in the host.
+  expect(f.ink).toBeLessThanOrEqual(f.host[1]);
+  expect(f.svg[0]).toBeGreaterThanOrEqual(f.host[0] - 0.5);
+  // Its vertical place is the same.
+  expect([f.top, f.height]).toEqual([before.top, before.height]);
+  // Wider than the host (A), the box is the host's width and scrolls, with
+  // no fade; at its end, the display ends at the host's right edge.
+  await page.evaluate(() => window.__A.setDisplayFit('natural'));
+  await idle(page);
+  let a = await fit(page, '__A');
+  expect(a).toMatchObject({ scrolls: true, masked: false });
+  expect(Math.abs(a.box[0] - a.host[0])).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(a.box[1] - a.host[1])).toBeLessThanOrEqual(0.5);
+  await page.evaluate(() => { const w = window.__wrap(window.__A); w.scrollLeft = w.scrollWidth; });
+  await idle(page);
+  a = await fit(page, '__A');
+  expect(Math.abs(a.svg[1] - a.host[1])).toBeLessThanOrEqual(0.5);
+  expect(a.ink).toBeLessThanOrEqual(a.host[1] + 0.5);
+  // A block too close to one side takes the room from the other: C at the
+  // page column's left edge (20 px of room, the content's padding). Moved
+  // without a resize, the host sets the fit again to have it measured.
+  await page.evaluate(() => { window.__C.el.style.marginInline = '0'; window.__C.setDisplayFit('natural'); });
+  await idle(page);
+  const left = await fit(page, '__C');
+  expect(left.scrolls).toBe(false);
+  expect(Math.abs(left.box[0] - left.host[0])).toBeLessThanOrEqual(1);
+  expect(left.ink).toBeLessThanOrEqual(left.host[1]);
+  // The element it sits in resized, the room follows: 420 px wide, C
+  // centred again, so 30 px of room on each side, too little now: it
+  // scrolls, its box the host's width.
+  await page.evaluate(() => {
+    window.__C.el.style.marginInline = 'auto';
+    const p = window.__C.el.parentElement!;
+    p.style.width = '420px';
+    p.style.maxWidth = 'none';
+  });
+  await idle(page);
+  const smaller = await fit(page, '__C');
+  expect(smaller.col[1] - smaller.col[0]).toBe(400);
+  expect(smaller.scrolls).toBe(true);
+  expect(Math.abs(smaller.box[0] - smaller.host[0])).toBeLessThanOrEqual(1);
+  expect(Math.abs(smaller.box[1] - smaller.host[1])).toBeLessThanOrEqual(1);
+  // A value that is no fit is refused.
+  expect(await page.evaluate(() => { try { window.__C.setDisplayFit('wide'); return 'set'; } catch (e) { return (e as Error).name; } })).toBe('TypeError');
+});
+
+test('fitting a display naturally moves no other line, and lays nothing out again', async ({ openPage }) => {
+  const page = await openPage('displays');
+  await centred(page);
+  await page.evaluate(() => {
+    window.__layouts = 0;
+    window.__C.on('layout', () => window.__layouts++);
+    window.__laid0 = reflowtex.inspect.state(window.__C.el).cache.layout.laid;
+  });
+  // Every <svg> but the display's, every glyph's place in its own, the
+  // page's height, the layout itself and the paint count.
+  const snapshot = () => page.evaluate(() => {
+    const C = window.__C, st = reflowtex.inspect.state(C.el);
+    const box = (e: Element) => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(v => Math.round(v * 100) / 100); };
+    return {
+      sameLayout: st.cache.layout.laid === window.__laid0, paints: reflowtex.inspect.paints, layouts: window.__layouts,
+      lines: [...document.querySelectorAll('.latex-block svg')].filter(s => !s.closest('.latex-display')).map(box),
+      glyphs: [...C.el.querySelectorAll('svg tspan')].map(t => `${t.getAttribute('x')},${t.getAttribute('y')}`).join(' '),
+      height: document.documentElement.scrollHeight, blockHeight: C.el.offsetHeight,
+    };
+  });
+  const before = await snapshot();
+  expect(before).toMatchObject({ sameLayout: true, layouts: 0 });
+  expect(before.lines.length).toBeGreaterThan(3);
+  await page.evaluate(() => window.__C.setDisplayFit('natural'));
+  await idle(page);
+  expect(await snapshot()).toEqual(before);
+  // and the host's default, every block at once
+  await page.evaluate(() => reflowtex.host.setDisplayFit('natural'));
+  await idle(page);
+  expect(await snapshot()).toEqual(before);
+  await page.evaluate(() => { reflowtex.host.setDisplayFit('column'); window.__C.setDisplayFit(null); });
+  await idle(page);
+  expect(await snapshot()).toEqual(before);
+});
+
+test('back in the column, the box, the peek and the fade return; glyphs stay where they were', async ({ openPage }) => {
+  const page = await openPage('displays');
+  await centred(page);
+  const column = await fit(page, '__C');
+  await page.evaluate(() => window.__C.setDisplayFit('natural'));
+  await idle(page);
+  const natural = await fit(page, '__C');
+  await page.evaluate(() => window.__C.setDisplayFit('column'));
+  await idle(page);
+  const back = await fit(page, '__C');
+  expect(back).toMatchObject({ api: 'column', masked: true, box: column.box });
+  // The display stayed where it was on screen: scrolled by the room it had
+  // taken on the left, its first glyphs under the fade.
+  expect(Math.abs(back.svg[0] - natural.svg[0])).toBeLessThanOrEqual(1);
+  expect(back.scrollLeft).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__wrap(window.__C).className)).toContain('latex-overflow-left');
+  // A scrolled display too wide for the host too keeps its glyphs where
+  // they are, both ways.
+  await page.evaluate(() => { window.__wrap(window.__A).scrollLeft = 300; });
+  await idle(page);
+  const a0 = await fit(page, '__A');
+  await page.evaluate(() => window.__A.setDisplayFit('natural'));
+  await idle(page);
+  const a1 = await fit(page, '__A');
+  await page.evaluate(() => window.__A.setDisplayFit(null));
+  await idle(page);
+  const a2 = await fit(page, '__A');
+  expect(Math.abs(a1.svg[0] - a0.svg[0])).toBeLessThanOrEqual(1);
+  expect(a2).toMatchObject({ api: 'column', masked: true, box: a0.box, scrollLeft: a0.scrollLeft });
+  // The fade switch has no say while fitted naturally, and has again after.
+  await page.evaluate(() => { window.__C.setDisplayFade(true); window.__C.setDisplayFit('natural'); });
+  await idle(page);
+  expect((await fit(page, '__C')).masked).toBe(false);
+  await page.evaluate(() => window.__C.setDisplayFit('column'));
+  await idle(page);
+  expect((await fit(page, '__C')).masked).toBe(true);
+});
+
+test('a view fits its displays on its own; the host default reaches only those without a setting', async ({ openPage }) => {
+  const page = await openPage('displays');
+  await centred(page);
+  await page.evaluate(async () => {
+    const el = document.createElement('div');
+    el.className = 'latex-block';
+    el.style.cssText = 'width: 400px; margin-inline: auto';
+    document.querySelector('.latex-block[data-nodelist-b64]')!.parentElement!.append(el);
+    window.__V = await reflowtex.host.mount(el, { of: window.__C, view: 'side', displayFit: 'natural' });
+  });
+  await idle(page);
+  const state = async () => [await fit(page, '__C'), await fit(page, '__V')].map(f => [f.api, f.scrolls, f.masked]);
+  expect(await state()).toEqual([['column', true, true], ['natural', false, false]]);
+  await page.evaluate(() => reflowtex.host.setDisplayFit('natural'));
+  await idle(page);
+  expect(await state()).toEqual([['natural', false, false], ['natural', false, false]]);
+  await page.evaluate(() => { reflowtex.host.setDisplayFit('column'); window.__V.setDisplayFit('column'); window.__C.setDisplayFit('natural'); });
+  await idle(page);
+  expect(await state()).toEqual([['natural', false, false], ['column', true, true]]);
+  // Unmounted, the view's element keeps nothing of it.
+  const left = await page.evaluate(() => { const el = window.__V.el; window.__V.setDisplayFit('natural'); window.__V.unmount();
+    return [el.className, el.style.getPropertyValue('--latex-display-room-left')]; });
+  expect(left).toEqual(['latex-block', '']);
+});

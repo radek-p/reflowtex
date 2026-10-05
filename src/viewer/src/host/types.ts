@@ -259,6 +259,21 @@ export interface Block {
      *  a class changes (latex-no-fade on el): nothing is laid out again,
      *  and every scroll position is kept. */
     setDisplayFade(on: boolean | null): void;
+    /** How its wide displays are boxed: its own setting, else the host's
+     *  (Host.displayFit). */
+    displayFit(): 'natural' | 'column';
+    /** 'column': a wide display scrolls in a box the column's width (with
+     *  the page's peek into the margins, and the fade). 'natural': its box
+     *  widens to the display's natural width, into the room beside the
+     *  column – centred on the column as far as the room on each side
+     *  allows, up to the padding box of the element the block sits in and
+     *  never past the window – and scrolls only when it is wider than that,
+     *  with no fade. This block, this view only; null follows the host
+     *  again. Only classes and styles change (latex-fit-natural on el, the
+     *  room as custom properties): no line is broken or laid out again, and
+     *  every glyph of a display stays where it was on screen as far as its
+     *  box lets it (scrollLeft follows). */
+    setDisplayFit(fit: 'natural' | 'column' | null): void;
     /** Scroll a wide display sideways so that a point of it is in view, for
      *  example to keep a caret visible. `display` is its index among
      *  the block's displays (the top-level ones, in document order, whether
@@ -437,6 +452,12 @@ export interface Host {
     /** Set that default; the blocks that follow it change at once, with no
      *  layout. */
     setDisplayFade(on: boolean): void;
+    /** How wide displays are boxed in every block that has no setting of
+     *  its own (Block.setDisplayFit). 'column' unless set. */
+    displayFit(): 'natural' | 'column';
+    /** Set that default; the blocks that follow it change at once, with no
+     *  layout. */
+    setDisplayFit(fit: 'natural' | 'column'): void;
 }
 
 export interface BlockMountOptions {
@@ -454,6 +475,9 @@ export interface BlockMountOptions {
     /** Its own display fade (Block.setDisplayFade), set before it is first
      *  drawn; without it, it follows the host's. */
     displayFade?: boolean;
+    /** Its own display fit (Block.setDisplayFit), set before it is first
+     *  drawn; without it, it follows the host's. */
+    displayFit?: 'natural' | 'column';
 }
 
 declare global {

@@ -16,7 +16,8 @@ import { addMark, liveMarks, markHandle, rangesOf } from './marks.ts';
 import { getColorMaps, setColorMaps } from '../runtime/colour.js';
 import { destroyBlock, mountBlock } from '../runtime/init.js';
 import { blockData } from '../runtime/blocks.js';
-import { applyFade, displayFadeDefault, displayFadeOf, forgetFade, revealInDisplay, setDisplayFadeDefault, setDisplayFadeOf } from './displays.ts';
+import { applyFade, applyFit, displayFadeDefault, displayFadeOf, displayFitDefault, displayFitOf, fadesNow, forgetFade, forgetFit,
+         revealInDisplay, setDisplayFadeDefault, setDisplayFadeOf, setDisplayFitDefault, setDisplayFitOf } from './displays.ts';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
 
 interface ViewerBlockData extends BlockData {
@@ -66,8 +67,10 @@ class BlockImpl implements Block {
     displayFade() { return displayFadeOf(this.el); }
     setDisplayFade(on: boolean | null) { setDisplayFadeOf(this.el, on); }
     revealInDisplay(display: number | Element, x?: number, options?: { margin?: number }) {
-        return revealInDisplay(this.data.cache, displayFadeOf(this.el), display, x, options);
+        return revealInDisplay(this.data.cache, fadesNow(this.el), display, x, options);
     }
+    displayFit() { return displayFitOf(this.el); }
+    setDisplayFit(fit: 'natural' | 'column' | null) { setDisplayFitOf(this.el, fit); }
     on<E extends keyof BlockEvents>(event: E, fn: BlockEvents[E]): () => void {
         // 'layout' is the block's reflowtex:layout DOM event (announceLayout).
         const h = (e: Event) => { if ((e as CustomEvent).detail?.block === this.el) fn(); };
@@ -144,6 +147,7 @@ export const host: Host = {
         if (options.of !== undefined && !of) throw new Error('host.mount: `of` is not a block on the page');
         // (before it is drawn, so that it never shows the other way first)
         if (options.displayFade !== undefined) setDisplayFadeOf(el, options.displayFade);
+        if (options.displayFit !== undefined) setDisplayFitOf(el, options.displayFit);
         await mountBlock(el, of ? of.data : null, options.view ?? null);
         const b = blockOf(el);
         if (!b) throw new Error('host.mount: not a block (no data-nodelist-b64, or it failed to render)');
@@ -151,6 +155,8 @@ export const host: Host = {
     },
     displayFade: () => displayFadeDefault(),
     setDisplayFade(on) { setDisplayFadeDefault(on, blocks.map(b => b.el)); },
+    displayFit: () => displayFitDefault(),
+    setDisplayFit(fit) { setDisplayFitDefault(fit, blocks.map(b => b.el)); },
     onBlock(fn) {
         blockListeners.add(fn);
         for (const b of blocks) fn(b);
@@ -167,12 +173,14 @@ export function unregisterBlock(el: Element) {
     if (i >= 0) blocks.splice(i, 1);
     byEl.delete(el);
     forgetFade(el);
+    forgetFit(el);
 }
 
 export function registerBlock(data: ViewerBlockData) {
     const b = blockOf(data.el);
     if (!b || blocks.includes(b)) return;
     applyFade(data.el);
+    applyFit(data.el);
     blocks.push(b);
     for (const fn of [...blockListeners]) {
         try { fn(b); } catch (e) { console.error('[latex-viewer] onBlock listener:', e); }

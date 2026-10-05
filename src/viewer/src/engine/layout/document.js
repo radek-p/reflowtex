@@ -129,6 +129,10 @@ export function sizeSegment(s, L, prev, columnPx, p) {
         // Later paint/scroll measurements refine both directional classes.
         s.wrap.classList.add('latex-display', 'latex-overflow-right');
         if (s.svg.parentNode !== s.wrap) s.wrap.replaceChildren(s.svg);
+        // its natural width, for a host that fits the box to it
+        // (Block.setDisplayFit; the viewer's .latex-fit-natural rule)
+        if (!L.held && s.wrap.style.getPropertyValue('--latex-display-width') !== `${surfaceW}px`)
+            s.wrap.style.setProperty('--latex-display-width', `${surfaceW}px`);
         mount = s.wrap;
     } else if (s.wrap && s.svg.parentNode === s.wrap) {
         s.wrap.classList.remove('latex-overflow-left', 'latex-overflow-right');

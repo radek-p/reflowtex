@@ -38,6 +38,22 @@ export function installViewerStyles() {
       /* A block whose wide displays do not fade (Block.setDisplayFade):
          whatever mask the page gives .latex-display goes. Paint only. */
       .latex-no-fade .latex-display { -webkit-mask-image: none !important; mask-image: none !important; }
+      /* A block whose wide displays are fitted naturally (Block.setDisplayFit):
+         each scroll box is as wide as its display (--latex-display-width,
+         from the layout), reaching into the room beside the column (from
+         host/displays.ts), centred on the column as far as each side's room
+         allows. W - 100% is how far the display overflows the column (a %
+         in a margin is the column's), taken half from each side, or what
+         one side cannot give from the other. No peek, no spacer, no fade. */
+      .latex-fit-natural .latex-display {
+        --latex-display-over: max(0px, calc(var(--latex-display-width, 0px) - 100%));
+        margin-left: calc(0px - min(var(--latex-display-room-left, 0px),
+          max(var(--latex-display-over) / 2, var(--latex-display-over) - var(--latex-display-room-right, 0px)))) !important;
+        margin-right: calc(0px - min(var(--latex-display-room-right, 0px),
+          max(var(--latex-display-over) / 2, var(--latex-display-over) - var(--latex-display-room-left, 0px)))) !important;
+        padding-left: 0 !important; padding-right: 0 !important;
+        -webkit-mask-image: none !important; mask-image: none !important; }
+      .latex-fit-natural .latex-display::after { display: none !important; }
       @media print {
         .latex-margin { display: none; }
         /* Controls do nothing on paper. More specific than the page's
