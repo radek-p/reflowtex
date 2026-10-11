@@ -28,6 +28,13 @@ export const slotValues = new Map();          // name → string (absent: the de
 export const slotBlocks = new Set();          // blocks whose document has slots
 export let slotMeasure = null;                // a canvas context, made on first use
 export let slotScheduled = false;
+// Scopes: a page showing several documents may give each its own texts. A
+// block mounted with a scope (host.mount(el, { scope }), data-latex-scope)
+// takes a name's text from its scope first, then from the page-wide texts.
+export const scopedValues = new Map();        // scope → Map(name → string)
+const scopeBlocks = new Map();                // scope → Set(block element)
+let dirtyScopes = null;                       // scopes changed since the last frame; ALL: every block
+const ALL = Symbol('every block');
 
 // The width of `text` in font `fi`, in sp, as the browser draws it.
 export function measureSlotText(fi, text) {
@@ -167,27 +174,87 @@ export function refreshSlots(el) {
     paintVisibleNow(data.fontInfo, data.cache);
 }
 
-export function scheduleSlots() {
+/** Refresh, in the next frame, the blocks of `scope` (a string), or of no
+ *  scope given (undefined): every block. */
+export function scheduleSlots(scope) {
+    if (scope === undefined) dirtyScopes = ALL;
+    else if (dirtyScopes !== ALL) (dirtyScopes ||= new Set()).add(scope);
     if (slotScheduled) return;
     slotScheduled = true;
     frame('slots', () => {
         slotScheduled = false;
-        for (const el of slotBlocks) refreshSlots(el);
+        const dirty = dirtyScopes;
+        dirtyScopes = null;
+        if (dirty === ALL) { for (const el of slotBlocks) refreshSlots(el); return; }
+        for (const sc of dirty || []) for (const el of scopeBlocks.get(sc) || []) if (slotBlocks.has(el)) refreshSlots(el);
     });
 }
 
+/** The scope a block resolves its texts in (null: the page's only). */
+export const scopeOf = el => (blockData.get(el) || {}).scope ?? null;
+/** From initBlock (before the first layout) and destroyBlock (null). */
+export function joinScope(el, scope, old = null) {
+    if (old !== null) {
+        const set = scopeBlocks.get(old);
+        if (set) { set.delete(el); if (!set.size) scopeBlocks.delete(old); }
+    }
+    if (scope !== null && scope !== undefined) {
+        let set = scopeBlocks.get(scope);
+        if (!set) scopeBlocks.set(scope, set = new Set());
+        set.add(el);
+    }
+}
+/** Move a block already on the page into `scope` (null: none). */
+export function setBlockScope(el, scope) {
+    const data = blockData.get(el);
+    if (!data || (data.scope ?? null) === scope) return;
+    joinScope(el, scope, data.scope ?? null);
+    data.scope = scope;
+    if (slotBlocks.has(el)) refreshSlots(el);
+}
+/** For the inspector and tests: how many blocks each scope holds. */
+export const scopeSizes = () => Object.fromEntries([...scopeBlocks].map(([k, v]) => [k, v.size]));
+
 // The page's side (host API): host.setText(name, text) gives every \webtext
-// of that name, in every block, a text (null: the default again);
+// of that name, in every block, a text (null: the default again); with
+// { scope }, in the blocks of that scope only, where it wins over the
+// page-wide text;
 // instance.setText(text) gives one, and wins over its name's; with
 // { mirror: true }, that instance in every view of its block (host.mount(el,
 // { of })), those mounted later too. Updates within one frame are applied
 // together.
 const instanceTexts = new Map();       // instance id → string
 const mirroredTexts = new WeakMap();   // a block's source → Map(its id past the key → string)
-export function setSlotText(name, text) {
-    if (text === null || text === undefined) slotValues.delete(String(name));
-    else slotValues.set(String(name), String(text));
-    scheduleSlots();
+/** @param {string} name @param {string | null} text @param {string | null} [scope] */
+export function setSlotText(name, text, scope = null) {
+    let values = slotValues;
+    if (scope !== null) {
+        values = scopedValues.get(scope);
+        if (!values) scopedValues.set(scope, values = new Map());
+    }
+    if (text === null || text === undefined) values.delete(String(name));
+    else values.set(String(name), String(text));
+    if (scope !== null && !values.size) scopedValues.delete(scope);
+    scheduleSlots(scope === null ? undefined : scope);
+}
+/** The text a block of `scope` shows for `name`: the scope's, else the
+ *  page's; null: TeX's default.
+ *  @param {string} name
+ *  @param {string | null} [scope]
+ *  @returns {string | null} */
+export function slotText(name, scope = null) {
+    const own = scope !== null && scopedValues.get(scope)?.get(String(name));
+    if (own !== undefined && own !== false) return own;
+    return slotValues.get(String(name)) ?? null;
+}
+/** Every text of `scope` forgotten (null: every page-wide one).
+ *  @param {string | null} [scope] */
+export function clearSlotTexts(scope = null) {
+    const values = scope === null ? slotValues : scopedValues.get(scope);
+    if (!values || !values.size) return;
+    values.clear();
+    if (scope !== null) scopedValues.delete(scope);
+    scheduleSlots(scope === null ? undefined : scope);
 }
 textHooks.set = (id, text, mirror = false) => {
     const data = mirror && allData.find(d => id.startsWith(d.cache.blockKey + '/'));
@@ -212,5 +279,8 @@ function textOf(doc, id, slot) {
     if (own !== undefined && own !== null) return own;
     const mirrored = data.source && mirroredTexts.get(data.source);
     const shared = mirrored && mirrored.get(`t${id}`);
-    return shared !== undefined ? shared : slotValues.get(slot.name);
+    if (shared !== undefined) return shared;
+    const scoped = data.scope != null && scopedValues.get(data.scope);
+    const inScope = scoped && scoped.get(slot.name);
+    return inScope !== undefined && inScope !== false ? inScope : slotValues.get(slot.name);
 }

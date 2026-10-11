@@ -63,6 +63,7 @@ that `idle()` waits for it.
 | Footnotes: hover, click to pin, Escape, keyboard, ARIA | `footnotes.spec.ts` |
 | Hints: blurred with a label, click and Enter, `--latex-hint-label`, print | `hints.spec.ts`, `regressions.spec.ts` |
 | Cross-references: `\eqref` goes to its anchor | `links.spec.ts` |
+| Scopes of live text: two documents with the same slot name, each its own text; the page-wide fallback; a block mounted later drawn with its scope's text from its first frame; one scope's change lays out only its blocks; views inherit the scope; unmount leaves the scope | `scopes.spec.ts` |
 | Live text: `reflowtex.setText`, and back to the default; a no-break space as a tie (interword glue, never broken, as wide as TeX) | `live.spec.ts` |
 | Margin protrusion (microtype) at reflow widths: full lines end at the measure plus their last character's `\rpcode`, after live text, a fill (`\hfill`), inline maths, in a theorem; centred lines centred on what does not protrude | `protrusion.spec.ts` |
 | Live marks and the highlighter: selection to ranges, bands through a reflow, two blocks, saved and restored, re-found by text, eraser, recolour | `highlighter.spec.ts` |

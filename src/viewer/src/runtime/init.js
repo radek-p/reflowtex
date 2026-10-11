@@ -12,7 +12,7 @@ import { disposePieces } from '../host/inline.ts';
 import { removeMarginNotes } from '../defaults/margin-notes.ts';
 import { inspectable } from '../host/inspect.js';
 import { installLinks, installWidgetStates, pageLabels, viewSuffix } from '../host/links.js';
-import { applySlots, slotBlocks, forgetInstanceTexts } from '../host/slots.js';
+import { applySlots, slotBlocks, forgetInstanceTexts, joinScope, setBlockScope } from '../host/slots.js';
 import { viewAdded, viewRemoved } from '../host/marks.ts';
 import { copyLayer, dropLayer, layerOf } from './a11y.js';
 import { installViewerStyles } from '../index.js';
@@ -66,7 +66,9 @@ function newSource(b64, doc, fontInfo, el) {
              layer: layerOf(el), views: [], seq: 0 };
 }
 
-export async function initBlock(el, of = null, viewName = null) {
+/** @param {string | null} [scope] where its live texts are looked up first
+ *  (host.mount's scope); undefined: the element's data-latex-scope, if any. */
+export async function initBlock(el, of = null, viewName = null, scope = undefined) {
     const nodelistB64 = of ? of.b64 : el.dataset.nodelistB64;
     if (!nodelistB64) throw new Error('Missing data-nodelist-b64 attribute');
 
@@ -98,7 +100,8 @@ export async function initBlock(el, of = null, viewName = null) {
     const cache = { bcs: null, dom: null, layout: null, stats: null, blockEl: el, blockKey: newBlockKey(),
                     relayout: () => { if (blockData.get(el)) { blockData.get(el).lastWidth = -1; reflowBlock(el); } } };
     const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false,
-                    seq: ++docSeq, el };
+                    seq: ++docSeq, el,
+                    scope: scope !== undefined ? scope : (el.dataset.latexScope ?? null) };
     const source = data.source = of || newSource(nodelistB64, doc, fontInfo, el);
     // (a name not taken: a page may have named a view v2 itself)
     do source.seq++; while (!viewName && source.views.some(d => d.view === `v${source.seq}`));
@@ -119,6 +122,7 @@ export async function initBlock(el, of = null, viewName = null) {
     }
     blockData.set(el, data);
     docData.set(doc, data);
+    joinScope(el, data.scope);
     allData.push(data);
     inspectable.add(el);
     if (doc.slots && doc.slots.length) {
@@ -205,29 +209,35 @@ function watchFonts() {
 // One block at a time: a block asked for twice (init and host.mount) is
 // rendered once.
 const rendering = new WeakMap();        // el → the promise of its initBlock
-function renderOnce(el) {
+function renderOnce(el, scope = undefined) {
     if (blockData.get(el)) return Promise.resolve(null);
     let p = rendering.get(el);
-    if (!p) { p = track('block set-up', initBlock(el).finally(() => rendering.delete(el))); rendering.set(el, p); }
+    if (!p) { p = track('block set-up', initBlock(el, null, null, scope).finally(() => rendering.delete(el))); rendering.set(el, p); }
     return p;
 }
 
 /** host.mount: render one block element, added after the page loaded; with
- *  `of` (another block's data), a view of that block, named `viewName`.
+ *  `of` (another block's data), a view of that block, named `viewName`;
+ *  its texts looked up in `scope` first (undefined: data-latex-scope, or a
+ *  view's block's scope).
  *  @param {HTMLElement} el
  *  @param {any} [of]
  *  @param {string | null} [viewName]
+ *  @param {string | null} [scope]
  */
-export async function mountBlock(el, of = null, viewName = null) {
+export async function mountBlock(el, of = null, viewName = null, scope = undefined) {
     installPage();
     if (of && !blockData.get(el) && !rendering.get(el)) {
         if (viewName && of.source.views.some(d => d.view === viewName))
             throw new Error(`host.mount: the block already has a view "${viewName}"`);
-        const p = track('block set-up', initBlock(el, of.source, viewName).finally(() => rendering.delete(el)));
+        const inherited = scope !== undefined ? scope : el.dataset.latexScope ?? of.scope ?? null;
+        const p = track('block set-up', initBlock(el, of.source, viewName, inherited).finally(() => rendering.delete(el)));
         rendering.set(el, p);
         await p;
     } else {
-        await renderOnce(el);
+        await renderOnce(el, scope);
+        // (a block already rendered, or rendering, moves into the scope asked for)
+        if (scope !== undefined) setBlockScope(el, scope);
     }
     watchFonts();
 }
@@ -269,6 +279,7 @@ export function destroyBlock(el) {
     // shown in it, its copy of the accessible layer.
     viewRemoved(data);
     forgetInstanceTexts(data.cache.blockKey);
+    joinScope(el, null, data.scope);
     const views = data.source.views, v = views.indexOf(data);
     if (v >= 0) views.splice(v, 1);
     dropLayer(el);

@@ -234,6 +234,9 @@ export interface Block {
     /** Its name among the views of its block (host.mount(el, { of, view })):
      *  as given, else v1, v2, … in the order mounted. */
     readonly view: string;
+    /** The scope it resolves its texts in (BlockMountOptions.scope); null:
+     *  the page-wide texts only. */
+    readonly scope: string | null;
     /** Every view of the same compiled block now on the page, this one
      *  included, in the order mounted; a block shown nowhere else has one. */
     views(): Block[];
@@ -408,8 +411,19 @@ export interface Host {
      *  colours are CSS custom properties; nothing is laid out again). */
     setColorMaps(maps: Record<string, ColorMap>): void;
     /** Show `text` in every \webtext{name}{…}, in every block (null: the
-     *  defaults again). */
-    setText(name: string, text: string | null): void;
+     *  defaults again). With `scope`, in the blocks of that scope only
+     *  (BlockMountOptions.scope), where it wins over the page-wide text; a
+     *  scope's text may be set before its blocks are mounted, and they are
+     *  then first drawn with it. Kept until cleared, whether or not a block
+     *  of the scope is on the page. */
+    setText(name: string, text: string | null, options?: ScopeOptions): void;
+    /** The text a block of `scope` shows for `name` (no scope: an
+     *  unscoped block): the scope's, else the page-wide one; null when it
+     *  shows TeX's default. Instance.setText's own texts aside. */
+    text(name: string, options?: ScopeOptions): string | null;
+    /** Forget every text set with setText in `scope` (no scope: every
+     *  page-wide one); the blocks concerned show what is left. */
+    clearTexts(options?: ScopeOptions): void;
     /** The text marked \webid{id}{…}, in every block and wherever its parts
      *  are shown. Its glyph elements carry data-rtx-id (and \webclass's
      *  classes, which CSS reaches directly); only lines already drawn have
@@ -460,7 +474,21 @@ export interface Host {
     setDisplayFit(fit: 'natural' | 'column'): void;
 }
 
+export interface ScopeOptions {
+    /** A name a host gives the blocks of one document (BlockMountOptions.scope);
+     *  null or absent: the page-wide texts. */
+    scope?: string | null;
+}
+
 export interface BlockMountOptions {
+    /** Where its \webtext slots find their texts first (Host.setText with
+     *  this scope), then the page-wide ones: for a page showing several
+     *  documents whose names (labels, counters) may clash. Applied before
+     *  its first layout, so a text already set is drawn at once. Without
+     *  it: the element's data-latex-scope, else, for a view (`of`), its
+     *  block's scope, else none – as before scopes. A block already on the
+     *  page moves into the scope given, null taking it out of one. */
+    scope?: string | null;
     /** The block to show again (a Block, its element, or its key). The new
      *  view is laid out at its own width and re-broken on its own, with its
      *  own instances, live marks and accessible layer; it shares the block's

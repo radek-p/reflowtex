@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 aed3059b880c9f2ec270de6f3e6c639bdaae47e9b404229c2f98ef83d8b6ac75
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 76ae3c879fd09efb8828df67f5af91c46301c0a429c12bdeb9a56cf656175bc7
 'use strict';
 "use strict";
 (() => {
@@ -1546,6 +1546,10 @@
   var slotBlocks = /* @__PURE__ */ new Set();
   var slotMeasure = null;
   var slotScheduled = false;
+  var scopedValues = /* @__PURE__ */ new Map();
+  var scopeBlocks = /* @__PURE__ */ new Map();
+  var dirtyScopes = null;
+  var ALL = /* @__PURE__ */ Symbol("every block");
   function measureSlotText(fi, text) {
     slotMeasure = slotMeasure || document.createElement("canvas").getContext("2d");
     slotMeasure.font = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
@@ -1676,20 +1680,69 @@
     layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
     paintVisibleNow(data.fontInfo, data.cache);
   }
-  function scheduleSlots() {
+  function scheduleSlots(scope) {
+    if (scope === void 0) dirtyScopes = ALL;
+    else if (dirtyScopes !== ALL) (dirtyScopes ||= /* @__PURE__ */ new Set()).add(scope);
     if (slotScheduled) return;
     slotScheduled = true;
     frame("slots", () => {
       slotScheduled = false;
-      for (const el of slotBlocks) refreshSlots(el);
+      const dirty = dirtyScopes;
+      dirtyScopes = null;
+      if (dirty === ALL) {
+        for (const el of slotBlocks) refreshSlots(el);
+        return;
+      }
+      for (const sc of dirty || []) for (const el of scopeBlocks.get(sc) || []) if (slotBlocks.has(el)) refreshSlots(el);
     });
   }
+  var scopeOf = (el) => (blockData.get(el) || {}).scope ?? null;
+  function joinScope(el, scope, old = null) {
+    if (old !== null) {
+      const set = scopeBlocks.get(old);
+      if (set) {
+        set.delete(el);
+        if (!set.size) scopeBlocks.delete(old);
+      }
+    }
+    if (scope !== null && scope !== void 0) {
+      let set = scopeBlocks.get(scope);
+      if (!set) scopeBlocks.set(scope, set = /* @__PURE__ */ new Set());
+      set.add(el);
+    }
+  }
+  function setBlockScope(el, scope) {
+    const data = blockData.get(el);
+    if (!data || (data.scope ?? null) === scope) return;
+    joinScope(el, scope, data.scope ?? null);
+    data.scope = scope;
+    if (slotBlocks.has(el)) refreshSlots(el);
+  }
+  var scopeSizes = () => Object.fromEntries([...scopeBlocks].map(([k, v]) => [k, v.size]));
   var instanceTexts = /* @__PURE__ */ new Map();
   var mirroredTexts = /* @__PURE__ */ new WeakMap();
-  function setSlotText(name, text) {
-    if (text === null || text === void 0) slotValues.delete(String(name));
-    else slotValues.set(String(name), String(text));
-    scheduleSlots();
+  function setSlotText(name, text, scope = null) {
+    let values = slotValues;
+    if (scope !== null) {
+      values = scopedValues.get(scope);
+      if (!values) scopedValues.set(scope, values = /* @__PURE__ */ new Map());
+    }
+    if (text === null || text === void 0) values.delete(String(name));
+    else values.set(String(name), String(text));
+    if (scope !== null && !values.size) scopedValues.delete(scope);
+    scheduleSlots(scope === null ? void 0 : scope);
+  }
+  function slotText(name, scope = null) {
+    const own = scope !== null && scopedValues.get(scope)?.get(String(name));
+    if (own !== void 0 && own !== false) return own;
+    return slotValues.get(String(name)) ?? null;
+  }
+  function clearSlotTexts(scope = null) {
+    const values = scope === null ? slotValues : scopedValues.get(scope);
+    if (!values || !values.size) return;
+    values.clear();
+    if (scope !== null) scopedValues.delete(scope);
+    scheduleSlots(scope === null ? void 0 : scope);
   }
   textHooks.set = (id, text, mirror = false) => {
     const data = mirror && allData.find((d) => id.startsWith(d.cache.blockKey + "/"));
@@ -1714,7 +1767,10 @@
     if (own !== void 0 && own !== null) return own;
     const mirrored = data.source && mirroredTexts.get(data.source);
     const shared = mirrored && mirrored.get(`t${id}`);
-    return shared !== void 0 ? shared : slotValues.get(slot.name);
+    if (shared !== void 0) return shared;
+    const scoped = data.scope != null && scopedValues.get(data.scope);
+    const inScope = scoped && scoped.get(slot.name);
+    return inScope !== void 0 && inScope !== false ? inScope : slotValues.get(slot.name);
   }
 
   // src/host/inline.ts
@@ -5417,6 +5473,9 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     get view() {
       return this.data.view;
     }
+    get scope() {
+      return scopeOf(this.el);
+    }
     views() {
       return this.data.source.views.map((d) => byEl.get(d.el)).filter((b) => !!b && blocks2.includes(b));
     }
@@ -5502,11 +5561,18 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     return b && blocks2.includes(b) ? b : void 0;
   }
   var blockListeners = /* @__PURE__ */ new Set();
+  function scopeArg(scope) {
+    if (scope === void 0 || scope === null) return null;
+    if (typeof scope !== "string") throw new TypeError("scope: a string, or null");
+    return scope;
+  }
   var host = {
     version: 1,
     define: defineKind,
     kinds: () => definedKinds().map((k) => k.kind),
-    setText: (name, text) => setSlotText(name, text),
+    setText: (name, text, options = {}) => setSlotText(name, text, scopeArg(options.scope)),
+    text: (name, options = {}) => slotText(name, scopeArg(options.scope)),
+    clearTexts: (options = {}) => clearSlotTexts(scopeArg(options.scope)),
     mark: (id) => markHandle(id),
     rangesOf: (range) => rangesOf(range),
     addMark: (ranges, options) => addMark(ranges, options),
@@ -5529,7 +5595,12 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       if (options.of !== void 0 && !of) throw new Error("host.mount: `of` is not a block on the page");
       if (options.displayFade !== void 0) setDisplayFadeOf(el, options.displayFade);
       if (options.displayFit !== void 0) setDisplayFitOf(el, options.displayFit);
-      await mountBlock(el, of ? of.data : null, options.view ?? null);
+      await mountBlock(
+        el,
+        of ? of.data : null,
+        options.view ?? null,
+        options.scope === void 0 ? void 0 : scopeArg(options.scope)
+      );
       const b = blockOf(el);
       if (!b) throw new Error("host.mount: not a block (no data-nodelist-b64, or it failed to render)");
       return b;
@@ -5825,6 +5896,8 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     },
     idle,
     pending,
+    scopes: () => scopeSizes(),
+    // scope → how many blocks it holds
     surfaces(el) {
       return [...surfacesOf(el)].filter((s) => !s.isDisposed).map((s) => {
         let key = surfaceKeys.get(s);
@@ -6087,7 +6160,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       seq: 0
     };
   }
-  async function initBlock(el, of = null, viewName = null) {
+  async function initBlock(el, of = null, viewName = null, scope = void 0) {
     const nodelistB64 = of ? of.b64 : el.dataset.nodelistB64;
     if (!nodelistB64) throw new Error("Missing data-nodelist-b64 attribute");
     const t0 = performance.now();
@@ -6128,7 +6201,8 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       cache,
       painted: false,
       seq: ++docSeq,
-      el
+      el,
+      scope: scope !== void 0 ? scope : el.dataset.latexScope ?? null
     };
     const source = data.source = of || newSource(nodelistB64, doc, fontInfo, el);
     do
@@ -6148,6 +6222,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     }
     blockData.set(el, data);
     docData.set(doc, data);
+    joinScope(el, data.scope);
     allData.push(data);
     inspectable.add(el);
     if (doc.slots && doc.slots.length) {
@@ -6216,25 +6291,27 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     if (document.fonts.ready) document.fonts.ready.then(scheduleFontRepaint);
   }
   var rendering = /* @__PURE__ */ new WeakMap();
-  function renderOnce(el) {
+  function renderOnce(el, scope = void 0) {
     if (blockData.get(el)) return Promise.resolve(null);
     let p = rendering.get(el);
     if (!p) {
-      p = track("block set-up", initBlock(el).finally(() => rendering.delete(el)));
+      p = track("block set-up", initBlock(el, null, null, scope).finally(() => rendering.delete(el)));
       rendering.set(el, p);
     }
     return p;
   }
-  async function mountBlock(el, of = null, viewName = null) {
+  async function mountBlock(el, of = null, viewName = null, scope = void 0) {
     installPage();
     if (of && !blockData.get(el) && !rendering.get(el)) {
       if (viewName && of.source.views.some((d) => d.view === viewName))
         throw new Error(`host.mount: the block already has a view "${viewName}"`);
-      const p = track("block set-up", initBlock(el, of.source, viewName).finally(() => rendering.delete(el)));
+      const inherited = scope !== void 0 ? scope : el.dataset.latexScope ?? of.scope ?? null;
+      const p = track("block set-up", initBlock(el, of.source, viewName, inherited).finally(() => rendering.delete(el)));
       rendering.set(el, p);
       await p;
     } else {
-      await renderOnce(el);
+      await renderOnce(el, scope);
+      if (scope !== void 0) setBlockScope(el, scope);
     }
     watchFonts();
   }
@@ -6267,6 +6344,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     removeMarginNotes(data);
     viewRemoved(data);
     forgetInstanceTexts(data.cache.blockKey);
+    joinScope(el, null, data.scope);
     const views = data.source.views, v = views.indexOf(data);
     if (v >= 0) views.splice(v, 1);
     dropLayer(el);

@@ -53,6 +53,7 @@ viewport.
 | `data-latex-width` | layout width in pt (default: the element's own pixel width ÷ 2); `natural`: the width of its text set on one line, like an `\hbox`, which the viewer also gives the element as its CSS width – for a word in the page's own HTML |
 | `data-align` | `justify` (default) · `left` · `right` · `center` |
 | `data-latex-selection` | How selected text looks, on `<html>` or a block (the nearest wins): `native` (default), the browser's own highlight, glyph by glyph; `bands`, the viewer's, drawn as a mark's band is: one even rect per line (`rect.latex-selection`, coloured `var(--latex-selection-color, Highlight)`), spaces included, over marks and under the text; a selection that starts or ends in a word space (or at a glyph's far edge) reaches that edge, so a space can be selected, alone or with the words around it. The selection itself stays the browser's (copy, keyboard, `getSelection()`); only its look changes. [host/selection.ts](src/host/selection.ts) |
+| `data-latex-scope` | The scope its live texts are looked up in first (see Live text: scopes); `host.mount(el, { scope })` wins over it |
 | `data-color-map` | name of an entry in the page's `#latex-color-maps` island to recolour this block with (see Theming below); omitted = TeX/tikz colours render as-is |
 | `data-display-min-space` | Minimum space (pt) kept between two pieces of a display – an align's columns, or an equation and its number – as the measure decreases, before the display freezes and scrolls (default `10`; `0` permits zero). A display's *outer* space (centring, margin) is not covered by this and always closes to zero first |
 | `data-display-overflow-tolerance` | Tiny horizontal overhang ignored before adding a display scrollbar (default `2` CSS px) |
@@ -294,6 +295,13 @@ everything a page draws:
   mark shown in no view is then removed, and a mirrored mark whose ranges
   named the view names another. Mounting and unmounting views leaves
   nothing behind.
+- **Scopes**: a page showing several documents at once, whose live-text
+  names (a label's number, a counter) may clash, mounts each document's
+  blocks in a scope of its own: `host.mount(el, { scope: 'doc-1' })` (or
+  `data-latex-scope` on the element), `host.setText(name, text, { scope })`.
+  Such a block takes a name's text from its scope first, then from the
+  page-wide texts (`host.setText` without a scope); a block mounted with
+  none sees the page-wide texts only, as before. See Live text.
 - **Wide displays**: a display too wide for its column scrolls sideways
   and fades where its box cuts it off (see Overflow). A host that needs a
   formula shown whole turns the fade off: `block.setDisplayFade(false)`
@@ -474,7 +482,29 @@ browser's fixed advance, and do not break. The words keep the default's
 height and depth.
 Changes within one animation frame are applied together, and only the
 segments holding an affected paragraph are laid out and painted again. A text
-set before its block is initialised is applied when the block is. A slot
+set before its block is initialised is applied when the block is.
+
+**Scopes.** Several documents on one page may use the same names (two
+papers each with `\label{thm:main}`). A host mounts each document's blocks
+in a scope of its own and sets their texts there:
+
+```js
+await reflowtex.host.mount(el, { scope: 'paper-2' });   // or data-latex-scope="paper-2"
+reflowtex.host.setText('thm:main', '3.1', { scope: 'paper-2' });
+reflowtex.host.text('thm:main', { scope: 'paper-2' });  // '3.1': what its blocks show (null: TeX's default)
+reflowtex.host.clearTexts({ scope: 'paper-2' });        // every text of that scope forgotten
+```
+
+A block in a scope resolves a name in this order: its instance's own text
+(`instance.setText`, or a mirrored one), its scope's, the page-wide one,
+TeX's default. Its scope is applied before its first layout, so a block
+mounted into a scope whose texts are already set is drawn with them from its
+first frame, never with TeX's defaults first. Setting a scope's text lays
+out only that scope's blocks. A view (`host.mount(el, { of })`) has its
+block's scope unless given one (`scope: null`: none); `block.scope` says
+which. Mounting a block already on the page with a scope moves it into
+that scope. A scope's texts are the host's: they are kept when its last
+block is unmounted, for one mounted again, until `clearTexts`. A slot
 inside a box (`\mbox`) is left as its default.
 
 ## Widgets (optional)

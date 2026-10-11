@@ -8,6 +8,7 @@ import { api } from '../runtime/page.js';
 import { surfacesOf } from './surface.ts';
 import { definedKinds } from './kinds.ts';
 import { idle, pending } from '../runtime/pending.js';
+import { scopeSizes } from './slots.js';
 // ── end of imports
 
 // ── Inspection ───────────────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ api.inspect = {
     get paints() { return paintCount; },
     idle,
     pending,
+    scopes: () => scopeSizes(),   // scope → how many blocks it holds
     surfaces(el) {
         return [...surfacesOf(el)].filter(s => !s.isDisposed).map(s => {
             let key = surfaceKeys.get(s);

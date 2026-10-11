@@ -11,7 +11,7 @@ import { normalise, walk, matches, type AnchorSource, type Doc, type DocStream, 
 import { TypesetPartImpl, type BlockData } from './surface.ts';
 import './block-hosts.ts';
 import { defineKind, definedKinds } from './kinds.ts';
-import { setSlotText } from './slots.js';
+import { clearSlotTexts, scopeOf, setSlotText, slotText } from './slots.js';
 import { addMark, liveMarks, markHandle, rangesOf } from './marks.ts';
 import { getColorMaps, setColorMaps } from '../runtime/colour.js';
 import { destroyBlock, mountBlock } from '../runtime/init.js';
@@ -44,6 +44,7 @@ class BlockImpl implements Block {
     get el() { return this.data.el; }
     get key() { return this.data.cache.blockKey || ''; }
     get view() { return this.data.view; }
+    get scope() { return scopeOf(this.el); }
     views(): Block[] {
         return this.data.source.views.map(d => byEl.get(d.el)).filter((b): b is BlockImpl => !!b && blocks.includes(b));
     }
@@ -119,12 +120,20 @@ function blockFrom(of: Block | Element | string): BlockImpl | undefined {
     return b && blocks.includes(b) ? b : undefined;
 }
 const blockListeners = new Set<(b: Block) => void>();
+// A scope as given (a string; null or undefined: none).
+function scopeArg(scope: string | null | undefined): string | null {
+    if (scope === undefined || scope === null) return null;
+    if (typeof scope !== 'string') throw new TypeError('scope: a string, or null');
+    return scope;
+}
 
 export const host: Host = {
     version: 1,
     define: defineKind,
     kinds: () => definedKinds().map(k => k.kind),
-    setText: (name, text) => setSlotText(name, text),
+    setText: (name, text, options = {}) => setSlotText(name, text, scopeArg(options.scope)),
+    text: (name, options = {}) => slotText(name, scopeArg(options.scope)),
+    clearTexts: (options = {}) => clearSlotTexts(scopeArg(options.scope)),
     mark: id => markHandle(id),
     rangesOf: range => rangesOf(range),
     addMark: (ranges, options) => addMark(ranges, options),
@@ -148,7 +157,8 @@ export const host: Host = {
         // (before it is drawn, so that it never shows the other way first)
         if (options.displayFade !== undefined) setDisplayFadeOf(el, options.displayFade);
         if (options.displayFit !== undefined) setDisplayFitOf(el, options.displayFit);
-        await mountBlock(el, of ? of.data : null, options.view ?? null);
+        await mountBlock(el, of ? of.data : null, options.view ?? null,
+                         options.scope === undefined ? undefined : scopeArg(options.scope));
         const b = blockOf(el);
         if (!b) throw new Error('host.mount: not a block (no data-nodelist-b64, or it failed to render)');
         return b;
