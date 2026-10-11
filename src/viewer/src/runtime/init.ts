@@ -2,7 +2,7 @@
 
 import { closeFootnote, installFootnotes } from '../defaults/footnotes.ts';
 import { DEFAULT_WIDTH_PT, ZOOM } from '../engine/core.ts';
-import { layoutDocument, newBlockKey } from '../engine/layout/document.ts';
+import { newBlockKey } from '../engine/layout/document.ts';
 import { allData, announceLayout, docData } from './block-data.ts';
 import { registerBlock, unregisterBlock } from '../host/host.ts';
 import { disposeSurfaces } from '../host/surface.ts';
@@ -26,6 +26,8 @@ import { debugLog } from './page.ts';
 import { paramsFromEl } from './params.ts';
 import { observedBlocks, paintVisibleNow } from './visibility.ts';
 import { track } from './pending.ts';
+import { dropSlices, flushBlock, layoutBlock, slicedFor, startSlices } from './slices.ts';
+import type { LayoutMode } from './slices.ts';
 import type { BlockData, BlockSource } from './block-data.ts';
 import type { Doc, FontTable, TexNode } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
@@ -74,7 +76,7 @@ function newSource(b64: string, doc: Doc, fontInfo: FontTable, el: HTMLElement):
 /** `scope`: where its live texts are looked up first (host.mount's scope);
  *  undefined: the element's data-latex-scope, if any. */
 export async function initBlock(el: HTMLElement, of: BlockSource | null = null, viewName: string | null = null,
-                                scope: string | null | undefined = undefined): Promise<InitTimes> {
+                                scope: string | null | undefined = undefined, layout: LayoutMode | null = null): Promise<InitTimes> {
     const nodelistB64 = of ? of.b64 : el.dataset.nodelistB64;
     if (!nodelistB64) throw new Error('Missing data-nodelist-b64 attribute');
 
@@ -108,7 +110,8 @@ export async function initBlock(el: HTMLElement, of: BlockSource | null = null, 
     // (its source and its view's name follow)
     const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false,
                     seq: ++docSeq, el,
-                    scope: scope !== undefined ? scope : (el.dataset.latexScope ?? null) } as BlockData;
+                    scope: scope !== undefined ? scope : (el.dataset.latexScope ?? null),
+                    layoutMode: layout } as BlockData;
     const source = data.source = of || newSource(nodelistB64, doc, fontInfo, el);
     // (a name not taken: a page may have named a view v2 itself)
     do source.seq++; while (!viewName && source.views.some(d => d.view === `v${source.seq}`));
@@ -142,12 +145,12 @@ export async function initBlock(el: HTMLElement, of: BlockSource | null = null, 
     // block's resulting position whether to paint now or on approach. Blocks
     // are initialised top to bottom, so earlier blocks already have their
     // final heights when later ones measure their distance to the viewport.
-    el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
+    el.replaceChildren(layoutBlock(data, widthPt, params));
     if (natural) {
         widthPt = data.naturalPt = naturalWidthPt(el, fontInfo, cache, widthPt);
         data.lastWidth = widthPt;
         el.style.width = (widthPt * ZOOM) + 'px';
-        el.replaceChildren(layoutDocument(fontInfo, doc, widthPt, params, cache));
+        el.replaceChildren(layoutBlock(data, widthPt, params));
     }
     remeasureStreams(fontInfo, doc, widthPt, params, cache);
     // The document's outline (sections, subsections, theorems), for a page to
@@ -170,6 +173,8 @@ export async function initBlock(el: HTMLElement, of: BlockSource | null = null, 
     // are scrolled toward. Never un-painted.
     paintVisibleNow(fontInfo, cache);
     data.painted = true;
+    // (sliced: what is not on the screen is laid out and painted at idle)
+    if (slicedFor(data)) startSlices(data);
     announceLayout(el);
     registerBlock(data);
     observedBlocks.add(el);
@@ -216,29 +221,36 @@ function watchFonts() {
 // One block at a time: a block asked for twice (init and host.mount) is
 // rendered once.
 const rendering = new WeakMap<Element, Promise<InitTimes | null>>();        // el → the promise of its initBlock
-function renderOnce(el: HTMLElement, scope: string | null | undefined = undefined): Promise<InitTimes | null> {
+function renderOnce(el: HTMLElement, scope: string | null | undefined = undefined,
+                    layout: LayoutMode | null = null): Promise<InitTimes | null> {
     if (blockData.get(el)) return Promise.resolve(null);
     let p = rendering.get(el);
-    if (!p) { p = track('block set-up', initBlock(el, null, null, scope).finally(() => rendering.delete(el))); rendering.set(el, p); }
+    if (!p) { p = track('block set-up', initBlock(el, null, null, scope, layout).finally(() => rendering.delete(el))); rendering.set(el, p); }
     return p;
 }
 
 /** host.mount: render one block element, added after the page loaded; with
  *  `of` (another block's data), a view of that block, named `viewName`;
  *  its texts looked up in `scope` first (undefined: data-latex-scope, or a
- *  view's block's scope). */
+ *  view's block's scope). `layout`: its layouts sliced or not (null:
+ *  data-latex-layout, else the page's default). */
 export async function mountBlock(el: HTMLElement, of: BlockData | null = null, viewName: string | null = null,
-                                 scope: string | null | undefined = undefined): Promise<void> {
+                                 scope: string | null | undefined = undefined, layout: LayoutMode | null = null): Promise<void> {
     installPage();
     if (of && !blockData.get(el) && !rendering.get(el)) {
         if (viewName && of.source.views.some(d => d.view === viewName))
             throw new Error(`host.mount: the block already has a view "${viewName}"`);
         const inherited = scope !== undefined ? scope : el.dataset.latexScope ?? of.scope ?? null;
-        const p = track('block set-up', initBlock(el, of.source, viewName, inherited).finally(() => rendering.delete(el)));
+        const p = track('block set-up', initBlock(el, of.source, viewName, inherited, layout).finally(() => rendering.delete(el)));
         rendering.set(el, p);
         await p;
     } else {
-        await renderOnce(el, scope);
+        await renderOnce(el, scope, layout);
+        const data = blockData.get(el);
+        if (data && layout) {
+            data.layoutMode = layout;
+            if (!slicedFor(data)) flushBlock(data);     // (what a sliced layout had left: now)
+        }
         // (a block already rendered, or rendering, moves into the scope asked for)
         if (scope !== undefined) setBlockScope(el, scope);
     }
@@ -282,6 +294,7 @@ export function destroyBlock(el: HTMLElement): void {
     // shown in it, its copy of the accessible layer.
     viewRemoved(data);
     forgetInstanceTexts(data.cache.blockKey);
+    dropSlices(data);
     joinScope(el, null, data.scope);
     const views = data.source.views, v = views.indexOf(data);
     if (v >= 0) views.splice(v, 1);

@@ -123,6 +123,12 @@ export interface SegmentLayout {
     deferred?: boolean;
     /** Deferred by a quick reflow: its box keeps the old surface. */
     held?: boolean;
+    /** Left by a sliced layout for idle time (runtime/slices.ts). */
+    pending?: boolean;
+    /** Its geometry is estimateGeometry's, not one it was laid out to. */
+    estimate?: boolean;
+    /** Where a sliced layout reckons its top stands in the window (px). */
+    estTop?: number;
     /** A stream box framed at its top or bottom (CSS padding or border). */
     frameTop?: boolean;
     frameBottom?: boolean;
@@ -181,7 +187,7 @@ export interface LayoutDom {
     trail?: HTMLElement;
 }
 export interface PaintStats { created: number; moved: number; repositioned: number; removed: number }
-export interface LayoutStats { computed: number; reused: number; deferred: number; materialized: number }
+export interface LayoutStats { computed: number; reused: number; deferred: number; materialized: number; pending: number }
 /** What a deferred segment needs to be laid out later. */
 export interface LayoutContext {
     layoutOne(seg: Segment, i: number): SegmentLayout;
@@ -223,4 +229,10 @@ export interface LayoutCache {
     layoutStats?: LayoutStats;
     /** A stream laid out before its box could be measured. */
     streamsUnmeasured?: boolean;
+    /** The layout under way is sliced (runtime/slices.ts). */
+    sliced?: boolean;
+    /** The last layout through layoutBlock was. */
+    lastSliced?: boolean;
+    /** The geometry the segments had, for a sliced re-render to keep. */
+    geomHint?: SegmentLayout[] | null;
 }

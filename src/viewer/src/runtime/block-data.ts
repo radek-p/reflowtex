@@ -47,6 +47,8 @@ export interface BlockData {
     hidAria?: boolean;
     /** data-latex-width="natural": the width it measured (pt). */
     naturalPt?: number;
+    /** Its layouts sliced or not (host.mount's layout); null: data-latex-layout, else the page's. */
+    layoutMode?: 'sliced' | 'sync' | null;
     /** Its margin notes' layer (defaults/margin-notes.ts). */
     margin?: MarginLayer | null;
 }

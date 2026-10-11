@@ -11,6 +11,7 @@ import { alignFromEl } from './params.ts';
 import { scheduleSettle } from './settle.ts';
 import { observedBlocks, paintVisibleNow, segIO } from './visibility.ts';
 import { frame } from './pending.ts';
+import { layoutBlock, startSlices, slicedFor } from './slices.ts';
 import type { BlockData } from './block-data.ts';
 import type { Doc, FontTable } from '../engine/model.ts';
 import type { LayoutCache, LayoutStats, PaintStats } from '../engine/layout/types.ts';
@@ -81,10 +82,14 @@ export function reflowBlock(el: HTMLElement, quick = false): boolean {
     // the visible segments. A quick reflow (a resize under way) lays out only
     // the segments near the viewport, and those whose height is cached; the
     // rest keep their boxes until the resize stops (settleBlock).
+    // Sliced (slices.ts), only the segments on the screen are laid out now,
+    // and the rest in slices of idle time – after a resize, once it has
+    // settled (settleAll), so that a drag does not start them every frame.
+    const sliced = slicedFor(data);
     quickLayout = quick && !!data.cache.layout;
     let root: HTMLElement;
     try {
-        root = layoutDocument(data.fontInfo, data.doc, newWidth, params, data.cache);
+        root = layoutBlock(data, newWidth, params);
         if (root !== el.firstElementChild) el.replaceChildren(root);
         remeasureStreams(data.fontInfo, data.doc, newWidth, params, data.cache);
     } finally {
@@ -99,6 +104,7 @@ export function reflowBlock(el: HTMLElement, quick = false): boolean {
     markDirty(data.cache);
     const tp = performance.now();
     const repainted = paintVisibleNow(data.fontInfo, data.cache);
+    if (sliced && !quick) startSlices(data);
     const st: Partial<PaintStats> = data.cache.stats || {};
     const ls: Partial<LayoutStats> = data.cache.layoutStats || {};
     debugLog(`[latex-viewer] re-render at ${newWidth.toFixed(0)}pt: layout ${(tp - t0).toFixed(1)} ms, paint ${(performance.now() - tp).toFixed(1)} ms (${repainted} visible segment(s); ${st.repositioned||0} repositioned, ${st.created||0} created; segments: ${ls.computed||0} laid out, ${ls.reused||0} reused, ${ls.deferred||0} deferred to scroll)`);
@@ -121,12 +127,17 @@ export function rerenderBlock(el: HTMLElement): void {
     // otherwise hold detached elements). layoutDocument observes the new ones.
     unobserveAll(data.cache);
     disposePieces(data.cache);
+    // (sliced, the segments laid out later keep the geometry they had: the
+    // width is the same, so it is what they get)
+    data.cache.geomHint = data.cache.layout && data.cache.layout.laid;
     data.cache.dom = null;
     data.cache.layout = null;
     const params = { ...data.params, align: data.lastAlign };
-    el.replaceChildren(layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache));
+    try { el.replaceChildren(layoutBlock(data, data.lastWidth, params)); }
+    finally { data.cache.geomHint = null; }
     remeasureStreams(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
     paintVisibleNow(data.fontInfo, data.cache);
+    if (slicedFor(data)) startSlices(data);
     // Parts the page has mounted elsewhere (host API surfaces) redraw too.
     rerenderSurfaces(el);
     announceLayout(el);
@@ -155,7 +166,9 @@ export function unobserveAll(cache: LayoutCache): void {
 export function remeasureStreams(fontInfo: FontTable, doc: Doc, widthPt: number, params: Params, cache: LayoutCache): void {
     if (!cache.streamsUnmeasured) return;
     cache.streamsUnmeasured = false;
-    layoutDocument(fontInfo, doc, widthPt, params, cache);
+    cache.sliced = !!cache.lastSliced;
+    try { layoutDocument(fontInfo, doc, widthPt, params, cache); }
+    finally { cache.sliced = false; }
 }
 
 // Repaint every block after a wave of webfonts finishes loading. On a cold cache

@@ -44,6 +44,24 @@ export function cancelLater(id: number | undefined): void {
     clearTimeout(id);
 }
 
+/** Idle time, counted: `cb(deadline)` when the browser has nothing more
+ *  urgent (requestIdleCallback, at most `timeout` ms late), or, where there
+ *  is none (WebKit), in a task after the next frame, with a deadline of
+ *  `fallbackMs`. `deadline.timeRemaining()` is what is left of the slice. */
+const idleCallback = typeof requestIdleCallback === 'function' ? requestIdleCallback : null;
+export type Deadline = Pick<IdleDeadline, 'didTimeout' | 'timeRemaining'>;
+export function idleTask(name: string, cb: (deadline: Deadline) => void,
+                         { timeout = 200, fallbackMs = 6 }: { timeout?: number; fallbackMs?: number } = {}): void {
+    const token: Token = { name };
+    waiting.set(token, name);
+    const run = (deadline: Deadline) => { waiting.delete(token); cb(deadline); };
+    if (idleCallback) { idleCallback(run, { timeout }); return; }
+    requestAnimationFrame(() => setTimeout(() => {
+        const end = performance.now() + fallbackMs;
+        run({ didTimeout: false, timeRemaining: () => Math.max(0, end - performance.now()) });
+    }, 0));
+}
+
 /** A promise, counted until it settles. Returns it. */
 export function track<T>(name: string, promise: Promise<T>): Promise<T> {
     const token: Token = { name };

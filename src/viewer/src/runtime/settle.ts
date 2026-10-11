@@ -5,6 +5,8 @@ import { blockData } from './blocks.ts';
 import { debugLog } from './page.ts';
 import { paintVisibleNow } from './visibility.ts';
 import { cancelLater, frame, later } from './pending.ts';
+import { layoutBlock, slicedFor, startSlices } from './slices.ts';
+import type { BlockData } from './block-data.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
 
 // ── Settling after a resize ───────────────────────────────────────────────────
@@ -27,8 +29,26 @@ export function scheduleSettle(el: HTMLElement): void {
 }
 export function settleAll(): void {
     settleTimer = 0;
-    const els = [...unsettled].filter(el => el.isConnected);
+    const all = [...unsettled].filter(el => el.isConnected);
     unsettled.clear();
+    // A block laid out in slices settles in slices too, and holds no scroll
+    // position of its own: the browser's scroll anchoring does (slices.ts).
+    // It settles in the next frame, as a reflow is laid out (blocks.ts): its
+    // writes land in the frame the browser draws.
+    const els: HTMLElement[] = [], sliced: HTMLElement[] = [];
+    for (const el of all) {
+        const data = blockData.get(el);
+        if (data && slicedFor(data) && data.cache.layout) sliced.push(el);
+        else els.push(el);
+    }
+    if (sliced.length) frame('settle: sliced blocks', () => {
+        for (const el of sliced) {
+            const data = blockData.get(el);
+            if (!data || !el.isConnected || !data.cache.layout) continue;
+            if (slicedFor(data)) settleSliced(data);
+            else settleBlock(el);          // (made sync meanwhile)
+        }
+    });
     if (!els.length) return;
     const t0 = performance.now();
     const scroller = scrollerOf(els[0]);
@@ -47,6 +67,12 @@ export function settleAll(): void {
     }
     frame('settle: scroll anchoring back', restore);
     debugLog(`[latex-viewer] settled ${els.length} block(s) in ${(performance.now() - t0).toFixed(1)} ms`);
+}
+function settleSliced(data: BlockData): void {
+    const params = { ...data.params, align: data.lastAlign };
+    layoutBlock(data, data.lastWidth, params);
+    paintVisibleNow(data.fontInfo, data.cache);
+    startSlices(data);
 }
 // Lay out, at the width it was last reflowed to, every segment of a block
 // that a quick reflow left with its old box. The segments near the screen

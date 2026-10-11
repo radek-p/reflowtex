@@ -17,6 +17,7 @@ import { addMark, liveMarks, markHandle, rangesOf } from './marks.ts';
 import { getColorMaps, setColorMaps } from '../runtime/colour.ts';
 import { destroyBlock, mountBlock } from '../runtime/init.ts';
 import { blockData } from '../runtime/blocks.ts';
+import { flushBlock, layoutDone, pageLayout, setPageLayout } from '../runtime/slices.ts';
 import { applyFade, applyFit, displayFadeDefault, displayFadeOf, displayFitDefault, displayFitOf, fadesNow, forgetFade, forgetFit,
          revealInDisplay, setDisplayFadeDefault, setDisplayFadeOf, setDisplayFitDefault, setDisplayFitOf } from './displays.ts';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
@@ -61,6 +62,8 @@ class BlockImpl implements Block {
         if (!this.byId) this.byId = new Map([...walk(this.roots)].map(i => [i.id, i]));
         return this.byId.get(id);
     }
+    layoutDone() { return layoutDone(this.data); }
+    flushLayout() { flushBlock(this.data); }
     destroy() { destroyBlock(this.el); }
     unmount() { destroyBlock(this.el); }
     displayFade() { return displayFadeOf(this.el); }
@@ -71,8 +74,12 @@ class BlockImpl implements Block {
     displayFit() { return displayFitOf(this.el); }
     setDisplayFit(fit: 'natural' | 'column' | null) { setDisplayFitOf(this.el, fit); }
     on<E extends keyof BlockEvents>(event: E, fn: BlockEvents[E]): () => void {
-        // 'layout' is the block's reflowtex:layout DOM event (announceLayout).
-        const h = (e: Event) => { if ((e as CustomEvent).detail?.block === this.el) fn(); };
+        // 'layout' is the block's reflowtex:layout DOM event (announceLayout);
+        // the layout* ones, slices.ts's.
+        const h = (e: Event) => {
+            const d = (e as CustomEvent).detail;
+            if (d?.block === this.el) (fn as (detail: unknown) => void)(event === 'layoutslice' ? { left: d.left } : undefined);
+        };
         this.el.addEventListener('reflowtex:' + event, h);
         return () => this.el.removeEventListener('reflowtex:' + event, h);
     }
@@ -155,12 +162,16 @@ export const host: Host = {
         // (before it is drawn, so that it never shows the other way first)
         if (options.displayFade !== undefined) setDisplayFadeOf(el, options.displayFade);
         if (options.displayFit !== undefined) setDisplayFitOf(el, options.displayFit);
+        if (options.layout !== undefined && options.layout !== 'sliced' && options.layout !== 'sync')
+            throw new TypeError(`host.mount: layout is 'sliced' or 'sync', not ${JSON.stringify(options.layout)}`);
         await mountBlock(el, of ? of.data : null, options.view ?? null,
-                         options.scope === undefined ? undefined : scopeArg(options.scope));
+                         options.scope === undefined ? undefined : scopeArg(options.scope), options.layout ?? null);
         const b = blockOf(el);
         if (!b) throw new Error('host.mount: not a block (no data-nodelist-b64, or it failed to render)');
         return b;
     },
+    layout: () => pageLayout(),
+    setLayout(mode) { setPageLayout(mode); },
     displayFade: () => displayFadeDefault(),
     setDisplayFade(on) { setDisplayFadeDefault(on, blocks.map(b => b.el)); },
     displayFit: () => displayFitDefault(),

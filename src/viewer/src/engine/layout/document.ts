@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ZOOM, useGlyphMetrics } from '../core.ts';
+import { SP_TO_PX, ZOOM, sumWidthSp, useGlyphMetrics } from '../core.ts';
 import {
     displaySkipAdjust, layoutDisplaySegment, preDisplaySizeSp, updateDisplayOverflowCue,
 } from './display.ts';
@@ -16,7 +16,7 @@ import { observeSegments } from '../../runtime/visibility.ts';
 import { frame } from '../../runtime/pending.ts';
 import type { Doc, FontTable } from '../model.ts';
 import type {
-    DomSegment, HeightCache, LayoutCache, Observation, Segment, SegmentLayout, TextSegment,
+    DisplaySegment, DomSegment, HeightCache, LayoutCache, LineMeta, Observation, Segment, SegmentLayout, TextSegment,
 } from './types.ts';
 import type { Params } from '../../runtime/params.ts';
 
@@ -108,10 +108,12 @@ export function sizeSegment(s: DomSegment, L: SegmentLayout, prev: SegmentLayout
     // old, wider surface cannot widen the page. The box is far from the screen,
     // so it is never the scroll anchor whose style must not change.
     const svg = s.svg!;                 // (a text or display segment's)
+    // (each written only when it changes: rewriting an <svg>'s size, even
+    // to the same value, has the browser lay out all the text it holds again)
     if (!L.held) {
-        svg.setAttribute('width', String(surfaceW));
-        svg.setAttribute('height', String(H));
-        svg.setAttribute('viewBox', `0 0 ${surfaceW} ${H}`);
+        setAttr(svg, 'width', String(surfaceW));
+        setAttr(svg, 'height', String(H));
+        setAttr(svg, 'viewBox', `0 0 ${surfaceW} ${H}`);
     }
     setStyle(s.box, 'overflowX', L.held ? 'clip' : '');
 
@@ -359,9 +361,50 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
 
     const paramsKey = JSON.stringify(p);
     cache.layoutCtx = { layoutOne, segs, widthPt, p, columnPx, paramsKey };
-    const stats = cache.layoutStats = { computed: 0, reused: 0, deferred: 0, materialized: 0 };
+    const stats = cache.layoutStats = { computed: 0, reused: 0, deferred: 0, materialized: 0, pending: 0 };
     const prevLaid = cache.layout && cache.layout.laid.length === segs.length ? cache.layout.laid : null;
+    // A sliced layout (runtime/slices.ts) lays out now only what is on the
+    // screen; every other segment that would be laid out is left *pending*:
+    // deferred, with the geometry it had (its <svg> held as it is) or, laid
+    // out for the first time, an estimate, until a slice of idle time (or a
+    // paint, as for any deferred segment) lays it out. On the screen means
+    // its box's rect, before this layout moves anything; a box not on the
+    // page yet is placed by the heights above it, estimated or real.
+    const sliced = !!cache.sliced;
+    const hint = cache.geomHint && cache.geomHint.length === segs.length ? cache.geomHint : null;
+    const vh = window.innerHeight || 800;
+    let estY = 0;
+    if (sliced) {
+        const top = cache.blockEl && cache.blockEl.isConnected ? cache.blockEl.getBoundingClientRect().top : 0;
+        estY = top;
+    }
+    const pendingOf = (seg: TextSegment | DisplaySegment, i: number): SegmentLayout => {
+        const prev = prevLaid && prevLaid[i];
+        const g: PendingGeometry = (hint && hint[i]) || prev || estimateGeometry(seg, widthPt, cache);
+        const estimate = g === prev ? !!prev.estimate : !(hint && hint[i]);
+        stats.pending++;
+        return { seg, deferred: true, pending: true, estimate, held: g === prev && !prev.estimate,
+                 lines: [], H: g.H, W: g.W ?? columnPx, firstAscent: g.firstAscent, lastDepth: g.lastDepth,
+                 firstMeta: g.firstMeta, gapBefore: seg.gapBefore || 0, preDisplaySizeSp: g.preDisplaySizeSp,
+                 displayLeftSp: g.displayLeftSp, atSourceWidth: g.atSourceWidth };
+    };
+    const onScreen = (s: DomSegment, i: number, seg: TextSegment | DisplaySegment): boolean => {
+        if (s.box && s.box.isConnected && s.box.getClientRects().length) {
+            const r = s.box.getBoundingClientRect();
+            return r.bottom > 0 && r.top < vh;
+        }
+        const prev = (hint && hint[i]) || (prevLaid && prevLaid[i]);
+        const top = estY + (seg.gapBefore || 0);
+        const H = prev ? prev.H : estimateGeometry(seg, widthPt, cache).H;
+        return top + H > 0 && top < vh;
+    };
     const laid = segs.map((seg, i): SegmentLayout => {
+        const L = laidOne(seg, i);
+        // (where it will stand, roughly: slices.ts orders its work by it)
+        if (sliced) { L.estTop = estY + (L.gapBefore || 0); estY = L.estTop + (L.H || 0); }
+        return L;
+    });
+    function laidOne(seg: Segment, i: number): SegmentLayout {
         const s = dom.segs[i];
         if (seg.kind === 'stream') {
             stats.computed++;
@@ -384,11 +427,12 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
                          preDisplaySizeSp: g.preDisplaySizeSp, displayLeftSp: g.displayLeftSp, atSourceWidth: g.atSourceWidth };
             }
         }
+        if (sliced && !onScreen(s, i, seg)) return pendingOf(seg, i);
         const L = layoutOne(seg, i);
         rememberLayout(hc, widthPt, L);
         stats.computed++;
         return L;
-    });
+    }
 
     // ── Mounting, and the browser's scroll anchoring ──────────────────────
     // When a window resize reflows a page, the browser keeps the content at the
@@ -470,6 +514,7 @@ export function syncChildren(parent: Element, want: Element[]): void {
 type StyleProp = 'height' | 'overflowX' | 'containerType' | 'marginTop' | 'marginBottom' | 'paddingTop'
     | 'paddingBottom' | 'overflowAnchor';
 export function setStyle(el: HTMLElement | SVGElement, prop: StyleProp, v: string): void { if (el.style[prop] !== v) el.style[prop] = v; }
+export function setAttr(el: Element, name: string, v: string): void { if (el.getAttribute(name) !== v) el.setAttribute(name, v); }
 
 // Per-segment cache, keyed by the layout parameters (a change of alignment or of
 // any Knuth–Plass knob starts afresh). `exact` maps a width to its full layout;
@@ -504,6 +549,38 @@ export function cachedGeometry(hc: HeightCache, w: number): Observation | null {
     const a = obs[k-1], b = obs[k];
     if (a.H !== b.H) return null;
     return (w - a.w <= b.w - w) ? a : b;
+}
+
+// A pending segment's height before it is laid out (see layoutDocument): a
+// paragraph's natural width over its measure, in lines of its baselineskip;
+// a display's rows as TeX set them. Only ever a placeholder: what it gets
+// wrong moves the content below once the segment is laid out.
+/** What a pending segment is placed by (estimateGeometry's, or a layout's). */
+export type PendingGeometry = Pick<SegmentLayout, 'H' | 'firstAscent' | 'lastDepth' | 'firstMeta'>
+    & Partial<Pick<SegmentLayout, 'W' | 'estimate' | 'preDisplaySizeSp' | 'displayLeftSp' | 'atSourceWidth'>>;
+export function estimateGeometry(seg: TextSegment | DisplaySegment, widthPt: number, cache: LayoutCache): PendingGeometry {
+    const widthSp = widthPt * 65536;
+    if (seg.kind === 'display') {
+        let H = 0;
+        seg.rows.forEach((r, k) => {
+            const b: { height?: number; depth?: number } = r.item.box || {};
+            H += ((b.height || 0) + (b.depth || 0)) * SP_TO_PX + (k ? r.gap || 0 : 0);
+        });
+        const first: { height?: number } = seg.rows[0].item.box || {};
+        const last: { depth?: number } = seg.rows[seg.rows.length - 1].item.box || {};
+        return { H, firstAscent: (first.height || 0) * SP_TO_PX, lastDepth: (last.depth || 0) * SP_TO_PX, firstMeta: null };
+    }
+    let H = 0, firstMeta: LineMeta | null = null, bskip = 12 * ZOOM;
+    for (const { para } of seg.items) {
+        bskip = para.baselineskip ? para.baselineskip * SP_TO_PX : bskip;
+        const meta = para.baselineskip ? { bskip, lskip: (para.lineskip || 0) * SP_TO_PX,
+                                           lskiplimit: (para.lineskiplimit || 0) * SP_TO_PX } : null;
+        if (!firstMeta) firstMeta = meta;
+        const avail = Math.max(1, widthSp - (para.indent || 0));
+        const lines = seg.isFigure ? 1 : Math.max(1, Math.ceil(sumWidthSp(para.nodes || []) * 1.03 / avail));
+        H += lines * bskip;
+    }
+    return { H: Math.max(0, H - 0.3 * bskip), firstAscent: 0.7 * bskip, lastDepth: 0.3 * bskip, firstMeta };
 }
 
 // Run the deferred layout of segment i now (its lines are needed), size its

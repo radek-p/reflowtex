@@ -58,6 +58,7 @@ viewport.
 | `data-latex-width` | layout width in pt, fractions allowed (default: the element's own pixel width ÷ 2); `natural`: the width of its text set on one line, like an `\hbox`, which the viewer also gives the element as its CSS width – for a word in the page's own HTML |
 | `data-align` | `justify` (default) · `left` · `right` · `center` |
 | `data-latex-selection` | How selected text looks, on `<html>` or a block (the nearest wins): `native` (default), the browser's own highlight, glyph by glyph; `bands`, the viewer's, drawn as a mark's band is: one even rect per line (`rect.latex-selection`, coloured `var(--latex-selection-color, Highlight)`), spaces included, over marks and under the text; a selection that starts or ends in a word space (or at a glyph's far edge) reaches that edge, so a space can be selected, alone or with the words around it. The selection itself stays the browser's (copy, keyboard, `getSelection()`); only its look changes. [host/selection.ts](src/host/selection.ts) |
+| `data-latex-layout` | `sliced` (default) or `sync`, on a block or any element above it (`<html>` for the page; the nearest wins): whether a re-break lays out at once only what is on the screen and the rest in slices of idle time, or everything at once (see What a resize costs); `host.mount(el, { layout })` and `host.setLayout` set it from a script |
 | `data-latex-scope` | The scope its live texts are looked up in first (see Live text: scopes); `host.mount(el, { scope })` wins over it |
 | `data-color-map` | name of an entry in the page's `#latex-color-maps` island to recolour this block with (see Theming below); omitted = TeX/tikz colours render as-is |
 | `data-display-min-space` | Minimum space (pt) kept between two pieces of a display – an align's columns, or an equation and its number – as the measure decreases, before the display freezes and scrolls (default `10`; `0` permits zero). A display's *outer* space (centring, margin) is not covered by this and always closes to zero first |
@@ -106,7 +107,9 @@ A display wider than its column (beyond the configurable rounding tolerance) is
 wrapped by the viewer in a `.latex-display` scroll box. The supplied CSS lets it
 peek up to 100px into each available page margin and fades the currently hidden
 edge; scroll-state classes remove each cue when that end is reached. Override
-`--latex-display-peek` to change the visual allowance. A page can turn the
+`--latex-display-peek` to change the visual allowance. While a segment waits
+for its slice after a width change (see What a resize costs), its box clips
+it sideways, so a surface laid out for a wider column never widens the page. A page can turn the
 fade off – for one block or view, or by default – through the host API
 (`setDisplayFade`, below): the block element then carries `latex-no-fade`,
 and the viewer's own rule takes the mask away. It can also have a display's
@@ -193,6 +196,33 @@ timing lines are off by default; turn them on with `window.reflowtex.debug =
 true` (from the console, at any time) or by adding `?reflowtex-debug` to the
 page URL. They are logged at the debug level, so the console's Verbose level
 must be on too.
+
+**Sliced.** A long block re-broken whole is one long task: a block some
+1,600 px tall, of many segments, took 35–60 ms, and a test block of 480 segments
+(`tests/web/pages/huge`) over 100 ms on a resize and 250 ms on its first
+layout. So, unless a block asks for `sync` (`data-latex-layout`), a
+re-break lays out at once only the segments on the screen (by their boxes'
+places before it, or, for a new block, by the heights above them). Every
+other segment it would have laid out is *pending*: it keeps the geometry it
+had, its `<svg>` as it was (clipped sideways meanwhile, so an old, wider
+surface cannot widen the page), or, laid out for the first time, a height
+estimated from its paragraphs' natural widths. The pending segments are then
+laid out in slices of idle time (`requestIdleCallback`; WebKit has none,
+and gets a task after each frame), nearest the screen first, each slice
+within 8 ms; the segments within a screen's height of the window are drawn
+in slices too, as is what the IntersectionObserver finds near the window
+when the reader scrolls somewhere new (what is on the screen is drawn at
+once, as before). A segment the reader reaches before its slice is laid out
+and drawn then. After a window resize the slices begin once the width has
+held still for 150 ms, so a drag does not start them on every frame. When
+none is left, the block is laid out once more with every segment from its
+cache, so that the spacing between segments, rounded onto the layout grid
+down the block, is exactly what a synchronous layout gives; the web tests
+check it bit for bit, glyph by glyph, on every page they have and on the
+demo and testmath pages when built. Heights change as slices land: above
+the reader, the browser's scroll anchoring holds the reading point; the
+viewer never scrolls the page itself. Decoding a block's data is not
+sliced: on the 480-segment block it is most of the first layout's time.
 
 The browser's own scroll anchoring survives a reflow: on a window resize the
 content at the top of the viewport stays where it was, as on any ordinary
@@ -307,6 +337,21 @@ everything a page draws:
   Such a block takes a name's text from its scope first, then from the
   page-wide texts (`host.setText` without a scope); a block mounted with
   none sees the page-wide texts only, as before. See Live text.
+- **Sliced layout**: a re-break (a block's first layout, a new width, new
+  live text) lays out at once only the segments on the screen, and the
+  rest in slices of idle time, nearest the screen first (see What a resize
+  costs). `block.on('layoutstart' | 'layoutslice' | 'layoutcomplete', fn)`
+  follow it (`layoutslice` gets `{ left }`, the segments still to come;
+  one start and one complete per run, however often the width changes
+  under way), and `block.layoutDone()` resolves once nothing is left. The
+  events come in the same task as the change they report, before the
+  browser draws it, so a host that keeps the reader's place itself can
+  correct it there; otherwise the browser's scroll anchoring does, as for
+  any reflow. `block.flushLayout()` does what is left at once.
+  `host.mount(el, { layout: 'sync' })`, `data-latex-layout="sync"` or
+  `host.setLayout('sync')` (the page's default) lay out whole, as before:
+  for a host that measures the whole block at once. Print lays out and
+  draws everything first either way.
 - **Wide displays**: a display too wide for its column scrolls sideways
   and fades where its box cuts it off (see Overflow). A host that needs a
   formula shown whole turns the fade off: `block.setDisplayFade(false)`

@@ -40,8 +40,13 @@ and CI's conventions.
 
 Builds go to `build/` (ignored). Run them with `make test-web`, or
 `npx playwright test -c tests/web -g footnote` for some (`--project webkit`
-for one engine). On GitHub, the CI workflow (`.github/workflows/ci.yml`)
-runs them in the CI image on every push and pull request.
+for one engine). Tests tagged `@timing` (long tasks, in `slices.spec.ts`)
+measure how long the viewer's tasks take, which means something only on a
+machine doing nothing else: they run in projects of their own
+(`timing-chromium`, `timing-webkit`, …), after every other test and one
+engine after another; `--project timing-webkit --no-deps` runs them alone.
+On GitHub, the CI workflow (`.github/workflows/ci.yml`) runs them in the CI
+image on every push and pull request.
 
 Three habits make them reliable. Measure a glyph by its SVG coordinates
 (WebKit gives a `<tspan>`'s box as its whole line's). Change a column's
@@ -64,6 +69,7 @@ that `idle()` waits for it.
 | Footnotes: hover, click to pin, Escape, keyboard, ARIA | `footnotes.spec.ts` |
 | Hints: blurred with a label, click and Enter, `--latex-hint-label`, print | `hints.spec.ts`, `regressions.spec.ts` |
 | Cross-references: `\eqref` goes to its anchor | `links.spec.ts` |
+| Sliced layout: on every page and the demo pages, the end of the slices identical to a synchronous layout (line breaks, heights, sizes, glyph positions) at several widths; a fresh block bit for bit; a width changed midway, an unmount midway (nothing left, nothing retained); a host's reading line within 1 px, and the browser's anchoring; on the screen drawn at once, near it in slices; the events once per run; `sync` by attribute, mount, host and print; no long task on a 480-segment block; 300 random widths and scrolls checked against sync | `slices.spec.ts` (`pages/huge`) |
 | Scopes of live text: two documents with the same slot name, each its own text; the page-wide fallback; a block mounted later drawn with its scope's text from its first frame; one scope's change lays out only its blocks; views inherit the scope; unmount leaves the scope | `scopes.spec.ts` |
 | Live text: `reflowtex.setText`, and back to the default; a no-break space as a tie (interword glue, never broken, as wide as TeX) | `live.spec.ts` |
 | Margin protrusion (microtype) at reflow widths: full lines end at the measure plus their last character's `\rpcode`, after live text, a fill (`\hfill`), inline maths, in a theorem; centred lines centred on what does not protrude | `protrusion.spec.ts` |

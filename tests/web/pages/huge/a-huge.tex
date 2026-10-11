@@ -1,0 +1,22 @@
+% A synthetic very tall block: a hundred and twenty sections, each its own
+% segments (a heading, prose, a display, more prose), for what a re-break of
+% the whole block costs and how it is sliced (slices.spec.ts).
+\newcount\hugen
+\newcommand\hugepart{%
+  \section{Part \the\hugen}
+  The harmonic series diverges, though very slowly: its partial sums grow
+  like the logarithm of the number of terms, and part \the\hugen{} says so
+  again at some length, with $\sum_{n \le N} 1/n = \ln N + \gamma + O(1/N)$
+  in it, so that the lines break differently at every width the tests use,
+  and a paragraph of this length takes several lines even on a wide screen.
+  \[ \sum_{k=1}^{\the\hugen} k = \frac{\the\hugen\,(\the\hugen+1)}{2}
+     \qquad\text{and}\qquad \int_0^1 x^{\the\hugen}\,dx = \frac{1}{\the\hugen+1}. \]
+  After the display the text goes on: a second paragraph, shorter, which
+  ends part \the\hugen{} with a reference to the next one.
+
+  And a third, so that every part holds more than one paragraph of running
+  text between its heading and the next.
+  \advance\hugen by 1
+  \ifnum\hugen<121 \expandafter\hugepart\fi}
+\hugen=1
+\hugepart

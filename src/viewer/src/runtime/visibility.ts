@@ -5,8 +5,21 @@ import { announceLayout } from './block-data.ts';
 import { blockData } from './blocks.ts';
 import { frame } from './pending.ts';
 import { BLOCK_SELECTOR } from './page.ts';
+import { flushAll, paintLater } from './slices.ts';
 import type { FontTable } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
+
+// A block laid out in slices (slices.ts) paints only what is on the screen at
+// once; what is near it is painted in slices too, nearest first.
+const slicedPaint = (cache: LayoutCache): boolean => !!cache.lastSliced;
+const onScreen = (r: DOMRectReadOnly): boolean => r.bottom > 0 && r.top < (window.innerHeight || 800);
+const laterFor = (cache: LayoutCache, i: number, r: DOMRectReadOnly): boolean => {
+    const data = cache.blockEl && blockData.get(cache.blockEl);
+    if (!data) return false;
+    const vh = window.innerHeight || 800;
+    paintLater(data, cache, i, r.bottom < 0 ? -r.bottom : r.top - vh);
+    return true;
+};
 
 // ── Per-segment painting (grow-only) ──────────────────────────────────────────
 // Layout always covers the whole block (cheap pure computation, and it must, so
@@ -35,6 +48,7 @@ export const segIO = new IntersectionObserver(entries => {
         if (!s) continue;
         s.intersecting = e.isIntersecting;
         if (e.isIntersecting && (!s.painted || s.dirty)) {
+            if (slicedPaint(ref!.cache) && !onScreen(e.boundingClientRect) && laterFor(ref!.cache, ref!.i, e.boundingClientRect)) continue;
             paintSegment(ref!.cache.fontInfo!, ref!.cache, ref!.i);
             const block = ref!.cache.dom!.root.closest<HTMLElement>(BLOCK_SELECTOR);
             if (block) painted.add(block);
@@ -70,7 +84,7 @@ export function paintVisibleNow(fontInfo: FontTable, cache: LayoutCache): number
     cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 };
     const segs = cache.dom.segs;
     const vh = window.innerHeight || 800, M = vh;
-    const todo: number[] = [], nested: LayoutCache[] = [];
+    const todo: number[] = [], nested: LayoutCache[] = [], rects: DOMRect[] = [];
     for (let i = 0; i < segs.length; i++) {
         const s = segs[i];
         // A stream segment paints through its nested cache – after this pass,
@@ -82,9 +96,14 @@ export function paintVisibleNow(fontInfo: FontTable, cache: LayoutCache): number
         // paints it once it is shown.
         if (!s.svg.getClientRects().length) continue;
         const r = s.svg.getBoundingClientRect();
-        if (r.bottom > -M && r.top < vh + M) todo.push(i);
+        if (r.bottom > -M && r.top < vh + M) { todo.push(i); rects.push(r); }
     }
-    for (const i of todo) paintSegment(fontInfo, cache, i);
+    let k = 0;
+    for (const i of todo) {
+        const r = rects[k++];
+        if (slicedPaint(cache) && !onScreen(r) && laterFor(cache, i, r)) continue;
+        paintSegment(fontInfo, cache, i);
+    }
     let n = todo.length;
     for (const c of nested) n += paintVisibleNow(fontInfo, c);
     return n;
@@ -111,6 +130,7 @@ window.addEventListener('resize', scheduleViewportPaint, { passive: true });
 // Print needs every segment painted (off-screen ones are empty until then). Grow-
 // only means they simply stay painted afterwards, so there is nothing to restore.
 window.addEventListener('beforeprint', () => {
+    flushAll();         // (what slices had left: laid out now)
     for (const el of observedBlocks) {
         const data = blockData.get(el);
         if (data) paintDocument(data.fontInfo, data.cache);

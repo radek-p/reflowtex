@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { SP_TO_PX, gD, gH, useGlyphMetrics } from '../engine/core.ts';
-import { layoutDocument } from '../engine/layout/document.ts';
 import { widgetNodes } from './widgets.ts';
 import { blockData } from '../runtime/blocks.ts';
 import { api } from '../runtime/page.ts';
@@ -10,6 +9,7 @@ import { allData, docData } from '../runtime/block-data.ts';
 import { disposePiece } from './inline.ts';
 import { textHooks } from './instances.ts';
 import { frame, track } from '../runtime/pending.ts';
+import { layoutBlock, slicedFor, startSlices } from '../runtime/slices.ts';
 import type { BlockData, BlockSource } from '../runtime/block-data.ts';
 import type { Doc, FontTable, GlueNode, GlyphNode, Slot, TexNode, ViewerFont } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
@@ -172,8 +172,9 @@ export function refreshSlots(el: Element): void {
     data.doc.slotParas!.forEach(sp => { sp.stale = null; });
     invalidateParagraphs(data.cache, changed, stale);
     const params = { ...data.params, align: data.lastAlign };
-    layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
+    layoutBlock(data, data.lastWidth, params);
     paintVisibleNow(data.fontInfo, data.cache);
+    if (slicedFor(data)) startSlices(data);
 }
 
 /** Refresh, in the next frame, the blocks of `scope` (a string), or of no

@@ -9,6 +9,8 @@ import { surfacesOf } from './surface.ts';
 import { definedKinds } from './kinds.ts';
 import { idle, pending } from '../runtime/pending.ts';
 import { scopeSizes } from './slots.ts';
+import { sliceState } from '../runtime/slices.ts';
+import type { SliceState } from '../runtime/slices.ts';
 import type { BlockData } from '../runtime/block-data.ts';
 import type { TexNode } from '../engine/model.ts';
 import type { LayoutCache, Line } from '../engine/layout/types.ts';
@@ -34,6 +36,7 @@ export interface Inspect {
     idle(): Promise<void>;
     pending(): string[];
     scopes(): Record<string, number>;
+    slices(reset?: boolean): SliceState;
     surfaces(el: HTMLElement): InspectSurface[];
     kinds(): ReturnType<typeof definedKinds>;
     replay(el: Element, i: number, sink: ReplaySink, cache?: LayoutCache): boolean;
@@ -89,6 +92,7 @@ const inspect: Inspect = {
     idle,
     pending,
     scopes: () => scopeSizes(),   // scope → how many blocks it holds
+    slices: reset => sliceState(reset),   // layout work left for idle time (runtime/slices.ts)
     surfaces(el) {
         return [...surfacesOf(el)].filter(s => !s.isDisposed).map(s => {
             let key = surfaceKeys.get(s);

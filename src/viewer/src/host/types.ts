@@ -232,6 +232,16 @@ export interface BlockEvents {
     /** After every layout of the block, and whenever more of its lines are
      *  drawn as they near the window: anchors may have moved. */
     layout: () => void;
+    /** A sliced layout (BlockMountOptions.layout) has left work for idle
+     *  time: segments to lay out, or near the window to paint. Sent once per
+     *  run, however many times the layout starts again (a width changing
+     *  under way). */
+    layoutstart: () => void;
+    /** A slice of that work is done; `left`: the segments still to come. */
+    layoutslice: (detail: { left: number }) => void;
+    /** Nothing is left: the block is laid out as a synchronous layout would
+     *  have left it. Once per layoutstart. */
+    layoutcomplete: () => void;
 }
 
 export interface Block {
@@ -259,6 +269,11 @@ export interface Block {
     destroy(): void;
     /** The same as destroy: this view goes; the block's other views stay. */
     unmount(): void;
+    /** Resolves once the block's sliced layout has nothing left
+     *  (layoutcomplete), at once when it has nothing under way. */
+    layoutDone(): Promise<void>;
+    /** Lay out and paint, now, everything a sliced layout has left. */
+    flushLayout(): void;
     /** Whether its wide displays (those that scroll sideways in a
      *  .latex-display box) fade where they are cut off: its own setting,
      *  else the host's (Host.displayFade). */
@@ -479,6 +494,11 @@ export interface Host {
     /** Set that default; the blocks that follow it change at once, with no
      *  layout. */
     setDisplayFit(fit: 'natural' | 'column'): void;
+    /** How blocks are laid out when nothing says otherwise
+     *  (BlockMountOptions.layout, data-latex-layout): 'sliced' unless set. */
+    layout(): 'sliced' | 'sync';
+    /** Set that default; 'sync' finishes at once what slices had left. */
+    setLayout(mode: 'sliced' | 'sync'): void;
 }
 
 export interface ScopeOptions {
@@ -496,6 +516,13 @@ export interface BlockMountOptions {
      *  block's scope, else none – as before scopes. A block already on the
      *  page moves into the scope given, null taking it out of one. */
     scope?: string | null;
+    /** 'sliced': a re-break (the first layout, a new width, new live text)
+     *  lays out at once only the segments on the screen, and the rest in
+     *  slices of idle time, nearest first (BlockEvents layoutstart,
+     *  layoutslice, layoutcomplete; Block.layoutDone). 'sync': all of it at
+     *  once, as a page that prints or measures the whole block needs.
+     *  Without it: data-latex-layout, else the host's (Host.layout). */
+    layout?: 'sliced' | 'sync';
     /** The block to show again (a Block, its element, or its key). The new
      *  view is laid out at its own width and re-broken on its own, with its
      *  own instances, live marks and accessible layer; it shares the block's
