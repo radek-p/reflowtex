@@ -2,12 +2,12 @@
 // What every integration needs besides compiling: the viewer's files, a block's
 // HTML, the passes a snippet needs, and a few formats shared with the page
 // templates. (Integrations depend on src/; nothing here knows any of them.)
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { copyFileSync, cpSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join, relative, sep } from 'node:path';
+import { join, relative } from 'node:path';
 import { protoText } from './schema.ts';
 import { a11yLayerFromBytes } from './a11y.ts';
+import { ensureBundles } from './bundles.ts';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));
 const VIEWER_DIR = join(SRC, 'viewer');
@@ -49,52 +49,24 @@ export const escapeHtml = (s: string): string =>
 
 // ── The viewer bundle ───────────────────────────────────────────────────────
 
-/** The SHA-256 src/viewer/build.sh records in the bundle's second line: every
- *  module under src/viewer/src/ (.js and .ts), as its path (relative to
- *  src/viewer) and a newline, then its contents, in byte order of the paths. */
-export function viewerSourcesSha256(): string {
-  const files: string[] = [];
-  const walk = (d: string) => {
-    for (const f of readdirSync(d)) {
-      const p = join(d, f);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (f.endsWith('.js') || f.endsWith('.ts')) files.push(relative(VIEWER_DIR, p).split(sep).join('/'));
-    }
-  };
-  walk(join(VIEWER_DIR, 'src'));
-  files.sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
-  const h = createHash('sha256');
-  for (const f of files) { h.update(`${f}\n`); h.update(readFileSync(join(VIEWER_DIR, f))); }
-  return h.digest('hex');
-}
-
-/** The latex-viewer.js to ship: the committed minified copy when it was made
- *  from the current bundle, else the bundle. A stale copy costs bytes, never
- *  correctness, and is reported. Ship it as latex-viewer.js either way: the
- *  DOM contract, the fonts resolved relative to the script's URL and the ?v=
+/** The latex-viewer.js to ship: the minified bundle, built first if it is
+ *  missing or stale (bundles.ts). Ship it as latex-viewer.js: the DOM
+ *  contract, the fonts resolved relative to the script's URL and the ?v=
  *  cache-buster all key off that name. */
 export function viewerScript(log: (s: string) => void = console.log): string {
-  const bundle = join(VIEWER_DIR, 'latex-viewer.js');
-  const minified = join(VIEWER_DIR, 'latex-viewer.min.js');
-  const secondLine = readFileSync(bundle, 'utf8').split('\n')[1] ?? '';
-  if (!secondLine.includes(`sources sha256 ${viewerSourcesSha256()}`))
-    log('  viewer: latex-viewer.js is stale (a module in src/viewer/src/ changed since it was bundled) – shipping it anyway; run `make build-viewer`');
-  if (existsSync(minified)) {
-    const header = readFileSync(minified, 'utf8').split('\n')[0];
-    if (header.includes(`sha256 ${createHash('sha256').update(readFileSync(bundle)).digest('hex')}`)) return minified;
-    log('  viewer: latex-viewer.min.js is stale (source changed since it was generated) – shipping the unminified source; run `make minify-viewer`');
-  }
-  return bundle;
+  ensureBundles({ only: ['viewer'], log });
+  return join(VIEWER_DIR, 'latex-viewer.min.js');
 }
 
 /** What src/inspector holds that a site does not need: its sources (built into
- *  the files beside them), its build script and its README. */
-export const INSPECTOR_UNSHIPPED = new Set(['src', 'build.sh', 'README.md']);
+ *  the files beside them) and its README. */
+export const INSPECTOR_UNSHIPPED = new Set(['src', 'README.md']);
 
 /** Copy the viewer (and, if asked, the inspector: its script and what it loads
  *  from beside itself when opened – the built files, not its sources) into a
- *  site directory. */
-export function installViewer(outDir: string, { inspector = false, log }: { inspector?: boolean; log?: (s: string) => void } = {}): void {
+ *  site directory, each built first if it is missing or stale. */
+export function installViewer(outDir: string, { inspector = false, log = console.log }: { inspector?: boolean; log?: (s: string) => void } = {}): void {
+  ensureBundles({ log });
   mkdirSync(outDir, { recursive: true });
   copyFileSync(viewerScript(log), join(outDir, 'latex-viewer.js'));
   copyFileSync(join(VIEWER_DIR, 'protobuf.min.js'), join(outDir, 'protobuf.min.js'));

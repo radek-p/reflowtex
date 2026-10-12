@@ -244,8 +244,9 @@ visit. From a script: `highlight(host, ranges, colour)` and
 
 ## Building
 
-The sources are TypeScript in [src/](src/). `make build-companion` bundles
-them into `companion.js`, which is committed, so site builders need no Node.
+The sources are TypeScript in [src/](src/), bundled into `companion.js`
+(not committed) by every build that installs it, when it is missing or
+stale; `make build-companion` builds it on demand.
 `make typecheck` checks them against the viewer's host API
 ([src/viewer/src/host/types.ts](../viewer/src/host/types.ts)). Tests:
 `tests/web/test_accordion_v2.py`, `test_companion.py`.

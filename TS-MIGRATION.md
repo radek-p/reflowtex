@@ -6,13 +6,13 @@ are as they were.
 
 ## What is generated, what is vendored, what stays JavaScript
 
-- **Generated, committed:** `src/viewer/latex-viewer.js` and `.min.js`
-  (`make build-viewer`, from `src/viewer/src/`), `src/companion/companion.js`
-  (`make build-companion`) and the inspector's `inspector.js`, `agent.js` and
-  `panel/*.js` (`make build-inspector`, from `src/inspector/src/`). Each
-  records its sources' SHA-256 on its second line, and
-  `tests/unit/bundles.test.ts` fails when they have changed since.
-- **Generated, not committed:** the render report's `app.js` (built from
+- **Generated, not committed:** `src/viewer/latex-viewer.js` and `.min.js`
+  (from `src/viewer/src/`), `src/companion/companion.js` and the
+  inspector's `inspector.js`, `agent.js` and `panel/*.js` (from
+  `src/inspector/src/`), built by src/pipeline/bundles.ts wherever they are
+  needed, when missing or stale (each records on its second line what it was
+  built from; `make build-viewer` and the others build on demand, and a
+  release attaches them); the render report's `app.js` (built from
   `tests/render/report/app.ts` when served, and for the site) and the
   website's `static/privacy-notice.js` (from `website/browser/`), both by
   esbuild in passing.
@@ -29,7 +29,7 @@ are as they were.
 pipeline, the tools, the tests, the render report's page) and
 `tsconfig.browser.json` (the viewer, the companion, the inspector, the
 website's script), strict, reading no JavaScript. CI runs it
-(`.github/workflows/ts.yml`).
+(`.github/workflows/ci.yml`).
 
 ## How it was done
 

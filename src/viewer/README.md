@@ -9,17 +9,22 @@ the DOM below.
 > (`index.ts` is the entry; `engine/` breaks lines, lays out and paints,
 > `runtime/` runs blocks on the page, `host/` is what pages and packages use,
 > `defaults/` renders footnotes and margin notes). `latex-viewer.js` is a
-> committed bundle of them, one classic script, so site builders never need
-> Node. After editing a module, maintainers run `make build-viewer` (needs
-> Node): it bundles with esbuild and minifies. The bundle's header records the
-> SHA-256 of the modules, and the pipeline warns when it is stale. esbuild
-> drops ordinary comments, so read the modules, not the bundle.
+> bundle of them, one classic script, and is not committed: the integrations
+> (and the website's build, and the tests) build it with esbuild when it is
+> missing or was built from other modules (src/pipeline/bundles.ts), so a
+> site's build needs only `npm ci`. The bundle's header names its version
+> and the SHA-256 of what it was built from. esbuild drops ordinary
+> comments, so read the modules, not the bundle.
+>
+> **Getting it:** `make build-viewer` writes `latex-viewer.js` and
+> `latex-viewer.min.js` here; or download both, versioned, from a
+> [release](https://github.com/radek-p/reflowtex/releases), with their
+> SHA-256 sums. A release's files are built from its tag, which is their
+> source (AGPL-3.0 §13).
 
-> **`latex-viewer.min.js`** is the bundle minified (about a third of the
-> size, a third again over gzip). The integrations ship it *as* `latex-viewer.js`
-> whenever its header records the SHA-256 of the current bundle, and fall back
-> to the bundle otherwise, so the served name and the DOM contract never change.
-> `make build-viewer` regenerates both; `make minify-viewer` only this one.
+> **`latex-viewer.min.js`** is the same bundle minified (about a third of
+> the size, a third again over gzip). The integrations ship it *as*
+> `latex-viewer.js`, so the served name and the DOM contract never change.
 
 > **`protobuf.min.js`** is [protobuf.js](https://github.com/protobufjs/protobuf.js)
 > v8.7.1, vendored (BSD-3-Clause – see [THIRD-PARTY-LICENSES.md](../../THIRD-PARTY-LICENSES.md)).

@@ -236,11 +236,12 @@ size. Anything the page fixes to the window can keep clear with them:
   that changed: the tree does not flicker while a width moves, and a press
   on a row lands on the row it began on.
 - **The sources** are in `src/`: `src/inspector.*`, `src/agent/` and
-  `src/panel/`. `make build-inspector` (`build.sh`) builds them into the
-  files above, which are committed, so a site needs no Node: the loader and
-  the agent bundled into one classic script each, the panel's modules one
-  file each. Each built file names, on its second line, the sources it was
-  built from; a unit test fails when they have changed since.
+  `src/panel/`, built into the files above (not committed) by every build
+  that installs the inspector, when they are missing or stale
+  (src/pipeline/bundles.ts; `make build-inspector` on demand): the loader
+  and the agent bundled into one classic script each, the panel's modules
+  one file each. Each built file names, on its second line, what it was
+  built from.
 - **`vendor/preact.js`** is Preact, htm and Preact Signals in one ES module
   (MIT; 23 KB, 9 KB gzipped), rebuilt at pinned versions by
   `make vendor-inspector`.

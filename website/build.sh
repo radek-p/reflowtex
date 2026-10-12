@@ -33,6 +33,9 @@ PAGELESS="$REPO/tools/pageless-pdf"               # the pageless PDF (Tools › 
 mkdir -p "$SITE/layouts/shortcodes" "$SITE/layouts/partials"
 cp "$HUGO_INT/layouts/shortcodes/latex.html"          "$SITE/layouts/shortcodes/latex.html"
 cp "$HUGO_INT/layouts/partials/reflowtex-viewer.html" "$SITE/layouts/partials/reflowtex-viewer.html"
+#    The browser's scripts (viewer, companion, inspector) are built from their
+#    TypeScript first, if they are missing or stale (src/pipeline/bundles.ts).
+node "$REPO/scripts/build-bundles.ts"
 #    …and the inspector (src/inspector), which every page offers. It is served
 #    from a folder named by a hash of its files: its panel's ES modules import
 #    each other by plain relative paths, which no ?v= can follow, so a new

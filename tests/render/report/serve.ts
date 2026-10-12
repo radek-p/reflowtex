@@ -20,10 +20,12 @@ import { serveMounts } from '../../../tools/lib/static-server.ts';
 import { allCases, BUILD } from '../render.ts';
 import { writeIndex } from './results.ts';
 import { reportScript } from './build.ts';
+import { ensureBundles } from '../../../src/pipeline/bundles.ts';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const REPO = resolve(HERE, '../../..');
 
+ensureBundles({ only: ['inspector'] });   // (served from src/inspector, as built)
 const results = writeIndex(BUILD, [...allCases().keys()]);
 // (the page, staged: its script built from app.ts as it is now)
 const page = mkdtempSync(join(tmpdir(), 'render-report-'));

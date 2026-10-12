@@ -7,3 +7,11 @@ scratchpad.md
 .DS_Store
 .vscode/
 node_modules/
+# Built from their TypeScript where they are needed (src/pipeline/bundles.ts;
+# make build-viewer): never committed.
+/src/viewer/latex-viewer.js
+/src/viewer/latex-viewer.min.js
+/src/companion/companion.js
+/src/inspector/inspector.js
+/src/inspector/agent.js
+/src/inspector/panel/

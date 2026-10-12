@@ -17,7 +17,7 @@ HTM_VERSION        = 3.1.1
 SIGNALS_VERSION    = 2.11.2
 ESBUILD_VERSION    = 0.28.2
 
-.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all render-report test-capture test-web typecheck build-companion build-inspector clean vendor-protobuf vendor-inspector build-viewer minify-viewer
+.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all render-report test-capture test-web typecheck build-companion build-inspector clean vendor-protobuf vendor-inspector build-viewer
 
 help:
 	@echo "Reflow TeX targets:"
@@ -32,16 +32,15 @@ help:
 	@echo "  make website-clean    force a full clean rebuild of website/public (incl. testmath.tex)"
 	@echo "  make clean            remove build artefacts"
 	@echo "  make vendor-protobuf  refresh src/viewer/protobuf.min.js from protobufjs@$(PROTOBUFJS_VERSION)"
-	@echo "  make build-viewer     bundle src/viewer/src/ into src/viewer/latex-viewer.js, then minify (maintainers; after editing the viewer)"
-	@echo "  make minify-viewer    regenerate src/viewer/latex-viewer.min.js only"
+	@echo "  make build-viewer     bundle src/viewer/src/ into src/viewer/latex-viewer.js and .min.js (builds that need it do so themselves)"
 	@echo "  make test-render      the render tests: every glyph in the browser against TeX (tests/render)"
 	@echo "  make test-render-all  the same, with the whole-document cases (testmath)"
 	@echo "  make render-report    the render tests' results side by side, served locally (after test-render)"
 	@echo "  make test-capture     the capture tests: what the serializer records of small documents (tests/capture)"
 	@echo "  make typecheck        type-check all the TypeScript: the Node side and the browser's (viewer host API, companion)"
-	@echo "  make build-companion  bundle src/companion/src/ (TypeScript) into src/companion/companion.js (maintainers)"
-	@echo "  make build-inspector  build src/inspector/src/ into the inspector's committed scripts (maintainers)"
-	@echo "  make test-web         the web tests: the viewer, companion and Hugo integration in Chromium and WebKit (tests/web)"
+	@echo "  make build-companion  bundle src/companion/src/ (TypeScript) into src/companion/companion.js"
+	@echo "  make build-inspector  build src/inspector/src/ into the inspector's scripts"
+	@echo "  make test-web         the web tests: the viewer, companion and Hugo integration in Chromium, WebKit and Firefox (tests/web)"
 	@echo "  make vendor-inspector refresh src/inspector/vendor/preact.js (preact@$(PREACT_VERSION), htm, signals)"
 
 # The build runs on Node, straight from the TypeScript sources (src/pipeline);
@@ -106,10 +105,10 @@ render-report: node-deps
 test-capture: node-deps
 	node --test tests/capture/capture.test.ts
 
-# The web tests (tests/web/README.md): Playwright Test, in Chromium and WebKit
-# (downloaded once); Hugo for the integration's site.
+# The web tests (tests/web/README.md): Playwright Test, in Chromium, WebKit
+# and Firefox (downloaded once); Hugo for the integration's site.
 test-web: node-deps
-	@npx playwright install chromium webkit
+	@npx playwright install chromium webkit firefox
 	npx playwright test -c tests/web
 
 # Forces every block (including testmath.tex on the Showcase page) to
@@ -159,38 +158,18 @@ vendor-inspector:
 typecheck: node-deps
 	@npm run -s typecheck
 
-# Maintainer-only: bundle the companion's TypeScript into the committed ES
-# module src/companion/companion.js (src/companion/build.sh). Needs npm.
-build-companion:
-	@sh src/companion/build.sh
+# The browser's scripts, built from their TypeScript (src/pipeline/bundles.ts):
+# none is committed, and every build that ships one (the integrations, the
+# website, the tests) builds it first when it is missing or stale. These
+# build one on demand, whether or not it is.
+build-companion: node-deps
+	@node scripts/build-bundles.ts --force companion
 
-# Maintainer-only: build the inspector's committed scripts (inspector.js,
-# agent.js, panel/*.js) from its sources, src/inspector/src/
-# (src/inspector/build.sh). Needs npm.
-build-inspector:
-	@sh src/inspector/build.sh
+build-inspector: node-deps
+	@node scripts/build-bundles.ts --force inspector
 
-# Maintainer-only: bundle the viewer's modules (src/viewer/src/) into the
-# committed classic script src/viewer/latex-viewer.js (src/viewer/build.sh),
-# then minify it. Needs npx (Node); site builders do not.
-build-viewer:
-	@ESBUILD_VERSION=$(ESBUILD_VERSION) sh src/viewer/build.sh
-	@$(MAKE) --no-print-directory minify-viewer
-
-# Maintainer-only: regenerate the committed minified viewer after editing
-# latex-viewer.js. Integrations ship the minified copy under the name
-# latex-viewer.js when its header records the current source's SHA-256, and
-# fall back to the source (with a warning) when it is stale – so forgetting
-# this step costs bytes, never correctness. Needs npx (Node); site builders
-# do not. The same pinned esbuild that bundles it (no second tool).
-minify-viewer:
-	@src=src/viewer/latex-viewer.js; out=src/viewer/latex-viewer.min.js; \
-	sha=$$(shasum -a 256 $$src | cut -c1-64); \
-	npx --yes esbuild@$(ESBUILD_VERSION) $$src --minify --charset=utf8 \
-	  --legal-comments=none --log-level=warning --outfile=$$out.tmp && \
-	{ printf '/* SPDX-License-Identifier: AGPL-3.0-or-later; reflowtex latex-viewer.js, minified by esbuild@$(ESBUILD_VERSION); source sha256 %s */\n' "$$sha"; cat $$out.tmp; } > $$out && \
-	rm -f $$out.tmp && \
-	echo "wrote $$out ($$(wc -c < $$src | tr -d ' ') -> $$(wc -c < $$out | tr -d ' ') bytes)"
+build-viewer: node-deps
+	@node scripts/build-bundles.ts --force viewer
 
 clean:
 	rm -rf build

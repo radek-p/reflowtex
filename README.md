@@ -172,9 +172,14 @@ The build pipeline shells out to a real TeX toolchain:
   `npm ci`, which every `make` target (and `website/build.sh`) does on first
   use
 
-The **browser** side needs no build step of its own and no external dependency beyond the
-vendored `protobuf.min.js`: the committed `latex-viewer.js` is ready to serve (maintainers
-who edit its modules rebuild it with `make build-viewer`; see [`src/viewer/`](src/viewer/README.md)).
+The **browser** side has no external dependency beyond the vendored
+`protobuf.min.js`. Its scripts (`latex-viewer.js`, the companion package,
+the inspector) are TypeScript, and are not committed: every build that ships
+them (the integrations, `website/build.sh`, the tests) bundles them first,
+when they are missing or stale, in well under a second. To get
+`latex-viewer.js` on its own, run `make build-viewer`, or download it,
+versioned and minified, from a [release](https://github.com/radek-p/reflowtex/releases);
+see [`src/viewer/`](src/viewer/README.md).
 
 `make check` verifies all of the above. The [container](#try-it-in-one-command)
 described above has all of this baked in, if you'd rather not install it.
