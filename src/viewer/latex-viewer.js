@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 22f70043a1b4092e28eb89dcce3294fa762cf5cdfcccf62221fbdf612261e1ba
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 84cbbcd0ccf8a9497507e9d2549f9cdd7105331c8d3a5eff28f6a1f4e9a85f83
 'use strict';
 "use strict";
 (() => {
@@ -5437,7 +5437,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         }
       }
     } else if (display instanceof Element) {
-      i = segs.findIndex((s2) => s2.svg.contains(display));
+      i = segs.findIndex((s2) => !!s2.svg && s2.svg.contains(display));
       if (i >= 0 && kinds2[i].kind !== "display") i = -1;
     }
     if (i < 0) return false;

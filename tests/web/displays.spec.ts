@@ -150,6 +150,19 @@ test('revealInDisplay brings a far-right point into view, and back', async ({ op
     window.__A.revealInDisplay(window.__wrap(window.__B).querySelector('tspan'))])).toEqual([false, false]);
 });
 
+// A block whose display comes after a stream (a segment with no <svg> of its
+// own): a glyph of the display, given as itself, is found past the stream.
+test('revealInDisplay finds a display after a stream', async ({ openPage }) => {
+  const page = await openPage('displays-streams');
+  await narrow(page);
+  const r = await page.evaluate(() => {
+    const wrap = window.__wrap(window.__A);
+    try { return { ok: window.__A.revealInDisplay(wrap.querySelector('tspan')), wrap: !!wrap }; }
+    catch (e) { return { error: String(e) }; }
+  });
+  expect(r).toEqual({ ok: true, wrap: true });
+});
+
 test('a view turns the fade off for itself only, and reveals on its own', async ({ openPage }) => {
   const page = await openPage('displays');
   await narrow(page);

@@ -190,7 +190,8 @@ export function revealInDisplay(cache: LayoutCache, fades: boolean, display: num
             if (kinds[k].kind === 'display' && ++n === display) { i = k; break; }
         }
     } else if (display instanceof Element) {
-        i = segs.findIndex(s => s.svg!.contains(display));
+        // (a stream's segment has no drawing of its own)
+        i = segs.findIndex(s => !!s.svg && s.svg.contains(display));
         if (i >= 0 && kinds[i].kind !== 'display') i = -1;
     }
     if (i < 0) return false;
