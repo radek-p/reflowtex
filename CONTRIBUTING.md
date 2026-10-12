@@ -33,6 +33,10 @@ A pull request cannot be merged before its author has signed.
 - `make check` verifies the toolchain; `make node-deps` installs the Node
   packages (every other target does it on first use). `npm run typecheck`
   and `npm test` check the TypeScript.
+- The code is TypeScript, strict, on Node and in the browser alike; the
+  browser's is built into committed scripts (`make build-viewer`,
+  `make build-companion`, `make build-inspector`). [TS-MIGRATION.md](TS-MIGRATION.md)
+  says what is generated, what stays JavaScript, and why.
 - `make website` rebuilds the documentation site, which doubles as the
   broadest test: every page is compiled and rendered by the pipeline.
 - New source files start with an SPDX header:
