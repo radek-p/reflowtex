@@ -50,9 +50,9 @@ node --test --test-name-pattern "displays@own" tests/render/render.test.ts
 
 The tests run on Node (`node:test`); the first run installs the repository's
 Node dependencies and Playwright's Chromium. On
-GitHub the workflow `.github/workflows/render-tests.yml` runs them all on
-every push and pull request, in the project's container image; when one
-fails, its reports are attached to the run (`render-reports`).
+GitHub the CI workflow (`.github/workflows/ci.yml`) runs them all on
+every push and pull request, in the CI image; their results and reports are
+attached to the run (`render-results`).
 
 ## When a test fails
 
@@ -78,7 +78,7 @@ Whole documents (testmath) are in it once `make test-render-all` has run
 them: every result there is shows, from whichever run made it.
 
 The website has it too, as Tools › Render tests (/render-tests/): its
-deploy runs the tests for the commit it publishes, and `website/build.sh`
+deploy takes CI's results for the commit it publishes, and `website/build.sh`
 copies the report and the results into the site (`report/site.ts`).
 
 For each test, TeX's pageless PDF beside the page the browser reflowed,

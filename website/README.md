@@ -59,9 +59,10 @@ Set these to the real values (all currently placeholders):
 
 ## Deploy
 
-`.github/workflows/hugo.yml` (at the repo root) runs on every push to `main`:
-it builds the project container image (cached between runs), runs
-`make website` inside it, and publishes `website/public` to GitHub Pages.
+`.github/workflows/hugo.yml` (at the repo root) runs once CI has run for a
+push to `main`: in the CI image (built once, kept in GitHub's registry; see
+CONTRIBUTING.md, "CI") it runs `make website`, with the render tests' results
+from that CI run, and publishes `website/public` to GitHub Pages.
 The per-block build tree (testmath.tex, on the Showcase page, included) is cached
 between runs, so only blocks whose content changed are recompiled. TeX Live
 is pinned by image digest in the `Dockerfile`; bump it deliberately.

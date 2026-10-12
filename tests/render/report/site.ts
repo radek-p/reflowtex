@@ -8,7 +8,7 @@
 // result.json, pageless.pdf, vector/{vector,strip,viewer}, and the page it
 // tested – into <site>/static/render-tests/build/, beside the report page
 // (website/build.sh puts it there). The results are of this checkout: the
-// site's deploy runs the tests first (.github/workflows/hugo.yml), so the
+// site's deploy takes CI's run of them (.github/workflows/hugo.yml), so the
 // page shows the version it is part of. With no results, it says so and the
 // site goes without.
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';

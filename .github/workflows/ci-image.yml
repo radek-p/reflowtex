@@ -1,0 +1,95 @@
+name: CI image
+
+# The image the tests and the site's build run in (the Dockerfile's test
+# target: TeX Live, the tests' packages, Node, Hugo, the browsers), kept in
+# this repository's own registry as ghcr.io/<owner>/reflowtex-ci:<tag>, the
+# tag a hash of what goes into it: the Dockerfile, docker/ (the package
+# lists, the scripts it copies) and package-lock.json (Playwright's version).
+# It is built only when that hash has no image yet – the first run after one
+# of those files changed – and every other run, and every other job, pulls
+# it. So Docker Hub (the pinned texlive base) is asked only on such a build,
+# and the GitHub Actions cache keeps even that to the layers that changed.
+# CONTRIBUTING.md ("CI") says more.
+
+on:
+  workflow_call:
+    outputs:
+      image:
+        description: the image's name in the registry, tag included
+        value: ${{ jobs.image.outputs.image }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.tag.outputs.image }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: tag
+        env:
+          INPUTS_HASH: ${{ hashFiles('Dockerfile', 'docker/**', 'package-lock.json') }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "image=ghcr.io/${owner}/reflowtex-ci:${INPUTS_HASH:0:20}" >> "$GITHUB_OUTPUT"
+
+      - run: .github/scripts/ci-image.sh login
+
+      - id: probe
+        run: |
+          if .github/scripts/ci-image.sh exists "${{ steps.tag.outputs.image }}"; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "${{ steps.tag.outputs.image }} is in the registry: nothing to build"
+          else
+            [ $? -eq 1 ] || exit 1
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "${{ steps.tag.outputs.image }} is not in the registry yet: building it"
+          fi
+
+      - if: steps.probe.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      # Up to three tries, a while apart: what the build fetches (the base
+      # image from Docker Hub, Debian's packages, CTAN's) fails now and then
+      # for a few minutes.
+      - id: build1
+        if: steps.probe.outputs.build == 'true'
+        continue-on-error: true
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: test
+          push: true
+          tags: ${{ steps.tag.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - if: steps.build1.outcome == 'failure'
+        run: sleep 60
+      - id: build2
+        if: steps.build1.outcome == 'failure'
+        continue-on-error: true
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: test
+          push: true
+          tags: ${{ steps.tag.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - if: steps.build2.outcome == 'failure'
+        run: sleep 180
+      - if: steps.build2.outcome == 'failure'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: test
+          push: true
+          tags: ${{ steps.tag.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

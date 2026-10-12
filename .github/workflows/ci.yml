@@ -1,0 +1,91 @@
+name: CI
+
+# Every check of a change, in one run (CONTRIBUTING.md, "CI"):
+#   typescript  type checking and the unit tests, on Node alone;
+#   render      every glyph the browser draws against TeX's own pageless PDF
+#               (tests/render/README.md), and the capture tests;
+#   web         what a site does in the browser: the viewer, the companion
+#               package and the Hugo integration, in Chromium, WebKit and
+#               Firefox (tests/web/README.md).
+# render and web run in the CI image (ci-image.yml): built once, the first
+# time its inputs change, and pulled from GitHub's registry by every job
+# after that. No test fetches anything while it runs: the TeX packages and
+# the browsers are in the image, and the browser's scripts are built from
+# the checkout.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    uses: ./.github/workflows/ci-image.yml
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+
+  render:
+    needs: image
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      IMAGE: ${{ needs.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: .github/scripts/ci-image.sh login && .github/scripts/ci-image.sh pull "$IMAGE"
+      - name: Run the capture and render tests
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace reflowtex:test bash -lc '
+            set -e
+            npm ci --no-audit --no-fund
+            make test-capture test-render-all
+          '
+      # The results, for the site (Deploy website shows them, for this
+      # commit) and, when a test failed, for a look.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render-results
+          path: tests/render/build/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  web:
+    needs: image
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      IMAGE: ${{ needs.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: .github/scripts/ci-image.sh login && .github/scripts/ci-image.sh pull "$IMAGE"
+      - name: Run the web tests
+        run: |
+          docker run --rm -e CI=1 -v "$PWD":/workspace -w /workspace reflowtex:test bash -lc '
+            set -e
+            npm ci --no-audit --no-fund
+            make test-web
+          '
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: web-test-logs
+          path: |
+            tests/web/build/*.log
+            tests/web/build/test-results/
+          if-no-files-found: ignore

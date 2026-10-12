@@ -1,0 +1,73 @@
+name: Release
+
+# A version tag (v1.2.3) pushed: the browser's scripts built from it and
+# attached to a GitHub Release of that tag – the viewer (latex-viewer-<v>.js,
+# and .min.js), the companion package and the inspector, with their SHA-256
+# sums and a note on their licences. The bundles are not in the repository
+# (src/pipeline/bundles.ts builds them where they are needed); this is where
+# a page that wants the files alone gets them. Their source is the tag
+# itself, which the release links (AGPL-3.0 §13).
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+
+      - name: Build the bundles, versioned
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          REFLOWTEX_VERSION="$version" node scripts/build-bundles.ts --force
+          grep -q "version $version;" src/viewer/latex-viewer.js
+
+      - name: Gather the release's files
+        run: |
+          out=release; mkdir -p "$out"
+          cp src/viewer/latex-viewer.js     "$out/latex-viewer-$VERSION.js"
+          cp src/viewer/latex-viewer.min.js "$out/latex-viewer-$VERSION.min.js"
+          cp src/viewer/protobuf.min.js     "$out/protobuf.min.js"
+          mkdir -p "stage/companion-$VERSION" "stage/inspector-$VERSION"
+          cp src/companion/companion.js src/companion/companion.css "stage/companion-$VERSION/"
+          (cd src/inspector && cp -R inspector.js inspector.css agent.js panel vendor "../../stage/inspector-$VERSION/")
+          tar -czf "$out/companion-$VERSION.tar.gz" -C stage "companion-$VERSION"
+          tar -czf "$out/inspector-$VERSION.tar.gz" -C stage "inspector-$VERSION"
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          cat > "$out/NOTICE.txt" <<EOF
+          Reflow TeX $VERSION: the browser's scripts, built from the tag $GITHUB_REF_NAME.
+
+          latex-viewer-$VERSION.js and .min.js, companion-$VERSION.tar.gz and
+          inspector-$VERSION.tar.gz are licensed under the GNU Affero General Public
+          License, version 3 or later (AGPL-3.0-or-later). Their Corresponding Source
+          is the repository at that tag:
+            $url/tree/$GITHUB_REF_NAME
+          A site that serves them to its users offers them that source (AGPL-3.0,
+          section 13); the integrations' page footer links it.
+
+          They include third-party code under its own licence: the companion bundles
+          Preact, htm and Preact Signals, and the inspector ships them vendored
+          (vendor/preact.js). protobuf.min.js is protobuf.js (BSD-3-Clause), which
+          latex-viewer.js needs loaded first. THIRD-PARTY-LICENSES.md in the
+          repository has their notices.
+          EOF
+          (cd "$out" && sha256sum -- * > SHA256SUMS)
+          cat "$out/SHA256SUMS"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "Reflow TeX $VERSION" \
+            --notes "The browser's scripts built from $GITHUB_REF_NAME (source: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/$GITHUB_REF_NAME). Check them against SHA256SUMS; NOTICE.txt says how they are licensed."

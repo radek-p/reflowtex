@@ -28,19 +28,20 @@ and CI's conventions.
 - **A Hugo site** (`hugo-site/`), built as a Hugo user builds theirs – the
   integration's shortcode and partial copied in, `prebuild.ts`, `hugo` –
   and served under `/hugo/`, as a project site on GitHub Pages is.
-- **The tests** (`*.spec.ts`, Playwright Test) open pages in Chromium and in
-  WebKit (Safari's engine; Firefox does not start under Playwright here yet)
-  and drive them. `setup.ts` builds every page and the Hugo site once, at
-  the start, and serves `build/`; `fixtures.ts` has `openPage`.
+- **The tests** (`*.spec.ts`, Playwright Test) open pages in Chromium,
+  WebKit (Safari's engine) and Firefox, and drive them (without Firefox
+  installed, `REFLOWTEX_FIREFOX=0` leaves it out). `setup.ts` builds the
+  browser's scripts if they are missing or stale, then every page and the
+  Hugo site once, at the start, and serves `build/`; `fixtures.ts` has
+  `openPage`.
   Every test also fails if the page reports an error: an uncaught exception,
   a `console.error`, a failed or 4xx/5xx request – or the viewer talking
   (`[latex-viewer] …` on the console outside debug mode).
 
 Builds go to `build/` (ignored). Run them with `make test-web`, or
 `npx playwright test -c tests/web -g footnote` for some (`--project webkit`
-for one engine). On GitHub,
-`.github/workflows/web-tests.yml` runs them in the container image on every
-push and pull request.
+for one engine). On GitHub, the CI workflow (`.github/workflows/ci.yml`)
+runs them in the CI image on every push and pull request.
 
 Three habits make them reliable. Measure a glyph by its SVG coordinates
 (WebKit gives a `<tspan>`'s box as its whole line's). Change a column's
