@@ -3,7 +3,11 @@
 // screen reader is given – the text in reading order with MathML for every
 // formula – and that the drawing is hidden from it, not from the eye.
 import { test, expect } from './fixtures.ts';
-import { idle } from './web.ts';
+import { createServer } from 'node:http';
+import { createReadStream, existsSync, readFileSync } from 'node:fs';
+import { join, sep } from 'node:path';
+import { BUILD, idle } from './web.ts';
+import { INSERT_MATH } from '../../src/pipeline/a11y.ts';
 
 test('every formula reaches assistive technology as MathML; the drawing does not', async ({ openPage }) => {
   const page = await openPage('mathml');
@@ -598,9 +602,8 @@ test('screen reader mode: a prompt at the page’s start, and the reading option
 });
 
 // The MathML is well formed: each element with a fixed number of children has
-// that many (Firefox reports an <mfrac/> that has not. It once reported one on this
-// page, where every <mfrac> has two, LaTeX's output included: most likely a
-// formula laid out while the page was still being parsed.)
+// that many (Firefox reports an <mfrac/> that has not; for one laid out while
+// the page was still being parsed, see the next test).
 test('every MathML element has the children its kind needs', async ({ openPage }) => {
   for (const name of ['mathml', 'mathml-long']) {
     const page = await openPage(name);
@@ -612,4 +615,95 @@ test('every MathML element has the children its kind needs', async ({ openPage }
     expect(wrong, name).toEqual([]);
     expect(await page.locator('.latex-a11y mfrac').count(), `${name} has fractions`).toBeGreaterThan(0);
   }
+});
+
+// A browser lays out what it has of a page while it is still arriving. A
+// formula shipped as markup stood in the page half parsed – an <mfrac> with
+// its numerator and not yet its denominator – and Firefox, laying it out,
+// reported "Incorrect number of children for <mfrac/> tag" (on a slow test
+// machine). The page here arrives in small pieces, a little apart, as from a
+// slow network; no element with a fixed number of children may be in the
+// page with any other number, at any moment a script could see (when the
+// browser could lay it out), and the page reports no error.
+const ARITY_WATCH = `(() => {
+  const arity = { mfrac: 2, msub: 2, msup: 2, msubsup: 3, munder: 2, mover: 2, munderover: 3, mroot: 2 };
+  const seen = window.__incomplete = [];
+  const check = el => {
+    for (const m of [el, ...el.querySelectorAll(Object.keys(arity).join(','))])
+      if (m.isConnected && m.localName in arity && m.namespaceURI === 'http://www.w3.org/1998/Math/MathML' && m.children.length !== arity[m.localName])
+        seen.push(m.localName + ' with ' + m.children.length);
+  };
+  new MutationObserver(records => {
+    for (const r of records) {
+      if (r.target.nodeType === 1) check(r.target);
+      for (const n of r.addedNodes) if (n.nodeType === 1) check(n);
+    }
+  }).observe(document, { childList: true, subtree: true });
+})();`;
+
+/** BUILD over HTTP, a page's formulas (from <math to </math>) arriving in
+ *  pieces of `size` bytes, `gap` ms apart; the rest of it at once. */
+function slowServer(size: number, gap: number): Promise<{ url: string; close: () => void }> {
+  const pause = () => new Promise(ok => setTimeout(ok, gap));
+  const server = createServer(async (req, res) => {
+    const file = join(BUILD, decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname));
+    if (!file.startsWith(BUILD + sep) || !existsSync(file)) { res.writeHead(404).end(); return; }
+    if (!file.endsWith('.html')) { res.writeHead(200, { 'cache-control': 'no-store' }); createReadStream(file).pipe(res); return; }
+    const html = readFileSync(file, 'latin1');   // (a byte a character: the pieces cut anywhere)
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    let at = 0;
+    for (const m of html.matchAll(/<math[\s>][\s\S]*?<\/math>/g)) {
+      res.write(Buffer.from(html.slice(at, m.index), 'latin1'));
+      await pause();
+      for (let i = m.index; i < m.index + m[0].length; i += size) {
+        res.write(Buffer.from(html.slice(i, Math.min(i + size, m.index + m[0].length)), 'latin1'));
+        await pause();
+      }
+      at = m.index + m[0].length;
+    }
+    res.end(Buffer.from(html.slice(at), 'latin1'));
+  });
+  return new Promise(ok => server.listen(0, '127.0.0.1', () =>
+    ok({ url: `http://127.0.0.1:${(server.address() as { port: number }).port}`, close: () => server.close() })));
+}
+
+test('no formula is ever in the page with a part missing, however the page arrives', async ({ openPage }) => {
+  const server = await slowServer(128, 5);
+  try {
+    for (const name of ['mathml', 'mathml-long']) {
+      const page = await openPage(`${server.url}/${name}/index.html`, { init: ARITY_WATCH });
+      expect(await page.evaluate(() => window.__incomplete), name).toEqual([]);
+      expect(await page.locator('.latex-a11y mfrac').count(), `${name} has fractions`).toBeGreaterThan(0);
+      // each formula as LaTeX wrote it, and the layer's own script gone
+      expect(await page.evaluate(() => document.querySelectorAll('noscript[data-mathml]').length +
+        [...document.scripts].filter(s => s.textContent!.includes('data-mathml')).length)).toBe(0);
+    }
+  } finally { server.close(); }
+});
+
+// Without scripts, the layer still gives every formula as MathML.
+test('without scripts, every formula of the layer is MathML', async ({ browser }) => {
+  const server = await slowServer(1 << 20, 0);
+  const ctx = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(`${server.url}/mathml/index.html`);
+    expect(await page.locator('.latex-a11y math').count()).toBe(9);
+    expect(await page.locator('.latex-a11y mfrac').count()).toBeGreaterThan(0);
+  } finally { await ctx.close(); server.close(); }
+});
+
+// Where the script after a layer did not run (a page that forbids inline
+// scripts, HTML a host inserted by script), the viewer puts the formulas in
+// place, the same way.
+test('the viewer puts the formulas in place where the layer\'s script did not run', async ({ openPage }) => {
+  const page = await openPage('mathml', { init: ARITY_WATCH, route: ['**/mathml/index.html', async route => {
+    const response = await route.fetch();
+    const html = await response.text();
+    expect(html).toContain(INSERT_MATH);
+    await route.fulfill({ response, body: html.split(INSERT_MATH).join('') });
+  }] });
+  expect(await page.locator('noscript[data-mathml]').count()).toBe(0);
+  expect(await page.locator('.latex-a11y math').count()).toBe(9);
+  expect(await page.evaluate(() => window.__incomplete)).toEqual([]);
 });

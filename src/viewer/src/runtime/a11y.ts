@@ -39,6 +39,7 @@
 import { api } from './page.ts';
 import { allData } from './block-data.ts';
 import { maxOf, inkOf, runsOf } from './a11y-runs.ts';
+import { insertShippedMath } from './a11y-math.ts';
 import { MIN_PX, fitRuns, fitText, layOutRuns, scaleOnto, type FitItem, type Lined, type Place } from './a11y-fit.ts';
 import type { BlockData } from './block-data.ts';
 import type { ContentItem } from '../engine/model.ts';
@@ -207,8 +208,10 @@ function passClick(e: MouseEvent) {
 }
 if (typeof document !== 'undefined') {
     document.addEventListener('click', passClick, true);
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addPrompt);
-    else addPrompt();
+    // the formulas of layers whose own script did not run (a11y-math.ts)
+    const start = () => { insertShippedMath(document); addPrompt(); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
     if (reader) showReader();
 }
 api.screenReaderMode = screenReaderMode;
@@ -250,6 +253,7 @@ export function placeAccessibleLayer(data: BlockData | undefined): void {
     const el = data && data.el;
     const layer = layerOf(el);
     if (!layer) return;
+    insertShippedMath(layer);
     // (a layer is found only by an element: data and el are there)
     if (layer === el!.nextElementSibling) el!.before(layer);
     const cache = data!.cache;
@@ -364,6 +368,7 @@ export function placeAccessibleLayer(data: BlockData | undefined): void {
  *  made of them (those were fitted to the other view's lines). */
 export function copyLayer(layer: HTMLElement | null, el: Element): HTMLElement | null {
     if (!layer || ownLayers.has(el)) return null;
+    insertShippedMath(layer);
     const copy = layer.cloneNode(true) as HTMLElement;
     if (copy.dataset.placed === '1') {
         delete copy.dataset.placed;

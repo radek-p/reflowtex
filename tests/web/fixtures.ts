@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The tests' `openPage`, and `test` and `expect` to write them with.
 //
-// openPage(name, { width = 1200, height = 900, theme, route, ...context })
+// openPage(name, { width = 1200, height = 900, theme, route, init, ...context })
 // loads a fixture page and waits until every block is drawn and its fonts have
 // loaded (then puts `theme` on <html>, if given); `context` goes to the
 // browser context (colorScheme, …). Every test runs in Chromium, WebKit
@@ -18,14 +18,17 @@ export type WebPage = Page & { errors: string[] };
 export interface OpenOptions extends BrowserContextOptions {
   width?: number; height?: number; theme?: string;
   route?: [string, (route: Route) => unknown];
+  /** a script run in the page before any of its own (page.addInitScript) */
+  init?: string;
 }
 
 export const test = base.extend<{ openPage: (name: string, o?: OpenOptions) => Promise<WebPage> }>({
   openPage: async ({ browser }, use) => {
     const opened: WebPage[] = [];
-    await use(async (name, { width = 1200, height = 900, theme, route, ...context } = {}) => {
+    await use(async (name, { width = 1200, height = 900, theme, route, init, ...context } = {}) => {
       const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, ...context });
       if (route) await ctx.route(...route);
+      if (init) await ctx.addInitScript(init);
       const page = Object.assign(await ctx.newPage(), { errors: [] as string[] });
       page.on('pageerror', e => page.errors.push(`uncaught: ${e}`));
       page.on('console', m => {

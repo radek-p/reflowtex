@@ -6,8 +6,10 @@
 // structure) from assistive technology.
 //
 // It is built at build time from the encoded document, so it is in the page
-// before any script runs: a reader, find-in-page or a search engine does not
+// before the viewer runs: a reader, find-in-page or a search engine does not
 // wait for the viewer, which paints a block only once it is scrolled to.
+// (Its formulas are put in place by a short script right after it, as soon
+// as it is parsed – or, without scripts, are there as markup: shippedMath.)
 //
 // Text and formulas, and every stream – a box (theorem, proof, note, a
 // custom kind), a hint, an accordion's panes, a footnote, a side note – in
@@ -27,6 +29,35 @@ export interface LayerDocument { paragraphs: { nodes?: LayerNode[] }[]; content:
 /** Visually hidden, still read (display:none or visibility:hidden would hide
  *  it from screen readers too). */
 const HIDDEN = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%)';
+
+/** A formula's MathML as the page ships it: as LaTeX wrote it, inside a
+ *  <noscript data-mathml>, and put in place whole by the script after the
+ *  layer (INSERT_MATH).
+ *
+ *  A browser parses a page as it arrives and may lay out what it has so far
+ *  at any moment. Shipped as markup, a formula stood in the page half parsed
+ *  whenever the HTML arrived or was parsed in pieces – an <mfrac> with its
+ *  numerator and not yet its denominator – and Firefox, laying that out,
+ *  reported "Invalid markup: Incorrect number of children for <mfrac/> tag"
+ *  (it did on a slow test machine). With scripts on, a <noscript>'s content
+ *  is plain text, nothing laid out; the script parses each formula off the
+ *  page (a <template>'s fragment) and inserts it complete, in one step.
+ *  Without scripts, the <noscript>'s content is the MathML itself, read as
+ *  before. (MathML holding "</noscript" could not be shipped so, and is
+ *  shipped as markup.) */
+function shippedMath(mathml: string): string {
+  return /<\/noscript/i.test(mathml) ? mathml : `<noscript data-mathml>${mathml}</noscript>`;
+}
+
+/** Right after a layer: its formulas (shippedMath) put in place, each whole
+ *  and in one step, as soon as the layer is parsed – before the viewer
+ *  runs, so a reader has them at once; then it removes itself, so the layer
+ *  follows its block directly again. (The viewer does the same for a layer
+ *  this did not run for: a page that forbids inline scripts, or HTML
+ *  inserted by a script, whose scripts do not run.) Kept in step with
+ *  insertShippedMath (src/viewer/src/runtime/a11y-math.ts). */
+export const INSERT_MATH = '<script>(s=>{for(const n of s.previousElementSibling.querySelectorAll("noscript[data-mathml]"))' +
+  '{const t=document.createElement("template");t.innerHTML=n.textContent;n.replaceWith(t.content)}s.remove()})(document.currentScript)</script>';
 
 const escapeText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /** A glyph's text: private-use code points (glyphs addressed by index,
@@ -59,7 +90,7 @@ function nodesHtml(nodes: LayerNode[], refs: number[] = []): string {
     for (let i = 0; i < list.length; i++) {
       const n = list[i];
       if (n.type === 'math' && (n.subtype ?? 0) === 0 && n.mathml) {
-        out += n.mathml;
+        out += shippedMath(n.mathml);
         i = formulaEnd(list, i) - 1;
       } else if (n.type === 'glyph' && n.char !== undefined) { out += escapeText(glyphText(n.char)); ref(n.stream); }
       // a space, or a glue that only stretches: a contents entry's number is
@@ -76,13 +107,15 @@ function nodesHtml(nodes: LayerNode[], refs: number[] = []): string {
   return out.replace(/ {2,}/g, ' ').trim();
 }
 
-/** The layer's HTML for a document. Each piece says what it stands for, so
+/** The layer's HTML for a document (and, if it has formulas, INSERT_MATH
+ *  after it). Each piece says what it stands for, so
  *  the viewer can lay it over that once drawn (runtime/a11y.ts):
  *  data-para = the paragraph's number, data-item = a display's position in
  *  the content (both 1-based, as the document numbers them), data-stream = a
  *  stream's number (its drawn box). */
 export function a11yLayer(doc: LayerDocument): string {
-  return `<div class="latex-a11y" style="${HIDDEN}">${itemsHtml(doc, doc.content, true, new Set())}</div>`;
+  const inner = itemsHtml(doc, doc.content, true, new Set());
+  return `<div class="latex-a11y" style="${HIDDEN}">${inner}</div>` + (inner.includes('<noscript data-mathml>') ? INSERT_MATH : '');
 }
 
 /** Content items as the layer's pieces. `top`: the block's own content,
@@ -104,7 +137,7 @@ function itemsHtml(doc: LayerDocument, content: LayerItem[], top: boolean, done:
     } else if (it.kind === 'display') {
       // a row after an alignment's first is read in the first row's table
       if (!it.mathml && it.box?.subtype === HL_ALIGNMENT && prev?.box?.subtype === HL_ALIGNMENT) return;
-      if (it.mathml) parts.push(`<div${item}>${it.mathml}</div>`);
+      if (it.mathml) parts.push(`<div${item}>${shippedMath(it.mathml)}</div>`);
       else if (it.box) {
         const refs: number[] = [];
         const html = nodesHtml([it.box], refs);

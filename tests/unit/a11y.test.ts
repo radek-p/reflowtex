@@ -4,7 +4,7 @@
 // document, as a page ships it next to the drawn block.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { a11yLayer, type LayerDocument } from '../../src/pipeline/a11y.ts';
+import { a11yLayer, INSERT_MATH, type LayerDocument } from '../../src/pipeline/a11y.ts';
 
 type N = Record<string, unknown>;
 const text = (s: string): N[] => [...s].map(ch => (ch === ' ' ? { type: 'glue', width: 218235 } : { type: 'glyph', char: ch.codePointAt(0) }));
@@ -12,15 +12,17 @@ const M = (inner: string, display = false) =>
   `<math${display ? ' display="block"' : ''} xmlns="http://www.w3.org/1998/Math/MathML">${inner}</math>`;
 const formula = (mathml: string | undefined, ...inside: N[]): N[] =>
   [{ type: 'math', subtype: 0, ...(mathml ? { mathml } : {}) }, ...inside, { type: 'math', subtype: 1 }];
-/** The layer's content, without its wrapper. */
-const body = (doc: LayerDocument) => a11yLayer(doc).replace(/^<div class="latex-a11y"[^>]*>/, '').replace(/<\/div>$/, '');
+/** A formula as the layer ships it: in a <noscript>, put in place by INSERT_MATH. */
+const shipped = (mathml: string) => `<noscript data-mathml>${mathml}</noscript>`;
+/** The layer's content, without its wrapper (and the script after it). */
+const body = (doc: LayerDocument) => a11yLayer(doc).replace(/^<div class="latex-a11y"[^>]*>/, '').replace(INSERT_MATH, '').replace(/<\/div>$/, '');
 
 test('a paragraph: its text, and MathML where a formula stands; data-para names it for the viewer', () => {
   const doc: LayerDocument = {
     paragraphs: [{ nodes: [...text('Let '), ...formula(M('<mi>𝑥</mi>'), { type: 'glyph', char: 0x1D465 }), ...text(' be real.')] }],
     content: [{ kind: 'paragraph', para: 1 }],
   };
-  assert.equal(body(doc), `<p data-para="1">Let ${M('<mi>𝑥</mi>')} be real.</p>`);
+  assert.equal(body(doc), `<p data-para="1">Let ${shipped(M('<mi>𝑥</mi>'))} be real.</p>`);
 });
 
 test('a display is its block MathML; one without MathML reads as its text; data-item is its content index (1-based)', () => {
@@ -33,7 +35,7 @@ test('a display is its block MathML; one without MathML reads as its text; data-
       { kind: 'display', box: { type: 'hlist', children: [] } },
     ],
   };
-  assert.equal(body(doc), `<div data-item="1">${M('<mn>1</mn>', true)}</div><p data-item="3">a table</p>`);
+  assert.equal(body(doc), `<div data-item="1">${shipped(M('<mn>1</mn>', true))}</div><p data-item="3">a table</p>`);
 });
 
 test('an alignment is read once: the rows after its first are in the first row’s table', () => {
@@ -47,7 +49,7 @@ test('an alignment is read once: the rows after its first are in the first row�
       { kind: 'display', box: { type: 'hlist', subtype: 6, children: text('table') } },
     ],
   };
-  assert.equal(body(doc), `<div data-item="1">${M('<mtable/>', true)}</div><p data-item="4">table</p>`);
+  assert.equal(body(doc), `<div data-item="1">${shipped(M('<mtable/>', true))}</div><p data-item="4">table</p>`);
 });
 
 test('a formula without MathML (a footnote mark) reads as its text', () => {
@@ -98,7 +100,7 @@ test('blockHtml({a11y}): the drawn block hidden from assistive technology, the l
   const html = blockHtml(encoded(), {}, { a11y: true });
   const [block, layer] = html.split(/(?=<div class="latex-a11y")/);
   assert.match(block, /^<div class="latex-block" aria-hidden="true" data-nodelist-b64="[^"]+"><\/div>$/);
-  assert.equal(layer.replace(/^<div class="latex-a11y"[^>]*>/, ''), `<p data-para="1">See ${M('<mi>𝑥</mi>')}</p><div data-item="2">${M('<mn>2</mn>', true)}</div></div>`);
+  assert.equal(layer.replace(/^<div class="latex-a11y"[^>]*>/, ''), `<p data-para="1">See ${shipped(M('<mi>𝑥</mi>'))}</p><div data-item="2">${shipped(M('<mn>2</mn>', true))}</div></div>${INSERT_MATH}`);
 });
 
 test('blockHtml without {a11y} is as it was', () => {
@@ -155,4 +157,19 @@ test('a glue that only stretches is a space: a contents entry’s number and its
   const entry = { type: 'hlist', children: [...text('1.1'), { type: 'glue', width: 0, stretch: 65536 }] };
   const doc: LayerDocument = { paragraphs: [{ nodes: [entry, ...text('Entries')] }], content: [{ kind: 'paragraph', para: 1 }] };
   assert.equal(body(doc), '<p data-para="1">1.1 Entries</p>');
+});
+
+// A formula is shipped in a <noscript> (plain text while scripts run, so no
+// browser lays it out half parsed) and the script after the layer puts it in
+// place; a layer without formulas has no script.
+test('formulas are shipped whole: in a <noscript>, with the script that inserts them after the layer', () => {
+  const withMath = a11yLayer({ paragraphs: [{ nodes: [...text('Let '), ...formula(M('<mfrac><mn>1</mn><mn>2</mn></mfrac>'))] }],
+                               content: [{ kind: 'paragraph', para: 1 }] });
+  assert.ok(withMath.endsWith(`</div>${INSERT_MATH}`));
+  assert.ok(withMath.includes(shipped(M('<mfrac><mn>1</mn><mn>2</mn></mfrac>'))));
+  assert.equal(a11yLayer({ paragraphs: [{ nodes: text('x') }], content: [{ kind: 'paragraph', para: 1 }] }).includes('<script'), false);
+  // MathML that would end the <noscript> is shipped as markup
+  const odd = M('<mtext>&lt;/noscript&gt;</mtext>'), raw = M('<mtext></noscript></mtext>');
+  assert.equal(body({ paragraphs: [{ nodes: formula(odd) }], content: [{ kind: 'paragraph', para: 1 }] }), `<p data-para="1">${shipped(odd)}</p>`);
+  assert.equal(body({ paragraphs: [{ nodes: formula(raw) }], content: [{ kind: 'paragraph', para: 1 }] }), `<p data-para="1">${raw}</p>`);
 });
