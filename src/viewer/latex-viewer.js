@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 76ae3c879fd09efb8828df67f5af91c46301c0a429c12bdeb9a56cf656175bc7
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 0b5681e17ac915717861218ab313e2ea4fe7afbf789f9c8c9b758567d5227d53
 'use strict';
 "use strict";
 (() => {
-  // src/engine/core.js
+  // src/engine/core.ts
   var ZOOM = 2;
   var SP_TO_PX = ZOOM / 65536;
   var BREAK_NODES = /* @__PURE__ */ new WeakMap();
@@ -32,7 +32,7 @@
   var DEFAULT_WIDTH_PT = 400;
   var RIGHT_PROTRUSION = { 44: 0.7, 46: 0.7, 58: 0.5, 59: 0.5, 45: 0.5, 8208: 0.5, 8722: 0.5, 33: 0.3, 63: 0.3 };
   var LEFT_PROTRUSION = { 40: 0.3, 8220: 0.7, 8216: 0.7 };
-  var glyphMetrics = null;
+  var glyphMetrics = [];
   function useGlyphMetrics(table) {
     glyphMetrics = table || [];
     for (const m of glyphMetrics) {
@@ -128,13 +128,15 @@
     return w;
   }
   function vlistGlueRatio(box) {
-    if (box.glue_sign === 1 && box.glue_set > 0) return { ratio: box.glue_set, fillOrder: box.glue_order || 0 };
-    if (box.glue_sign === 2 && box.glue_set > 0) return { ratio: -box.glue_set, fillOrder: box.glue_order || 0 };
+    const set = box.glue_set ?? 0;
+    if (box.glue_sign === 1 && set > 0) return { ratio: set, fillOrder: box.glue_order || 0 };
+    if (box.glue_sign === 2 && set > 0) return { ratio: -set, fillOrder: box.glue_order || 0 };
     return { ratio: 0, fillOrder: 0 };
   }
   function hlistGlueRatio(box) {
-    if (box.glue_sign === 1 && box.glue_set > 0) return { ratio: box.glue_set, fillOrder: box.glue_order || 0 };
-    if (box.glue_sign === 2 && box.glue_set > 0) return { ratio: -box.glue_set, fillOrder: box.glue_order || 0 };
+    const set = box.glue_set ?? 0;
+    if (box.glue_sign === 1 && set > 0) return { ratio: set, fillOrder: box.glue_order || 0 };
+    if (box.glue_sign === 2 && set > 0) return { ratio: -set, fillOrder: box.glue_order || 0 };
     if (box.glue_set !== void 0 && box.glue_set !== null) return { ratio: 0, fillOrder: 0 };
     const nodes = box.children;
     let natural = 0;
