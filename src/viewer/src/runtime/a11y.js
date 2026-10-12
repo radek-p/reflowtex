@@ -37,7 +37,7 @@
 // shipped form.
 
 import { BREAK_NODES, SP_TO_PX, useGlyphMetrics } from '../engine/core.ts';
-import { renderNodes } from '../engine/paint.js';
+import { renderNodes } from '../engine/render.js';
 import { api } from './page.ts';
 import { allData } from './block-data.js';
 

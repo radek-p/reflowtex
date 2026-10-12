@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 081a60cfc20eb22af02f36c04d2e127286d1e86d10da7b14c2ae7e725d29ee35
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 730505dd9f5191f5d5d78ef187c9b8e374a0c3616330368f123c96ff415d1644
 'use strict';
 "use strict";
 (() => {
@@ -1230,6 +1230,190 @@
     for (const d of allData) if (d.margin) placeMarginNotes(d);
   });
 
+  // src/engine/render.js
+  function svgMatrixOf(n, x, y) {
+    return { a: n.m_a ?? 1, b: -(n.m_b ?? 0), c: -(n.m_c ?? 0), d: n.m_d ?? 1, x, y };
+  }
+  function affineOf(t) {
+    return [
+      t.a,
+      t.b,
+      t.c,
+      t.d,
+      t.x - (t.a * t.x + t.c * t.y),
+      t.y - (t.b * t.x + t.d * t.y)
+    ];
+  }
+  function affineMul(m1, m2) {
+    if (!m1) return m2;
+    if (!m2) return m1;
+    const [a1, b1, c1, d1, e1, f1] = m1, [a2, b2, c2, d2, e2, f2] = m2;
+    return [
+      a1 * a2 + c1 * b2,
+      b1 * a2 + d1 * b2,
+      a1 * c2 + c1 * d2,
+      b1 * c2 + d1 * d2,
+      a1 * e2 + c1 * f2 + e1,
+      b1 * e2 + d1 * f2 + f1
+    ];
+  }
+  var GLUE_CLEADERS = 101;
+  var GLUE_XLEADERS = 102;
+  function deepCloneNode(o) {
+    if (Array.isArray(o)) return o.map(deepCloneNode);
+    if (o && typeof o === "object") {
+      const r = {};
+      for (const k of Object.keys(o)) r[k] = deepCloneNode(o[k]);
+      return r;
+    }
+    return o;
+  }
+  function leaderCopies(n, count) {
+    if (!n._leaderCopies || n._leaderCopies.length !== count) {
+      n._leaderCopies = [];
+      for (let i = 0; i < count; i++) n._leaderCopies.push(deepCloneNode(n.leader));
+    }
+    return n._leaderCopies;
+  }
+  function renderLeaders(fontInfo, sink, n, x, baselineY, wSp) {
+    const L = n.leader;
+    if (!L || wSp <= 0) return;
+    if (L.type === "rule") {
+      const h = (L.height === RUNNING_RULE ? 0 : L.height ?? 0) * SP_TO_PX;
+      const d = (L.depth === RUNNING_RULE ? 0 : L.depth ?? 0) * SP_TO_PX;
+      if (h + d > 0) sink.rule(L, x, baselineY - h, wSp * SP_TO_PX, h + d);
+      return;
+    }
+    const Lw = L.width ?? 0;
+    if (Lw <= 0) return;
+    const count = Math.floor(wSp / Lw);
+    if (count < 1) return;
+    const slack = wSp - count * Lw;
+    let start, step = Lw;
+    if (n.subtype === GLUE_XLEADERS) {
+      const gap = slack / (count + 1);
+      start = gap;
+      step = Lw + gap;
+    } else if (n.subtype === GLUE_CLEADERS) {
+      start = slack / 2;
+    } else {
+      start = 0;
+    }
+    const copies = leaderCopies(n, count);
+    for (let i = 0; i < count; i++) {
+      renderNodes(fontInfo, sink, [copies[i]], x + (start + i * step) * SP_TO_PX, baselineY, 0, 0, 0);
+    }
+  }
+  function renderVlistBody(fontInfo, sink, n, vlistX, refY) {
+    const { ratio: vr, fillOrder: vfo } = vlistGlueRatio(n);
+    const vlistW = n.width;
+    let curY = refY - n.height * SP_TO_PX;
+    for (const child of n.children) {
+      const y0 = curY;
+      if (child.type === "kern") {
+        curY += child.kern * SP_TO_PX;
+      } else if (child.type === "glue") {
+        curY += setGlue(child, vr, vfo) * SP_TO_PX;
+      } else if (child.type === "rule") {
+        const rw = (child.width === RUNNING_RULE ? vlistW : child.width) * SP_TO_PX;
+        const rh = (child.height + child.depth) * SP_TO_PX;
+        sink.rule(child, vlistX, curY, rw, rh);
+        curY += rh;
+      } else if (child.type === "hlist") {
+        const cb = curY + child.height * SP_TO_PX;
+        const { ratio: hr, fillOrder: hfo } = hlistGlueRatio(child);
+        renderNodes(fontInfo, sink, child.children, vlistX + (child.shift ?? 0) * SP_TO_PX, cb, hr, 0, hfo, child.height, child.depth);
+        curY += (child.height + child.depth) * SP_TO_PX;
+      } else if (child.type === "vlist") {
+        renderVlistBody(fontInfo, sink, child, vlistX + (child.shift ?? 0) * SP_TO_PX, curY + child.height * SP_TO_PX);
+        curY += (child.height + child.depth) * SP_TO_PX;
+      }
+      if (sink.vnode) sink.vnode(child, vlistX, y0, curY - y0);
+    }
+  }
+  function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fillOrder, runH, runD) {
+    ratio = ratio || 0;
+    expandRatio = expandRatio || 0;
+    fillOrder = fillOrder || 0;
+    runH = runH || 0;
+    runD = runD || 0;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i], x0 = x;
+      switch (n.type) {
+        case "rule": {
+          const w = n.width === RUNNING_RULE ? 0 : n.width ?? 0;
+          const h = n.height === RUNNING_RULE ? runH : n.height ?? 0;
+          const d = n.depth === RUNNING_RULE ? runD : n.depth ?? 0;
+          const hp = h * SP_TO_PX, dp = d * SP_TO_PX;
+          if (w > 0 && hp + dp > 0) sink.rule(n, x, baselineY - hp, w * SP_TO_PX, hp + dp);
+          x += w * SP_TO_PX;
+          break;
+        }
+        case "glyph": {
+          sink.glyph(n, x, baselineY, fontInfo[String(n.font)]);
+          x += gW(n) * glyphExpandScale(fontInfo, n, expandRatio) * SP_TO_PX;
+          break;
+        }
+        case "glue": {
+          let w = n.width;
+          if (ratio > 0 && (n.stretch_order || 0) === fillOrder && n.stretch) w += ratio * n.stretch;
+          else if (ratio < 0 && (n.shrink_order || 0) === fillOrder && n.shrink) w += ratio * n.shrink;
+          if (n.leader) renderLeaders(fontInfo, sink, n, x, baselineY, w);
+          if (n.subtype === 13) sink.space(n, x, baselineY);
+          if (sink.gap) sink.gap(n, "width", x, w * SP_TO_PX);
+          x += w * SP_TO_PX;
+          break;
+        }
+        case "kern": {
+          const w = n.kern * ((n.subtype || 0) === 0 ? kernExpandScale(fontInfo, nodes[i - 1], nodes[i + 1], expandRatio) : 1) * SP_TO_PX;
+          if (sink.gap) sink.gap(n, "kern", x, w);
+          x += w;
+          break;
+        }
+        case "picture": {
+          sink.picture(n, x, baselineY);
+          x += n.width * SP_TO_PX;
+          break;
+        }
+        case "transform": {
+          sink.beginTransform(n, svgMatrixOf(n, x, baselineY));
+          x = renderNodes(fontInfo, sink, n.children, x, baselineY, ratio, expandRatio, fillOrder, runH, runD);
+          sink.endTransform();
+          break;
+        }
+        case "disc":
+          x = renderNodes(fontInfo, sink, n.replace, x, baselineY, 0, expandRatio, 0, runH, runD);
+          break;
+        case "wdisc":
+          x = renderNodes(fontInfo, sink, n.replace, x, baselineY, 0, 0, 0, runH, runD);
+          break;
+        case "widget":
+          if (sink.widget) sink.widget(n, x, baselineY);
+          x += n.width * SP_TO_PX;
+          break;
+        case "math": {
+          const w = n.surround * SP_TO_PX;
+          if (sink.gap) sink.gap(n, "surround", x, w);
+          x += w;
+          break;
+        }
+        case "hlist": {
+          if (n.aside && sink.aside) sink.aside(n, x, baselineY);
+          const { ratio: hr, fillOrder: hfo } = hlistGlueRatio(n);
+          renderNodes(fontInfo, sink, n.children, x, baselineY + (n.shift ?? 0) * SP_TO_PX, hr, 0, hfo, n.height, n.depth);
+          x += n.width * SP_TO_PX;
+          break;
+        }
+        case "vlist":
+          renderVlistBody(fontInfo, sink, n, x, baselineY + (n.shift ?? 0) * SP_TO_PX);
+          x += n.width * SP_TO_PX;
+          break;
+      }
+      if (sink.node) sink.node(n, x0, baselineY, x - x0);
+    }
+    return x;
+  }
+
   // src/host/links.js
   var linkMap = {};
   var pageLabels = /* @__PURE__ */ new Set();
@@ -2210,37 +2394,11 @@
   .latex-block rect.latex-selection { fill: var(--latex-selection-color, Highlight); }
 `;
 
-  // src/engine/paint.js
+  // src/engine/sink.js
   function svgEl(tag, attrs) {
     const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
     return el;
-  }
-  function svgMatrixOf(n, x, y) {
-    return { a: n.m_a ?? 1, b: -(n.m_b ?? 0), c: -(n.m_c ?? 0), d: n.m_d ?? 1, x, y };
-  }
-  function affineOf(t) {
-    return [
-      t.a,
-      t.b,
-      t.c,
-      t.d,
-      t.x - (t.a * t.x + t.c * t.y),
-      t.y - (t.b * t.x + t.d * t.y)
-    ];
-  }
-  function affineMul(m1, m2) {
-    if (!m1) return m2;
-    if (!m2) return m1;
-    const [a1, b1, c1, d1, e1, f1] = m1, [a2, b2, c2, d2, e2, f2] = m2;
-    return [
-      a1 * a2 + c1 * b2,
-      b1 * a2 + d1 * b2,
-      a1 * c2 + c1 * d2,
-      b1 * c2 + d1 * d2,
-      a1 * e2 + c1 * f2 + e1,
-      b1 * e2 + d1 * f2 + f1
-    ];
   }
   var BAND_MIN = { up: 0.75, down: 0.25 };
   function reconcileSink(byNode, used, stats, cache) {
@@ -2556,162 +2714,8 @@
       }
     };
   }
-  var GLUE_CLEADERS = 101;
-  var GLUE_XLEADERS = 102;
-  function deepCloneNode(o) {
-    if (Array.isArray(o)) return o.map(deepCloneNode);
-    if (o && typeof o === "object") {
-      const r = {};
-      for (const k of Object.keys(o)) r[k] = deepCloneNode(o[k]);
-      return r;
-    }
-    return o;
-  }
-  function leaderCopies(n, count) {
-    if (!n._leaderCopies || n._leaderCopies.length !== count) {
-      n._leaderCopies = [];
-      for (let i = 0; i < count; i++) n._leaderCopies.push(deepCloneNode(n.leader));
-    }
-    return n._leaderCopies;
-  }
-  function renderLeaders(fontInfo, sink, n, x, baselineY, wSp) {
-    const L = n.leader;
-    if (!L || wSp <= 0) return;
-    if (L.type === "rule") {
-      const h = (L.height === RUNNING_RULE ? 0 : L.height ?? 0) * SP_TO_PX;
-      const d = (L.depth === RUNNING_RULE ? 0 : L.depth ?? 0) * SP_TO_PX;
-      if (h + d > 0) sink.rule(L, x, baselineY - h, wSp * SP_TO_PX, h + d);
-      return;
-    }
-    const Lw = L.width ?? 0;
-    if (Lw <= 0) return;
-    const count = Math.floor(wSp / Lw);
-    if (count < 1) return;
-    const slack = wSp - count * Lw;
-    let start, step = Lw;
-    if (n.subtype === GLUE_XLEADERS) {
-      const gap = slack / (count + 1);
-      start = gap;
-      step = Lw + gap;
-    } else if (n.subtype === GLUE_CLEADERS) {
-      start = slack / 2;
-    } else {
-      start = 0;
-    }
-    const copies = leaderCopies(n, count);
-    for (let i = 0; i < count; i++) {
-      renderNodes(fontInfo, sink, [copies[i]], x + (start + i * step) * SP_TO_PX, baselineY, 0, 0, 0);
-    }
-  }
-  function renderVlistBody(fontInfo, sink, n, vlistX, refY) {
-    const { ratio: vr, fillOrder: vfo } = vlistGlueRatio(n);
-    const vlistW = n.width;
-    let curY = refY - n.height * SP_TO_PX;
-    for (const child of n.children) {
-      const y0 = curY;
-      if (child.type === "kern") {
-        curY += child.kern * SP_TO_PX;
-      } else if (child.type === "glue") {
-        curY += setGlue(child, vr, vfo) * SP_TO_PX;
-      } else if (child.type === "rule") {
-        const rw = (child.width === RUNNING_RULE ? vlistW : child.width) * SP_TO_PX;
-        const rh = (child.height + child.depth) * SP_TO_PX;
-        sink.rule(child, vlistX, curY, rw, rh);
-        curY += rh;
-      } else if (child.type === "hlist") {
-        const cb = curY + child.height * SP_TO_PX;
-        const { ratio: hr, fillOrder: hfo } = hlistGlueRatio(child);
-        renderNodes(fontInfo, sink, child.children, vlistX + (child.shift ?? 0) * SP_TO_PX, cb, hr, 0, hfo, child.height, child.depth);
-        curY += (child.height + child.depth) * SP_TO_PX;
-      } else if (child.type === "vlist") {
-        renderVlistBody(fontInfo, sink, child, vlistX + (child.shift ?? 0) * SP_TO_PX, curY + child.height * SP_TO_PX);
-        curY += (child.height + child.depth) * SP_TO_PX;
-      }
-      if (sink.vnode) sink.vnode(child, vlistX, y0, curY - y0);
-    }
-  }
-  function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fillOrder, runH, runD) {
-    ratio = ratio || 0;
-    expandRatio = expandRatio || 0;
-    fillOrder = fillOrder || 0;
-    runH = runH || 0;
-    runD = runD || 0;
-    for (let i = 0; i < nodes.length; i++) {
-      const n = nodes[i], x0 = x;
-      switch (n.type) {
-        case "rule": {
-          const w = n.width === RUNNING_RULE ? 0 : n.width ?? 0;
-          const h = n.height === RUNNING_RULE ? runH : n.height ?? 0;
-          const d = n.depth === RUNNING_RULE ? runD : n.depth ?? 0;
-          const hp = h * SP_TO_PX, dp = d * SP_TO_PX;
-          if (w > 0 && hp + dp > 0) sink.rule(n, x, baselineY - hp, w * SP_TO_PX, hp + dp);
-          x += w * SP_TO_PX;
-          break;
-        }
-        case "glyph": {
-          sink.glyph(n, x, baselineY, fontInfo[String(n.font)]);
-          x += gW(n) * glyphExpandScale(fontInfo, n, expandRatio) * SP_TO_PX;
-          break;
-        }
-        case "glue": {
-          let w = n.width;
-          if (ratio > 0 && (n.stretch_order || 0) === fillOrder && n.stretch) w += ratio * n.stretch;
-          else if (ratio < 0 && (n.shrink_order || 0) === fillOrder && n.shrink) w += ratio * n.shrink;
-          if (n.leader) renderLeaders(fontInfo, sink, n, x, baselineY, w);
-          if (n.subtype === 13) sink.space(n, x, baselineY);
-          if (sink.gap) sink.gap(n, "width", x, w * SP_TO_PX);
-          x += w * SP_TO_PX;
-          break;
-        }
-        case "kern": {
-          const w = n.kern * ((n.subtype || 0) === 0 ? kernExpandScale(fontInfo, nodes[i - 1], nodes[i + 1], expandRatio) : 1) * SP_TO_PX;
-          if (sink.gap) sink.gap(n, "kern", x, w);
-          x += w;
-          break;
-        }
-        case "picture": {
-          sink.picture(n, x, baselineY);
-          x += n.width * SP_TO_PX;
-          break;
-        }
-        case "transform": {
-          sink.beginTransform(n, svgMatrixOf(n, x, baselineY));
-          x = renderNodes(fontInfo, sink, n.children, x, baselineY, ratio, expandRatio, fillOrder, runH, runD);
-          sink.endTransform();
-          break;
-        }
-        case "disc":
-          x = renderNodes(fontInfo, sink, n.replace, x, baselineY, 0, expandRatio, 0, runH, runD);
-          break;
-        case "wdisc":
-          x = renderNodes(fontInfo, sink, n.replace, x, baselineY, 0, 0, 0, runH, runD);
-          break;
-        case "widget":
-          if (sink.widget) sink.widget(n, x, baselineY);
-          x += n.width * SP_TO_PX;
-          break;
-        case "math": {
-          const w = n.surround * SP_TO_PX;
-          if (sink.gap) sink.gap(n, "surround", x, w);
-          x += w;
-          break;
-        }
-        case "hlist": {
-          if (n.aside && sink.aside) sink.aside(n, x, baselineY);
-          const { ratio: hr, fillOrder: hfo } = hlistGlueRatio(n);
-          renderNodes(fontInfo, sink, n.children, x, baselineY + (n.shift ?? 0) * SP_TO_PX, hr, 0, hfo, n.height, n.depth);
-          x += n.width * SP_TO_PX;
-          break;
-        }
-        case "vlist":
-          renderVlistBody(fontInfo, sink, n, x, baselineY + (n.shift ?? 0) * SP_TO_PX);
-          x += n.width * SP_TO_PX;
-          break;
-      }
-      if (sink.node) sink.node(n, x0, baselineY, x - x0);
-    }
-    return x;
-  }
+
+  // src/engine/paint.js
   var paintCount = 0;
   function paintSegment(fontInfo, cache, i) {
     paintCount++;

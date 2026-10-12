@@ -6,7 +6,7 @@ import {
 } from '../core.ts';
 import { texInterlineGlue } from './lines.js';
 import { HL_ALIGNMENT, HL_EQUATION } from './text.js';
-import { affineMul, affineOf, renderNodes } from '../paint.js';
+import { affineMul, affineOf, renderNodes } from '../render.js';
 // ── end of imports
 
 // Where a box's ink ends, used only to size its horizontal scroll area.
