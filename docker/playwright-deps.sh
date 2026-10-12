@@ -33,8 +33,15 @@ fi
 apt-get update -qq
 
 # Testing's own package when it has one (apt prefers it); trixie's otherwise.
-here= old=
+# One the image has already, itself or under another name (libasound2 is
+# libasound2t64 now), is left as it is: naming it would upgrade it to today's
+# testing alone, away from the packages built with it (libdbus-1-3, which
+# Firefox names, against the image's dbus), or take trixie's in its place.
+have=" $(dpkg-query -W -f '${db:Status-Abbrev} ${Package} ${Provides}\n' | sed -n 's/^ii  *//p' |
+         sed 's/([^)]*)//g; s/:[a-z0-9]*//g; s/,/ /g' | tr -s ' \n' ' ') "
+here='' old=''
 for p in $pkgs; do
+  case "$have" in *" $p "*) continue ;; esac
   if apt-cache policy "$p" 2>/dev/null | grep -q '500 .* forky\|500 .* testing\|500 .* sid'; then here="$here $p"
   else echo "playwright-deps: $p from $RELEASE"; old="$old $p/$RELEASE"; fi
 done

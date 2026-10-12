@@ -4,8 +4,8 @@
 // openPage(name, { width = 1200, height = 900, theme, route, ...context })
 // loads a fixture page and waits until every block is drawn and its fonts have
 // loaded (then puts `theme` on <html>, if given); `context` goes to the
-// browser context (colorScheme, …). Every test runs in Chromium and in WebKit
-// (Safari's engine: the two projects of playwright.config.ts). Besides errors,
+// browser context (colorScheme, …). Every test runs in Chromium, WebKit
+// (Safari's engine) and Firefox: the projects of playwright.config.ts. Besides errors,
 // the viewer must stay quiet: a log, info or warning line of its own
 // ("[latex-viewer] …") fails the test too. Anything the page reports as an
 // error – an uncaught exception, a console.error, a request that failed or
