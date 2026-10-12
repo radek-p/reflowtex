@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex inspector – GENERATED from src/inspector/src/panel/resources.ts by esbuild (make build-inspector); sources sha256 d804145e4ff690a9b9102807085ae3c32fbb48784b008089c6cc59884d83cb00
+// reflowtex inspector – GENERATED from src/inspector/src/panel/resources.ts by esbuild (make build-inspector); sources sha256 01536be8f7d675aa3c146af23bb078cd2e5f88e65f63228d1e45dc9f177ba368
 import { html, signal, computed, useLayoutEffect, useRef } from "../vendor/preact.js";
 import { call, got, MISSING } from "./bridge.js";
 import { refs, recall, keep, plain, say, IS_MAC } from "./store.js";

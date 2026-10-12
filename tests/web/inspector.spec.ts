@@ -342,3 +342,21 @@ test('the Overlays menu shows the reader text, the viewer’s own setting', asyn
   await item.click();
   expect(await page.evaluate(() => (window as any).reflowtex.accessibleDebug())).toBe(false);
 });
+
+// elementOf(id): what a row draws with. A vertical space row has no segment
+// of its own: it is the spacer before its segment (its parts, the same), and
+// between two paragraphs, the segment's drawing.
+test('elementOf a vertical space: its spacer, or its segment\'s drawing', async ({ openPage }) => {
+  const page = await openPage('host');
+  await agent(page);
+  const r = await page.evaluate(() => {
+    const I = window.__rtxInspector!;
+    const rows = I.blocks().flatMap(b => I.children(b.id)), gap = rows.find(x => x.kind === 'vgap');
+    const part = gap && I.children(gap.id)[0];
+    const name = (id: number) => { try { const el = I.elementOf(id); return el ? el.localName : null; } catch (e) { return String(e); } };
+    return { gap: gap ? name(gap.id) : 'no gap', part: part ? name(part.id) : 'no part',
+             // (a segment's spacer: empty, its height the space)
+             spacer: gap ? ((el: HTMLElement) => /px$/.test(el.style.height) && !el.firstChild)(I.elementOf(gap.id) as HTMLElement) : null };
+  });
+  expect(r).toEqual({ gap: 'div', part: 'div', spacer: true });
+});

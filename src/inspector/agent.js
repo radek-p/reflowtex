@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex inspector – GENERATED from src/inspector/src/agent/ by esbuild (make build-inspector); sources sha256 d804145e4ff690a9b9102807085ae3c32fbb48784b008089c6cc59884d83cb00
+// reflowtex inspector – GENERATED from src/inspector/src/agent/ by esbuild (make build-inspector); sources sha256 01536be8f7d675aa3c146af23bb078cd2e5f88e65f63228d1e45dc9f177ba368
 "use strict";
 (() => {
   // src/agent/context.ts
@@ -1549,6 +1549,11 @@
       const c = rootCache(e.block, e.root);
       return c && c.dom && c.dom.root;
     }
+    if (e.kind === "vgap") {
+      const c = cacheOf(e), s2 = c && c.dom && c.dom.segs[e.i];
+      return s2 ? s2.gap : null;
+    }
+    if (e.kind === "vpart") return elementOf(e.gap);
     const sid = e.seg;
     const { cache, s } = segParts(sid);
     if (e.kind === "node") {

@@ -2,7 +2,7 @@
 
 import { I, shown } from './context.ts';
 import { blockId, entries, lineId, parGapId, partId, segId, sideId } from './ids.ts';
-import { rootCache, rootsOf, segParts, segmentsOf } from './resolve.ts';
+import { cacheOf, rootCache, rootsOf, segParts, segmentsOf } from './resolve.ts';
 import { geometry, rectOf, toScreen } from './geometry.ts';
 import { gapBefore, gapInfo, partRect } from './vspace.ts';
 import { pathOf, pathOfLine } from './paths.ts';
@@ -172,7 +172,11 @@ export function elementOf(id: number): Element | null | undefined {
     if (e.kind === 'block') return e.el;
     if (e.kind === 'seg') { const { s } = segParts(id); return s && (s.svg || s.box); }
     if (e.kind === 'side') { const c = rootCache(e.block, e.root); return c && c.dom && c.dom.root; }
-    const sid = (e as { seg: number }).seg;
+    // A vertical space before a segment is its spacer (and so are its parts);
+    // one between two paragraphs, below, is in its segment's drawing.
+    if (e.kind === 'vgap') { const c = cacheOf(e), s = c && c.dom && c.dom.segs[e.i]; return s ? s.gap : null; }
+    if (e.kind === 'vpart') return elementOf(e.gap);
+    const sid = e.seg!;
     const { cache, s } = segParts(sid);
     if (e.kind === 'node') {
         const direct = cache!.dom!.byNode.get(e.n);
