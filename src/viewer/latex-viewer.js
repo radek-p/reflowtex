@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 6cbf23ee2eea45b559d783db0291118cf572a1b5131788e56d14fdc75fa6a586
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 bc6bf9ba4e6fec75eb353136651f0ad797222c1724fa9c11cc7a8f2e772b79a1
 'use strict';
 "use strict";
 (() => {
@@ -3068,299 +3068,8 @@
     });
   });
 
-  // src/runtime/a11y.js
-  var ANCHOR = "position:relative;height:0;margin:0;padding:0;border:0;overflow-x:clip;overflow-y:visible";
-  var PIECE = "position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;white-space:normal;pointer-events:none;user-select:none;-webkit-user-select:none";
-  var LINE_HEIGHT = 1.15;
-  var MIN_PX = 1;
-  var FITTED = ";overflow:hidden";
-  var UNFITTED = ";overflow-x:clip;overflow-y:visible";
-  var LINED = ";overflow:visible;font-size:0;line-height:0;white-space:nowrap";
-  var NEAR = 2;
-  var MODE_KEY = "reflowtex-a11y-math";
-  var mode = "mathml";
-  try {
-    if (localStorage.getItem(MODE_KEY) === "spoken") mode = "spoken";
-  } catch {
-  }
-  var accessibleMath = () => mode;
-  function setAccessibleMath(m) {
-    mode = m === "spoken" ? "spoken" : "mathml";
-    try {
-      localStorage.setItem(MODE_KEY, mode);
-    } catch {
-    }
-    document.dispatchEvent(new CustomEvent("reflowtex:accessible-math", { detail: { mode } }));
-    for (const data of allData) {
-      const layer = layerOf(data.el);
-      if (!layer) continue;
-      for (const piece of layer.children) {
-        restore(piece);
-        delete piece.dataset.lines;
-        delete piece.dataset.size;
-      }
-      placeAccessibleLayer(data);
-    }
-  }
-  api.accessibleMath = accessibleMath;
-  api.setAccessibleMath = setAccessibleMath;
-  var DEBUG_KEY = "reflowtex-a11y-debug";
-  var DEBUG_CSS = `
-html.latex-a11y-debug .latex-a11y > * { opacity: 1 !important; color: #d0021b !important; background: rgb(255 170 0 / .12);
-  outline: 1px dashed rgb(255 120 0 / .9); outline-offset: -1px; }
-html.latex-a11y-debug .latex-a11y [data-run]:nth-child(odd) { background: rgb(0 120 255 / .24); }
-html.latex-a11y-debug .latex-a11y [data-run]:nth-child(even) { background: rgb(255 0 150 / .2); }
-html.latex-a11y-debug .latex-a11y [data-run="math"], html.latex-a11y-debug .latex-a11y [data-run="display"],
-html.latex-a11y-debug .latex-a11y > div > math { background: rgb(0 170 70 / .3); }
-html.latex-a11y-debug .latex-a11y [data-stream] { outline: 2px solid rgb(130 0 255 / .7); }
-html.latex-a11y-debug .latex-a11y [role="note"] { background: rgb(130 0 255 / .1); }`;
-  var debug = false;
-  try {
-    debug = localStorage.getItem(DEBUG_KEY) === "1";
-  } catch {
-  }
-  var accessibleDebug = () => debug;
-  function setAccessibleDebug(on) {
-    debug = !!on;
-    try {
-      if (debug) localStorage.setItem(DEBUG_KEY, "1");
-      else localStorage.removeItem(DEBUG_KEY);
-    } catch {
-    }
-    showDebug();
-    document.dispatchEvent(new CustomEvent("reflowtex:accessible-debug", { detail: { on: debug } }));
-  }
-  function showDebug() {
-    if (typeof document === "undefined") return;
-    if (debug && !document.getElementById("latex-a11y-debug-css")) {
-      const st = document.createElement("style");
-      st.id = "latex-a11y-debug-css";
-      st.textContent = DEBUG_CSS;
-      document.head.appendChild(st);
-    }
-    document.documentElement.classList.toggle("latex-a11y-debug", debug);
-  }
-  if (debug) showDebug();
-  api.accessibleDebug = accessibleDebug;
-  api.setAccessibleDebug = setAccessibleDebug;
-  var READER_KEY = "reflowtex-a11y-reader";
-  var READER_CSS = `
-html.latex-reader-mode .latex-block svg { -webkit-user-select: none; user-select: none; }
-html.latex-reader-mode .latex-a11y > *, html.latex-reader-mode .latex-a11y > * * {
-  pointer-events: auto !important; -webkit-user-select: text !important; user-select: text !important; }
-html.latex-reader-mode .latex-a11y > * { opacity: 1 !important; color: transparent !important; }
-html.latex-reader-mode .latex-a11y ::selection { background: rgb(0 110 255 / .3); color: transparent; }
-html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { pointer-events: none !important; }
-.latex-reader-prompt { position: absolute; left: -9999px; top: 0; }
-.latex-reader-prompt:focus { left: 8px; top: 8px; z-index: 2147483647; padding: 8px 12px; font: 14px system-ui, sans-serif;
-  background: Canvas; color: CanvasText; border: 2px solid Highlight; border-radius: 6px; }`;
-  var reader = false;
-  try {
-    reader = localStorage.getItem(READER_KEY) === "1";
-  } catch {
-  }
-  var screenReaderMode = () => reader;
-  function setScreenReaderMode(on) {
-    reader = !!on;
-    try {
-      if (reader) localStorage.setItem(READER_KEY, "1");
-      else localStorage.removeItem(READER_KEY);
-    } catch {
-    }
-    showReader();
-    document.dispatchEvent(new CustomEvent("reflowtex:screen-reader-mode", { detail: { on: reader } }));
-  }
-  function readerStyle() {
-    if (document.getElementById("latex-reader-css")) return;
-    const st = document.createElement("style");
-    st.id = "latex-reader-css";
-    st.textContent = READER_CSS;
-    document.head.appendChild(st);
-  }
-  function showReader() {
-    readerStyle();
-    document.documentElement.classList.toggle("latex-reader-mode", reader);
-    const b = document.querySelector(".latex-reader-prompt");
-    if (b) b.textContent = reader ? "Screen reader mode is on: turn it off" : "Turn on screen reader mode: click a word to hear it, and read on from there";
-  }
-  function addPrompt() {
-    if (document.querySelector(".latex-reader-prompt") || !document.querySelector(".latex-a11y")) return;
-    readerStyle();
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "latex-reader-prompt";
-    b.addEventListener("click", () => setScreenReaderMode(!reader));
-    document.body.prepend(b);
-    showReader();
-  }
-  function passClick(e) {
-    if (!reader || !e.isTrusted || !(e.target instanceof Element) || !e.target.closest(".latex-a11y")) return;
-    if (e.target.closest('summary, a, button, [role="button"]')) return;
-    const sel = document.getSelection();
-    if (sel && !sel.isCollapsed) return;
-    const root = document.documentElement;
-    root.classList.add("latex-reader-probe");
-    const under = document.elementFromPoint(e.clientX, e.clientY);
-    root.classList.remove("latex-reader-probe");
-    if (!under || !under.closest(".latex-block")) return;
-    e.stopPropagation();
-    e.preventDefault();
-    under.dispatchEvent(new MouseEvent("click", {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-      clientX: e.clientX,
-      clientY: e.clientY,
-      button: 0
-    }));
-  }
-  if (typeof document !== "undefined") {
-    document.addEventListener("click", passClick, true);
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addPrompt);
-    else addPrompt();
-    if (reader) showReader();
-  }
-  api.screenReaderMode = screenReaderMode;
-  api.setScreenReaderMode = setScreenReaderMode;
-  var unescape = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
-  var wordsOf = (mathml) => {
-    const m = /\balttext="([^"]*)"/.exec(mathml);
-    return m ? unescape(m[1]) : "";
-  };
-  var shipped = /* @__PURE__ */ new WeakMap();
-  var shippedStyle = /* @__PURE__ */ new WeakMap();
-  function remember(piece) {
-    if (!shipped.has(piece)) shipped.set(piece, piece.innerHTML);
-  }
-  function restore(piece) {
-    if (shipped.has(piece)) piece.innerHTML = shipped.get(piece);
-  }
-  function inMode(piece) {
-    remember(piece);
-    if (mode !== "spoken") return;
-    for (const m of piece.querySelectorAll("math")) {
-      const span = document.createElement("span");
-      span.dataset.spoken = "";
-      span.textContent = m.getAttribute("alttext") || m.textContent;
-      m.replaceWith(span);
-    }
-  }
+  // src/runtime/a11y-runs.js
   var maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
-  var ownLayers = /* @__PURE__ */ new WeakMap();
-  function layerOf(el) {
-    if (el && ownLayers.has(el)) return ownLayers.get(el);
-    for (const s of el ? [el.previousElementSibling, el.nextElementSibling] : []) if (s && s.classList.contains("latex-a11y")) return s;
-    return null;
-  }
-  function placeAccessibleLayer(data) {
-    const el = data && data.el;
-    const layer = layerOf(el);
-    if (!layer) return;
-    if (layer === el.nextElementSibling) el.before(layer);
-    const cache = data.cache;
-    const laid = cache.layout && cache.layout.laid;
-    if (!laid || !cache.dom) return;
-    const segs = laid.map((L) => L.seg);
-    const byPara = /* @__PURE__ */ new Map(), byItem = /* @__PURE__ */ new Map(), byStream = /* @__PURE__ */ new Map();
-    segs.forEach((seg, i) => {
-      if (seg.kind === "text") seg.items.forEach((it, j) => byPara.set(it.index, [i, j]));
-      else if (seg.kind === "display") byItem.set(seg.rows[0].item, i);
-      else if (seg.kind === "stream") byStream.set(seg.index, i);
-    });
-    const content = data.doc.content || [];
-    if (layer.dataset.placed !== "1") {
-      shippedStyle.set(layer, layer.getAttribute("style"));
-      layer.style.cssText = ANCHOR;
-      layer.dataset.placed = "1";
-    }
-    const origin = layer.getBoundingClientRect();
-    const places = [...layer.children].map((piece) => {
-      let i, j = -1;
-      if (piece.dataset.para) [i, j] = byPara.get(+piece.dataset.para) || [];
-      else if (piece.dataset.item) i = byItem.get(content[+piece.dataset.item - 1]);
-      else if (piece.dataset.stream) i = byStream.get(+piece.dataset.stream);
-      const s = i === void 0 ? null : cache.dom.segs[i];
-      if (!s || !s.box) return null;
-      const r = s.box.getBoundingClientRect();
-      let y0 = 0, y1 = r.height, lines = 1, a = -1, b = -1;
-      const L = laid[i];
-      if (j >= 0 && L.itemStarts && L.lines && L.lines.length) {
-        a = L.itemStarts[j];
-        b = (j + 1 < L.itemStarts.length ? L.itemStarts[j + 1] : L.lines.length) - 1;
-        if (a <= b) {
-          y0 = L.baselineYs[a] - maxOf(L.profiles[a], "h");
-          y1 = L.baselineYs[b] + maxOf(L.profiles[b], "d");
-          lines = b - a + 1;
-        }
-      }
-      const ctm = s.svg && s.svg.getScreenCTM && s.svg.getScreenCTM();
-      return {
-        top: r.top - origin.top + y0,
-        left: r.left - origin.left,
-        width: r.width,
-        height: Math.max(1, y1 - y0),
-        lines,
-        seg: i,
-        a,
-        b,
-        ctm,
-        display: !!piece.dataset.item
-      };
-    });
-    const pieces = [...layer.children];
-    for (const piece of pieces) if (!piece.dataset.lines) inMode(piece);
-    const refit = [], lined = [], scaled = [];
-    const h = window.innerHeight;
-    pieces.forEach((piece, k) => {
-      const p = places[k] || { top: 0, left: 0, width: 1, height: 1, lines: 1 };
-      const top = origin.top + p.top;
-      const near = top + p.height > -NEAR * h && top < (NEAR + 1) * h;
-      const box = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px`;
-      if (near && p.a >= 0 && p.ctm) {
-        const key = `${Math.round(p.width)}x${Math.round(p.height)}@${p.a}-${p.b}/${mode}`;
-        piece.style.cssText = box + LINED;
-        if (piece.dataset.lines !== key) {
-          const runs2 = runsOf(data, p.seg, p.a, p.b);
-          if (runs2) {
-            piece.dataset.lines = key;
-            lined.push({ piece, p, runs: runs2, origin });
-            return;
-          }
-        } else return;
-      }
-      if (near && p.display && p.ctm) {
-        const math = piece.querySelector("math, [data-spoken]");
-        const ink = math && inkOf(data, p.seg);
-        if (ink) {
-          const m = p.ctm, left = m.a * ink.x0 + m.e - origin.left, top2 = m.d * ink.y0 + m.f - origin.top;
-          const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
-          piece.style.cssText = `${PIECE};top:${top2}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
-          math.dataset.run = math.localName === "math" ? "display" : "spoken";
-          if (math.localName !== "math") math.style.whiteSpace = "nowrap";
-          math.style.display = "inline-block";
-          scaled.push({ el: math, w, h: hh });
-          return;
-        }
-      }
-      const size = `${Math.round(p.width)}x${Math.round(p.height)}`;
-      const fitted = piece.dataset.size === size && !piece.dataset.lines;
-      const guess = Math.max(MIN_PX, p.height / p.lines / LINE_HEIGHT);
-      const font = fitted ? piece.style.fontSize : `${guess}px`;
-      piece.style.cssText = `${box};font-size:${font}` + (fitted || near ? FITTED : UNFITTED);
-      if (!fitted) {
-        if (near) {
-          piece.dataset.size = size;
-          refit.push({ piece, px: guess });
-        } else delete piece.dataset.size;
-      }
-    });
-    const runs = [];
-    for (const l of lined) runs.push(...layOutRuns(l));
-    fitText(refit);
-    fitRuns(runs);
-    scaleOnto(scaled);
-    el.dispatchEvent(new CustomEvent("reflowtex:layer", { bubbles: true, detail: { block: el } }));
-  }
   function glyphText(cp) {
     if (cp >= 57344 && cp <= 63743 || cp >= 983040) return "";
     const ch = String.fromCodePoint(cp);
@@ -3559,7 +3268,15 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     const last = L.lines.length - 1;
     return { x0, x1, y0: L.baselineYs[0] - maxOf(L.profiles[0], "h"), y1: L.baselineYs[last] + maxOf(L.profiles[last], "d") };
   }
-  function layOutRuns({ piece, p, runs, origin }) {
+
+  // src/runtime/a11y-fit.js
+  var MIN_PX = 1;
+  var unescape = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  var wordsOf = (mathml) => {
+    const m = /\balttext="([^"]*)"/.exec(mathml);
+    return m ? unescape(m[1]) : "";
+  };
+  function layOutRuns({ piece, p, runs, origin }, mode2) {
     const m = p.ctm, pieceLeft = origin.left + p.left, pieceTop = origin.top + p.top;
     const ratio = textBoxRatio(piece.parentElement);
     const byLine = /* @__PURE__ */ new Map();
@@ -3580,7 +3297,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         if (r.sp) frag.appendChild(document.createTextNode(" "));
         const left = m.a * r.x0 + m.e - pieceLeft, w = Math.max(1, m.a * (r.x1 - r.x0));
         const gap = Math.abs(left - x) > 0.25 ? `;margin-left:${left - x}px` : "";
-        if (r.mathml && mode === "mathml") {
+        if (r.mathml && mode2 === "mathml") {
           const box = document.createElement("span");
           box.style.cssText = `display:inline-block;position:relative;width:${w}px;height:0;vertical-align:top${gap}`;
           box.innerHTML = r.mathml;
@@ -3687,6 +3404,293 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         return true;
       });
     }
+  }
+
+  // src/runtime/a11y.js
+  var ANCHOR = "position:relative;height:0;margin:0;padding:0;border:0;overflow-x:clip;overflow-y:visible";
+  var PIECE = "position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;white-space:normal;pointer-events:none;user-select:none;-webkit-user-select:none";
+  var LINE_HEIGHT = 1.15;
+  var FITTED = ";overflow:hidden";
+  var UNFITTED = ";overflow-x:clip;overflow-y:visible";
+  var LINED = ";overflow:visible;font-size:0;line-height:0;white-space:nowrap";
+  var NEAR = 2;
+  var MODE_KEY = "reflowtex-a11y-math";
+  var mode = "mathml";
+  try {
+    if (localStorage.getItem(MODE_KEY) === "spoken") mode = "spoken";
+  } catch {
+  }
+  var accessibleMath = () => mode;
+  function setAccessibleMath(m) {
+    mode = m === "spoken" ? "spoken" : "mathml";
+    try {
+      localStorage.setItem(MODE_KEY, mode);
+    } catch {
+    }
+    document.dispatchEvent(new CustomEvent("reflowtex:accessible-math", { detail: { mode } }));
+    for (const data of allData) {
+      const layer = layerOf(data.el);
+      if (!layer) continue;
+      for (const piece of layer.children) {
+        restore(piece);
+        delete piece.dataset.lines;
+        delete piece.dataset.size;
+      }
+      placeAccessibleLayer(data);
+    }
+  }
+  api.accessibleMath = accessibleMath;
+  api.setAccessibleMath = setAccessibleMath;
+  var DEBUG_KEY = "reflowtex-a11y-debug";
+  var DEBUG_CSS = `
+html.latex-a11y-debug .latex-a11y > * { opacity: 1 !important; color: #d0021b !important; background: rgb(255 170 0 / .12);
+  outline: 1px dashed rgb(255 120 0 / .9); outline-offset: -1px; }
+html.latex-a11y-debug .latex-a11y [data-run]:nth-child(odd) { background: rgb(0 120 255 / .24); }
+html.latex-a11y-debug .latex-a11y [data-run]:nth-child(even) { background: rgb(255 0 150 / .2); }
+html.latex-a11y-debug .latex-a11y [data-run="math"], html.latex-a11y-debug .latex-a11y [data-run="display"],
+html.latex-a11y-debug .latex-a11y > div > math { background: rgb(0 170 70 / .3); }
+html.latex-a11y-debug .latex-a11y [data-stream] { outline: 2px solid rgb(130 0 255 / .7); }
+html.latex-a11y-debug .latex-a11y [role="note"] { background: rgb(130 0 255 / .1); }`;
+  var debug = false;
+  try {
+    debug = localStorage.getItem(DEBUG_KEY) === "1";
+  } catch {
+  }
+  var accessibleDebug = () => debug;
+  function setAccessibleDebug(on) {
+    debug = !!on;
+    try {
+      if (debug) localStorage.setItem(DEBUG_KEY, "1");
+      else localStorage.removeItem(DEBUG_KEY);
+    } catch {
+    }
+    showDebug();
+    document.dispatchEvent(new CustomEvent("reflowtex:accessible-debug", { detail: { on: debug } }));
+  }
+  function showDebug() {
+    if (typeof document === "undefined") return;
+    if (debug && !document.getElementById("latex-a11y-debug-css")) {
+      const st = document.createElement("style");
+      st.id = "latex-a11y-debug-css";
+      st.textContent = DEBUG_CSS;
+      document.head.appendChild(st);
+    }
+    document.documentElement.classList.toggle("latex-a11y-debug", debug);
+  }
+  if (debug) showDebug();
+  api.accessibleDebug = accessibleDebug;
+  api.setAccessibleDebug = setAccessibleDebug;
+  var READER_KEY = "reflowtex-a11y-reader";
+  var READER_CSS = `
+html.latex-reader-mode .latex-block svg { -webkit-user-select: none; user-select: none; }
+html.latex-reader-mode .latex-a11y > *, html.latex-reader-mode .latex-a11y > * * {
+  pointer-events: auto !important; -webkit-user-select: text !important; user-select: text !important; }
+html.latex-reader-mode .latex-a11y > * { opacity: 1 !important; color: transparent !important; }
+html.latex-reader-mode .latex-a11y ::selection { background: rgb(0 110 255 / .3); color: transparent; }
+html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { pointer-events: none !important; }
+.latex-reader-prompt { position: absolute; left: -9999px; top: 0; }
+.latex-reader-prompt:focus { left: 8px; top: 8px; z-index: 2147483647; padding: 8px 12px; font: 14px system-ui, sans-serif;
+  background: Canvas; color: CanvasText; border: 2px solid Highlight; border-radius: 6px; }`;
+  var reader = false;
+  try {
+    reader = localStorage.getItem(READER_KEY) === "1";
+  } catch {
+  }
+  var screenReaderMode = () => reader;
+  function setScreenReaderMode(on) {
+    reader = !!on;
+    try {
+      if (reader) localStorage.setItem(READER_KEY, "1");
+      else localStorage.removeItem(READER_KEY);
+    } catch {
+    }
+    showReader();
+    document.dispatchEvent(new CustomEvent("reflowtex:screen-reader-mode", { detail: { on: reader } }));
+  }
+  function readerStyle() {
+    if (document.getElementById("latex-reader-css")) return;
+    const st = document.createElement("style");
+    st.id = "latex-reader-css";
+    st.textContent = READER_CSS;
+    document.head.appendChild(st);
+  }
+  function showReader() {
+    readerStyle();
+    document.documentElement.classList.toggle("latex-reader-mode", reader);
+    const b = document.querySelector(".latex-reader-prompt");
+    if (b) b.textContent = reader ? "Screen reader mode is on: turn it off" : "Turn on screen reader mode: click a word to hear it, and read on from there";
+  }
+  function addPrompt() {
+    if (document.querySelector(".latex-reader-prompt") || !document.querySelector(".latex-a11y")) return;
+    readerStyle();
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "latex-reader-prompt";
+    b.addEventListener("click", () => setScreenReaderMode(!reader));
+    document.body.prepend(b);
+    showReader();
+  }
+  function passClick(e) {
+    if (!reader || !e.isTrusted || !(e.target instanceof Element) || !e.target.closest(".latex-a11y")) return;
+    if (e.target.closest('summary, a, button, [role="button"]')) return;
+    const sel = document.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    const root = document.documentElement;
+    root.classList.add("latex-reader-probe");
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    root.classList.remove("latex-reader-probe");
+    if (!under || !under.closest(".latex-block")) return;
+    e.stopPropagation();
+    e.preventDefault();
+    under.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      button: 0
+    }));
+  }
+  if (typeof document !== "undefined") {
+    document.addEventListener("click", passClick, true);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addPrompt);
+    else addPrompt();
+    if (reader) showReader();
+  }
+  api.screenReaderMode = screenReaderMode;
+  api.setScreenReaderMode = setScreenReaderMode;
+  var shipped = /* @__PURE__ */ new WeakMap();
+  var shippedStyle = /* @__PURE__ */ new WeakMap();
+  function remember(piece) {
+    if (!shipped.has(piece)) shipped.set(piece, piece.innerHTML);
+  }
+  function restore(piece) {
+    if (shipped.has(piece)) piece.innerHTML = shipped.get(piece);
+  }
+  function inMode(piece) {
+    remember(piece);
+    if (mode !== "spoken") return;
+    for (const m of piece.querySelectorAll("math")) {
+      const span = document.createElement("span");
+      span.dataset.spoken = "";
+      span.textContent = m.getAttribute("alttext") || m.textContent;
+      m.replaceWith(span);
+    }
+  }
+  var ownLayers = /* @__PURE__ */ new WeakMap();
+  function layerOf(el) {
+    if (el && ownLayers.has(el)) return ownLayers.get(el);
+    for (const s of el ? [el.previousElementSibling, el.nextElementSibling] : []) if (s && s.classList.contains("latex-a11y")) return s;
+    return null;
+  }
+  function placeAccessibleLayer(data) {
+    const el = data && data.el;
+    const layer = layerOf(el);
+    if (!layer) return;
+    if (layer === el.nextElementSibling) el.before(layer);
+    const cache = data.cache;
+    const laid = cache.layout && cache.layout.laid;
+    if (!laid || !cache.dom) return;
+    const segs = laid.map((L) => L.seg);
+    const byPara = /* @__PURE__ */ new Map(), byItem = /* @__PURE__ */ new Map(), byStream = /* @__PURE__ */ new Map();
+    segs.forEach((seg, i) => {
+      if (seg.kind === "text") seg.items.forEach((it, j) => byPara.set(it.index, [i, j]));
+      else if (seg.kind === "display") byItem.set(seg.rows[0].item, i);
+      else if (seg.kind === "stream") byStream.set(seg.index, i);
+    });
+    const content = data.doc.content || [];
+    if (layer.dataset.placed !== "1") {
+      shippedStyle.set(layer, layer.getAttribute("style"));
+      layer.style.cssText = ANCHOR;
+      layer.dataset.placed = "1";
+    }
+    const origin = layer.getBoundingClientRect();
+    const places = [...layer.children].map((piece) => {
+      let i, j = -1;
+      if (piece.dataset.para) [i, j] = byPara.get(+piece.dataset.para) || [];
+      else if (piece.dataset.item) i = byItem.get(content[+piece.dataset.item - 1]);
+      else if (piece.dataset.stream) i = byStream.get(+piece.dataset.stream);
+      const s = i === void 0 ? null : cache.dom.segs[i];
+      if (!s || !s.box) return null;
+      const r = s.box.getBoundingClientRect();
+      let y0 = 0, y1 = r.height, lines = 1, a = -1, b = -1;
+      const L = laid[i];
+      if (j >= 0 && L.itemStarts && L.lines && L.lines.length) {
+        a = L.itemStarts[j];
+        b = (j + 1 < L.itemStarts.length ? L.itemStarts[j + 1] : L.lines.length) - 1;
+        if (a <= b) {
+          y0 = L.baselineYs[a] - maxOf(L.profiles[a], "h");
+          y1 = L.baselineYs[b] + maxOf(L.profiles[b], "d");
+          lines = b - a + 1;
+        }
+      }
+      const ctm = s.svg && s.svg.getScreenCTM && s.svg.getScreenCTM();
+      return {
+        top: r.top - origin.top + y0,
+        left: r.left - origin.left,
+        width: r.width,
+        height: Math.max(1, y1 - y0),
+        lines,
+        seg: i,
+        a,
+        b,
+        ctm,
+        display: !!piece.dataset.item
+      };
+    });
+    const pieces = [...layer.children];
+    for (const piece of pieces) if (!piece.dataset.lines) inMode(piece);
+    const refit = [], lined = [], scaled = [];
+    const h = window.innerHeight;
+    pieces.forEach((piece, k) => {
+      const p = places[k] || { top: 0, left: 0, width: 1, height: 1, lines: 1 };
+      const top = origin.top + p.top;
+      const near = top + p.height > -NEAR * h && top < (NEAR + 1) * h;
+      const box = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px`;
+      if (near && p.a >= 0 && p.ctm) {
+        const key = `${Math.round(p.width)}x${Math.round(p.height)}@${p.a}-${p.b}/${mode}`;
+        piece.style.cssText = box + LINED;
+        if (piece.dataset.lines !== key) {
+          const runs2 = runsOf(data, p.seg, p.a, p.b);
+          if (runs2) {
+            piece.dataset.lines = key;
+            lined.push({ piece, p, runs: runs2, origin });
+            return;
+          }
+        } else return;
+      }
+      if (near && p.display && p.ctm) {
+        const math = piece.querySelector("math, [data-spoken]");
+        const ink = math && inkOf(data, p.seg);
+        if (ink) {
+          const m = p.ctm, left = m.a * ink.x0 + m.e - origin.left, top2 = m.d * ink.y0 + m.f - origin.top;
+          const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
+          piece.style.cssText = `${PIECE};top:${top2}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
+          math.dataset.run = math.localName === "math" ? "display" : "spoken";
+          if (math.localName !== "math") math.style.whiteSpace = "nowrap";
+          math.style.display = "inline-block";
+          scaled.push({ el: math, w, h: hh });
+          return;
+        }
+      }
+      const size = `${Math.round(p.width)}x${Math.round(p.height)}`;
+      const fitted = piece.dataset.size === size && !piece.dataset.lines;
+      const guess = Math.max(MIN_PX, p.height / p.lines / LINE_HEIGHT);
+      const font = fitted ? piece.style.fontSize : `${guess}px`;
+      piece.style.cssText = `${box};font-size:${font}` + (fitted || near ? FITTED : UNFITTED);
+      if (!fitted) {
+        if (near) {
+          piece.dataset.size = size;
+          refit.push({ piece, px: guess });
+        } else delete piece.dataset.size;
+      }
+    });
+    const runs = [];
+    for (const l of lined) runs.push(...layOutRuns(l, mode));
+    fitText(refit);
+    fitRuns(runs);
+    scaleOnto(scaled);
+    el.dispatchEvent(new CustomEvent("reflowtex:layer", { bubbles: true, detail: { block: el } }));
   }
   function copyLayer(layer, el) {
     if (!layer || ownLayers.has(el)) return null;
