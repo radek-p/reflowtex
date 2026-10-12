@@ -195,7 +195,8 @@ export type NodeType = TexNode['type'];
 
 // ── The document ───────────────────────────────────────────────────────────
 
-export interface Picture { svg?: string; vb_w?: number; vb_h?: number }
+/** A drawing's markup, and its viewBox's size (bp), as the pipeline writes it. */
+export interface Picture { svg: string; vb_w: number; vb_h: number }
 export interface GlyphMetrics { width: number; height: number; depth: number }
 
 /** One character's protrusion and expansion codes (thousandths). */

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 0b3263ae8cc2e2b769e5b17c9bc230ae96ce13e27ef7d797a36f1140b4c068bc
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 beeb7fa09bd3b3d4972d270230b28640ea2a305146d0c91557e44aeed9066188
 'use strict';
 "use strict";
 (() => {
@@ -2395,7 +2395,7 @@
   .latex-block rect.latex-selection { fill: var(--latex-selection-color, Highlight); }
 `;
 
-  // src/engine/sink.js
+  // src/engine/sink.ts
   function svgEl(tag, attrs) {
     const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
@@ -2403,7 +2403,8 @@
   }
   var BAND_MIN = { up: 0.75, down: 0.25 };
   function reconcileSink(byNode, used, stats, cache) {
-    let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
+    let textParent = null, auxParent = null;
+    let lastTspan = null, lastRect = null;
     const stack = [];
     const linkRuns = /* @__PURE__ */ new Map();
     const markRuns = /* @__PURE__ */ new Map();
@@ -2462,7 +2463,7 @@
       beginTransform(n, tf) {
         let g = byNode.get(n);
         const isNew = !g;
-        if (isNew) {
+        if (!g) {
           g = svgEl("g", {});
           const t = svgEl("text", {});
           t.style.cssText = "font-weight:normal;font-style:normal";
@@ -2496,7 +2497,7 @@
           return;
         }
         let el = byNode.get(n), isNew = !el;
-        if (isNew) {
+        if (!el) {
           el = svgEl("tspan", { x, y, "font-family": fi?.family ?? "serif", "font-size": fi?.size_px ?? 12 });
           el.textContent = n.text !== void 0 ? n.text : String.fromCodePoint(n.char);
           if (n.color) el.style.fill = colorFill(n.color);
@@ -2510,8 +2511,8 @@
           byNode.set(n, el);
           stats.created++;
         } else {
-          el.setAttribute("x", x);
-          el.setAttribute("y", y);
+          el.setAttribute("x", String(x));
+          el.setAttribute("y", String(y));
           stats.repositioned++;
         }
         const live3 = liveOn(n);
@@ -2581,7 +2582,7 @@
         const boxes = [];
         if (h > 0) boxes.push([x, y - h, w, h]);
         if (d > 0) boxes.push([x, y, w, d]);
-        if (isNew) {
+        if (!el) {
           el = svgEl("g", { class: "latex-missing-glyph" });
           for (const [bx, by, bw, bh] of boxes) {
             const r = svgEl("rect", { x: bx, y: by, width: bw, height: bh });
@@ -2596,10 +2597,10 @@
         } else {
           const rects = el.children;
           boxes.forEach(([bx, by, bw, bh], i) => {
-            rects[i].setAttribute("x", bx);
-            rects[i].setAttribute("y", by);
-            rects[i].setAttribute("width", bw);
-            rects[i].setAttribute("height", bh);
+            rects[i].setAttribute("x", String(bx));
+            rects[i].setAttribute("y", String(by));
+            rects[i].setAttribute("width", String(bw));
+            rects[i].setAttribute("height", String(bh));
           });
           stats.repositioned++;
         }
@@ -2609,7 +2610,7 @@
       },
       space(n, x, y) {
         let el = byNode.get(n), isNew = !el;
-        if (isNew) {
+        if (!el) {
           el = svgEl("tspan", { x, y });
           el.textContent = " ";
           el.style.pointerEvents = "none";
@@ -2617,8 +2618,8 @@
           byNode.set(n, el);
           stats.created++;
         } else {
-          el.setAttribute("x", x);
-          el.setAttribute("y", y);
+          el.setAttribute("x", String(x));
+          el.setAttribute("y", String(y));
           stats.repositioned++;
         }
         place(textParent, lastTspan, el, isNew);
@@ -2628,16 +2629,16 @@
       },
       rule(n, x, y, w, h) {
         let el = byNode.get(n), isNew = !el;
-        if (isNew) {
+        if (!el) {
           el = svgEl("rect", { x, y, width: w, height: h });
           el.style.fill = n.color ? colorFill(n.color) : "var(--latex-color-000000, currentColor)";
           byNode.set(n, el);
           stats.created++;
         } else {
-          el.setAttribute("x", x);
-          el.setAttribute("y", y);
-          el.setAttribute("width", w);
-          el.setAttribute("height", h);
+          el.setAttribute("x", String(x));
+          el.setAttribute("y", String(y));
+          el.setAttribute("width", String(w));
+          el.setAttribute("height", String(h));
           stats.repositioned++;
         }
         place(auxParent, lastRect, el, isNew);
@@ -2648,15 +2649,15 @@
       // position on the baseline, drawing nothing, for aside.anchor().
       aside(n, x, y) {
         let el = byNode.get(n), isNew = !el;
-        if (isNew) {
+        if (!el) {
           el = svgEl("rect", { x, y, width: 0, height: 0 });
           el.setAttribute("class", "latex-aside-mark");
-          el.dataset.aside = n.aside;
+          el.dataset.aside = String(n.aside);
           byNode.set(n, el);
           stats.created++;
         } else {
-          el.setAttribute("x", x);
-          el.setAttribute("y", y);
+          el.setAttribute("x", String(x));
+          el.setAttribute("y", String(y));
           stats.repositioned++;
         }
         place(auxParent, lastRect, el, isNew);
@@ -2669,7 +2670,7 @@
       widget(n, x, y) {
         let el = byNode.get(n), isNew = !el;
         const h = n.height * SP_TO_PX, d = n.depth * SP_TO_PX, w = n.width * SP_TO_PX;
-        if (isNew) {
+        if (!el) {
           el = svgEl("foreignObject", { width: w, height: h + d });
           el.setAttribute("class", "latex-widget");
           el.dataset.widget = `${cache.blockKey}:${n.slot}`;
@@ -2684,8 +2685,8 @@
         } else {
           stats.repositioned++;
         }
-        el.setAttribute("x", x);
-        el.setAttribute("y", y - h);
+        el.setAttribute("x", String(x));
+        el.setAttribute("y", String(y - h));
         place(auxParent, lastRect, el, isNew);
         used.add(el);
         lastRect = el;
@@ -2695,7 +2696,7 @@
       picture(n, x, y) {
         let el = byNode.get(n), isNew = !el;
         const pic = n.pic;
-        if (isNew) {
+        if (!el) {
           el = svgEl("g", { class: "latex-picture" });
           if (pic) el.innerHTML = pic.svg;
           el.setAttribute("fill", "var(--latex-color-000000, currentColor)");
@@ -2716,7 +2717,7 @@
     };
   }
 
-  // src/engine/paint.js
+  // src/engine/paint.ts
   var paintCount = 0;
   function paintSegment(fontInfo, cache, i) {
     paintCount++;
@@ -2726,6 +2727,7 @@
     const dom = cache.dom;
     const L = cache.layout.laid[i];
     const s = dom.segs[i];
+    const svg = s.svg;
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
     const used = /* @__PURE__ */ new Set();
     const sink = reconcileSink(dom.byNode, used, stats, cache);
@@ -2739,8 +2741,8 @@
     for (let j = 0; j < s.pairs.length; j++) {
       const pair = s.pairs[j];
       if (j < L.lines.length && !pair.attached) {
-        s.svg.appendChild(pair.g);
-        s.svg.appendChild(pair.text);
+        svg.appendChild(pair.g);
+        svg.appendChild(pair.text);
         pair.attached = true;
       } else if (j >= L.lines.length && pair.attached) {
         pair.g.remove();
@@ -2778,7 +2780,7 @@
     s.live = used;
     s.painted = true;
     s.dirty = false;
-    if (s.wrap && s.svg.parentNode === s.wrap) {
+    if (s.wrap && svg.parentNode === s.wrap) {
       updateDisplayOverflowCue(s.wrap);
     }
   }

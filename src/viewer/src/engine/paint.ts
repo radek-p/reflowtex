@@ -5,11 +5,14 @@
 
 import { useGlyphMetrics } from './core.ts';
 import { renderNodes } from './render.ts';
-import { reconcileSink, svgEl } from './sink.js';
+import { reconcileSink, svgEl } from './sink.ts';
 import { updateDisplayOverflowCue } from './layout/display.js';
 import { materializeSegment } from './layout/document.js';
 import { restoreLinkStates } from '../host/links.js';
 import { liveInfo } from '../host/marks.ts';
+import type { FontTable, Mark } from './model.ts';
+import type { DomSegment, LayoutCache, LinePair } from './layout/types.ts';
+import type { ElementRun, Run } from './sink.ts';
 
 export let paintCount = 0;
 
@@ -19,18 +22,19 @@ export let paintCount = 0;
 // painted independently. That independence is what makes per-segment painting
 // possible (see observeSegments / paintVisibleNow): a long document only pays the
 // DOM cost for the segments that have been on screen, not for all of them at once.
-export function paintSegment(fontInfo, cache, i) {
+export function paintSegment(fontInfo: FontTable, cache: LayoutCache, i: number): void {
     paintCount++;
     restoreLinkStates();              // once this paint is done (a microtask)
     materializeSegment(cache, i);     // a deferred layout is only ever run here
     useGlyphMetrics(cache.metrics);   // a paint may run after another block laid out
-    const dom = cache.dom;
-    const L   = cache.layout.laid[i];
+    const dom = cache.dom!;
+    const L   = cache.layout!.laid[i];
     const s   = dom.segs[i];
+    const svg = s.svg!;
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
-    const used  = new Set();
+    const used  = new Set<Element>();
     const sink  = reconcileSink(dom.byNode, used, stats, cache);
-    const linkRuns = [], markRuns = [], selRuns = [];
+    const linkRuns: ElementRun[] = [], markRuns: [number | string, ElementRun][] = [], selRuns: Run[] = [];
 
     // Grow/shrink the pool of per-line group pairs. Detached pairs are kept for
     // later regrowth; their stale children are swept by the live set.
@@ -43,8 +47,8 @@ export function paintSegment(fontInfo, cache, i) {
     for (let j = 0; j < s.pairs.length; j++) {
         const pair = s.pairs[j];
         if (j < L.lines.length && !pair.attached) {
-            s.svg.appendChild(pair.g);
-            s.svg.appendChild(pair.text);
+            svg.appendChild(pair.g);
+            svg.appendChild(pair.text);
             pair.attached = true;
         } else if (j >= L.lines.length && pair.attached) {
             pair.g.remove();
@@ -54,11 +58,11 @@ export function paintSegment(fontInfo, cache, i) {
     }
 
     for (let j = 0; j < L.lines.length; j++) {
-        const { ratio, er, x0, fillRatio, fillOrder } = L.lrp[j];
+        const { ratio, er, x0, fillRatio, fillOrder } = L.lrp![j];
         sink.beginLine(s.pairs[j].text, s.pairs[j].g);
         // On a fill line finite glue is already at natural width (ratio 0), so the
         // single ratio slot carries the fill ratio and fillOrder selects the fill.
-        renderNodes(fontInfo, sink, L.lines[j].nodes, x0, L.baselineYs[j],
+        renderNodes(fontInfo, sink, L.lines[j].nodes, x0, L.baselineYs![j],
                     fillOrder ? fillRatio : ratio, er, fillOrder || 0);
         linkRuns.push(...sink.takeLinkRuns());
         markRuns.push(...sink.takeMarkRuns());
@@ -82,7 +86,7 @@ export function paintSegment(fontInfo, cache, i) {
     // SVG text it returns the font's ascent/descent box, not the glyph outlines,
     // so the wrapper was padded for phantom overshoot and every scrollable
     // display carried visibly inflated space above and below.
-    if (s.wrap && s.svg.parentNode === s.wrap) {
+    if (s.wrap && svg.parentNode === s.wrap) {
         updateDisplayOverflowCue(s.wrap);
     }
 }
@@ -94,17 +98,17 @@ export function paintSegment(fontInfo, cache, i) {
 // no link: no underline, and a click does nothing. The rects lie under the
 // glyphs (first in the <svg>), so a glyph still takes the pointer over its
 // own ink. Rebuilt on every paint – a segment holds a handful at most.
-export function paintLinkHits(s, runs) {
+export function paintLinkHits(s: DomSegment, runs: ElementRun[]): void {
     if (!runs.length && !s.hits) return;
     if (!s.hits) {
         s.hits = svgEl('g', { 'aria-hidden': 'true' });
-        s.svg.insertBefore(s.hits, s.svg.firstChild);
+        s.svg!.insertBefore(s.hits, s.svg!.firstChild);
     }
     s.hits.replaceChildren(...runs.map(r => {
         const rect = svgEl('rect', { x: r.x0, y: r.top, width: Math.max(0, r.x1 - r.x0),
                                      height: Math.max(0, r.bottom - r.top) });
         rect.setAttribute('class', 'latex-link-hit');
-        for (const k of ['link', 'linkHref', 'linkLabel', 'linkAction'])
+        for (const k of ['link', 'linkHref', 'linkLabel', 'linkAction'] as const)
             if (r.el.dataset[k] !== undefined) rect.dataset[k] = r.el.dataset[k];
         rect.style.cssText = 'fill:transparent;cursor:pointer';
         return rect;
@@ -121,16 +125,16 @@ export function paintLinkHits(s, runs) {
 //   .latex-block rect.latex-mark[data-mark~="key"] { fill: #fde68a; }
 // A live mark (host.addMark) has its band the same way, drawn after the
 // document's own, so over them.
-export function paintMarkBands(s, runs, cache) {
+export function paintMarkBands(s: DomSegment, runs: [number | string, ElementRun][], cache: LayoutCache): void {
     if (!runs.length && !s.bands) return;
     if (!s.bands) {
         s.bands = svgEl('g', { 'aria-hidden': 'true', style: 'pointer-events:none' });
-        s.svg.insertBefore(s.bands, s.svg.firstChild);
+        s.svg!.insertBefore(s.bands, s.svg!.firstChild);
     }
     // The document's own marks first, then the live ones over them.
     runs = runs.filter(([k]) => typeof k !== 'string').concat(runs.filter(([k]) => typeof k === 'string'));
     s.bands.replaceChildren(...runs.map(([index, r]) => {
-        const m = (typeof index === 'string' ? liveInfo(index) : cache.marks && cache.marks[index - 1]) || {};
+        const m: Mark = (typeof index === 'string' ? liveInfo(index) : cache.marks && cache.marks[index - 1]) || {};
         const rect = svgEl('rect', { x: r.x0, y: r.top, width: Math.max(0, r.x1 - r.x0),
                                      height: Math.max(0, r.bottom - r.top) });
         rect.setAttribute('class', 'latex-mark');
@@ -143,13 +147,13 @@ export function paintMarkBands(s, runs, cache) {
 
 // The selection, when drawn as bands (host/selection.ts): one rect per
 // line, class latex-selection, over the marks' bands and under the text.
-export function paintSelectionBands(s, runs) {
+export function paintSelectionBands(s: DomSegment, runs: Run[]): void {
     if (!runs.length && !s.selBands) return;
     if (!s.selBands) {
         s.selBands = svgEl('g', { 'aria-hidden': 'true', style: 'pointer-events:none' });
         // After the marks' bands (and link hits), before the first line.
-        const first = s.pairs.find(p => p.attached);
-        s.svg.insertBefore(s.selBands, first ? first.g : null);
+        const first = s.pairs.find((p: LinePair) => p.attached);
+        s.svg!.insertBefore(s.selBands, first ? first.g : null);
     }
     s.selBands.replaceChildren(...runs.map(r => {
         const rect = svgEl('rect', { x: r.x0, y: r.top, width: Math.max(0, r.x1 - r.x0),
@@ -161,11 +165,11 @@ export function paintSelectionBands(s, runs) {
 
 // Paint every segment regardless of the viewport – for printing, where nothing may
 // be left as an empty placeholder.
-export function paintDocument(fontInfo, cache) {
+export function paintDocument(fontInfo: FontTable, cache: LayoutCache): void {
     if (!cache.layout) return;
     cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 };
     for (let i = 0; i < cache.layout.laid.length; i++) {
-        const s = cache.dom.segs[i];
+        const s = cache.dom!.segs[i];
         if (!s.svg) { if (s.sub) paintDocument(fontInfo, s.sub); continue; }
         paintSegment(fontInfo, cache, i);
     }

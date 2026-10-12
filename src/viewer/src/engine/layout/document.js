@@ -10,7 +10,7 @@ import { layoutStreamSegment } from './stream.js';
 import { keptHostBox } from '../../host/block-hosts.ts';
 import { blockKeyOf } from '../../host/host.ts';
 import { layoutTextSegment, segmentsOf } from './text.js';
-import { svgEl } from '../sink.js';
+import { svgEl } from '../sink.ts';
 import { held, linkTargets } from '../../host/links.js';
 import { quickLayout } from '../../runtime/blocks.js';
 import { observeSegments } from '../../runtime/visibility.js';

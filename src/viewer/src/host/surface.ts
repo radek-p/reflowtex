@@ -13,12 +13,14 @@ import { SP_TO_PX, ZOOM, sumWidthSp } from '../engine/core.ts';
 import { layoutDocument } from '../engine/layout/document.js';
 import { NATURAL_PROBE_PT, markDirty, unobserveAll } from '../runtime/blocks.js';
 import { paintVisibleNow } from '../runtime/visibility.js';
-import { paintDocument } from '../engine/paint.js';
+import { paintDocument } from '../engine/paint.ts';
 import { disposePieces } from './inline.ts';
 // block-hosts.ts and this module import each other: only functions, called
 // after both have loaded.
 import { disposeHosts, surfaceChanged } from './block-hosts.ts';
 import type { Doc, DocStream } from './instances.ts';
+import type { FontTable } from '../engine/model.ts';
+import type { LayoutCache } from '../engine/layout/types.ts';
 import type { Instance, MountOptions, Surface, SurfaceMetrics, TypesetPart } from './types.ts';
 import { cancelFrame, frame } from '../runtime/pending.ts';
 
@@ -26,7 +28,7 @@ import { cancelFrame, frame } from '../runtime/pending.ts';
 export interface BlockData {
     el: HTMLElement;
     doc: Doc;
-    fontInfo: unknown;
+    fontInfo: FontTable;
     params: Record<string, unknown>;
 }
 
@@ -35,15 +37,12 @@ export interface BlockData {
 const live = new WeakMap<HTMLElement, Set<SurfaceImpl>>();
 const all = new Set<SurfaceImpl>();
 
-/** A layout's cache, as far as the host modules use it. `blockEl` and
- *  `relayout` travel down into nested caches: the block whose instances the
- *  layout holds, and how to lay out again the layout that owns it (the
- *  block, or a surface). `hosts` holds its block instances' hosts
- *  (block-hosts.ts), by stream index. */
-export type Cache = {
-    bcs: unknown; dom: any; layout: any; stats: unknown;
-    blockEl?: HTMLElement; relayout?: () => void; hosts?: Map<number, unknown>;
-};
+/** A layout's cache (engine/layout/types.ts). `blockEl` and `relayout`
+ *  travel down into nested caches: the block whose instances the layout
+ *  holds, and how to lay out again the layout that owns it (the block, or
+ *  a surface). `hosts` holds its block instances' hosts (block-hosts.ts),
+ *  by stream index. */
+export type Cache = LayoutCache;
 
 /** What a layout's first and last lines give the text around it. */
 export interface Edges { firstAscent: number; firstMeta: unknown; textFirst: boolean; lastDepth: number; textLast: boolean }
@@ -81,8 +80,9 @@ export class TypesetPartImpl implements TypesetPart {
         if (this.natural === null) {
             const { cache } = this.layout(NATURAL_PROBE_PT * ZOOM);
             let w = 0;
-            for (const L of cache.layout.laid)
-                (L.lines || []).forEach((ln: any, j: number) => {
+            // (laid out just now)
+            for (const L of cache.layout!.laid)
+                (L.lines || []).forEach((ln, j) => {
                     w = Math.max(w, ((L.lrp && L.lrp[j]) ? L.lrp[j].x0 : 0) + sumWidthSp(ln.nodes) * SP_TO_PX);
                 });
             this.natural = Math.ceil(w + 0.5);
@@ -163,7 +163,7 @@ export class SurfaceImpl implements Surface {
         if (this.box.parentNode !== this.el) this.el.replaceChildren(this.box);
         markDirty(this.cache);
         paintVisibleNow(this.part.data.fontInfo, this.cache);
-        const laid = this.cache.layout.laid;
+        const laid = this.cache.layout!.laid;
         const first = laid[0], lastL = laid[laid.length - 1];
         this.last = {
             width: px,

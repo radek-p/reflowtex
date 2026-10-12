@@ -151,7 +151,7 @@ export interface LayoutDom {
     root: HTMLElement;
     segs: DomSegment[];
     /** Every element drawn, by the node it draws (kept when undrawn). */
-    byNode: Map<TexNode, Element>;
+    byNode: Map<TexNode, SVGElement>;
     live: Set<Element>;
     /** The anchor element of each label. */
     anchors: Map<string, HTMLElement>;

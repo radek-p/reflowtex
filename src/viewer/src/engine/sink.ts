@@ -10,10 +10,25 @@ import { colorFill } from '../runtime/colour.ts';
 import { renderPiece } from '../host/inline.ts';
 import { applyMark, liveOn, registerGlyph } from '../host/marks.ts';
 import { registerSpace, selectedGlyph, selectionEdges } from '../host/selection.ts';
+import type { GlyphNode, TexNode, ViewerFont } from './model.ts';
+import type { Sink, SvgMatrix } from './render.ts';
+import type { LayoutCache, PaintStats } from './layout/types.ts';
+
+/** A run of glyphs on a line (px): a reference's, a mark's, the selection's. */
+export interface Run { x0: number; x1: number; top: number; bottom: number }
+export interface ElementRun extends Run { el: SVGElement }
+/** The painter's sink: renderNodes' calls, and what paintSegment asks of it. */
+export interface PaintSink extends Sink {
+    beginLine(textEl: SVGTextElement, auxEl: SVGGElement): void;
+    missing(n: TexNode, x: number, y: number): void;
+    takeLinkRuns(): ElementRun[];
+    takeMarkRuns(): [number | string, ElementRun][];
+    takeSelectionRun(): Run | null;
+}
 
 // ── SVG renderer ──────────────────────────────────────────────────────────────
 
-export function svgEl(tag, attrs) {
+export function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number>): SVGElementTagNameMap[K] {
     const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
     for(const [k,v] of Object.entries(attrs)) el.setAttribute(k,String(v));
     return el;
@@ -40,12 +55,13 @@ export function svgEl(tag, attrs) {
 // Lines 1.2 em apart keep a gap of 0.2 em between their bands.
 export const BAND_MIN = { up: 0.75, down: 0.25 };
 
-export function reconcileSink(byNode, used, stats, cache) {
-    let textParent = null, auxParent = null, lastTspan = null, lastRect = null;
-    const stack = [];
-    const linkRuns = new Map();   // data-link key → { el, x0, x1, top, bottom }
-    const markRuns = new Map();   // mark index, or live mark id → { el, x0, x1, top, bottom }
-    let selRun = null;            // the selection on this line, drawn as a band (host/selection.ts)
+export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Element>, stats: PaintStats, cache: LayoutCache): PaintSink {
+    let textParent: SVGElement | null = null, auxParent: SVGElement | null = null;
+    let lastTspan: Element | null = null, lastRect: Element | null = null;
+    const stack: { textParent: SVGElement | null; auxParent: SVGElement | null; lastTspan: Element | null; lastRect: Element | null }[] = [];
+    const linkRuns = new Map<string, ElementRun>();   // data-link key → { el, x0, x1, top, bottom }
+    const markRuns = new Map<number | string, ElementRun>();   // mark index, or live mark id → { el, x0, x1, top, bottom }
+    let selRun: Run | null = null;            // the selection on this line, drawn as a band (host/selection.ts)
     // How far the line reaches above and below: each glyph's ink, and at
     // least a parenthesis at its size (BAND_MIN). A band – a mark's, the selection's –
     // is never less than the line: one over "one" is as tall as one over
@@ -56,14 +72,14 @@ export function reconcileSink(byNode, used, stats, cache) {
     // Edge), as x on this line: afterX where its band may start, beforeX
     // where it may end. An end after a space waits for the next glyph's x.
     const edges = selectionEdges();
-    let afterX = null, beforeX = null, endAtNext = false;
-    const edgeX = (n, x, w) => {
+    let afterX: number | null = null, beforeX: number | null = null, endAtNext = false;
+    const edgeX = (n: TexNode, x: number, w: number) => {
         const { start, end } = edges;
         if (start && start.node === n) afterX = start.side === 'right' ? x + w : x;
         if (end && end.node === n) { if (end.side === 'left') beforeX = x; else endAtNext = true; }
     };
-    const toLine = r => { r.top = Math.min(r.top, lineTop); r.bottom = Math.max(r.bottom, lineBottom); return r; };
-    const extend = (runs, key, el, x, n, y) => {
+    const toLine = <R extends Run>(r: R): R => { r.top = Math.min(r.top, lineTop); r.bottom = Math.max(r.bottom, lineBottom); return r; };
+    const extend = <K>(runs: Map<K, ElementRun>, key: K, el: SVGElement, x: number, n: TexNode, y: number) => {
         const x1 = x + gW(n) * SP_TO_PX, top = y - gH(n) * SP_TO_PX, bottom = y + gD(n) * SP_TO_PX;
         const r = runs.get(key);
         if (!r) runs.set(key, { el, x0: x, x1, top, bottom });
@@ -73,7 +89,7 @@ export function reconcileSink(byNode, used, stats, cache) {
         }
     };
 
-    function place(parent, last, el, isNew) {
+    function place(parent: Element, last: Element | null, el: Element, isNew: boolean) {
         const expected = last ? last.nextSibling : parent.firstChild;
         if (el !== expected) {
             parent.insertBefore(el, expected);
@@ -82,7 +98,7 @@ export function reconcileSink(byNode, used, stats, cache) {
     }
 
     return {
-        beginLine(textEl, auxEl) {
+        beginLine(textEl: SVGTextElement, auxEl: SVGGElement) {
             textParent = textEl; auxParent = auxEl; lastTspan = null; lastRect = null;
             lineTop = Infinity; lineBottom = -Infinity;
             afterX = null; beforeX = null; endAtNext = false;
@@ -92,10 +108,10 @@ export function reconcileSink(byNode, used, stats, cache) {
         // the group's matrix anyway. So a transform gets its own <g> holding
         // its own <text>, and sits in the aux parent next to rules and
         // pictures. Nesting works because the parents are stacked.
-        beginTransform(n, tf) {
+        beginTransform(n: TexNode, tf: SvgMatrix) {
             let g = byNode.get(n);
             const isNew = !g;
-            if (isNew) {
+            if (!g) {
                 g = svgEl('g', {});
                 const t = svgEl('text', {});
                 t.style.cssText = 'font-weight:normal;font-style:normal';
@@ -104,29 +120,29 @@ export function reconcileSink(byNode, used, stats, cache) {
             } else { stats.repositioned++; }
             const [a,b,c,d,e,f] = affineOf(tf);
             g.setAttribute('transform', `matrix(${a} ${b} ${c} ${d} ${e} ${f})`);
-            place(auxParent, lastRect, g, isNew);
+            place(auxParent!, lastRect, g, isNew);
             used.add(g); lastRect = g;
             stack.push({ textParent, auxParent, lastTspan, lastRect });
-            textParent = g.firstChild; auxParent = g;
+            textParent = g.firstChild as SVGTextElement; auxParent = g;
             // The group's own <text> is not in `used`: it lives and goes with
             // the group. Swept on its own, it was taken out of a group that a
             // later paint reused, empty (and g.firstChild null from then on).
-            lastTspan = null; lastRect = g.firstChild;
+            lastTspan = null; lastRect = g.firstChild as Element;
         },
         endTransform() {
-            const s = stack.pop();
+            const s = stack.pop()!;
             textParent = s.textParent; auxParent = s.auxParent;
             lastTspan = s.lastTspan; lastRect = s.lastRect;
         },
-        glyph(n, x, y, fi) {
+        glyph(n: GlyphNode, x: number, y: number, fi: ViewerFont | undefined) {
             // No loadable font for this glyph → draw its metric boxes instead of
             // an unshapeable character (see missing()).
             if (fi?.unresolved) { this.missing(n, x, y); return; }
             let el = byNode.get(n), isNew = !el;
-            if (isNew) {
+            if (!el) {
                 el = svgEl('tspan', {x, y, 'font-family': fi?.family ?? 'serif', 'font-size': fi?.size_px ?? 12});
                 // A \webtext slot's word (see Slots) is a whole word, as text.
-                el.textContent = n.text !== undefined ? n.text : String.fromCodePoint(n.char);
+                el.textContent = n.text !== undefined ? n.text : String.fromCodePoint(n.char!);
                 // Inline style so it wins over the page's `fill: currentColor`
                 // rule; uncoloured glyphs keep currentColor (dark-mode aware).
                 // Coloured ones go through the theme substitution maps.
@@ -143,14 +159,14 @@ export function reconcileSink(byNode, used, stats, cache) {
                 registerGlyph(el, n);
                 byNode.set(n, el); stats.created++;
             } else {
-                el.setAttribute('x', x); el.setAttribute('y', y); stats.repositioned++;
+                el.setAttribute('x', String(x)); el.setAttribute('y', String(y)); stats.repositioned++;
             }
             // Live marks (host.addMark, a reader's highlight) come and go
             // while the element stays: their ids are set on every paint.
             const live = liveOn(n);
             if (live) el.dataset.rtxMarks = live.join(' ');
             else if (el.dataset.rtxMarks !== undefined) delete el.dataset.rtxMarks;
-            place(textParent, lastTspan, el, isNew);
+            place(textParent!, lastTspan, el, isNew);
             used.add(el); lastTspan = el;
             // The extent of each reference on this line, for its hit area
             // (see paintLinkHits). Not inside a transform: that has its own
@@ -179,7 +195,7 @@ export function reconcileSink(byNode, used, stats, cache) {
         // The references' extents on the line just drawn; starts afresh.
         takeLinkRuns() { const runs = [...linkRuns.values()]; linkRuns.clear(); return runs; },
         // The marks' and the selection's, at least as tall as the line.
-        takeMarkRuns() { const runs = [...markRuns.entries()].map(([k, r]) => [k, toLine(r)]); markRuns.clear(); return runs; },
+        takeMarkRuns() { const runs = [...markRuns.entries()].map(([k, r]): [number | string, ElementRun] => [k, toLine(r)]); markRuns.clear(); return runs; },
         // The selection's, reaching the edges its ends fall on: over the
         // space after "word" when it starts at the end of the d; the space
         // alone when no glyph between is selected.
@@ -197,15 +213,15 @@ export function reconcileSink(byNode, used, stats, cache) {
         // A glyph whose font could not be loaded: draw its TeX metric boxes – the
         // advance width by the height above the baseline, and by the depth below –
         // as two outlined rects, so the missing ink's place and size are visible.
-        missing(n, x, y) {
+        missing(n: TexNode, x: number, y: number) {
             let el = byNode.get(n), isNew = !el;
             const w = gW(n) * SP_TO_PX;
             const h = gH(n) * SP_TO_PX;                 // above the baseline
             const d = gD(n) * SP_TO_PX;                 // below the baseline
-            const boxes = [];
+            const boxes: [number, number, number, number][] = [];
             if (h > 0) boxes.push([x, y - h, w, h]);
             if (d > 0) boxes.push([x, y,     w, d]);
-            if (isNew) {
+            if (!el) {
                 el = svgEl('g', { class: 'latex-missing-glyph' });
                 for (const [bx, by, bw, bh] of boxes) {
                     const r = svgEl('rect', { x: bx, y: by, width: bw, height: bh });
@@ -219,17 +235,17 @@ export function reconcileSink(byNode, used, stats, cache) {
             } else {
                 const rects = el.children;
                 boxes.forEach(([bx, by, bw, bh], i) => {
-                    rects[i].setAttribute('x', bx);     rects[i].setAttribute('y', by);
-                    rects[i].setAttribute('width', bw); rects[i].setAttribute('height', bh);
+                    rects[i].setAttribute('x', String(bx));     rects[i].setAttribute('y', String(by));
+                    rects[i].setAttribute('width', String(bw)); rects[i].setAttribute('height', String(bh));
                 });
                 stats.repositioned++;
             }
-            place(auxParent, lastRect, el, isNew);
+            place(auxParent!, lastRect, el, isNew);
             used.add(el); lastRect = el;
         },
         space(n, x, y) {
             let el = byNode.get(n), isNew = !el;
-            if (isNew) {
+            if (!el) {
                 el = svgEl('tspan', {x, y});
                 el.textContent = ' ';
                 // Not a target: the pointer between two words of a reference
@@ -238,15 +254,15 @@ export function reconcileSink(byNode, used, stats, cache) {
                 registerSpace(el, n);
                 byNode.set(n, el); stats.created++;
             } else {
-                el.setAttribute('x', x); el.setAttribute('y', y); stats.repositioned++;
+                el.setAttribute('x', String(x)); el.setAttribute('y', String(y)); stats.repositioned++;
             }
-            place(textParent, lastTspan, el, isNew);
+            place(textParent!, lastTspan, el, isNew);
             used.add(el); lastTspan = el;
             if (!stack.length) edgeX(n, x, 0);
         },
         rule(n, x, y, w, h) {
             let el = byNode.get(n), isNew = !el;
-            if (isNew) {
+            if (!el) {
                 el = svgEl('rect', {x, y, width: w, height: h});
                 // Always set the fill inline rather than leaving it to page
                 // CSS: a blanket `rect { fill: currentColor }` would also hit
@@ -256,27 +272,27 @@ export function reconcileSink(byNode, used, stats, cache) {
                                         : 'var(--latex-color-000000, currentColor)';
                 byNode.set(n, el); stats.created++;
             } else {
-                el.setAttribute('x', x); el.setAttribute('y', y);
-                el.setAttribute('width', w); el.setAttribute('height', h);
+                el.setAttribute('x', String(x)); el.setAttribute('y', String(y));
+                el.setAttribute('width', String(w)); el.setAttribute('height', String(h));
                 stats.repositioned++;
             }
-            place(auxParent, lastRect, el, isNew);
+            place(auxParent!, lastRect, el, isNew);
             used.add(el); lastRect = el;
         },
         // Where a \webaside stood (see Asides): an empty rect at the pen
         // position on the baseline, drawing nothing, for aside.anchor().
         aside(n, x, y) {
             let el = byNode.get(n), isNew = !el;
-            if (isNew) {
+            if (!el) {
                 el = svgEl('rect', { x, y, width: 0, height: 0 });
                 el.setAttribute('class', 'latex-aside-mark');
-                el.dataset.aside = n.aside;
+                el.dataset.aside = String(n.aside);
                 byNode.set(n, el); stats.created++;
             } else {
-                el.setAttribute('x', x); el.setAttribute('y', y);
+                el.setAttribute('x', String(x)); el.setAttribute('y', String(y));
                 stats.repositioned++;
             }
-            place(auxParent, lastRect, el, isNew);
+            place(auxParent!, lastRect, el, isNew);
             used.add(el); lastRect = el;
         },
         // A widget part (see Widgets): HTML in a foreignObject over the part's
@@ -285,7 +301,7 @@ export function reconcileSink(byNode, used, stats, cache) {
         widget(n, x, y) {
             let el = byNode.get(n), isNew = !el;
             const h = n.height * SP_TO_PX, d = n.depth * SP_TO_PX, w = n.width * SP_TO_PX;
-            if (isNew) {
+            if (!el) {
                 el = svgEl('foreignObject', { width: w, height: h + d });
                 el.setAttribute('class', 'latex-widget');
                 // every part of one widget shares a key, for the shared hover
@@ -306,8 +322,8 @@ export function reconcileSink(byNode, used, stats, cache) {
             } else {
                 stats.repositioned++;
             }
-            el.setAttribute('x', x); el.setAttribute('y', y - h);
-            place(auxParent, lastRect, el, isNew);
+            el.setAttribute('x', String(x)); el.setAttribute('y', String(y - h));
+            place(auxParent!, lastRect, el, isNew);
             used.add(el); lastRect = el;
         },
         // A precompiled TikZ box or included PDF page. Its markup never changes,
@@ -315,7 +331,7 @@ export function reconcileSink(byNode, used, stats, cache) {
         picture(n, x, y) {
             let el = byNode.get(n), isNew = !el;
             const pic = n.pic;
-            if (isNew) {
+            if (!el) {
                 // A drawing carries its own colours (already rewritten to
                 // the theme's custom properties), unlike glyph ink which is
                 // themed wholesale. The class marks that boundary for page CSS
@@ -335,7 +351,7 @@ export function reconcileSink(byNode, used, stats, cache) {
             const s = pic && pic.vb_w ? (n.width * SP_TO_PX) / pic.vb_w : 1;
             el.setAttribute('transform',
                 `translate(${x} ${y - n.height * SP_TO_PX}) scale(${s})`);
-            place(auxParent, lastRect, el, isNew);
+            place(auxParent!, lastRect, el, isNew);
             used.add(el); lastRect = el;
         },
     };
