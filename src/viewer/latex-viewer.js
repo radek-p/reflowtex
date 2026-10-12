@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 beeb7fa09bd3b3d4972d270230b28640ea2a305146d0c91557e44aeed9066188
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 90fdd81cce88883f49832e90ec07767f6d962a0e864c825546f6e77743900cb2
 'use strict';
 "use strict";
 (() => {
@@ -3889,7 +3889,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     return out;
   }
 
-  // src/engine/layout/text.js
+  // src/engine/layout/text.ts
   function contentStream(doc) {
     if (doc.content && doc.content.length) return doc.content;
     return doc.paragraphs.map((_, i) => ({ kind: "paragraph", para: i + 1 }));
@@ -3902,8 +3902,9 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     if (ids) return ids;
     ids = [];
     (function walk2(ns) {
+      const found = ids;
       for (const n of ns || []) {
-        if (n.anchor) ids.push(n.anchor);
+        if (n.anchor) found.push(n.anchor);
         walk2(n.children);
         walk2(n.pre);
         walk2(n.post);
@@ -3966,14 +3967,15 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         continue;
       }
       if (item.kind === "display") {
-        const isAlign = item.box.subtype === HL_ALIGNMENT;
+        const box = item.box;
+        const isAlign = box.subtype === HL_ALIGNMENT;
         const last = segs[segs.length - 1];
         if (isAlign && last && last.kind === "display" && last.isAlign) {
           last.rows.push({ item, gap, vspace: vsp });
         } else {
           segs.push({ kind: "display", isAlign, rows: [{ item, gap: 0 }], gapBefore: gap, vspace: vsp });
         }
-        own(segs[segs.length - 1], anchorIdsOf(item.box, item.box.children));
+        own(segs[segs.length - 1], anchorIdsOf(box, box.children));
         text = null;
         gap = 0;
         vsp = null;
@@ -4141,7 +4143,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     };
   }
 
-  // src/engine/layout/display.js
+  // src/engine/layout/display.ts
   function inkExtentOf(fontInfo, box) {
     let min = Infinity, max = -Infinity;
     let M = null;
@@ -4160,8 +4162,6 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       }
     };
     renderNodes(fontInfo, {
-      beginLine() {
-      },
       beginTransform(n, tf) {
         stack.push(M);
         M = affineMul(M, affineOf(tf));
@@ -4253,8 +4253,6 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       if (x + w > inkMax) inkMax = x + w;
     };
     renderNodes(fontInfo, {
-      beginLine() {
-      },
       // A gap's kind is about horizontal neighbours, and a transform's children
       // advance the pen untransformed (see renderNodes), so the plain pen
       // positions are the ones to compare. No matrix bookkeeping is needed.
@@ -4327,7 +4325,8 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     if (k < 0) return null;
     const ln = lines[k], L = lrp[k];
     const MAX = 1073741823;
-    let x = L.x0, w = null, unknown = false, mathOn = false, font = null, anyFont = null;
+    let x = L.x0, w = null, unknown = false, mathOn = false;
+    let font = null, anyFont = null;
     const found = () => {
       w = unknown ? MAX : x;
     };
@@ -4385,7 +4384,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     return { w: w === null ? -MAX : w === MAX ? MAX : Math.round(w / SP_TO_PX), quad: fi && fi.quad || 0 };
   }
   function displaySkipsFull(L, prev) {
-    const rows = L.seg.rows;
+    const rows = L.seg.kind === "display" ? L.seg.rows : void 0;
     const item = rows && rows[0] && rows[0].item;
     if (!item || item.display_above === void 0 || item.display_above === null) return null;
     if (item.box && item.box.subtype === HL_ALIGNMENT) return true;

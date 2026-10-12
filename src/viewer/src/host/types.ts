@@ -12,6 +12,12 @@
 // into any element the page gives it, at any width, as often as it likes.
 // Instances nest as their TeX did.
 
+// (For the paragraph breaker a page may plug in: the viewer's own node and
+// line shapes.)
+import type { TexNode, ViewerFont } from '../engine/model.ts';
+import type { Line } from '../engine/layout/types.ts';
+import type { Params } from '../runtime/params.ts';
+
 /** Where an instance stands relative to the text. */
 export type Placement =
     /** In the flow, between paragraphs (webstream and what is built on it). */
@@ -508,6 +514,26 @@ export interface BlockMountOptions {
     displayFit?: 'natural' | 'column';
 }
 
+/** window.reflowtexBreak: another paragraph breaker, which a page may
+ *  define (the viewer's README, Plugging in another paragraph breaker). It
+ *  is given a paragraph's nodes, the measure (sp), the block's parameters
+ *  and helpers, and returns its lines, or null to leave the paragraph to
+ *  the built-in breaker. */
+export type ParagraphBreaker = (nodes: TexNode[], availSp: number, params: Params, helpers: BreakerHelpers) => Line[] | null;
+export interface BreakerHelpers {
+    gW(n: TexNode): number;
+    gH(n: TexNode): number;
+    gD(n: TexNode): number;
+    align: string;
+    /** The paragraph's \baselineskip and \lineskip (sp). */
+    bskip: number;
+    lskip: number;
+    /** A font's record: its quad, expansion limits and character codes. */
+    font(id: number): ViewerFont | null;
+    adjustSpacing: number;
+    protrudeChars: number;
+}
+
 /** window.reflowtex: the host API, and a few page-wide switches (the
  *  viewer's README). A page may create it first, with the switches set. */
 export interface ReflowTeX {
@@ -539,6 +565,7 @@ export interface ReflowTeX {
 declare global {
     interface Window {
         reflowtex?: ReflowTeX;
+        reflowtexBreak?: ParagraphBreaker;
     }
     interface DocumentEventMap {
         /** Sent once, on document, when window.reflowtex.host exists. */

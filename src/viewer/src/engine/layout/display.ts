@@ -5,21 +5,25 @@ import {
     RUNNING_RULE, SP_TO_PX, ZOOM, gD, gH, gW, glyphExpandScale, kernExpandScale, nodeWidthSp,
 } from '../core.ts';
 import { texInterlineGlue } from './lines.ts';
-import { HL_ALIGNMENT, HL_EQUATION } from './text.js';
-import { affineMul, affineOf, renderNodes } from '../render.ts';
+import { HL_ALIGNMENT, HL_EQUATION } from './text.ts';
+import { affineMul, affineOf, renderNodes, type Affine } from '../render.ts';
+import type { AffineField, BoxNode, ChildList, ContentItem, FontTable, TexNode } from '../model.ts';
+import type {
+    DisplaySegment, Line, LinePlacement, LineMeta, PreDisplaySize, SegmentGeometry, SegmentLayout,
+} from './types.ts';
 // ── end of imports
 
 // Where a box's ink ends, used only to size its horizontal scroll area.
 // Placement comes exclusively from TeX's (possibly affine-evaluated) geometry;
 // ink bounds must never feed back into centring or alignment.
-export function inkExtentOf(fontInfo, box) {
+export function inkExtentOf(fontInfo: FontTable, box: TexNode): { min: number; max: number } {
     let min = Infinity, max = -Infinity;
     // Transform-aware: under a rotation it is the box's *height* that spans x,
     // so the horizontal extent has to be taken from the mapped corners rather
     // than from the node's width. Hence the full box rather than just (x, w).
-    let M = null;
-    const stack = [];
-    const note = (x, w, yTop, yBot) => {
+    let M: Affine | null = null;
+    const stack: (Affine | null)[] = [];
+    const note = (x: number, w: number, yTop: number, yBot: number) => {
         if (!M) {
             if (x < min) min = x;
             if (x + w > max) max = x + w;
@@ -33,9 +37,8 @@ export function inkExtentOf(fontInfo, box) {
         }
     };
     renderNodes(fontInfo, {
-        beginLine() {},
         beginTransform(n, tf) { stack.push(M); M = affineMul(M, affineOf(tf)); },
-        endTransform()        { M = stack.pop(); },
+        endTransform()        { M = stack.pop()!; },
         glyph(n, x, y) { note(x, gW(n) * SP_TO_PX, y - gH(n) * SP_TO_PX, y + gD(n) * SP_TO_PX); },
         space()        {},                    // inter-word glue is not ink
         rule(n, x, y, w, h) { note(x, w, y, y + h); },
@@ -48,18 +51,18 @@ export function inkExtentOf(fontInfo, box) {
 // LuaTeX compilations. This is deliberately oblivious to display type:
 // equation, \[...\], align, gather, multline, and package-defined displays all
 // arrive as the same recursively matched finished node tree.
-export const AFFINE_NODE_FIELDS = [
+export const AFFINE_NODE_FIELDS: AffineField[] = [
     'width', 'height', 'depth', 'stretch', 'shrink', 'kern', 'shift',
     'glue_set', 'surround', 'm_a', 'm_b', 'm_c', 'm_d',
 ];
-export const AFFINE_CHILD_LISTS = ['children', 'pre', 'post', 'replace'];
-export function affineDisplayNode(n, deltaSp) {
+export const AFFINE_CHILD_LISTS: ChildList[] = ['children', 'pre', 'post', 'replace'];
+export function affineDisplayNode(n: TexNode, deltaSp: number): TexNode {
     let out = n, changed = false;
     // A copy remembers the node it was evaluated from (for api.inspect: the
     // compiled values, and the gap classification, which is keyed by it).
     const edit = () => { if (!changed) { out = { ...n }; Object.defineProperty(out, 'affineSource', { value: n.affineSource || n }); changed = true; } };
     for (const field of AFFINE_NODE_FIELDS) {
-        const rate = n[`${field}_rate`];
+        const rate = n[`${field}_rate` as const];
         if (rate !== undefined) {
             edit();
             out[field] = (n[field] || 0) + rate * deltaSp;
@@ -67,8 +70,8 @@ export function affineDisplayNode(n, deltaSp) {
     }
     for (const key of AFFINE_CHILD_LISTS) {
         if (!n[key]?.length) continue;
-        const children = n[key].map(child => affineDisplayNode(child, deltaSp));
-        if (children.some((child, i) => child !== n[key][i])) {
+        const children = n[key]!.map(child => affineDisplayNode(child, deltaSp));
+        if (children.some((child, i) => child !== n[key]![i])) {
             edit(); out[key] = children;
         }
     }
@@ -79,10 +82,10 @@ export function affineDisplayNode(n, deltaSp) {
     return out;
 }
 
-export function affineDisplayItem(item, deltaSp) {
-    const out = { ...item, box: affineDisplayNode(item.box, deltaSp) };
-    for (const field of ['display_width', 'display_indent', 'display_shift']) {
-        const rate = item[`${field}_rate`];
+export function affineDisplayItem(item: ContentItem, deltaSp: number): ContentItem {
+    const out = { ...item, box: affineDisplayNode(item.box!, deltaSp) };
+    for (const field of ['display_width', 'display_indent', 'display_shift'] as const) {
+        const rate = item[`${field}_rate` as const];
         if (rate !== undefined) out[field] = (item[field] || 0) + rate * deltaSp;
     }
     return out;
@@ -106,20 +109,22 @@ export function affineDisplayItem(item, deltaSp) {
 // floor-bearing gap lands, then ask whether ink falls on both sides of the gap.
 // It reads only the compiled tree, so it is computed once per display and cached
 // – the answer cannot change with the reader's width.
-export const displayGapKinds = new WeakMap();   // display item → Map(node → {field: isInternal})
+/** A display's floored gaps, by node: for each field, whether the gap is
+ *  internal (ink on both sides) and so keeps the minimum. */
+export type GapKinds = Map<TexNode, Partial<Record<'width' | 'kern' | 'surround', boolean>>>;
+export const displayGapKinds = new WeakMap<ContentItem, GapKinds>();   // display item → Map(node → {field: isInternal})
 
-export function classifyDisplayGaps(fontInfo, item) {
+export function classifyDisplayGaps(fontInfo: FontTable, item: ContentItem): GapKinds {
     const cached = displayGapKinds.get(item);
     if (cached) return cached;
-    const kinds = new Map();
-    const gaps = [];
+    const kinds: GapKinds = new Map();
+    const gaps: { n: TexNode; field: 'width' | 'kern' | 'surround'; x1: number; x2: number }[] = [];
     let inkMin = Infinity, inkMax = -Infinity;
-    const ink = (x, w) => {
+    const ink = (x: number, w: number) => {
         if (x < inkMin) inkMin = x;
         if (x + w > inkMax) inkMax = x + w;
     };
     renderNodes(fontInfo, {
-        beginLine() {},
         // A gap's kind is about horizontal neighbours, and a transform's children
         // advance the pen untransformed (see renderNodes), so the plain pen
         // positions are the ones to compare. No matrix bookkeeping is needed.
@@ -130,8 +135,8 @@ export function classifyDisplayGaps(fontInfo, item) {
         // strut – which is exactly that – correctly does not count as ink.
         rule(n, x, y, w)    { ink(x, w); },
         picture(n, x)       { ink(x, n.width * SP_TO_PX); },
-        gap(n, field, x, w) { if (n[`${field}_floor`]) gaps.push({ n, field, x1: x, x2: x + w }); },
-    }, [item.box], 0, 0, 0, 0, 0);
+        gap(n, field, x, w) { if (n[`${field}_floor` as const]) gaps.push({ n, field, x1: x, x2: x + w }); },
+    }, [item.box!], 0, 0, 0, 0, 0);
 
     // Ink that ends within a scaled point of a gap's edge abuts it. TeX's own
     // dimensions are integral scaled points, so anything finer is arithmetic
@@ -153,16 +158,16 @@ export function classifyDisplayGaps(fontInfo, item) {
 // classifier saw are considered, which is what keeps the floor to genuine gaps:
 // a box's `width` also carries a rate, but a box is not space – it is however
 // wide its contents came out – so it never fences off a measure of its own.
-export function affineFloorWidthNode(n, sourceWidthSp, floorSp, kinds) {
+export function affineFloorWidthNode(n: TexNode, sourceWidthSp: number, floorSp: number, kinds: GapKinds): number {
     let minimum = 0;
     const fields = kinds.get(n);
     if (fields) {
-        for (const field of ['width', 'kern', 'surround']) {
-            const rate = n[`${field}_rate`];
-            if (fields[field] === undefined || !(rate > 0)) continue;
+        for (const field of ['width', 'kern', 'surround'] as const) {
+            const rate = n[`${field}_rate` as const];
+            if (fields[field] === undefined || !(rate! > 0)) continue;
             const floor = fields[field] ? floorSp : 0;
             minimum = Math.max(minimum,
-                sourceWidthSp + (floor - (n[field] || 0)) / rate);
+                sourceWidthSp + (floor - (n[field] || 0)) / rate!);
         }
     }
     for (const key of AFFINE_CHILD_LISTS) {
@@ -174,16 +179,16 @@ export function affineFloorWidthNode(n, sourceWidthSp, floorSp, kinds) {
     return minimum;
 }
 
-export function affineFloorWidthItem(fontInfo, item, sourceWidthSp, floorSp) {
+export function affineFloorWidthItem(fontInfo: FontTable, item: ContentItem, sourceWidthSp: number, floorSp: number): number {
     const kinds = classifyDisplayGaps(fontInfo, item);
-    let minimum = affineFloorWidthNode(item.box, sourceWidthSp, floorSp, kinds);
+    let minimum = affineFloorWidthNode(item.box!, sourceWidthSp, floorSp, kinds);
     // display_shift places the whole display inside the column – centring for an
     // ordinary display, a fixed indent under fleqn. That is outer space by
     // construction: there is no ink on its far side to protect, so it closes to
     // zero and the display sits flush left before it starts to scroll.
-    if (item.display_shift_floor && item.display_shift_rate > 0) {
+    if (item.display_shift_floor && item.display_shift_rate! > 0) {
         minimum = Math.max(minimum,
-            sourceWidthSp - (item.display_shift || 0) / item.display_shift_rate);
+            sourceWidthSp - (item.display_shift || 0) / item.display_shift_rate!);
     }
     // Never freeze *wider* than the measure the tree was compiled at. A gap that
     // was already below the minimum when TeX set it would otherwise ask for a
@@ -206,14 +211,15 @@ export function affineFloorWidthItem(fontInfo, item, sourceWidthSp, floorSp) {
 // adds (of the font current at the display, which the bundle records).
 // Measured on the line as laid out here, so the choice TeX makes with it
 // (displaySkipsFull) follows the reader's width.
-export function preDisplaySizeSp(fontInfo, lines, lrp) {
+export function preDisplaySizeSp(fontInfo: FontTable, lines: Line[], lrp: LinePlacement[]): PreDisplaySize | null {
     const k = lines.length - 1;
     if (k < 0) return null;
     const ln = lines[k], L = lrp[k];
     const MAX = 1073741823;
-    let x = L.x0, w = null, unknown = false, mathOn = false, font = null, anyFont = null;
+    let x = L.x0, w: number | null = null, unknown = false, mathOn = false;
+    let font: number | null = null, anyFont: number | null = null;
     const found = () => { w = unknown ? MAX : x; };
-    const walk = (ns, glueSet) => {
+    const walk = (ns: TexNode[], glueSet: boolean) => {
         for (let i = 0; i < ns.length; i++) {
             const n = ns[i];
             switch (n.type) {
@@ -231,7 +237,7 @@ export function preDisplaySizeSp(fontInfo, lines, lrp) {
                     if (glueSet) {
                         if (L.ratio > 0 && !so && n.stretch) { g += L.ratio * n.stretch; unknown = true; }
                         else if (L.ratio < 0 && !sho && n.shrink) { g += L.ratio * n.shrink; unknown = true; }
-                        else if (L.fillRatio > 0 && so === L.fillOrder && n.stretch) unknown = true;
+                        else if (L.fillRatio! > 0 && so === L.fillOrder && n.stretch) unknown = true;
                     }
                     x += g * SP_TO_PX;
                     if (n.leader) found();
@@ -258,8 +264,8 @@ export function preDisplaySizeSp(fontInfo, lines, lrp) {
 // that opened its paragraph: -\maxdimen, or the indent box's end). An
 // alignment is always set with the full pair. null when the bundle carries
 // no skip data – the captured spacing then stands.
-export function displaySkipsFull(L, prev) {
-    const rows = L.seg.rows;
+export function displaySkipsFull(L: SegmentLayout, prev: SegmentLayout | undefined): boolean | null {
+    const rows = L.seg.kind === 'display' ? L.seg.rows : undefined;
     const item = rows && rows[0] && rows[0].item;
     if (!item || item.display_above === undefined || item.display_above === null) return null;
     // an alignment always gets the full pair (TeX §1206)
@@ -284,17 +290,17 @@ export function displaySkipsFull(L, prev) {
 // The change to the space above segment L (px) from redoing the skip choice:
 // the display's own above skip, and the below skip of a display just before
 // L. Records the display's choice on its layout for the segment after it.
-export function displaySkipAdjust(L, prev) {
+export function displaySkipAdjust(L: SegmentLayout, prev: SegmentLayout | undefined): number {
     let delta = 0;
     if (L.seg.kind === 'display') {
         const full = displaySkipsFull(L, prev);
         L.displayFull = full;
         if (full !== null) {
             const it = L.seg.rows[0].item;
-            delta += ((full ? it.display_above : it.display_above_short) - (it.display_used_above || 0)) * SP_TO_PX;
+            delta += ((full ? it.display_above! : it.display_above_short!) - (it.display_used_above || 0)) * SP_TO_PX;
             // and the interline glue TeX set above the display, redone for
             // the line now above it and the display's height at this width
-            const meta = it.display_baselineskip != null
+            const meta: LineMeta | null | undefined = it.display_baselineskip != null
                 ? { bskip: it.display_baselineskip * SP_TO_PX, lskip: (it.display_lineskip || 0) * SP_TO_PX,
                     lskiplimit: (it.display_lineskiplimit || 0) * SP_TO_PX }
                 : (prev && prev.firstMeta);
@@ -316,7 +322,7 @@ export function displaySkipAdjust(L, prev) {
         const it = prev.seg.rows[prev.seg.rows.length - 1].item;
         // LaTeX's \addvspace below the display asks for at least display_after_min
         const floor = it.display_after_min || 0;
-        const below = Math.max(prev.displayFull ? it.display_below : it.display_below_short, floor);
+        const below = Math.max(prev.displayFull ? it.display_below! : it.display_below_short!, floor);
         delta += (below - Math.max(it.display_used_below || 0, floor)) * SP_TO_PX;
         if (it.display_interline_below != null && L.firstMeta && L.firstAscent != null) {
             delta += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta) - it.display_interline_below * SP_TO_PX;
@@ -337,14 +343,14 @@ export function displaySkipAdjust(L, prev) {
 // same slope, so the affine model carries whichever branch the source
 // measure was on across the switches; redoing the rule from the evaluated
 // widths puts the formula where TeX puts it at every measure.
-export function placeEquationNumber(item) {
+export function placeEquationNumber(item: ContentItem): ContentItem {
     const b = item.box;
     if (!b || b.subtype !== HL_EQUATION || !b.children || b.children.length !== 4) return item;
     const [k0, f0, k1, num] = b.children;
     if (k0.type !== 'kern' || f0.type !== 'hlist' || k1.type !== 'kern' || num.type !== 'hlist' || num.subtype !== 7) return item;
     const z = item.display_width || 0, e = num.width || 0;
     if (!(z > 0) || !(e > 0)) return item;
-    let f = f0, w = 0;
+    let f: BoxNode = f0, w = 0;
     const shrink = [0, 0, 0, 0];
     for (const n of f0.children || []) {
         w += nodeWidthSp(n);
@@ -375,13 +381,14 @@ export function placeEquationNumber(item) {
 // anchored at. A display TeX set another way at the document's width (amsmath
 // moved its tag, or had no room to centre the body) carries the wider regime
 // as a second form, from the width where TeX switches (display_wide_from).
-export function displayForm(item, targetSp, sourceWidthSp) {
+export function displayForm(item: ContentItem, targetSp: number, sourceWidthSp: number): { item: ContentItem; anchorSp: number } {
     if (item.display_wide && item.display_wide_from && targetSp >= item.display_wide_from)
         return { item: item.display_wide, anchorSp: item.display_wide_width || sourceWidthSp };
     return { item, anchorSp: sourceWidthSp };
 }
 
-export function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
+export function layoutDisplaySegment(fontInfo: FontTable, seg: DisplaySegment, widthPt: number,
+                                     displayModel: { sourceWidthSp: number; minSpacePt: number }): SegmentGeometry {
     const targetSp = Math.round(widthPt * 65536);
     const floorSp = Math.max(0, displayModel.minSpacePt) * 65536;
     const forms = seg.rows.map(r => displayForm(r.item, targetSp, displayModel.sourceWidthSp));
@@ -396,7 +403,7 @@ export function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
     const rows = seg.rows.map(r => ({
         ...r,
         x0:  (r.item.display_shift || 0) * SP_TO_PX,
-        ink: inkExtentOf(fontInfo, r.item.box),
+        ink: inkExtentOf(fontInfo, r.item.box!),
     }));
     // The surface has to cover the measure the display was evaluated at *and*
     // whatever ink hangs past it, so a frozen display can be panned to its last
@@ -404,14 +411,14 @@ export function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
     let right = Math.max(columnPx, evaluatedSp * SP_TO_PX);
     for (const r of rows) right = Math.max(right, r.x0 + r.ink.max);
     return {
-        lines: rows.map(r => ({ nodes: [r.item.box], ratio: 0, fitness: 2, leftProtrusion: 0 })),
+        lines: rows.map(r => ({ nodes: [r.item.box!], ratio: 0, fitness: 2, leftProtrusion: 0 })),
         lrp:   rows.map(r => ({ ratio: 0, er: 0, x0: r.x0 })),
         gaps:  rows.map(r => r.gap || null),
         W:     Math.ceil(right),
         // the display's left edge at this width, for displaySkipsFull: the
         // shift plus the kern LuaTeX opens a numbered formula's box with
         displayLeftSp: (rows[0].item.display_shift || 0)
-            + ((c => c && c.type === 'kern' ? (c.kern || 0) : 0)((rows[0].item.box.children || [])[0])),
+            + ((c: TexNode | undefined) => c && c.type === 'kern' ? (c.kern || 0) : 0)((rows[0].item.box!.children || [])[0]),
         atSourceWidth: Math.abs(evaluatedSp - displayModel.sourceWidthSp) < 32768,
         // How the width model was applied, for api.inspect: the measure TeX
         // compiled at, the one asked for, the narrowest the gaps allow, and
@@ -422,7 +429,7 @@ export function layoutDisplaySegment(fontInfo, seg, widthPt, displayModel) {
     };
 }
 
-export function updateDisplayOverflowCue(wrap) {
+export function updateDisplayOverflowCue(wrap: HTMLElement): void {
     const EPS = 1;
     wrap.classList.toggle('latex-overflow-left', wrap.scrollLeft > EPS);
     wrap.classList.toggle('latex-overflow-right',

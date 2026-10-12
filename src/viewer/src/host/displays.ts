@@ -11,7 +11,7 @@
 // again and no scroll box loses its position.
 
 import { materializeSegment } from '../engine/layout/document.js';
-import { updateDisplayOverflowCue } from '../engine/layout/display.js';
+import { updateDisplayOverflowCue } from '../engine/layout/display.ts';
 
 export const NO_FADE_CLASS = 'latex-no-fade';
 

@@ -6,7 +6,7 @@
 import { useGlyphMetrics } from './core.ts';
 import { renderNodes } from './render.ts';
 import { reconcileSink, svgEl } from './sink.ts';
-import { updateDisplayOverflowCue } from './layout/display.js';
+import { updateDisplayOverflowCue } from './layout/display.ts';
 import { materializeSegment } from './layout/document.js';
 import { restoreLinkStates } from '../host/links.js';
 import { liveInfo } from '../host/marks.ts';

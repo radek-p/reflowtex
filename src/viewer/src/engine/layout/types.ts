@@ -5,6 +5,7 @@
 // Types only.
 
 import type { BreakCandidates } from '../breaker.ts';
+import type { GapKinds } from './display.ts';
 import type {
     ContentItem, FontTable, GlyphMetrics, Link, Mark, Paragraph, Stream, TexNode,
 } from '../model.ts';
@@ -73,6 +74,28 @@ export interface InkItem { x1: number; x2: number; h: number; d: number }
 /** TeX's \predisplaysize from a line (sp) and the quad of its font. */
 export interface PreDisplaySize { w: number; quad: number }
 
+/** What laying out a text or display segment gives (text.ts, display.ts),
+ *  before the lines are stacked (document.ts). */
+export interface SegmentGeometry {
+    lines: Line[];
+    lrp: LinePlacement[];
+    meta?: (LineMeta | null)[];
+    gaps?: (number | null)[];
+    itemStarts?: number[];
+    W: number;
+    preDisplaySizeSp?: PreDisplaySize | null;
+    displayLeftSp?: number;
+    atSourceWidth?: boolean;
+    affine?: DisplayAffine;
+}
+/** How a display's width model was applied, for api.inspect: the measure
+ *  TeX compiled at, the one asked for, the narrowest its gaps allow, and the
+ *  one evaluated at (sp); each row's gap kinds and item as evaluated. */
+export interface DisplayAffine {
+    sourceWidthSp: number; targetSp: number; minWidthSp: number; evaluatedSp: number; floorSp: number;
+    kinds: GapKinds[]; items: ContentItem[];
+}
+
 /** What laying out one segment gives: its lines and its geometry (px). A
  *  segment whose layout is deferred has no lines yet, only the geometry
  *  its neighbours need (document.ts, the layout cache). */
@@ -96,8 +119,7 @@ export interface SegmentLayout {
     preDisplaySizeSp?: PreDisplaySize | null;
     displayLeftSp?: number;
     atSourceWidth?: boolean;
-    /** How a display's width model was applied (for api.inspect). */
-    affine?: unknown;
+    affine?: DisplayAffine;
     deferred?: boolean;
     /** Deferred by a quick reflow: its box keeps the old surface. */
     held?: boolean;

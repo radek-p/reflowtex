@@ -4,12 +4,12 @@
 import { ZOOM, useGlyphMetrics } from '../core.ts';
 import {
     displaySkipAdjust, layoutDisplaySegment, preDisplaySizeSp, updateDisplayOverflowCue,
-} from './display.js';
+} from './display.ts';
 import { lineProfile, minRequiredAdvance, texInterlineAdvance, texInterlineGlue } from './lines.ts';
 import { layoutStreamSegment } from './stream.js';
 import { keptHostBox } from '../../host/block-hosts.ts';
 import { blockKeyOf } from '../../host/host.ts';
-import { layoutTextSegment, segmentsOf } from './text.js';
+import { layoutTextSegment, segmentsOf } from './text.ts';
 import { svgEl } from '../sink.ts';
 import { held, linkTargets } from '../../host/links.js';
 import { quickLayout } from '../../runtime/blocks.js';
