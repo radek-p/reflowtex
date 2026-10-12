@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Bundles the viewer's modules (src/viewer/src/, entry index.js) into the one
+# Bundles the viewer's modules (src/viewer/src/, TypeScript, entry index.ts) into the one
 # classic script integrations ship, src/viewer/latex-viewer.js. The bundle is
 # committed, so site builders never need Node; maintainers run this (through
 # `make build-viewer`) after editing a module. Its second line records the
@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 sha=$(find src \( -name '*.js' -o -name '*.ts' \) | LC_ALL=C sort | while read -r f; do
         printf '%s\n' "$f"; cat "$f"; done | shasum -a 256 | cut -c1-64)
 
-npx --yes "esbuild@$ESBUILD_VERSION" src/index.js --bundle --format=iife \
+npx --yes "esbuild@$ESBUILD_VERSION" src/index.ts --bundle --format=iife \
     --charset=utf8 --legal-comments=none --log-level=warning \
     --outfile=latex-viewer.js.tmp
 

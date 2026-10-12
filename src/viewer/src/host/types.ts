@@ -514,6 +514,19 @@ export interface BlockMountOptions {
     displayFit?: 'natural' | 'column';
 }
 
+/** One entry of a block's outline (the viewer's README, Outline): sent as
+ *  `reflowtex:outline` (bubbling, detail { block, entries }) on the block
+ *  once it is laid out, and kept on it as `el.reflowtexOutline`. `id` is
+ *  its anchor element's id. */
+export interface OutlineItem {
+    kind: string;
+    env: string;
+    level: number;
+    number: string;
+    title: string;
+    id: string | null;
+}
+
 /** window.reflowtexBreak: another paragraph breaker, which a page may
  *  define (the viewer's README, Plugging in another paragraph breaker). It
  *  is given a paragraph's nodes, the measure (sp), the block's parameters
@@ -572,5 +585,9 @@ declare global {
         'reflowtex:host': CustomEvent<{ host: Host }>;
         /** Sent on document after live marks change (host.addMark). */
         'reflowtex:marks': CustomEvent<{ marks: LiveMark[] }>;
+    }
+    interface HTMLElement {
+        /** A block's outline, once it is laid out (OutlineItem). */
+        reflowtexOutline?: OutlineItem[];
     }
 }

@@ -8,24 +8,21 @@
 import { api } from '../runtime/page.ts';
 import { SP_TO_PX } from '../engine/core.ts';
 import { normalise, walk, matches, type AnchorSource, type Doc, type DocStream, type InstanceImpl } from './instances.ts';
-import { TypesetPartImpl, type BlockData } from './surface.ts';
+import { TypesetPartImpl } from './surface.ts';
+import type { BlockData } from '../runtime/block-data.ts';
 import './block-hosts.ts';
 import { defineKind, definedKinds } from './kinds.ts';
 import { clearSlotTexts, scopeOf, setSlotText, slotText } from './slots.ts';
 import { addMark, liveMarks, markHandle, rangesOf } from './marks.ts';
 import { getColorMaps, setColorMaps } from '../runtime/colour.ts';
-import { destroyBlock, mountBlock } from '../runtime/init.js';
+import { destroyBlock, mountBlock } from '../runtime/init.ts';
 import { blockData } from '../runtime/blocks.ts';
 import { applyFade, applyFit, displayFadeDefault, displayFadeOf, displayFitDefault, displayFitOf, fadesNow, forgetFade, forgetFit,
          revealInDisplay, setDisplayFadeDefault, setDisplayFadeOf, setDisplayFitDefault, setDisplayFitOf } from './displays.ts';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
 
-interface ViewerBlockData extends BlockData {
-    cache: { blockKey?: string } & Parameters<typeof revealInDisplay>[0];
-    /** Its name among its block's views, and what they share (init.js). */
-    view: string;
-    source: { views: ViewerBlockData[] };
-}
+/** A block's (a view's) data (runtime/block-data.ts). */
+type ViewerBlockData = BlockData;
 
 // A point in an SVG element's own coordinates, in the window's: through its
 // transform, as WebKit gives an empty or text element's box wrongly.

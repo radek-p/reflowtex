@@ -15,7 +15,7 @@ import { installLinks, installWidgetStates, pageLabels, viewSuffix } from '../ho
 import { applySlots, slotBlocks, forgetInstanceTexts, joinScope, setBlockScope } from '../host/slots.ts';
 import { viewAdded, viewRemoved } from '../host/marks.ts';
 import { copyLayer, dropLayer, layerOf } from './a11y.ts';
-import { installViewerStyles } from '../index.js';
+import { installViewerStyles } from '../index.ts';
 import {
     NATURAL_PROBE_PT, blockData, naturalWidthPt, reflowBlock, remeasureStreams, ro, scheduleFontRepaint, unobserveAll,
 } from './blocks.ts';
@@ -27,7 +27,14 @@ import { debugLog } from './page.ts';
 import { paramsFromEl } from './params.ts';
 import { observedBlocks, paintVisibleNow } from './visibility.ts';
 import { track } from './pending.ts';
+import type { BlockData, BlockSource } from './block-data.ts';
+import type { Doc, FontTable, TexNode } from '../engine/model.ts';
+import type { LayoutCache } from '../engine/layout/types.ts';
+import type { OutlineItem } from '../host/types.ts';
 // ── end of imports
+
+/** How long a block's set-up took (ms), and how many segments it painted. */
+interface InitTimes { decode: number; fonts: number; layout: number; paint: number; total: number; segTotal: number; segPainted: number }
 
 export let docSeq = 0;
 
@@ -35,14 +42,14 @@ export let docSeq = 0;
 
 // Hang each picture's payload on the node that draws it, once per block, so
 // the renderer never has to thread the document through every call.
-export function resolvePictures(doc) {
+export function resolvePictures(doc: Doc): void {
     const pics = doc.pictures;
     if (!pics || !pics.length) return;
-    const walk = nodes => {
+    const walk = (nodes: TexNode[]) => {
         for (const n of nodes) {
             if (n.type === 'picture' && n.picture) n.pic = pics[n.picture - 1];
-            for (const k of ['children', 'replace', 'pre', 'post']) {
-                if (n[k]) walk(n[k]);
+            for (const k of ['children', 'replace', 'pre', 'post'] as const) {
+                if (n[k]) walk(n[k]!);
             }
         }
     };
@@ -61,14 +68,15 @@ export function resolvePictures(doc) {
 // source: the compiled bytes, the fonts, the glyph metrics and pictures,
 // which nothing changes. Each view decodes its own working copy of the node
 // lists, which live text, widgets and line breaks change per view.
-function newSource(b64, doc, fontInfo, el) {
+function newSource(b64: string, doc: Doc, fontInfo: FontTable, el: HTMLElement): BlockSource {
     return { b64, glyph_metrics: doc.glyph_metrics, pictures: doc.pictures, fontInfo,
              layer: layerOf(el), views: [], seq: 0 };
 }
 
-/** @param {string | null} [scope] where its live texts are looked up first
- *  (host.mount's scope); undefined: the element's data-latex-scope, if any. */
-export async function initBlock(el, of = null, viewName = null, scope = undefined) {
+/** `scope`: where its live texts are looked up first (host.mount's scope);
+ *  undefined: the element's data-latex-scope, if any. */
+export async function initBlock(el: HTMLElement, of: BlockSource | null = null, viewName: string | null = null,
+                                scope: string | null | undefined = undefined): Promise<InitTimes> {
     const nodelistB64 = of ? of.b64 : el.dataset.nodelistB64;
     if (!nodelistB64) throw new Error('Missing data-nodelist-b64 attribute');
 
@@ -90,18 +98,19 @@ export async function initBlock(el, of = null, viewName = null, scope = undefine
     const params  = paramsFromEl(el);
     const natural = el.dataset.latexWidth === 'natural';
     let widthPt = natural ? NATURAL_PROBE_PT : el.dataset.latexWidth
-        ? parseInt(el.dataset.latexWidth)
+        ? parseInt(el.dataset.latexWidth!)
         : (el.clientWidth / ZOOM) || DEFAULT_WIDTH_PT;
     // bcs: Map(paraIdx → break candidates), built lazily. blockEl and relayout
     // are for the host API (block-hosts.ts): the block the layout's instances
     // belong to, and how to lay it out again when a host's edges change.
     // blockKey now, not at the first layout: widgets and texts are applied
     // before it, and find their instances by it.
-    const cache = { bcs: null, dom: null, layout: null, stats: null, blockEl: el, blockKey: newBlockKey(),
-                    relayout: () => { if (blockData.get(el)) { blockData.get(el).lastWidth = -1; reflowBlock(el); } } };
+    const cache: LayoutCache = { bcs: null, dom: null, layout: null, stats: null, blockEl: el, blockKey: newBlockKey(),
+                    relayout: () => { if (blockData.get(el)) { blockData.get(el)!.lastWidth = -1; reflowBlock(el); } } };
+    // (its source and its view's name follow)
     const data  = { doc, fontInfo, lastWidth: widthPt, lastAlign: params.align, params, cache, painted: false,
                     seq: ++docSeq, el,
-                    scope: scope !== undefined ? scope : (el.dataset.latexScope ?? null) };
+                    scope: scope !== undefined ? scope : (el.dataset.latexScope ?? null) } as BlockData;
     const source = data.source = of || newSource(nodelistB64, doc, fontInfo, el);
     // (a name not taken: a page may have named a view v2 itself)
     do source.seq++; while (!viewName && source.views.some(d => d.view === `v${source.seq}`));
@@ -148,8 +157,8 @@ export async function initBlock(el, of = null, viewName = null, scope = undefine
     // anchor element, which exists once the block is laid out – now. Also
     // kept on the element for a script that attaches later.
     if (doc.outline && doc.outline.length) {
-        const anchorId = label => label ? label + (cache.anchorSuffix || '') : null;
-        const entries = doc.outline.map(e => ({
+        const anchorId = (label: string | undefined) => label ? label + (cache.anchorSuffix || '') : null;
+        const entries = doc.outline.map((e): OutlineItem => ({
             kind: e.kind || '', env: e.env || '', level: e.level || 0,
             number: e.number || '', title: e.title || '',
             id: anchorId((doc.anchors || [])[(e.anchor || 0) - 1]),
@@ -170,8 +179,8 @@ export async function initBlock(el, of = null, viewName = null, scope = undefine
     ro.observe(el);
     // A segment is the paint unit: a run of consecutive text paragraphs, or a single
     // display. The rest are painted as they approach the viewport (segIO).
-    const segTotal   = cache.dom.segs.length;
-    const segPainted = cache.dom.segs.reduce((n, s) => n + (s.painted ? 1 : 0), 0);
+    const segTotal   = cache.dom!.segs.length;
+    const segPainted = cache.dom!.segs.reduce((n, s) => n + (s.painted ? 1 : 0), 0);
     return { decode: t1 - t0, fonts: t2 - t1, layout: t3 - t2, paint: t4 - t3,
              total: t4 - t0, segTotal, segPainted };
 }
@@ -180,7 +189,7 @@ export async function initBlock(el, of = null, viewName = null, scope = undefine
 // map, the viewer's styles and its page-wide handlers. Idempotent, so a block
 // mounted later (host.mount) on a page that had none finds it done.
 let installed = false;
-export function installPage() {
+export function installPage(): void {
     if (installed) return;
     installed = true;
     installColorMaps();
@@ -208,8 +217,8 @@ function watchFonts() {
 
 // One block at a time: a block asked for twice (init and host.mount) is
 // rendered once.
-const rendering = new WeakMap();        // el → the promise of its initBlock
-function renderOnce(el, scope = undefined) {
+const rendering = new WeakMap<Element, Promise<InitTimes | null>>();        // el → the promise of its initBlock
+function renderOnce(el: HTMLElement, scope: string | null | undefined = undefined): Promise<InitTimes | null> {
     if (blockData.get(el)) return Promise.resolve(null);
     let p = rendering.get(el);
     if (!p) { p = track('block set-up', initBlock(el, null, null, scope).finally(() => rendering.delete(el))); rendering.set(el, p); }
@@ -219,13 +228,9 @@ function renderOnce(el, scope = undefined) {
 /** host.mount: render one block element, added after the page loaded; with
  *  `of` (another block's data), a view of that block, named `viewName`;
  *  its texts looked up in `scope` first (undefined: data-latex-scope, or a
- *  view's block's scope).
- *  @param {HTMLElement} el
- *  @param {any} [of]
- *  @param {string | null} [viewName]
- *  @param {string | null} [scope]
- */
-export async function mountBlock(el, of = null, viewName = null, scope = undefined) {
+ *  view's block's scope). */
+export async function mountBlock(el: HTMLElement, of: BlockData | null = null, viewName: string | null = null,
+                                 scope: string | null | undefined = undefined): Promise<void> {
     installPage();
     if (of && !blockData.get(el) && !rendering.get(el)) {
         if (viewName && of.source.views.some(d => d.view === viewName))
@@ -242,8 +247,8 @@ export async function mountBlock(el, of = null, viewName = null, scope = undefin
     watchFonts();
 }
 
-export async function init() {
-    const blocks = [...document.querySelectorAll('[data-nodelist-b64]')];
+export async function init(): Promise<void> {
+    const blocks = [...document.querySelectorAll<HTMLElement>('[data-nodelist-b64]')];
     if (blocks.length === 0) return;
 
     const tStart = performance.now();
@@ -260,7 +265,7 @@ export async function init() {
                 + `(decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) `
                 + `– ${t.segPainted}/${t.segTotal} segments painted`);
         }
-        catch (e) { el.textContent = `Render error: ${e.message}`; console.error(e); }
+        catch (e) { el.textContent = `Render error: ${(e as Error).message}`; console.error(e); }
     }
     const segDeferred = segTotal - segPainted;
     debugLog(`[latex-viewer] ${blocks.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms `
@@ -270,7 +275,7 @@ export async function init() {
 }
 
 /** block.destroy: undo everything the block was given, and forget it. */
-export function destroyBlock(el) {
+export function destroyBlock(el: HTMLElement): void {
     const data = blockData.get(el);
     if (!data) return;
     closeFootnote();

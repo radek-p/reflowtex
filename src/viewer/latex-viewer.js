@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 ec0b40bd290ea9768712236150cd19ee3bf856c81d78f40817ae057225d4e1c2
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 d3aed3ed4075e31e2318eea8d22b2c1a535d758831e789b02cfff785dc30ab7c
 'use strict';
 "use strict";
 (() => {
@@ -6149,7 +6149,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     }
   }
 
-  // src/runtime/init.js
+  // src/runtime/init.ts
   var docSeq = 0;
   function resolvePictures(doc) {
     const pics = doc.pictures;
@@ -6387,7 +6387,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     if (!el.dataset.nodelistB64) delete el.dataset.latexView;
   }
 
-  // src/index.js
+  // src/index.ts
   function installViewerStyles() {
     const st = document.createElement("style");
     st.textContent = `
