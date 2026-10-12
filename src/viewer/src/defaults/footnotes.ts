@@ -4,19 +4,27 @@
 import { blockOf } from '../host/host.ts';
 import { kindDef } from '../host/kinds.ts';
 import { BLOCK_SELECTOR } from '../runtime/page.ts';
+import type { Instance, Surface } from '../host/types.ts';
+import type { LayoutCache } from '../engine/layout/types.ts';
 // ── end of imports
+
+/** An element that opens a stream in the popover: a glyph, or a margin mark. */
+type Source = HTMLElement | SVGElement;
+/** A box on screen (px). */
+export type ScreenRect = Pick<DOMRect, 'left' | 'top' | 'right' | 'bottom' | 'width' | 'height'>;
+interface Open { block: Element; id: string; anchor: Source }
 
 // ── Footnotes ────────────────────────────────────────────────────────────────
 // Footnote bodies are ordinary ContentItem streams stored outside the document's
 // main flow. Hover/focus previews them; click pins the popover for touch users and
 // so links/citations inside the fully rendered LaTeX body remain interactive.
-export let footnotePop = null;
-export let footnoteBody = null;
-export let footnoteArrow = null;
-export let pinnedFootnote = null;   // { block, id, anchor } or null
-export let hoverFootnote = null;
+export let footnotePop: HTMLDivElement | null = null;
+export let footnoteBody: HTMLDivElement | null = null;
+export let footnoteArrow: HTMLDivElement | null = null;
+export let pinnedFootnote: Open | null = null;   // { block, id, anchor } or null
+export let hoverFootnote: Open | null = null;
 
-export function installFootnotes() {
+export function installFootnotes(): void {
     if (footnotePop) return;
     const style = document.createElement('style');
     style.textContent = `
@@ -44,16 +52,16 @@ export function installFootnotes() {
     document.head.appendChild(style);
 
     footnotePop = document.createElement('div');
-    footnotePop.id = 'latex-footnote-pop';
-    footnotePop.setAttribute('role', 'tooltip');
+    footnotePop!.id = 'latex-footnote-pop';
+    footnotePop!.setAttribute('role', 'tooltip');
     footnoteArrow = document.createElement('div');
-    footnoteArrow.className = 'latex-footnote-arrow';
+    footnoteArrow!.className = 'latex-footnote-arrow';
     footnoteBody = document.createElement('div');
-    footnoteBody.className = 'latex-block latex-footnote-content';
-    footnotePop.append(footnoteArrow, footnoteBody);
-    document.body.appendChild(footnotePop);
+    footnoteBody!.className = 'latex-block latex-footnote-content';
+    footnotePop!.append(footnoteArrow!, footnoteBody!);
+    document.body.appendChild(footnotePop!);
 
-    const sourceAt = t => (t && t.closest) ? t.closest('[data-footnote]') : null;
+    const sourceAt = (t: EventTarget | null) => (t && (t as Element).closest) ? (t as Element).closest<Source>('[data-footnote]') : null;
     document.addEventListener('pointerover', e => {
         if (pinnedFootnote) return;
         const el = sourceAt(e.target);
@@ -73,20 +81,20 @@ export function installFootnotes() {
         }
     });
     document.addEventListener('focusout', e => {
-        if (!pinnedFootnote && !footnotePop.contains(e.relatedTarget)) closeFootnote();
+        if (!pinnedFootnote && !footnotePop!.contains(e.relatedTarget as Node | null)) closeFootnote();
     });
     document.addEventListener('click', e => {
         const el = sourceAt(e.target);
         if (el) {
             e.preventDefault();
             const block = el.closest(BLOCK_SELECTOR);
-            const id = el.dataset.footnote;
+            const id = el.dataset.footnote!;
             if (pinnedFootnote && pinnedFootnote.block === block && pinnedFootnote.id === id) {
                 closeFootnote();
             } else {
                 openFootnote(el, true);
             }
-        } else if (pinnedFootnote && !footnotePop.contains(e.target)) {
+        } else if (pinnedFootnote && !footnotePop!.contains(e.target as Node | null)) {
             closeFootnote();
         }
     });
@@ -114,12 +122,12 @@ export function installFootnotes() {
     window.addEventListener('resize', reflow);
 }
 
-export function footnoteGroupRect(el) {
+export function footnoteGroupRect(el: Source): ScreenRect {
     const id = el.dataset.footnote;
-    const same = e => e && e.dataset && e.dataset.footnote === id;
-    const kin = [el];
-    for (let p = el.previousElementSibling; same(p); p = p.previousElementSibling) kin.push(p);
-    for (let n = el.nextElementSibling; same(n); n = n.nextElementSibling) kin.push(n);
+    const same = (e: Element | null) => e && (e as Source).dataset && (e as Source).dataset.footnote === id;
+    const kin: Element[] = [el];
+    for (let p = el.previousElementSibling; same(p); p = p!.previousElementSibling) kin.push(p!);
+    for (let n = el.nextElementSibling; same(n); n = n!.nextElementSibling) kin.push(n!);
     let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
     for (const k of kin) {
         const b = glyphScreenRect(k);
@@ -135,81 +143,81 @@ export function footnoteGroupRect(el) {
 // the page defines one (host.define: a NoteHost of type 'popover', undone
 // when the popover shows something else or closes), else its body laid out
 // at the popover's width.
-let shown = null;              // { key, instance, surface?, undo? }
+let shown: { key: string; instance: Instance; surface?: Surface; undo?: (() => void) | null } | null = null;
 function undraw() {
     if (!shown) return;
     if (shown.undo) { try { shown.undo(); } catch (e) { console.error('[latex-viewer] popover:', e); } }
     if (shown.surface) shown.surface.dispose();
     shown = null;
 }
-export function renderFootnote(block, id) {
+export function renderFootnote(block: Element, id: string): boolean {
     const b = blockOf(block);
     const instance = b && b.find(`${b.key}/s${Number(id)}`);
     if (!instance || instance.placement !== 'detached') return false;
     const widthPx = Math.min(420, Math.max(220, document.documentElement.clientWidth - 32));
-    footnoteBody.style.width = widthPx + 'px';
+    footnoteBody!.style.width = widthPx + 'px';
     const key = instance.id;
     if (shown && shown.key === key) {                 // the same again: a new width at most
         if (shown.surface) shown.surface.setWidth(widthPx);
         return true;
     }
     undraw();
-    footnoteBody.replaceChildren();
+    footnoteBody!.replaceChildren();
     shown = { key, instance };
     const def = kindDef(instance.kind);
     if (def) {
         try {
-            const u = def.render(instance, { type: 'popover', el: footnoteBody, instance, setEdges() {} });
+            const u = def.render(instance, { type: 'popover', el: footnoteBody!, instance, setEdges() {} });
             shown.undo = typeof u === 'function' ? u : null;
             return true;
         } catch (e) {
             console.error(`[latex-viewer] kind "${instance.kind}": render failed, drawn by default:`, e);
-            footnoteBody.replaceChildren();
+            footnoteBody!.replaceChildren();
         }
     }
     const body = instance.part('body');
-    if (body && body.type === 'typeset') shown.surface = body.mount(footnoteBody, { width: widthPx });
+    if (body && body.type === 'typeset') shown.surface = body.mount(footnoteBody!, { width: widthPx });
     return true;
 }
 
-export function positionFootnote(anchor) {
+export function positionFootnote(anchor: Source): void {
     const r = footnoteGroupRect(anchor);
     const gap = 9, vw = document.documentElement.clientWidth, vh = window.innerHeight;
-    const pw = footnotePop.offsetWidth, ph = footnotePop.offsetHeight;
+    const pw = footnotePop!.offsetWidth, ph = footnotePop!.offsetHeight;
     const cx = r.left + r.width / 2;
     const left = Math.max(8, Math.min(cx - pw / 2, vw - pw - 8));
     const above = (r.bottom + gap + ph > vh) && (r.top - gap - ph > 0);
     const rawTop = above ? r.top - ph - gap : r.bottom + gap;
     const top = Math.max(8, Math.min(rawTop, vh - ph - 8));
-    footnotePop.classList.toggle('latex-footnote-above', above);
-    footnotePop.style.left = left + 'px';
-    footnotePop.style.top = top + 'px';
-    const box = footnotePop.getBoundingClientRect();
-    footnoteArrow.style.left = Math.max(12, Math.min(box.width - 12, cx - box.left)) + 'px';
+    footnotePop!.classList.toggle('latex-footnote-above', above);
+    footnotePop!.style.left = left + 'px';
+    footnotePop!.style.top = top + 'px';
+    const box = footnotePop!.getBoundingClientRect();
+    footnoteArrow!.style.left = Math.max(12, Math.min(box.width - 12, cx - box.left)) + 'px';
 }
 
-export function openFootnote(anchor, pin) {
+export function openFootnote(anchor: Source, pin: boolean): void {
     const block = anchor.closest(BLOCK_SELECTOR);
-    const id = anchor.dataset.footnote;
+    const id = anchor.dataset.footnote!;
     if (!block || !renderFootnote(block, id)) return;
-    footnotePop.classList.add('latex-footnote-open');
-    footnotePop.classList.toggle('latex-footnote-pinned', pin);
+    footnotePop!.classList.add('latex-footnote-open');
+    footnotePop!.classList.toggle('latex-footnote-pinned', pin);
     positionFootnote(anchor);
     const active = { block, id, anchor };
     if (pin) { pinnedFootnote = active; hoverFootnote = null; }
     else hoverFootnote = active;
 }
 
-export function closeFootnote() {
+export function closeFootnote(): void {
     pinnedFootnote = null; hoverFootnote = null;
     undraw();
-    if (footnotePop) footnotePop.classList.remove(
+    if (footnotePop) footnotePop!.classList.remove(
         'latex-footnote-open', 'latex-footnote-pinned', 'latex-footnote-above');
 }
 
-export function registerFootnoteSource(el, id) {
+export function registerFootnoteSource(el: Source, id: number): void {
     el.classList.add('latex-footnote-source');
-    el.dataset.footnote = id;
+    el.dataset.footnote = String(id);
     el.setAttribute('role', 'button');
     el.setAttribute('tabindex', '0');
     el.setAttribute('aria-describedby', 'latex-footnote-pop');
@@ -219,7 +227,7 @@ export function registerFootnoteSource(el, id) {
 // Document.streams): a footnote's marker, or any glyph a package points at a
 // stream of its own (a term's definition, say). It opens the stream in the
 // popover above, drawn by its kind.
-export function registerStreamSource(el, idx, cache) {
+export function registerStreamSource(el: Source, idx: number, cache: LayoutCache): void {
     if ((cache.streams || [])[idx - 1]) registerFootnoteSource(el, idx);
 }
 
@@ -230,12 +238,12 @@ export function registerStreamSource(el, idx, cache) {
 // build the box from those (width ~half an em, height from the font size – rough
 // is fine, it only anchors a popover) and map it through getScreenCTM(), which
 // folds in every ancestor transform and the SVG's own screen position.
-export function glyphScreenRect(el) {
-    const svg = el.ownerSVGElement;
-    const ctm = el.getScreenCTM && el.getScreenCTM();
-    const x = parseFloat(el.getAttribute('x'));
-    const y = parseFloat(el.getAttribute('y'));
-    const fs = parseFloat(el.getAttribute('font-size'));
+export function glyphScreenRect(el: Element): ScreenRect {
+    const svg = (el as SVGGraphicsElement).ownerSVGElement;
+    const ctm = (el as SVGGraphicsElement).getScreenCTM && (el as SVGGraphicsElement).getScreenCTM();
+    const x = parseFloat(el.getAttribute('x')!);
+    const y = parseFloat(el.getAttribute('y')!);
+    const fs = parseFloat(el.getAttribute('font-size')!);
     if (!svg || !ctm || !svg.createSVGPoint || !isFinite(x) || !isFinite(y) || !isFinite(fs)) {
         return el.getBoundingClientRect();
     }

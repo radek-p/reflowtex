@@ -12,7 +12,7 @@
 // drawn later (as the reader nears them) have it too. A glyph's place is
 // its position in the block's text: every glyph, in reading order (glyphIndex
 // below), which is the same on every load of the same document.
-import { glyphScreenRect } from '../defaults/footnotes.js';
+import { glyphScreenRect } from '../defaults/footnotes.ts';
 import { allData, type BlockData, type BlockSource } from '../runtime/block-data.ts';
 import type { ContentItem, Doc, TexNode } from '../engine/model.ts';
 import { markDirty } from '../runtime/blocks.ts';

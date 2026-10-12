@@ -2,7 +2,7 @@
 // The painter's sink (render.js): it draws what renderNodes walks into a
 // segment's <svg>, reusing the elements of the previous paint.
 
-import { registerStreamSource } from '../defaults/footnotes.js';
+import { registerStreamSource } from '../defaults/footnotes.ts';
 import { BREAK_NODES, SP_TO_PX, gD, gH, gW } from './core.ts';
 import { affineOf } from './render.ts';
 import { registerLinkGlyph } from '../host/links.ts';

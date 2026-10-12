@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 ac913b274e16c9e348f262115b7ac593e0830df783dc49ac7c1d5f2126f78892
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 23bf6016b2403cd8a1e9554c3bf6f187374d33c0312a3de216400ed31db53f32
 'use strict';
 "use strict";
 (() => {
@@ -5661,7 +5661,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     document.dispatchEvent(new CustomEvent("reflowtex:host", { detail: { host } }));
   }
 
-  // src/defaults/footnotes.js
+  // src/defaults/footnotes.ts
   var footnotePop = null;
   var footnoteBody = null;
   var footnoteArrow = null;
@@ -5861,7 +5861,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
   }
   function registerFootnoteSource(el, id) {
     el.classList.add("latex-footnote-source");
-    el.dataset.footnote = id;
+    el.dataset.footnote = String(id);
     el.setAttribute("role", "button");
     el.setAttribute("tabindex", "0");
     el.setAttribute("aria-describedby", "latex-footnote-pop");

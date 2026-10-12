@@ -18,12 +18,13 @@
 // marks only) and --latex-margin-gap (from the text); else the margin is what
 // the window leaves beside the block, up to MARGIN.max. Placed again after
 // every layout, drawing and resize.
-import { registerFootnoteSource } from './footnotes.js';
+import { registerFootnoteSource } from './footnotes.ts';
 import { allData, type BlockData } from '../runtime/block-data.ts';
 import { blockOf } from '../host/host.ts';
 import { kindDef, onKindChange } from '../host/kinds.ts';
 import { surfacesOf, type SurfaceImpl } from '../host/surface.ts';
 import type { Instance, KindDef, NoteHost, Surface } from '../host/types.ts';
+import type { InstanceImpl } from '../host/instances.ts';
 import { frame } from '../runtime/pending.ts';
 
 export const MARGIN = { gap: 28, min: 150, max: 260 };   // px, by default
@@ -127,7 +128,7 @@ export function placeMarginNotes(data: BlockData | undefined) {
             mark.className = 'latex-margin-mark';
             mark.textContent = '*';
             mark.setAttribute('aria-label', 'Note');
-            registerFootnoteSource(mark, (a as any).stream);
+            registerFootnoteSource(mark, (a as InstanceImpl).stream);
             it = { note, mark, width: 0, def: null, undo: null, surface: null, edges: {} };
             M.items.set(a.id, it);
             M.layer.append(note, mark);
