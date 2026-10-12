@@ -114,16 +114,16 @@ export const reading: ReadingState & { setZoom(z: number): void; selection: Sign
         reading.selection!.value = sel;
     },
     setReader(on: boolean) {
-        const api = (window.reflowtex as any);
+        const api = window.reflowtex;
         if (api?.setScreenReaderMode) api.setScreenReaderMode(on);      // (it says so: the listener below)
     },
     setDebug(on: boolean) {
-        const api = (window.reflowtex as any);
+        const api = window.reflowtex;
         if (api?.setAccessibleDebug) api.setAccessibleDebug(on);        // (it says so: the listener below)
     },
     setMath(m: string) {
-        const api = (window.reflowtex as any);
-        if (api?.setAccessibleMath) api.setAccessibleMath(m);        // (it says so: the listener below)
+        const api = window.reflowtex;
+        if (api?.setAccessibleMath) api.setAccessibleMath(m as 'mathml' | 'spoken');        // (it says so: the listener below)
         else { save(KEYS.math, m); reading.math.value = m; }
     },
 };
@@ -195,8 +195,9 @@ export interface ReadingOptionsProps {
 
 /** The controls: text size, colour theme, (column width), (inspector). */
 export function ReadingOptions({ state = reading, width = false, selection = false, inspect = true, debug = false, themes = state.themes, onDone, class: cls }: ReadingOptionsProps) {
-    const inspector = (window.reflowtex as any)?.inspector;
-    const api = window.reflowtex as any;
+    // (the inspector's API, when the page has it: src/inspector/README.md)
+    const inspector = window.reflowtex?.inspector as { open(): unknown; shortcut?: string } | undefined;
+    const api = window.reflowtex;
     const showDebug = debug && state === reading && !!api?.setAccessibleDebug && !!document.querySelector('.latex-a11y');
     return (
         <div class={cls ? `rtx-reading ${cls}` : 'rtx-reading'}>
