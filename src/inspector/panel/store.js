@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex inspector – GENERATED from src/inspector/src/panel/store.js by esbuild (make build-inspector); sources sha256 152c7e31fa146b913af49077e450edf32e78e5c3228f524e44f6707e407fd2e6
+// reflowtex inspector – GENERATED from src/inspector/src/panel/store.js by esbuild (make build-inspector); sources sha256 b30f95facc87229bc842a9308d355dd27aedb7d8d243cf0bee13c268415c7181
 import { signal } from "../vendor/preact.js";
 const STORE = "reflowtex-inspector";
 const keyOf = (k) => k ? `${STORE}-${k}` : STORE;
