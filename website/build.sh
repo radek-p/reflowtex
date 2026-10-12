@@ -92,7 +92,8 @@ fi
 #    show.
 rm -rf "$SITE/static/render-tests"
 mkdir -p "$SITE/static/render-tests"
-cp "$REPO/tests/render/report/app.js" "$REPO/tests/render/report/report.css" "$SITE/static/render-tests/"
+cp "$REPO/tests/render/report/report.css" "$SITE/static/render-tests/"
+node "$REPO/tests/render/report/build.ts" "$SITE/static/render-tests/app.js"
 sed -e "s#\"inspector/#\"../inspector/$INSPECTOR_V/#g" \
     -e "s#</body>#<script src=\"../privacy-notice.js\" defer></script>\n</body>#" \
     "$REPO/tests/render/report/index.html" > "$SITE/static/render-tests/index.html"

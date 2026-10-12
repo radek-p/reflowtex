@@ -41,3 +41,15 @@ test('the index is the same file for the same results', async () => {
     assert.deepEqual(readFileSync(join(build, 'report.json')), first);
   } finally { rmSync(build, { recursive: true, force: true }); }
 });
+
+// The report page's script is built from app.ts when served (serve.ts) and for
+// the site (website/build.sh): plain JavaScript, a module, with no TypeScript
+// left in it and no import but the inspector's Preact, loaded at run time.
+test('the report page script is app.ts without its types', async () => {
+  const { reportScript } = await import('../render/report/build.ts');
+  const js = reportScript();
+  assert.match(js, /await import\(new URL\(`\$\{INSPECTOR\}vendor\/preact\.js`/);
+  assert.doesNotMatch(js, /^\s*(import|export) /m, 'its imports are types only');
+  assert.doesNotMatch(js, /\binterface \w+ \{|: (number|string|boolean)\b[,;)]/, 'no type syntax left');
+  assert.match(js, /render\(html`<\$\{App\}\/>`/);
+});

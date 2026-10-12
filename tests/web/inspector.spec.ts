@@ -17,7 +17,7 @@ test('text in surfaces is in the tree', async ({ openPage }) => {
   const page = await openPage('accordion-v2');
   await agent(page);
   const r = await page.evaluate(() => {
-    const I = window.__rtxInspector, [b] = I.blocks();
+    const I = window.__rtxInspector!, [b] = I.blocks();
     const rows = I.children(b.id), surfaces = rows.filter((x: any) => x.kind === 'side');
     const first = surfaces[0] ? I.children(surfaces[0].id) : [];
     return { labels: surfaces.map((s: any) => s.label), segs: first.length };

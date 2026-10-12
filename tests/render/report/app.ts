@@ -9,32 +9,64 @@
 // is pinned as dom-dump.ts pins it, where the viewer also draws 2 px per pt.
 // Relative URLs throughout: the report is served at / by serve.ts, and under the
 // site's path on the website (website/build.sh).
-const INSPECTOR = document.querySelector('meta[name="rr-inspector"]').content;
+//
+// Built into app.js beside index.html (build.ts): by serve.ts, and by
+// website/build.sh for the site.
+import type { ComponentChildren, RefObject } from 'preact';
+import type { Result } from './results.ts';
+import type { InspectorApi } from '../../../src/inspector/src/protocol.ts';
+
+/** What the report reads of a comparison (vector.json, written by
+ *  tools/pageless-pdf/vector-compare.ts): positions in pt. */
+interface Vector {
+    error?: string;
+    hsize_pt?: number;
+    margin_pt?: number;
+    glyphs?: { strip: number; viewer: number; matched: number };
+    matched?: { x: number; y: number; w: number; size: number; text: string; font?: string; dx: number; dy: number }[];
+    viewer_unmatched?: { x: number; y: number; w: number; size: number; text: string }[];
+    strip_unmatched?: { x: number; y: number }[];
+    rules?: { x?: number; y: number; w?: number; h?: number; unmatched?: boolean; off: number; dx: number; dy: number }[];
+    rules_missing?: { x: number; y: number; w?: number; h?: number }[];
+}
+/** A box in pt. */
+interface Box { x: number; y: number; w: number; h: number }
+/** Something that does not match: its kind, a label, its place and note,
+ *  and its box on either side. */
+interface Item { k: string; what: string; y: number; note: string; off?: number; allowed?: boolean; viewer?: Box; strip?: Box }
+/** The TeX side and the browser's. */
+type Side = 'left' | 'right';
+type Marks = ReturnType<typeof makeMarks>;
+/** What the tested page offers the report (the website's page script). */
+interface PageHooks { __setTheme?: (theme: string) => void; __zoom?: (step: number) => void }
+
+const INSPECTOR = document.querySelector<HTMLMetaElement>('meta[name="rr-inspector"]')!.content;
+// (the inspector's copy of Preact, htm and Signals: src/inspector/src/vendor/preact.d.ts)
 const { html, render, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } =
-    await import(new URL(`${INSPECTOR}vendor/preact.js`, document.baseURI).href);
+    await import(new URL(`${INSPECTOR}vendor/preact.js`, document.baseURI).href) as typeof import('../../../src/inspector/src/vendor/preact.js');
 
 const BUILD = 'build/';
 const PX_PER_PT = 2;
 const RED = '#d93025', AMBER = '#e37400', BLUE = '#0b57d0';
 
 // ── Data ───────────────────────────────────────────────────────────────────────
-const getJson = async url => { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
-const f3 = x => x.toFixed(3);
-const signed = x => `${x >= 0 ? '+' : ''}${f3(x)}`;
-const widthLabel = e => (e ? `${e > 0 ? '+' : ''}${e} pt` : 'own width');
+const getJson = async <T>(url: string): Promise<T> => { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
+const f3 = (x: number): string => x.toFixed(3);
+const signed = (x: number): string => `${x >= 0 ? '+' : ''}${f3(x)}`;
+const widthLabel = (e: number): string => (e ? `${e > 0 ? '+' : ''}${e} pt` : 'own width');
 
 /** A glyph's box from its origin: `size` pt tall (the font's), `w` wide – the
  *  browser's measure of it; a picture's glyph has neither. */
-function glyphBox(x, y, w, size) {
+function glyphBox(x: number, y: number, w: number, size: number): Box {
     const s = size || 7, ww = w || s * .55;
     return { x, y: y - s * .78, w: ww, h: s };
 }
-const shift = (b, dx, dy) => ({ ...b, x: b.x + dx, y: b.y + dy });
+const shift = (b: Box, dx: number, dy: number): Box => ({ ...b, x: b.x + dx, y: b.y + dy });
 
 /** Everything that does not match at these thresholds, top to bottom: each
  *  with its box on the TeX side (`strip`), the browser's (`viewer`), or both. */
-function mismatches(v, glyphThr, ruleThr, rulesAllowed) {
-    const out = [];
+function mismatches(v: Vector, glyphThr: number, ruleThr: number, rulesAllowed: number): Item[] {
+    const out: Item[] = [];
     for (const m of v.matched ?? []) {
         const off = Math.max(Math.abs(m.dx), Math.abs(m.dy));
         if (off <= glyphThr) continue;
@@ -46,7 +78,7 @@ function mismatches(v, glyphThr, ruleThr, rulesAllowed) {
     for (const p of v.strip_unmatched ?? [])
         out.push({ k: '−', what: 'glyph TeX only', y: p.y, note: 'not drawn', strip: glyphBox(p.x, p.y, 0, 0) });
     for (const r of v.rules ?? []) {
-        const b = { x: r.x ?? 0, y: r.y, w: r.w ?? 1, h: r.h ?? 1 };
+        const b: Box = { x: r.x ?? 0, y: r.y, w: r.w ?? 1, h: r.h ?? 1 };
         if (r.unmatched) out.push({ k: '+', what: 'rule browser only', y: r.y, note: `${r.w} × ${r.h}`, viewer: b });
         else if (r.off > ruleThr) out.push({ k: 'r', what: 'rule', y: r.y, note: `corners ${f3(r.off)}`, off: r.off, viewer: b, strip: shift(b, r.dx, r.dy) });
     }
@@ -54,13 +86,13 @@ function mismatches(v, glyphThr, ruleThr, rulesAllowed) {
     for (const r of missing)
         out.push({ k: '−', what: 'rule TeX only', y: r.y, note: 'not drawn', allowed: missing.length <= rulesAllowed,
                    strip: { x: r.x, y: r.y, w: r.w ?? 2, h: r.h ?? 2 } });
-    const x = it => (it.viewer ?? it.strip).x;
+    const x = (it: Item) => (it.viewer ?? it.strip)!.x;
     return out.sort((a, b) => a.y - b.y || x(a) - x(b));
 }
 
 /** The boxes of one side as SVG markup, in pt: at least 3 pt across and a
  *  point clear of what they mark, so a hairline or a dot shows. */
-function boxesSvg(items, side, sel) {
+function boxesSvg(items: Item[], side: 'viewer' | 'strip', sel: number): string {
     let s = '';
     items.forEach((it, i) => {
         const b = it[side];
@@ -76,7 +108,7 @@ function boxesSvg(items, side, sel) {
 }
 
 // ── Icons (the inspector's: 16px on a 20px grid) ─────────────────────────────────
-const Svg = ({ children }) => html`<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">${children}</svg>`;
+const Svg = ({ children }: { children?: ComponentChildren }) => html`<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">${children}</svg>`;
 const stroke = { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
 const IconPrev = () => html`<${Svg}><path d="M12.5 4.5L7 10l5.5 5.5" ...${stroke}/><//>`;
 const IconNext = () => html`<${Svg}><path d="M7.5 4.5L13 10l-5.5 5.5" ...${stroke}/><//>`;
@@ -87,49 +119,52 @@ const IconInspect = () => html`<${Svg}>
     <path d="M10 10l8 3.1-3.3 1.4-1.4 3.4z" fill="currentColor"/><//>`;
 const IconReload = () => html`<${Svg}><path d="M15.5 10a5.5 5.5 0 1 1-1.6-3.9M15.5 3.5v3h-3" ...${stroke}/><//>`;
 
-const Seg = ({ value, options, onChange, title }) => html`<span class="seg" role="group" aria-label=${title} title=${title}>
+const Seg = <V,>({ value, options, onChange, title }: { value: V; options: [V, string][]; onChange: (v: V) => void; title: string }) => html`<span class="seg" role="group" aria-label=${title} title=${title}>
     ${options.map(([v, label]) => html`<button type="button" aria-pressed=${String(v === value)} onClick=${() => onChange(v)}>${label}</button>`)}</span>`;
 
 /** An error threshold in pt: what is further off is listed and boxed. Typed
  *  freely, applied when it is a number. */
-function Threshold({ label, what, value, fallback, onChange }) {
+function Threshold({ label, what, value, fallback, onChange }:
+        { label: string; what: string; value: number; fallback: number; onChange: (n: number) => void }) {
     const [text, setText] = useState(String(value));
     useEffect(() => setText(String(value)), [value]);
     return html`<label class="field" title=${`${what} further off than this (pt) are listed and boxed; the case's ceiling is ${fallback}`}>${label}
-        <input value=${text} inputmode="decimal" onInput=${e => { setText(e.target.value); const n = Number(e.target.value); if (e.target.value !== '' && n >= 0) onChange(n); }}/>
+        <input value=${text} inputmode="decimal" onInput=${(e: Event & { target: HTMLInputElement }) => { setText(e.target.value); const n = Number(e.target.value); if (e.target.value !== '' && n >= 0) onChange(n); }}/>
         ${value !== fallback ? html`<button type="button" class="reset" title="The case's ceiling" onClick=${() => onChange(fallback)}>↺</button>` : null}</label>`;
 }
-const IconLock = ({ on }) => html`<${Svg}><rect x="4.5" y="9" width="11" height="8" rx="1.5" ...${stroke}/>
+const IconLock = ({ on }: { on: boolean }) => html`<${Svg}><rect x="4.5" y="9" width="11" height="8" rx="1.5" ...${stroke}/>
     <path d=${on ? 'M7 9V6.5a3 3 0 0 1 6 0V9' : 'M7 9V6.5a3 3 0 0 1 5.8-1.1'} ...${stroke}/><//>`;
 const IconView = () => html`<${Svg}><rect x="2.5" y="4" width="15" height="12" rx="1.5" ...${stroke}/><path d="M10 4v12" ...${stroke}/><//>`;
 const Caret = () => html`<svg viewBox="0 0 8 8" width="8" height="8" aria-hidden="true"><path d="M1 2.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`;
 
 // ── Settings, kept in this browser ─────────────────────────────────────────────
-const stored = (key, fallback) => { try { return localStorage.getItem(`render-report.${key}`) ?? fallback; } catch { return fallback; } };
-const store = (key, v) => { try { localStorage.setItem(`render-report.${key}`, v); } catch { /* not kept */ } };
-function useSetting(key, fallback) {
+const stored = (key: string, fallback: string): string => { try { return localStorage.getItem(`render-report.${key}`) ?? fallback; } catch { return fallback; } };
+const store = (key: string, v: string): void => { try { localStorage.setItem(`render-report.${key}`, v); } catch { /* not kept */ } };
+function useSetting(key: string, fallback: string): [string, (x: string) => void] {
     const [v, set] = useState(() => stored(key, fallback));
-    return [v, x => { store(key, x); set(x); }];
+    return [v, (x: string) => { store(key, x); set(x); }];
 }
 // The theme: index.html sets data-theme before the first paint; this follows
 // the choice, and the system's while it is 'auto'.
-function applyTheme(choice) {
+function applyTheme(choice: string): void {
     const dark = choice === 'dark' || (choice === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 }
 
 /** The View menu: theme, split, scroll lock. */
-function ViewMenu({ theme, setTheme, colours, setColours, split, setSplit, lock, setLock }) {
+function ViewMenu({ theme, setTheme, colours, setColours, split, setSplit, lock, setLock }: {
+        theme: string; setTheme: (t: string) => void; colours: string; setColours: (c: string) => void;
+        split: string; setSplit: (s: string) => void; lock: boolean; setLock: (on: boolean) => void }) {
     const [open, setOpen] = useState(false);
-    const box = useRef(null);
+    const box = useRef<HTMLSpanElement>(null);
     useEffect(() => {
         if (!open) return;
-        const away = e => { if (!box.current.contains(e.target)) setOpen(false); };
-        const esc = e => { if (e.key === 'Escape') setOpen(false); };
+        const away = (e: PointerEvent) => { if (!box.current!.contains(e.target as Node)) setOpen(false); };
+        const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
         addEventListener('pointerdown', away, true); addEventListener('keydown', esc);
         return () => { removeEventListener('pointerdown', away, true); removeEventListener('keydown', esc); };
     }, [open]);
-    const Radio = ({ value, set, v, label, hint }) => html`<button type="button" role="menuitemradio" aria-checked=${String(value === v)}
+    const Radio = ({ value, set, v, label, hint }: { value: string; set: (v: string) => void; v: string; label: string; hint?: string }) => html`<button type="button" role="menuitemradio" aria-checked=${String(value === v)}
         onClick=${() => set(v)} title=${hint ?? ''}><span class="check">${value === v ? '✓' : ''}</span>${label}</button>`;
     return html`<span class="menuwrap" ref=${box}>
         <button class="ib text" aria-haspopup="menu" aria-expanded=${String(open)} title="Theme, split and scrolling" onClick=${() => setOpen(!open)}>
@@ -161,8 +196,8 @@ function ViewMenu({ theme, setTheme, colours, setColours, split, setSplit, lock,
 const TAIL_PT = 36;
 
 /** An image's size in pt (2 px per pt): null while it loads, false if missing. */
-function useImageSize(src) {
-    const [size, setSize] = useState(null);
+function useImageSize(src: string | null): [number, number] | null | false {
+    const [size, setSize] = useState<[number, number] | null | false>(null);
     useEffect(() => {
         setSize(null);
         if (!src) return;
@@ -186,27 +221,29 @@ function useImageSize(src) {
 // wide, on device pixels (crosshair()), so it is sharp on any screen.
 const CROSSHAIR_OFFSET = 5;                    // CSS px, up and left of the pointer's tip
 const ARM_FROM = 3, ARM_TO = 10;               // CSS px from the point
-function crosshair() {
+function crosshair(): string {
     // (the point is a pixel's middle: the arms end on pixel edges, half a pixel on)
     const w = 1 / devicePixelRatio, a = ARM_FROM + w / 2, b = ARM_TO + w / 2;
     return `<path d="M${-b} 0H${-a}M${a} 0H${b}M0 ${-b}V${-a}M0 ${a}V${b}" fill="none" stroke="#fff" stroke-width="${w}"/>` +
         `<rect x="${-w / 2}" y="${-w / 2}" width="${w}" height="${w}" fill="#fff"/>`;
 }
 /** A point in CSS px, moved to the middle of the device pixel it is in. */
-const onDevicePixel = v => (Math.floor(v * devicePixelRatio) + .5) / devicePixelRatio;
+const onDevicePixel = (v: number): number => (Math.floor(v * devicePixelRatio) + .5) / devicePixelRatio;
 
 /** A side's pane. Over its content, the marks both sides share (makeMarks):
  *  the selected area (in pt), and the pointer and its ghost (in CSS px). The
  *  pointer counts anywhere in the pane, the page's margins and past its end
  *  too (in the stage's pt); a drag draws the area, here or in the live page
  *  (makeMarks.frame). */
-const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, children }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}
-        onPointerMove=${e => marks.move(side, e)} onPointerLeave=${() => marks.leave(side)}
-        onPointerDown=${e => marks.down(side, e)} onPointerUp=${e => marks.up(side, e)}
-        onDragStart=${e => e.preventDefault()} onSelectStart=${e => e.preventDefault()}>
+const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, children }: {
+        paneRef: RefObject<HTMLDivElement>; onScroll: () => void; stage: [number, number]; stagePt: [number, number];
+        side: Side; marks: Marks; children?: ComponentChildren }) => html`<div class="scroll" ref=${paneRef} onScroll=${onScroll}
+        onPointerMove=${(e: PointerEvent) => marks.move(side, e)} onPointerLeave=${() => marks.leave(side)}
+        onPointerDown=${(e: PointerEvent) => marks.down(side, e)} onPointerUp=${(e: PointerEvent) => marks.up(side, e)}
+        onDragStart=${(e: Event) => e.preventDefault()} onSelectStart=${(e: Event) => e.preventDefault()}>
     <div class="stage" style=${{ width: `${stage[0]}px`, height: `${stage[1]}px` }}>
         ${children}
-        <div class="overlay" ref=${el => marks.attach(side, el)}>
+        <div class="overlay" ref=${(el: HTMLElement | null) => marks.attach(side, el)}>
             <svg class="marks" viewBox=${`0 0 ${stagePt[0]} ${stagePt[1]}`} width=${stage[0]} height=${stage[1]}><rect class="area"/></svg>
             <svg class="cursor" width=${stage[0]} height=${stage[1]}><g class="ghost"></g></svg>
         </div>
@@ -216,28 +253,31 @@ const Pane = ({ paneRef, onScroll, stage, stagePt, side, marks, children }) => h
  *  pointer where it is and its ghost at the same place on the other; an area
  *  dragged out on either, on both. Drawn straight into each side's overlay,
  *  not through a render: the pointer moves every frame. */
-function makeMarks({ scale, status }) {
-    let pointer = null, area = null, drag = null, ratio = 0;
-    const svgs = {};
-    const f2 = x => x.toFixed(2);
+function makeMarks({ scale, status }: { scale: () => number; status: () => HTMLElement | null }) {
+    let pointer: { side: Side; x: number; y: number } | null = null;
+    let area: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    let drag: { side: Side; moved: boolean; before?: { x0: number; y0: number; x1: number; y1: number } | null } | null = null, ratio = 0;
+    const svgs: Partial<Record<Side, HTMLElement | null>> = {};
+    const f2 = (x: number) => x.toFixed(2);
     function draw() {
         const s = scale();
         for (const [side, svg] of Object.entries(svgs)) {
             if (!svg?.isConnected) continue;
-            const g = svg.querySelector('.ghost'), r = svg.querySelector('.area');
+            const g = svg.querySelector('.ghost')!, r = svg.querySelector('.area')!;
             // (drawn again for another screen's pixel density)
             if (ratio !== devicePixelRatio || !g.firstChild) g.innerHTML = crosshair();
             g.toggleAttribute('data-on', !!pointer);
             if (pointer) {
                 // on the device pixel the point is in, on either side alike
-                const box = svg.getBoundingClientRect();
-                const x = onDevicePixel(box.left + pointer.x * s) - box.left, y = onDevicePixel(box.top + pointer.y * s) - box.top;
+                const box = svg.getBoundingClientRect(), p = pointer as { x: number; y: number };
+                const x = onDevicePixel(box.left + p.x * s) - box.left, y = onDevicePixel(box.top + p.y * s) - box.top;
                 g.setAttribute('transform', `translate(${x} ${y})`);
             }
             r.toggleAttribute('data-on', !!area);
             if (area) {
-                r.setAttribute('x', Math.min(area.x0, area.x1)); r.setAttribute('y', Math.min(area.y0, area.y1));
-                r.setAttribute('width', Math.abs(area.x1 - area.x0)); r.setAttribute('height', Math.abs(area.y1 - area.y0));
+                const a = area as NonNullable<typeof area>;
+                r.setAttribute('x', String(Math.min(a.x0, a.x1))); r.setAttribute('y', String(Math.min(a.y0, a.y1)));
+                r.setAttribute('width', String(Math.abs(a.x1 - a.x0))); r.setAttribute('height', String(Math.abs(a.y1 - a.y0)));
             }
         }
         ratio = devicePixelRatio;
@@ -249,39 +289,39 @@ function makeMarks({ scale, status }) {
     }
     // (e.currentTarget: the pane; the point in its stage's pt)
     // (the crosshair's point, not the pointer's: CROSSHAIR_OFFSET px up and left)
-    const at = e => {
-        const r = e.currentTarget.querySelector('.stage').getBoundingClientRect(), s = scale();
+    const at = (e: PointerEvent): [number, number] => {
+        const r = (e.currentTarget as HTMLElement).querySelector('.stage')!.getBoundingClientRect(), s = scale();
         return [(e.clientX - CROSSHAIR_OFFSET - r.left) / s, (e.clientY - CROSSHAIR_OFFSET - r.top) / s];
     };
-    const onScrollbar = e => {
-        const p = e.currentTarget, r = p.getBoundingClientRect();
+    const onScrollbar = (e: PointerEvent) => {
+        const p = e.currentTarget as HTMLElement, r = p.getBoundingClientRect();
         return e.clientX - r.left >= p.clientLeft + p.clientWidth || e.clientY - r.top >= p.clientTop + p.clientHeight;
     };
-    const point = (side, x, y) => {
+    const point = (side: Side, x: number, y: number) => {
         pointer = { side, x, y };
-        if (drag && drag.side === side) { area = { ...area, x1: x, y1: y }; drag.moved ||= Math.hypot(x - area.x0, y - area.y0) * scale() > 3; }
+        if (drag && drag.side === side) { area = { ...area!, x1: x, y1: y }; drag.moved ||= Math.hypot(x - area.x0, y - area.y0) * scale() > 3; }
         draw();
     };
     return {
-        attach(side, el) { svgs[side] = el; if (el) draw(); },
+        attach(side: Side, el: HTMLElement | null) { svgs[side] = el; if (el) draw(); },
         draw,
-        move(side, e) { point(side, ...at(e)); },
-        leave(side) { if (pointer?.side === side && !drag) { pointer = null; draw(); } },
+        move(side: Side, e: PointerEvent) { point(side, ...at(e)); },
+        leave(side: Side) { if (pointer?.side === side && !drag) { pointer = null; draw(); } },
         // a drag draws an area; a click with no drag clears it
-        down(side, e) {
+        down(side: Side, e: PointerEvent) {
             if (e.button !== 0 || onScrollbar(e)) return;
             e.preventDefault();
-            e.currentTarget.setPointerCapture(e.pointerId);
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
             const [x, y] = at(e);
             drag = { side, moved: false, before: area };
             area = { x0: x, y0: y, x1: x, y1: y };
             draw();
         },
-        up(side, e) {
+        up(side: Side, e: PointerEvent) {
             if (!drag) return;
             if (!drag.moved) area = null;
             drag = null;
-            e.currentTarget.releasePointerCapture?.(e.pointerId);
+            (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
             draw();
         },
         clear() { area = null; draw(); },
@@ -289,10 +329,10 @@ function makeMarks({ scale, status }) {
         // The live page takes the pointer itself: its moves, in its own px (2
         // per pt), and a drag there draws the area as on the PDF – but not while
         // the inspector picks a node from the page (its agent says so).
-        frame(win) {
+        frame(win: Window) {
             const d = win.document;
             // (the page's px are the report's × PX_PER_PT / scale: the offset in pt is the same)
-            const pt = e => [(e.clientX + win.scrollX) / PX_PER_PT - CROSSHAIR_OFFSET / scale(),
+            const pt = (e: PointerEvent): [number, number] => [(e.clientX + win.scrollX) / PX_PER_PT - CROSSHAIR_OFFSET / scale(),
                              (e.clientY + win.scrollY) / PX_PER_PT - CROSSHAIR_OFFSET / scale()];
             d.addEventListener('pointermove', e => point('right', ...pt(e)), { passive: true });
             d.documentElement.addEventListener('mouseleave', () => { if (pointer?.side === 'right' && !drag) { pointer = null; draw(); } });
@@ -324,18 +364,19 @@ function makeMarks({ scale, status }) {
 }
 
 /** An image of one side, with its boxes. */
-function Sheet({ src, size, items, side, sel, scale }) {
+function Sheet({ src, size, items, side, sel, scale }:
+        { src: string | null; size: [number, number] | null | false; items: Item[]; side: 'viewer' | 'strip'; sel: number; scale: number }) {
     const svg = useMemo(() => boxesSvg(items, side, sel), [items, side, sel]);
     if (size === false) return html`<p class="empty">No image: run the test again (make test-render) to make one.</p>`;
     if (!size) return null;
-    return html`<img class="sheet" src=${src} alt="" draggable="false" style=${{ width: `${size[0] * scale}px`, height: `${size[1] * scale}px` }}/>
+    return html`<img class="sheet" src=${src!} alt="" draggable="false" style=${{ width: `${size[0] * scale}px`, height: `${size[1] * scale}px` }}/>
         <svg class="boxes" viewBox=${`0 0 ${size[0]} ${size[1]}`} width=${size[0] * scale} height=${size[1] * scale}
             dangerouslySetInnerHTML=${{ __html: svg }}/>`;
 }
 
 // What dom-dump.ts does to the page, so that it is laid out as it was
 // measured; and transparent past its end, so the pane's pattern shows there.
-function pinPage(win, colPx, marginPx) {
+function pinPage(win: Window & PageHooks, colPx: number, marginPx: number): void {
     const doc = win.document;
     if (win.__setTheme) win.__setTheme('light');
     if (win.__zoom) win.__zoom(0);
@@ -357,16 +398,16 @@ function pinPage(win, colPx, marginPx) {
 // page's light theme is #333 on #fafaf9); four are the page's themes; 'inverted'
 // is TeX's, inverted by a filter on both sides (report.css). 'auto': TeX, or
 // inverted while the report is dark.
-const PAGE_COLOURS = [['tex', 'TeX', 'Black on white, as TeX sets it'], ['light', 'Light', "The page's light theme"],
+const PAGE_COLOURS: [string, string, string][] = [['tex', 'TeX', 'Black on white, as TeX sets it'], ['light', 'Light', "The page's light theme"],
     ['dark', 'Dark', "The page's dark theme"], ['sepia', 'Sepia', "The page's sepia theme"], ['contrast', 'Contrast', "The page's high-contrast theme"],
     ['inverted', 'TeX inverted', "TeX's colours, inverted on both sides"]];
-const resolvePageColours = mode => (mode !== 'auto' ? mode : document.documentElement.dataset.theme === 'dark' ? 'inverted' : 'tex');
+const resolvePageColours = (mode: string): string => (mode !== 'auto' ? mode : document.documentElement.dataset.theme === 'dark' ? 'inverted' : 'tex');
 /** Give the live page these colours: a theme of its own, or TeX's. */
-function pageColours(win, mode) {
+function pageColours(win: (Window & PageHooks) | null | undefined, mode: string): void {
     const doc = win?.document;
     if (!doc?.head) return;
     const tex = mode === 'tex' || mode === 'inverted';
-    if (win.__setTheme) win.__setTheme(tex ? 'light' : mode);
+    if (win!.__setTheme) win!.__setTheme(tex ? 'light' : mode);
     let style = doc.getElementById('rr-colours');
     if (!style) { style = doc.createElement('style'); style.id = 'rr-colours'; doc.head.appendChild(style); }
     style.textContent = tex ? 'html { color: #000 !important; --latex-page-bg: #fff !important }' : '';
@@ -375,7 +416,9 @@ function pageColours(win, mode) {
 /** The page itself, as the test measured it: live, for the inspector. As tall
  *  as the stage and scaled to it, so it never scrolls on its own – the pane
  *  does. `onPage(win, block)` when it is ready; `onHeight(pt)` as it settles. */
-function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, colours, frameRef, onPage, onHeight }) {
+function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, colours, frameRef, onPage, onHeight }: {
+        src: string; items: Item[]; sel: number; scale: number; stagePt: [number, number]; marginPt: number; hsizePt: number; colours: string;
+        frameRef: RefObject<HTMLIFrameElement>; onPage: (win: Window, block: Element | null) => void; onHeight: (pt: number) => void }) {
     // hidden until pinned: the page as it loads (its header and title, its own
     // layout) is not the page the test measured
     const [ready, setReady] = useState(false);
@@ -384,12 +427,12 @@ function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, colours, fra
         const win = frameRef.current?.contentWindow, doc = win?.document;
         const block = doc?.querySelector('.latex-block');
         if (!block) return;
-        let svg = doc.getElementById('rr-overlay');
-        if (!svg) { svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.id = 'rr-overlay'; doc.body.appendChild(svg); }
+        let svg = doc!.getElementById('rr-overlay') as SVGSVGElement | null;
+        if (!svg) { svg = doc!.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.id = 'rr-overlay'; doc!.body.appendChild(svg); }
         const r = block.getBoundingClientRect();
         const wPt = (colPx + 2 * marginPx) / PX_PER_PT, hPt = r.height / PX_PER_PT;
-        Object.assign(svg.style, { left: `${r.left + win.scrollX - marginPx}px`, top: `${r.top + win.scrollY}px` });
-        svg.setAttribute('width', wPt * PX_PER_PT); svg.setAttribute('height', hPt * PX_PER_PT);
+        Object.assign(svg.style, { left: `${r.left + win!.scrollX - marginPx}px`, top: `${r.top + win!.scrollY}px` });
+        svg.setAttribute('width', String(wPt * PX_PER_PT)); svg.setAttribute('height', String(hPt * PX_PER_PT));
         svg.setAttribute('viewBox', `0 0 ${wPt} ${hPt}`);
         svg.innerHTML = boxesSvg(items, 'viewer', sel);
         onHeight(hPt);
@@ -397,7 +440,7 @@ function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, colours, fra
     useEffect(place, [place]);
     useEffect(() => pageColours(frameRef.current?.contentWindow, colours), [colours]);
     const onLoad = () => {
-        const win = frameRef.current.contentWindow;
+        const win = frameRef.current!.contentWindow! as Window & PageHooks & typeof globalThis;
         pinPage(win, colPx, marginPx);
         pageColours(win, colours);
         requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
@@ -421,42 +464,43 @@ const HEADING_PX = 30, PANE_PAD_PX = 18;
 /** 'row' (side by side) or 'column' (stacked) for a room of w × h px and a
  *  page of `content` pt: the one in which each side, scaled to fit its pane
  *  whole, is larger – two panes alike, so one side's area decides. */
-function betterSplit(w, h, [cw, ch]) {
-    const fit = (pw, ph) => { const s = Math.max(0, Math.min((pw - PANE_PAD_PX) / cw, (ph - HEADING_PX) / ch)); return s * s * cw * ch; };
+function betterSplit(w: number, h: number, [cw, ch]: number[]): 'row' | 'column' {
+    const fit = (pw: number, ph: number) => { const s = Math.max(0, Math.min((pw - PANE_PAD_PX) / cw, (ph - HEADING_PX) / ch)); return s * s * cw * ch; };
     return fit(w / 2, h) >= fit(w, h / 2) ? 'row' : 'column';
 }
 
 // ── The page ───────────────────────────────────────────────────────────────────
-const idFromHash = () => decodeURIComponent(location.hash.slice(1));
-const inField = e => /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
-const inspector = () => window.reflowtex?.inspector;
-const STATUS = { pass: 'Pass', fail: 'Fail', known: 'Known failure', fixed: 'Passes – take the known mark off', error: 'Error' };
-const MARK = { pass: '✓', fail: '✗', known: '○', fixed: '!', error: '⚠' };
+const idFromHash = (): string => decodeURIComponent(location.hash.slice(1));
+const inField = (e: Event) => /^(INPUT|SELECT|TEXTAREA)$/.test((e.target as Element).tagName);
+const inspector = () => window.reflowtex?.inspector as InspectorApi | undefined;
+const STATUS: Record<string, string> = { pass: 'Pass', fail: 'Fail', known: 'Known failure', fixed: 'Passes – take the known mark off', error: 'Error' };
+const MARK: Record<string, string> = { pass: '✓', fail: '✗', known: '○', fixed: '!', error: '⚠' };
 
 function App() {
-    const [report, setReport] = useState(null), [error, setError] = useState(null);
+    const [report, setReport] = useState<{ results: Result[] } | null>(null), [error, setError] = useState<string | null>(null);
     const [id, setId] = useState(idFromHash());
-    const [vec, setVec] = useState(null);
-    const [thr, setThr] = useState({});                   // per test: [glyph, rule]
-    const [zoom, setZoom] = useState('fit');
+    const [vec, setVec] = useState<Vector | null>(null);
+    const [thr, setThr] = useState<Record<string, [number, number]>>({});                   // per test: [glyph, rule]
+    const [zoom, setZoom] = useState<'fit' | number>('fit');
     const [mode, setMode] = useState('live');
     const [theme, setThemeKept] = useSetting('theme', 'auto');
     const [split, setSplit] = useSetting('split', 'auto');
     const [coloursKept, setColours] = useSetting('colours', 'auto');
     const [lockKept, setLockKept] = useSetting('lock', 'on');
-    const lock = lockKept === 'on', setLock = on => setLockKept(on ? 'on' : 'off');
+    const lock = lockKept === 'on', setLock = (on: boolean) => setLockKept(on ? 'on' : 'off');
     const [inspecting, setInspecting] = useState(false);
     const [sel, setSel] = useState(-1);
     const [fitScale, setFitScale] = useState(1);
     const [liveH, setLiveH] = useState(0);
     const [autoDir, setAutoDir] = useState('row');
-    const left = useRef(null), right = useRef(null), frame = useRef(null), compare = useRef(null);
-    const page = useRef(null);                            // the live page: [win, block]
-    const scaleRef = useRef(1), statusRef = useRef(null);
+    const left = useRef<HTMLDivElement>(null), right = useRef<HTMLDivElement>(null), frame = useRef<HTMLIFrameElement>(null);
+    const compare = useRef<HTMLDivElement>(null);
+    const page = useRef<[Window, Element | null] | null>(null);                            // the live page: [win, block]
+    const scaleRef = useRef(1), statusRef = useRef<HTMLElement>(null);
     const marks = useMemo(() => makeMarks({ scale: () => scaleRef.current, status: () => statusRef.current }), []);
     const inspectorUsed = useRef(false);
 
-    const setTheme = t => { setThemeKept(t); applyTheme(t); };
+    const setTheme = (t: string) => { setThemeKept(t); applyTheme(t); };
     const colours = resolvePageColours(coloursKept);
     // (a render when the system turns dark or light: the page's colours may follow)
     const [, setSystemDark] = useState(false);
@@ -467,25 +511,25 @@ function App() {
         return () => mq.removeEventListener('change', follow);
     }, []);
 
-    const load = () => getJson(`${BUILD}report.json`).then(setReport, e => setError(String(e)));
+    const load = () => getJson<{ results: Result[] }>(`${BUILD}report.json`).then(setReport, e => setError(String(e)));
     useEffect(() => { load(); }, []);
     useEffect(() => { const h = () => setId(idFromHash()); addEventListener('hashchange', h); return () => removeEventListener('hashchange', h); }, []);
 
     const results = report?.results ?? [];
     const idx = Math.max(0, results.findIndex(r => r.id === id));
     const r = results[idx];
-    const go = i => { const t = results[(i + results.length) % results.length]; if (t) location.hash = encodeURIComponent(t.id); };
+    const go = (i: number) => { const t = results[(i + results.length) % results.length]; if (t) location.hash = encodeURIComponent(t.id); };
 
     useEffect(() => {
         setVec(null); setSel(-1); setLiveH(0);
         if (!r || r.status === 'error') return;
-        getJson(`${BUILD}${r.dir}/vector/vector.json`).then(setVec, e => setVec({ error: String(e) }));
+        getJson<Vector>(`${BUILD}${r.dir}/vector/vector.json`).then(setVec, e => setVec({ error: String(e) }));
     }, [r?.id, r?.at]);
 
     const glyphThr = thr[r?.id]?.[0] ?? r?.tolerance ?? 0.05;
     const ruleThr = thr[r?.id]?.[1] ?? r?.rule_tolerance ?? r?.tolerance ?? 0.05;
-    const setGlyphThr = n => setThr({ ...thr, [r.id]: [n, ruleThr] });
-    const setRuleThr = n => setThr({ ...thr, [r.id]: [glyphThr, n] });
+    const setGlyphThr = (n: number) => setThr({ ...thr, [r.id]: [n, ruleThr] });
+    const setRuleThr = (n: number) => setThr({ ...thr, [r.id]: [glyphThr, n] });
     const items = useMemo(() => (vec && !vec.error ? mismatches(vec, glyphThr, ruleThr, r?.rules_missing ?? 0) : []), [vec, glyphThr, ruleThr]);
 
     const stamp = r ? `?t=${encodeURIComponent(r.at)}` : '';
@@ -498,12 +542,12 @@ function App() {
     // height: the longer side's, and a tail
     const marginPt = vec?.margin_pt ?? 36, hsizePt = vec?.hsize_pt ?? r?.hsize_pt ?? 345;
     const widthPt = hsizePt + 2 * marginPt;
-    const stagePt = [widthPt, Math.max(stripSize?.[1] ?? 0, viewerSize?.[1] ?? 0, liveH) + TAIL_PT];
+    const stagePt: [number, number] = [widthPt, Math.max((stripSize as [number, number] | null)?.[1] ?? 0, (viewerSize as [number, number] | null)?.[1] ?? 0, liveH) + TAIL_PT];
 
     // Side by side or stacked. 'auto': the one where the two, each scaled to fit
     // its pane whole, cover more of the screen – a page wider than it is tall
     // is often better stacked.
-    const dir = split === 'auto' ? autoDir : split;
+    const dir = split === 'auto' ? autoDir : split as 'row' | 'column';
     const contentPt = [widthPt, stagePt[1] - TAIL_PT || widthPt];
     useLayoutEffect(() => {
         if (!compare.current) return;
@@ -515,7 +559,7 @@ function App() {
             const c = compare.current;
             if (!c) return;
             setAutoDir(betterSplit(c.clientWidth, c.clientHeight, contentPt));
-            const pane = c.querySelector('.scroll');
+            const pane = c.querySelector<HTMLElement>('.scroll');
             if (pane) setFitScale(Math.max(.2, (pane.clientWidth - 18) / widthPt));
         }); });
         ro.observe(compare.current);
@@ -525,10 +569,10 @@ function App() {
     const scale = zoom === 'fit' ? fitScale : zoom;
     scaleRef.current = scale;
     useEffect(() => marks.draw());
-    const stage = [stagePt[0] * scale, stagePt[1] * scale];
+    const stage: [number, number] = [stagePt[0] * scale, stagePt[1] * scale];
 
     // Scrolling together: the same x and y on both, the stages being alike.
-    const follow = (from, to) => () => {
+    const follow = (from: RefObject<HTMLDivElement>, to: RefObject<HTMLDivElement>) => () => {
         if (!lock || !from.current || !to.current) return;
         const a = from.current, b = to.current;
         if (b.scrollTop !== a.scrollTop) b.scrollTop = a.scrollTop;
@@ -544,7 +588,7 @@ function App() {
         if (f !== 1) for (const p of [left.current, right.current]) if (p) { p.scrollTop *= f; p.scrollLeft *= f; }
     }, [scale]);
     // show a mismatch: in the middle of both sides
-    const reveal = i => {
+    const reveal = (i: number) => {
         setSel(i);
         const it = items[i];
         if (!it) return;
@@ -561,7 +605,7 @@ function App() {
     // reader's place wins over 'bottom').
     const modeRef = useRef(mode);
     modeRef.current = mode;
-    const openInspector = async (win, block) => {
+    const openInspector = async (win: Window, block: Element | null) => {
         const api = inspector();
         if (!api) return;
         await api.inspect(win);
@@ -570,7 +614,7 @@ function App() {
         setInspecting(true);
         store('inspector', 'open');
     };
-    const onPage = (win, block) => {
+    const onPage = (win: Window, block: Element | null) => {
         page.current = [win, block];
         marks.frame(win);
         if (stored('inspector', 'open') === 'open') openInspector(win, block);
@@ -582,7 +626,7 @@ function App() {
         if (await api.isOpen()) { api.close(); setInspecting(false); store('inspector', 'closed'); return; }
         if (mode !== 'live') { store('inspector', 'open'); setMode('live'); return; }     // opened by onPage when it is there
         const [win, block] = page.current ?? [];
-        if (win) openInspector(win, block);
+        if (win) openInspector(win, block as Element | null);
     };
     useEffect(() => {                                     // (it has its own close button)
         const t = setInterval(async () => {
@@ -595,10 +639,10 @@ function App() {
         }, 500);
         return () => clearInterval(t);
     }, []);
-    const setSide = m => { setMode(m); if (m !== 'live' && inspecting) { inspector()?.close(); setInspecting(false); } };
+    const setSide = (m: string) => { setMode(m); if (m !== 'live' && inspecting) { inspector()?.close(); setInspecting(false); } };
 
     useEffect(() => {
-        const key = e => {
+        const key = (e: KeyboardEvent) => {
             if (inField(e) || e.metaKey || e.ctrlKey || e.altKey) return;
             if (e.key === 'ArrowLeft') { go(idx - 1); e.preventDefault(); }
             else if (e.key === 'ArrowRight') { go(idx + 1); e.preventDefault(); }
@@ -614,7 +658,7 @@ function App() {
     if (!report) return html`<p class="empty">Loading…</p>`;
     if (!results.length) return html`<p class="empty">No results yet: run <kbd>make test-render</kbd> (or one case), then reload.</p>`;
 
-    const counts = results.reduce((a, x) => ({ ...a, [x.status]: (a[x.status] ?? 0) + 1 }), {});
+    const counts = results.reduce((a: Record<string, number>, x) => ({ ...a, [x.status]: (a[x.status] ?? 0) + 1 }), {});
     const liveSrc = r.page ? `${BUILD}${r.page}/index.html` : null;
     const shown = items.slice(0, 2000);
     const empty = noVec ? html`<p class="empty">${noVec}</p>` : null;
@@ -623,7 +667,7 @@ function App() {
         <div class="bar">
             <div class="group start" role="group" aria-label="Tests">
                 <button class="ib" title="Previous test (←)" aria-label="Previous test" onClick=${() => go(idx - 1)}><${IconPrev}/></button>
-                <span class="pick"><select aria-label="Test" value=${r.id} onChange=${e => { location.hash = encodeURIComponent(e.target.value); }}>
+                <span class="pick"><select aria-label="Test" value=${r.id} onChange=${(e: Event & { target: HTMLSelectElement }) => { location.hash = encodeURIComponent(e.target.value); }}>
                     ${results.map(x => html`<option value=${x.id}>${MARK[x.status] ?? '·'} ${x.id}</option>`)}
                 </select></span>
                 <button class="ib" title="Next test (→)" aria-label="Next test" onClick=${() => go(idx + 1)}><${IconNext}/></button>
@@ -703,4 +747,4 @@ function App() {
 }
 
 applyTheme(stored('theme', 'auto'));
-render(html`<${App}/>`, document.getElementById('app'));
+render(html`<${App}/>`, document.getElementById('app')!);
