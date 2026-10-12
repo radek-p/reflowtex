@@ -10,7 +10,7 @@
 // collapsed pane) painted when it is shown. Nothing to call.
 
 import { SP_TO_PX, ZOOM, sumWidthSp } from '../engine/core.ts';
-import { layoutDocument } from '../engine/layout/document.js';
+import { layoutDocument } from '../engine/layout/document.ts';
 import { NATURAL_PROBE_PT, markDirty, unobserveAll } from '../runtime/blocks.js';
 import { paintVisibleNow } from '../runtime/visibility.js';
 import { paintDocument } from '../engine/paint.ts';
@@ -18,9 +18,10 @@ import { disposePieces } from './inline.ts';
 // block-hosts.ts and this module import each other: only functions, called
 // after both have loaded.
 import { disposeHosts, surfaceChanged } from './block-hosts.ts';
-import type { Doc, DocStream } from './instances.ts';
+import type { Doc, Stream as DocStream } from '../engine/model.ts';
+import type { Params } from '../runtime/params.ts';
 import type { FontTable } from '../engine/model.ts';
-import type { LayoutCache } from '../engine/layout/types.ts';
+import type { LayoutCache, LineMeta, SegmentLayout } from '../engine/layout/types.ts';
 import type { Instance, MountOptions, Surface, SurfaceMetrics, TypesetPart } from './types.ts';
 import { cancelFrame, frame } from '../runtime/pending.ts';
 
@@ -29,7 +30,7 @@ export interface BlockData {
     el: HTMLElement;
     doc: Doc;
     fontInfo: FontTable;
-    params: Record<string, unknown>;
+    params: Params;
 }
 
 // Live surfaces per block element, for the font re-render (rerenderSurfaces),
@@ -45,11 +46,11 @@ const all = new Set<SurfaceImpl>();
 export type Cache = LayoutCache;
 
 /** What a layout's first and last lines give the text around it. */
-export interface Edges { firstAscent: number; firstMeta: unknown; textFirst: boolean; lastDepth: number; textLast: boolean }
+export interface Edges { firstAscent: number; firstMeta: LineMeta | null; textFirst: boolean; lastDepth: number; textLast: boolean }
 export function edgesOf(cache: Cache): Edges {
     const laid = (cache.layout && cache.layout.laid) || [];
     const first = laid[0], last = laid[laid.length - 1];
-    const textAt = (L: any) => !!(L && L.seg && L.seg.kind === 'text');
+    const textAt = (L: SegmentLayout | undefined) => !!(L && L.seg && L.seg.kind === 'text');
     return { firstAscent: first ? first.firstAscent : 0, firstMeta: first ? first.firstMeta : null,
              textFirst: textAt(first), lastDepth: last ? last.lastDepth : 0, textLast: textAt(last) };
 }

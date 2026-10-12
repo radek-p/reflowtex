@@ -37,22 +37,10 @@ import { onAction } from './actions.ts';
 /** Set by the viewer's slots (slots.js): a text instance's own text. */
 export const textHooks = { set: (_id: string, _text: string | null, _mirror?: boolean) => {} };
 
-// The decoded document, as far as the normaliser reads it (protobuf.js
-// objects: unset fields absent, enums as lowercase names).
-export interface DocNode {
-    type?: string;
-    stream?: number; slot?: number; aside?: number; link?: number;
-    children?: DocNode[]; replace?: DocNode[]; pre?: DocNode[]; post?: DocNode[];
-}
-export interface DocItem { kind?: string; para?: number; box?: DocNode; stream?: number; amount?: number }
-export interface DocStream { kind?: string; content?: DocItem[]; attrs?: { key?: string; value?: string }[]; text?: string }
-export interface DocSlot { name?: string; kind?: string; attrs?: DocStream['attrs'] }
-export interface Doc {
-    paragraphs: { nodes?: DocNode[] }[];
-    content?: DocItem[];
-    streams?: DocStream[];
-    slots?: DocSlot[];
-}
+// The decoded document (engine/model.ts), under the names this module had
+// for it.
+export type { Doc, TexNode as DocNode, ContentItem as DocItem, Stream as DocStream, Slot as DocSlot } from '../engine/model.ts';
+import type { Doc, TexNode as DocNode, ContentItem as DocItem, Stream as DocStream } from '../engine/model.ts';
 
 /** What the normaliser needs from the rest of the viewer, per part. */
 export interface PartFactory {

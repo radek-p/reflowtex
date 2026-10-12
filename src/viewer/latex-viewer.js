@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 90fdd81cce88883f49832e90ec07767f6d962a0e864c825546f6e77743900cb2
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 26ee5eb3a744318d4175a83ef52015b2050e9a38f6d6013da7c37f99b239ee2e
 'use strict';
 "use strict";
 (() => {
@@ -4684,7 +4684,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
   }
   onKindChange(redraw);
 
-  // src/engine/layout/stream.js
+  // src/engine/layout/stream.ts
   function layoutStreamSegment(fontInfo, doc, s, seg, widthPt, p, cache) {
     const hosted = layoutHostedSegment(s, seg, widthPt, cache);
     if (hosted) return hosted;
@@ -4734,7 +4734,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     };
   }
 
-  // src/engine/layout/document.js
+  // src/engine/layout/document.ts
   var blockSeq = 0;
   var isTextLike = (kind) => kind === "text" || kind === "stream";
   var onLayoutGrid = (px) => Math.round(px * 64) / 64;
@@ -4764,7 +4764,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       return { mount: s.box.firstElementChild, overflows: false };
     }
     const tolerancePx = Math.max(0, p.displayOverflowTolerancePx || 0);
-    const scrollable = L.seg.kind === "display" || L.seg.isFigure;
+    const scrollable = L.seg.kind === "display" || L.seg.kind === "text" && L.seg.isFigure;
     const overflows = scrollable && L.W > columnPx + tolerancePx;
     const surfaceW = overflows ? L.W : columnPx;
     const margin = spaceAbove(L, prev);
@@ -4772,13 +4772,14 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     const box = onGridCarried(L.H, gap.carry);
     const H = box.r;
     L.gridCarry = box.carry;
+    const svg = s.svg;
     if (!L.held) {
-      s.svg.setAttribute("width", surfaceW);
-      s.svg.setAttribute("height", H);
-      s.svg.setAttribute("viewBox", `0 0 ${surfaceW} ${H}`);
+      svg.setAttribute("width", String(surfaceW));
+      svg.setAttribute("height", String(H));
+      svg.setAttribute("viewBox", `0 0 ${surfaceW} ${H}`);
     }
     setStyle(s.box, "overflowX", L.held ? "clip" : "");
-    let mount = s.svg;
+    let mount = svg;
     if (overflows) {
       if (!s.wrap) {
         s.wrap = document.createElement("div");
@@ -4789,17 +4790,17 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
         );
       }
       s.wrap.classList.add("latex-display", "latex-overflow-right");
-      if (s.svg.parentNode !== s.wrap) s.wrap.replaceChildren(s.svg);
+      if (svg.parentNode !== s.wrap) s.wrap.replaceChildren(svg);
       if (!L.held && s.wrap.style.getPropertyValue("--latex-display-width") !== `${surfaceW}px`)
         s.wrap.style.setProperty("--latex-display-width", `${surfaceW}px`);
       mount = s.wrap;
-    } else if (s.wrap && s.svg.parentNode === s.wrap) {
+    } else if (s.wrap && svg.parentNode === s.wrap) {
       s.wrap.classList.remove("latex-overflow-left", "latex-overflow-right");
-      s.svg.remove();
+      svg.remove();
     }
     setStyle(s.box, "containerType", mount === s.wrap ? "inline-size" : "");
     setStyle(s.gap, "height", `${gap.r}px`);
-    setStyle(s.svg, "marginTop", "");
+    setStyle(svg, "marginTop", "");
     if (s.wrap) {
       setStyle(s.wrap, "marginTop", "");
       setStyle(s.wrap, "marginBottom", "");

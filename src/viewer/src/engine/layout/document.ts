@@ -6,7 +6,7 @@ import {
     displaySkipAdjust, layoutDisplaySegment, preDisplaySizeSp, updateDisplayOverflowCue,
 } from './display.ts';
 import { lineProfile, minRequiredAdvance, texInterlineAdvance, texInterlineGlue } from './lines.ts';
-import { layoutStreamSegment } from './stream.js';
+import { layoutStreamSegment } from './stream.ts';
 import { keptHostBox } from '../../host/block-hosts.ts';
 import { blockKeyOf } from '../../host/host.ts';
 import { layoutTextSegment, segmentsOf } from './text.ts';
@@ -15,15 +15,20 @@ import { held, linkTargets } from '../../host/links.js';
 import { quickLayout } from '../../runtime/blocks.js';
 import { observeSegments } from '../../runtime/visibility.js';
 import { frame } from '../../runtime/pending.ts';
+import type { Doc, FontTable } from '../model.ts';
+import type {
+    DomSegment, HeightCache, LayoutCache, Observation, Segment, SegmentLayout, TextSegment,
+} from './types.ts';
+import type { Params } from '../../runtime/params.ts';
 // ── end of imports
 
 export let blockSeq = 0;              // per-block prefix, so ids from two blocks differ
 
 // Text and stream segments join with TeX's interline glue (a stream's outer
 // edges are its first and last lines); a display keeps its captured spacing.
-export const isTextLike = kind => kind === 'text' || kind === 'stream';
+export const isTextLike = (kind: string): boolean => kind === 'text' || kind === 'stream';
 
-export const onLayoutGrid = px => Math.round(px * 64) / 64;
+export const onLayoutGrid = (px: number): number => Math.round(px * 64) / 64;
 
 // Heights and gaps go on that grid one after another down the document, so
 // each is rounded together with what the ones above it lost: the remainder
@@ -31,7 +36,7 @@ export const onLayoutGrid = px => Math.round(px * 64) / 64;
 // below. Rounded one by one, the ±1/128 px of each of some thousand gaps and
 // boxes adds up – a random walk that had testmath's last lines 0.15 pt below
 // TeX's; carried, no line is ever more than half a grid step from its place.
-export function onGridCarried(px, carry) {
+export function onGridCarried(px: number, carry: number): { r: number; carry: number } {
     const exact = px + carry;
     const r = onLayoutGrid(exact);
     return { r, carry: exact - r };
@@ -42,7 +47,7 @@ export function onGridCarried(px, carry) {
 // paragraph. Reproduce it so a heading sits the LaTeX distance above its
 // body – and independently of the heading's descender depth, since the
 // glue absorbs that. Displays keep their own captured spacing.
-export function spaceAbove(L, prev) {
+export function spaceAbove(L: SegmentLayout, prev: SegmentLayout | undefined): number {
     let margin = L.gapBefore || 0;
     if (prev && L.seg.kind === 'text' && isTextLike(prev.seg.kind) && L.firstMeta
         && !(prev.frameBottom && L.gapBefore)) {           // see the stream branch of sizeSegment
@@ -51,7 +56,8 @@ export function spaceAbove(L, prev) {
     return margin + displaySkipAdjust(L, prev);
 }
 
-export function sizeSegment(s, L, prev, columnPx, p) {
+export function sizeSegment(s: DomSegment, L: SegmentLayout, prev: SegmentLayout | undefined, columnPx: number, p: Params):
+        { mount: Element | null; overflows: boolean | undefined } {
     if (L.seg.kind === 'stream') {
         // The box already holds the nested layout, which sized itself. Only
         // the spacer above is this level's: the explicit gap plus, after
@@ -77,7 +83,7 @@ export function sizeSegment(s, L, prev, columnPx, p) {
     // A figure paragraph (isFigureParagraph) is exactly one unbreakable,
     // unshrinkable picture box, so it can overflow the column precisely the
     // way a display can – and gets the same scroll-box treatment.
-    const scrollable = L.seg.kind === 'display' || L.seg.isFigure;
+    const scrollable = L.seg.kind === 'display' || (L.seg.kind === 'text' && L.seg.isFigure);
     const overflows = scrollable && L.W > columnPx + tolerancePx;
     // columnPx unless genuinely overflowing: an ordinary (non-scrollable)
     // text segment's own L.W is now real ink width (see layoutTextSegment),
@@ -103,10 +109,11 @@ export function sizeSegment(s, L, prev, columnPx, p) {
     // on every frame of a drag. Its box clips it horizontally meanwhile, so the
     // old, wider surface cannot widen the page. The box is far from the screen,
     // so it is never the scroll anchor whose style must not change.
+    const svg = s.svg!;                 // (a text or display segment's)
     if (!L.held) {
-        s.svg.setAttribute('width', surfaceW);
-        s.svg.setAttribute('height', H);
-        s.svg.setAttribute('viewBox', `0 0 ${surfaceW} ${H}`);
+        svg.setAttribute('width', String(surfaceW));
+        svg.setAttribute('height', String(H));
+        svg.setAttribute('viewBox', `0 0 ${surfaceW} ${H}`);
     }
     setStyle(s.box, 'overflowX', L.held ? 'clip' : '');
 
@@ -118,25 +125,25 @@ export function sizeSegment(s, L, prev, columnPx, p) {
     // display that fits is mounted bare and can bleed freely; only one that
     // must pan pays for it, and its wrapper gets a little self-cancelling
     // headroom for the bleed (see the margin block below).
-    let mount = s.svg;
+    let mount: SVGSVGElement | HTMLElement = svg;
     if (overflows) {
         if (!s.wrap) {
             s.wrap = document.createElement('div');
-            s.wrap.addEventListener('scroll', () => updateDisplayOverflowCue(s.wrap),
+            s.wrap.addEventListener('scroll', () => updateDisplayOverflowCue(s.wrap!),
                                     { passive: true });
         }
         // It genuinely exceeds the column, so show a right cue immediately.
         // Later paint/scroll measurements refine both directional classes.
         s.wrap.classList.add('latex-display', 'latex-overflow-right');
-        if (s.svg.parentNode !== s.wrap) s.wrap.replaceChildren(s.svg);
+        if (svg.parentNode !== s.wrap) s.wrap.replaceChildren(svg);
         // its natural width, for a host that fits the box to it
         // (Block.setDisplayFit; the viewer's .latex-fit-natural rule)
         if (!L.held && s.wrap.style.getPropertyValue('--latex-display-width') !== `${surfaceW}px`)
             s.wrap.style.setProperty('--latex-display-width', `${surfaceW}px`);
         mount = s.wrap;
-    } else if (s.wrap && s.svg.parentNode === s.wrap) {
+    } else if (s.wrap && svg.parentNode === s.wrap) {
         s.wrap.classList.remove('latex-overflow-left', 'latex-overflow-right');
-        s.svg.remove();          // no longer overflowing: shed the scroll box
+        svg.remove();          // no longer overflowing: shed the scroll box
     }
     // The box around a scroll box is a size container, so that the page's
     // rules can size the scroll box by the column in cqw: a % in
@@ -149,7 +156,7 @@ export function sizeSegment(s, L, prev, columnPx, p) {
     // The space above the segment lives in its spacer, not in a margin on the
     // element itself (scroll anchoring again, see layoutDocument).
     setStyle(s.gap, 'height', `${gap.r}px`);
-    setStyle(s.svg, 'marginTop', '');
+    setStyle(svg, 'marginTop', '');
     if (s.wrap) { setStyle(s.wrap, 'marginTop', ''); setStyle(s.wrap, 'marginBottom', ''); }
     if (mount === s.wrap) {
         // A scroll box clips (overflow-x forces overflow-y), so give the ink
@@ -184,7 +191,7 @@ export function sizeSegment(s, L, prev, columnPx, p) {
  *  keyed by it, and a block's instance ids start with it). */
 export const newBlockKey = () => `b${++blockSeq}`;
 
-export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
+export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p: Params, cache: LayoutCache): HTMLElement {
     // Point the glyph-metrics reader at this document's table, and stash it on the
     // cache so paintDocument (which is handed only the cache) reads the same one.
     // fontInfo is stashed too, so the IntersectionObserver – which is handed only a
@@ -225,10 +232,11 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     const dom = cache.dom;
     dom.root.style.visibility = '';   // may have been hidden while paint was deferred
 
-    const layoutOne = (seg, i) => {
+    // (never a stream segment: layoutStreamSegment lays those out)
+    const layoutOne = (seg: Segment, i: number): SegmentLayout => {
         const geom = seg.kind === 'display'
             ? layoutDisplaySegment(fontInfo, seg, widthPt, displayModel)
-            : layoutTextSegment(fontInfo, seg, widthPt, p, cache);
+            : layoutTextSegment(fontInfo, seg as TextSegment, widthPt, p, cache);
 
         // Profiles use actual render coords so collision detection matches real ink positions.
         const profiles = geom.lines.map((ln, j) =>
@@ -238,7 +246,7 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         const baselineYs = [ascent];
         for (let j = 1; j < geom.lines.length; j++) {
             const gap = geom.gaps && geom.gaps[j];
-            let advance;
+            let advance: number;
             if (gap) {
                 // TeX's own spacing between the rows of an alignment. Measured
                 // baseline-to-baseline it must clear the previous depth and
@@ -297,7 +305,7 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
             // again, with what the page put in it, when the DOM is rebuilt.
             const gap = document.createElement('div');
             gap.style.cssText = 'height:0px;overflow-anchor:none';
-            dom.segs.push({ svg: null, box: keptHostBox(cache, seg.index), gap, wrap: null, pairs: [], sub: null });
+            dom.segs.push({ svg: null, box: keptHostBox(cache, seg.index)!, gap, wrap: null, pairs: [], sub: null });
             continue;
         }
         if (seg.kind === 'stream') {
@@ -355,7 +363,7 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     cache.layoutCtx = { layoutOne, segs, widthPt, p, columnPx, paramsKey };
     const stats = cache.layoutStats = { computed: 0, reused: 0, deferred: 0, materialized: 0 };
     const prevLaid = cache.layout && cache.layout.laid.length === segs.length ? cache.layout.laid : null;
-    const laid = segs.map((seg, i) => {
+    const laid = segs.map((seg, i): SegmentLayout => {
         const s = dom.segs[i];
         if (seg.kind === 'stream') {
             stats.computed++;
@@ -400,13 +408,13 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
     // to; the height changes it must compensate for are then all on siblings
     // above it, which is exactly the case anchoring handles. The child list is
     // reconciled in place rather than rebuilt, so nothing is detached.
-    const want = [];
+    const want: Element[] = [];
     laid.forEach((L, i) => {
         const s = dom.segs[i];
         const { mount, overflows } = sizeSegment(s, L, laid[i-1], columnPx, p);
         s.mount = mount;
         for (const id of L.seg.anchors || []) {
-            const label = cache.anchors[id - 1];
+            const label = cache.anchors![id - 1];
             if (!label) continue;
             let a = dom.anchors.get(label);
             if (!a) {
@@ -427,7 +435,7 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
         if (overflows) {
             // Initial layout may still be detached from the document. Check in
             // the next frame, after the wrapper has a meaningful clientWidth.
-            frame('overflow cue', () => updateDisplayOverflowCue(s.wrap));
+            frame('overflow cue', () => updateDisplayOverflowCue(s.wrap!));
         }
     });
 
@@ -448,34 +456,36 @@ export function layoutDocument(fontInfo, doc, widthPt, p, cache) {
 // Make parent's children exactly `want`, in order, touching only what differs:
 // an element already in place is left alone (see the scroll-anchoring notes in
 // layoutDocument), and one that moved is re-inserted before its new successor.
-export function syncChildren(parent, want) {
+export function syncChildren(parent: Element, want: Element[]): void {
     let k = 0;
     for (const el of want) {
         const cur = parent.childNodes[k];
         if (cur !== el) parent.insertBefore(el, cur || null);
         k++;
     }
-    while (parent.childNodes.length > k) parent.lastChild.remove();
+    while (parent.childNodes.length > k) parent.lastChild!.remove();
 }
 
 // Write a style property only when it changes: a rewrite with the same value
 // is harmless to layout but an actual change on the anchor element (or one of
 // its ancestors) is what cancels scroll anchoring.
-export function setStyle(el, prop, v) { if (el.style[prop] !== v) el.style[prop] = v; }
+type StyleProp = 'height' | 'overflowX' | 'containerType' | 'marginTop' | 'marginBottom' | 'paddingTop'
+    | 'paddingBottom' | 'overflowAnchor';
+export function setStyle(el: HTMLElement | SVGElement, prop: StyleProp, v: string): void { if (el.style[prop] !== v) el.style[prop] = v; }
 
 // Per-segment cache, keyed by the layout parameters (a change of alignment or of
 // any Knuth–Plass knob starts afresh). `exact` maps a width to its full layout;
 // `obs` is the sorted list of observed widths with the geometry seen there.
-export function segLayoutCache(s, key) {
+export function segLayoutCache(s: DomSegment, key: string): HeightCache {
     if (!s.hc || s.hc.key !== key) s.hc = { key, exact: new Map(), obs: [] };
     return s.hc;
 }
 export const EXACT_LAYOUTS_KEPT = 3;
 
-export function rememberLayout(hc, w, L) {
+export function rememberLayout(hc: HeightCache, w: number, L: SegmentLayout): void {
     hc.exact.set(w, L);
-    if (hc.exact.size > EXACT_LAYOUTS_KEPT) hc.exact.delete(hc.exact.keys().next().value);
-    const o = { w, H: L.H, W: L.W, firstAscent: L.firstAscent, lastDepth: L.lastDepth, firstMeta: L.firstMeta,
+    if (hc.exact.size > EXACT_LAYOUTS_KEPT) hc.exact.delete(hc.exact.keys().next().value!);
+    const o: Observation = { w, H: L.H, W: L.W, firstAscent: L.firstAscent, lastDepth: L.lastDepth, firstMeta: L.firstMeta,
                 preDisplaySizeSp: L.preDisplaySizeSp, displayLeftSp: L.displayLeftSp, atSourceWidth: L.atSourceWidth };
     const obs = hc.obs;
     let k = 0;
@@ -487,7 +497,7 @@ export function rememberLayout(hc, w, L) {
 // Geometry for width w without laying out: an exact observation, or – heights
 // being monotone in width – the interval between two observations of equal
 // height that brackets w (the nearer end supplies the rest of the geometry).
-export function cachedGeometry(hc, w) {
+export function cachedGeometry(hc: HeightCache, w: number): Observation | null {
     const obs = hc.obs;
     let k = 0;
     while (k < obs.length && obs[k].w < w) k++;
@@ -502,23 +512,23 @@ export function cachedGeometry(hc, w) {
 // element for the real geometry, and fix the spacing of the segment below it,
 // which depends on this one's last depth. If the real height differs from the
 // cached one, the following content simply moves; the observation is replaced.
-export function materializeSegment(cache, i) {
+export function materializeSegment(cache: LayoutCache, i: number): void {
     const laid = cache.layout && cache.layout.laid;
     const L = laid && laid[i];
     if (!L || !L.deferred) return;
-    const ctx = cache.layoutCtx;
+    const ctx = cache.layoutCtx!;
     useGlyphMetrics(cache.metrics);
-    const s = cache.dom.segs[i];
+    const s = cache.dom!.segs[i];
     const real = ctx.layoutOne(ctx.segs[i], i);
     rememberLayout(segLayoutCache(s, ctx.paramsKey), ctx.widthPt, real);
     laid[i] = real;
-    const remount = (seg, R, prev) => {
+    const remount = (seg: DomSegment, R: SegmentLayout, prev: SegmentLayout | undefined) => {
         const { mount, overflows } = sizeSegment(seg, R, prev, ctx.columnPx, ctx.p);
-        if (mount.parentNode !== seg.box) seg.box.replaceChildren(mount);
+        if (mount!.parentNode !== seg.box) seg.box.replaceChildren(mount!);
         seg.mount = mount;
-        if (overflows) frame('overflow cue', () => updateDisplayOverflowCue(seg.wrap));
+        if (overflows) frame('overflow cue', () => updateDisplayOverflowCue(seg.wrap!));
     };
     remount(s, real, laid[i-1]);
-    if (laid[i+1]) remount(cache.dom.segs[i+1], laid[i+1], real);
+    if (laid[i+1]) remount(cache.dom!.segs[i+1], laid[i+1], real);
     if (cache.layoutStats) cache.layoutStats.materialized++;
 }

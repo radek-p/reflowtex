@@ -10,8 +10,9 @@
 // (installViewerStyles) takes the mask away: a class, so nothing is laid out
 // again and no scroll box loses its position.
 
-import { materializeSegment } from '../engine/layout/document.js';
+import { materializeSegment } from '../engine/layout/document.ts';
 import { updateDisplayOverflowCue } from '../engine/layout/display.ts';
+import type { LayoutCache } from '../engine/layout/types.ts';
 
 export const NO_FADE_CLASS = 'latex-no-fade';
 
@@ -155,12 +156,6 @@ export function forgetFit(el: Element) {
     (el as HTMLElement).style?.removeProperty(ROOM_RIGHT);
 }
 
-interface Seg { svg: SVGSVGElement; wrap: HTMLElement | null; mount?: Element }
-interface LayoutCache {
-    dom?: { segs: Seg[] } | null;
-    layout?: { laid: { deferred?: boolean }[] } | null;
-    layoutCtx?: { segs: { kind: string }[] };
-}
 
 // The screen x of a point in an SVG element's own coordinates.
 function screenX(el: Element, x: number): number | null {
@@ -195,7 +190,7 @@ export function revealInDisplay(cache: LayoutCache, fades: boolean, display: num
             if (kinds[k].kind === 'display' && ++n === display) { i = k; break; }
         }
     } else if (display instanceof Element) {
-        i = segs.findIndex(s => s.svg.contains(display));
+        i = segs.findIndex(s => s.svg!.contains(display));
         if (i >= 0 && kinds[i].kind !== 'display') i = -1;
     }
     if (i < 0) return false;
@@ -206,7 +201,7 @@ export function revealInDisplay(cache: LayoutCache, fades: boolean, display: num
     if (!wrap || s.mount !== wrap || !wrap.isConnected) return true;   // it fits: all in view
     let span: [number, number] | null;
     if (typeof x === 'number') {
-        const p = screenX(s.svg, x);
+        const p = screenX(s.svg!, x);
         span = p === null ? null : [p, p];
     } else {
         span = display instanceof Element ? extent(display) : null;

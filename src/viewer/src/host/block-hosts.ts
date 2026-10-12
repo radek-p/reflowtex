@@ -27,6 +27,7 @@ import { blockData, rerenderBlock } from '../runtime/blocks.js';
 import { blockOf } from './host.ts';
 import { surfacesOf, type Cache, type Edges, type SurfaceImpl } from './surface.ts';
 import type { BlockHost, KindDef, Instance, Surface } from './types.ts';
+import type { DomSegment, SegmentLayout, StreamSegment } from '../engine/layout/types.ts';
 import { kindDef, onKindChange } from './kinds.ts';
 import { frame as nextFrame } from '../runtime/pending.ts';
 import { BLOCK_SELECTOR } from '../runtime/page.ts';
@@ -125,7 +126,7 @@ function makeRecord(box: HTMLElement, index: number, instance: Instance, def: Ki
         spacing() {
             // The spacers the layout put before this box and before the next
             // segment (layoutDocument: each segment is a spacer, then its box).
-            const segs: any[] = (owner.dom && owner.dom.segs) || [];
+            const segs = (owner.dom && owner.dom.segs) || [];
             const i = segs.findIndex(sg => sg.box === box);
             const px = (el: HTMLElement | undefined) => (el && parseFloat(el.style.height)) || 0;
             return { before: i >= 0 ? px(segs[i].gap) : 0, after: i >= 0 && i + 1 < segs.length ? px(segs[i + 1].gap) : 0 };
@@ -146,7 +147,7 @@ export function keptHostBox(cache: Cache, index: number): HTMLElement | null {
 
 /** For layoutStreamSegment: lay out a stream segment whose kind the page
  *  defined, or return null to have it laid out by default. */
-export function layoutHostedSegment(s: any, seg: any, widthPt: number, cache: Cache): object | null {
+export function layoutHostedSegment(s: DomSegment, seg: StreamSegment, widthPt: number, cache: Cache): SegmentLayout | null {
     const def = kindDef(seg.stream.kind || '');
     if (!def || !cache.blockEl) return null;
     const hosts = cache.hosts || (cache.hosts = new Map());
