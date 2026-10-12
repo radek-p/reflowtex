@@ -7,7 +7,7 @@
 // load). Each of these goes through here, named, so that a tool can ask
 // whether anything is still to come, and wait until nothing is: a test
 // harness, instead of waiting a fixed time and hoping (inspect.idle,
-// host/inspect.js). Frames can be held back for seconds on a busy machine, so
+// host/inspect.ts). Frames can be held back for seconds on a busy machine, so
 // no fixed time is ever enough.
 
 type Token = { name: string };

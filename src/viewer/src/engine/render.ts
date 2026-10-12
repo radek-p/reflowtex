@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Walking a finished node list as TeX would set it: every glyph, rule,
 // picture and space at its pen position, handed to a sink. The painter's
-// sink draws them (sink.js); others measure ink (layout/display.js), lay the
-// accessible text (runtime/a11y.js) or replay a segment (host/inspect.js).
+// sink draws them (sink.ts); others measure ink (layout/display.ts), lay the
+// accessible text (runtime/a11y.ts) or replay a segment (host/inspect.ts).
 
 import {
     RUNNING_RULE, SP_TO_PX, gW, glyphExpandScale, hlistGlueRatio, kernExpandScale, setGlue, vlistGlueRatio,

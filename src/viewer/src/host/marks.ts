@@ -22,7 +22,7 @@ import type { LiveMark, LiveMarkOptions, MarkHandle, TextRange } from './types.t
 
 interface Mark { id?: string; classes?: string }
 
-/** From paint.js: a glyph element of mark `index` (the layout's table). */
+/** From paint.ts: a glyph element of mark `index` (the layout's table). */
 export function applyMark(el: Element, index: number, cache: { marks?: Mark[] }) {
     const m = cache.marks && cache.marks[index - 1];
     if (!m) return;
@@ -31,7 +31,7 @@ export function applyMark(el: Element, index: number, cache: { marks?: Mark[] })
 }
 
 function handle(id: string, selector: string): MarkHandle {
-    // The glyphs; the bands behind them (paint.js, paintMarkBands) carry the id too.
+    // The glyphs; the bands behind them (paint.ts, paintMarkBands) carry the id too.
     const elements = () => [...document.querySelectorAll(selector)].filter(e => !e.matches('rect.latex-mark'));
     return {
         id,
@@ -132,7 +132,7 @@ const textOf = (ix: GlyphIndex, from: number, to: number) =>
 const blockByKey = (key: string): BlockData | undefined =>
     allData.find(d => d.cache.blockKey === key && d.el.isConnected);
 
-// A painted glyph element → its node (paint.js registers each as it makes it).
+// A painted glyph element → its node (paint.ts registers each as it makes it).
 const nodeOfEl = new WeakMap<Element, GNode>();
 export function registerGlyph(el: Element, n: GNode) { nodeOfEl.set(el, n); }
 /** The glyph node a painted element draws, if it is a glyph's. */
@@ -208,12 +208,12 @@ const live = new Map<string, Live>();
 const onNode = new WeakMap<GNode, string[]>();
 let seq = 0;
 
-/** From paint.js: the live marks on a glyph node, in the order made. */
+/** From paint.ts: the live marks on a glyph node, in the order made. */
 export function liveOn(n: GNode): string[] | undefined {
     const ids = onNode.get(n);
     return ids && ids.length ? ids : undefined;
 }
-/** From paint.js: a live mark's look, for its band. */
+/** From paint.ts: a live mark's look, for its band. */
 export function liveInfo(id: string): Mark | undefined {
     const m = live.get(id);
     return m && { id: m.id, classes: m.classes };

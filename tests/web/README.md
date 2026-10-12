@@ -47,11 +47,11 @@ Three habits make them reliable. Measure a glyph by its SVG coordinates
 width by its `.latex-block`'s style. And after acting on a page, wait with
 `idle(page)` (`web.ts`), never a fixed time: it resolves once the viewer
 has nothing still to come – no reflow, repaint, settling pass, font or
-animation (`reflowtex.inspect.idle()`, `src/viewer/src/runtime/pending.js`).
+animation (`reflowtex.inspect.idle()`, `src/viewer/src/runtime/pending.ts`).
 Under load a browser can hold frames back for seconds, and a fixed wait then
 measured too early. To look at an animation midway, `seek(page, 0.5)` holds
 every running one halfway; `seek(page, null)` lets them run on. New deferred
-work in the viewer goes through `pending.js` (`frame`, `later`, `track`), so
+work in the viewer goes through `pending.ts` (`frame`, `later`, `track`), so
 that `idle()` waits for it.
 
 ## What is tested

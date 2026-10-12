@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // reflowtex.inspect.idle(): resolves once the viewer has nothing still to
-// come (runtime/pending.js). The other tests wait for it after acting, so it
+// come (runtime/pending.ts). The other tests wait for it after acting, so it
 // must not resolve early; and it must resolve at all.
 import { test, expect } from './fixtures.ts';
 import { idle } from './web.ts';

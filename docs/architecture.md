@@ -128,8 +128,9 @@ and paints inline SVG – re-breaking on resize and repainting on theme change. 
 
 ## Why a schema-bound binary format
 
-The node list is large and finicky, and it crosses three languages (Lua producer,
-TypeScript encoder, JavaScript consumer). A schema (`latex.proto`) that all three bind
+The node list is large and finicky, and it crosses three programs in two
+languages (a Lua producer, a TypeScript encoder on Node, a TypeScript consumer
+in the browser). A schema (`latex.proto`) that all three bind
 to keeps them from drifting: change a field in one place and the others are
 generated or validated against it, rather than silently disagreeing. Protocol
 Buffers gives that plus a compact wire form. See [binary-format.md](binary-format.md).

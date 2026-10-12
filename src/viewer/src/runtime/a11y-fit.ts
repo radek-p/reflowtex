@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The accessible layer's text fitted onto the drawing (a11y.js): runs laid
+// The accessible layer's text fitted onto the drawing (a11y.ts): runs laid
 // out as one flow of text over their drawn lines, their letters spaced to
 // their drawn width, formulas scaled onto their glyphs, and a piece's text
 // sized to fill it. Measures first, then writes: one layout each.

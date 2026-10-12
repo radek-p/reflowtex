@@ -7,11 +7,11 @@ import type { BoxNode, FontTable, GlyphMetrics, GlueNode, TexNode, ViewerFont } 
 export const ZOOM         = 2;
 export const SP_TO_PX     = ZOOM / 65536;
 // The nodes a line break put at a line's end – a discretionary's pre-break
-// text (breaker.js) – and what they are: 'drop', the hyphen of a word broken
+// text (breaker.ts) – and what they are: 'drop', the hyphen of a word broken
 // there, no part of the text; 'keep', a hyphen the author typed ("well-" of
 // "well-known", LuaTeX's automatic discretionary), text. Either way the word
 // goes on on the next line: the painter marks their glyphs (data-break), so
-// that copying joins it again (runtime/copy.js), as reading does (a11y.js).
+// that copying joins it again (runtime/copy.ts), as reading does (a11y.ts).
 export const BREAK_NODES = new WeakMap<TexNode, 'drop' | 'keep'>();
 const AUTOMATIC_DISC = 2;           // LuaTeX's discretionary for a typed "-"
 export const breakKind = (disc: TexNode | undefined): 'drop' | 'keep' => ((disc && disc.subtype) === AUTOMATIC_DISC ? 'keep' : 'drop');

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Copying from a block: a word the viewer hyphenated at a line's end is
-// copied whole, as a screen reader reads it (runtime/a11y.js) – "paragraph",
+// copied whole, as a screen reader reads it (runtime/a11y.ts) – "paragraph",
 // not "para-" and "graph". The hyphen is the line break's (a discretionary's
 // pre-break text, marked data-break by the painter); a hyphen the author
 // wrote ("well-known", data-break="keep") is text, and stays – the word is

@@ -100,7 +100,7 @@ export function roundXnOverD(x: number, n: number, d: number): number {
 // does not protrude at all, just as in its PDF. An older bundle without that
 // information keeps the viewer's own table of hanging punctuation.
 //
-// A word of live text (a slot's node: host/slots.js) is one glyph-like node
+// A word of live text (a slot's node: host/slots.ts) is one glyph-like node
 // carrying its text instead of a character. TeX would have set it as a run
 // of characters of the same font, and protruded the first or the last of
 // them: so its codes are those of its first character at a line's start and

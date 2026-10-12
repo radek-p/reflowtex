@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Inline instances (\webwidget) drawn by a kind the page defined
 // (types.ts: KindDef.measure, PieceHost). The line breaking stays in
-// widgets.js; this is where it meets the page: which kind, its environment,
+// widgets.ts; this is where it meets the page: which kind, its environment,
 // and each piece's drawing and its end.
 //
-// A piece is drawn once, when its element is made (paint.js). Elements are
+// A piece is drawn once, when its element is made (paint.ts). Elements are
 // kept for reuse while their nodes are (a line that breaks elsewhere and
 // back gets the same one); a piece goes for good when its node does – the
 // widget measured again (invalidate, a new definition), or the drawing
@@ -60,7 +60,7 @@ export function inlineEnv(instance: Instance, fontSize: number, color: string | 
 const undo = new WeakMap<Element, () => void>();
 const byCache = new WeakMap<object, Set<Element>>();
 
-/** From paint.js: draw one piece in `box`, the element made for node `n`. */
+/** From paint.ts: draw one piece in `box`, the element made for node `n`. */
 export function renderPiece(n: WidgetNode, el: Element, box: HTMLElement, cache: object): void {
     const { instance, def, env } = n.inline!;
     const host: PieceHost = { type: 'piece', el: box, instance, piece: n.part!, env };

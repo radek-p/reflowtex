@@ -420,7 +420,7 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
                 a.className = 'latex-anchor';
                 // A view mounted from another (host.mount(el, { of })) suffixes
                 // its ids, which the block's own view holds; its links find
-                // them (links.js).
+                // them (links.ts).
                 a.id = label + (cache.anchorSuffix || '');
                 dom.anchors.set(label, a);
                 if (!cache.anchorSuffix) linkTargets.set(label, a);

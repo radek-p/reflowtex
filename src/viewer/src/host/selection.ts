@@ -6,7 +6,7 @@
 // which are glue. With data-latex-selection="bands" on <html> or on a block
 // (the nearest wins; "native" turns it off again inside), the browser's own
 // highlight is hidden in the text, and the viewer draws the selection as it
-// draws a mark's band (marks.ts, paint.js): one rect per line, from the
+// draws a mark's band (marks.ts, paint.ts): one rect per line, from the
 // first selected glyph to the last, spaces included, all of one height for
 // one size of type. The selection itself stays the browser's: copying,
 // dragging, the keyboard and getSelection() are as ever.
@@ -32,7 +32,7 @@ interface Edge { node: object; side: 'left' | 'right' }
 let edges: { start: Edge | null; end: Edge | null } = { start: null, end: null };
 const sameEdge = (a: Edge | null, b: Edge | null) => a === b || (!!a && !!b && a.node === b.node && a.side === b.side);
 
-// Word spaces' elements → their glue nodes (paint.js registers them).
+// Word spaces' elements → their glue nodes (paint.ts registers them).
 const spaceOfEl = new WeakMap<Element, object>();
 export function registerSpace(el: Element, n: object) { spaceOfEl.set(el, n); }
 
@@ -52,9 +52,9 @@ function edgeAt(container: Node, offset: number, which: 'start' | 'end'): Edge |
 /** The block (data) an edge's element is in. */
 const dataOfEl = (el: Element | null) => el && (allData as BlockData[]).find(d => d.el.contains(el));
 
-/** From paint.js: is this glyph node in the selection, drawn as bands? */
+/** From paint.ts: is this glyph node in the selection, drawn as bands? */
 export const selectedGlyph = (n: object) => selected.has(n);
-/** From paint.js: the edges the selection's ends fall on (see Edge). */
+/** From paint.ts: the edges the selection's ends fall on (see Edge). */
 export const selectionEdges = () => edges;
 
 /** Is the selection drawn as bands in this element (a block's)? */

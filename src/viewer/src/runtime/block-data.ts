@@ -69,7 +69,7 @@ export const allData: BlockData[] = [];                     // every block's dat
 // text of every paragraph near the window, which on a phone cost frames. A
 // placement is always due after the last reflow, so the layer ends where the
 // lines are. reflowtex:layout says whether the reflow was a quick one (detail
-// quick); each placement of the layer sends reflowtex:layer (runtime/a11y.js).
+// quick); each placement of the layer sends reflowtex:layer (runtime/a11y.ts).
 const LAYER_MS = 200;
 const layerTimers = new Map<HTMLElement, number>();                 // a block → its placement to come
 export function announceLayout(el: HTMLElement, quick = false): void {

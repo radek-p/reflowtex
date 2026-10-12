@@ -18,7 +18,7 @@
 // once, in the next frame.
 //
 // A host lives as long as the layout around it: relayouts reuse it, and so
-// does a rebuild after fonts load (document.js keeps the box, by stream
+// does a rebuild after fonts load (document.ts keeps the box, by stream
 // index, in cache.hosts). Defining or undefining a kind rebuilds the blocks
 // that have instances of it, so they are drawn the new way.
 
@@ -139,7 +139,7 @@ function makeRecord(box: HTMLElement, index: number, instance: Instance, def: Ki
     return rec;
 }
 
-/** For document.js: a host box to keep when the DOM is rebuilt. */
+/** For document.ts: a host box to keep when the DOM is rebuilt. */
 export function keptHostBox(cache: Cache, index: number): HTMLElement | null {
     const rec = cache.hosts && (cache.hosts.get(index) as HostRecord | undefined);
     return rec && !rec.failed ? rec.box : null;

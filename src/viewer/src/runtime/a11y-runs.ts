@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The accessible layer's text, read off the drawn lines (a11y.js): a
+// The accessible layer's text, read off the drawn lines (a11y.ts): a
 // paragraph's lines as runs of words and formulas, each where it is drawn,
 // and a display's ink. Reads the layout only; writes nothing.
 
@@ -159,7 +159,7 @@ export function runsOf(data: BlockData, i: number, a: number, b: number): LayerR
                 k = e;
                 continue;
             }
-            // what the line break put at the line's end (breaker.js): the
+            // what the line break put at the line's end (breaker.ts): the
             // hyphen of a word broken here, no part of it; or a hyphen the
             // author typed, kept. The word goes on on the next line.
             if (BREAK_NODES.has(n)) {

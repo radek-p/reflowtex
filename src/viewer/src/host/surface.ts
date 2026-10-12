@@ -228,5 +228,5 @@ export function rerenderSurfaces(blockEl: HTMLElement) {
 }
 
 // Print needs every line of every surface (a pane not shown on screen may be
-// the one print shows), as it does the blocks' (see visibility.js).
+// the one print shows), as it does the blocks' (see visibility.ts).
 window.addEventListener('beforeprint', () => { for (const s of all) s.paintAll(); });

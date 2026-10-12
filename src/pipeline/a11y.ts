@@ -77,7 +77,7 @@ function nodesHtml(nodes: LayerNode[], refs: number[] = []): string {
 }
 
 /** The layer's HTML for a document. Each piece says what it stands for, so
- *  the viewer can lay it over that once drawn (runtime/a11y.js):
+ *  the viewer can lay it over that once drawn (runtime/a11y.ts):
  *  data-para = the paragraph's number, data-item = a display's position in
  *  the content (both 1-based, as the document numbers them), data-stream = a
  *  stream's number (its drawn box). */

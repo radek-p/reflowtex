@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The painter's sink (render.js): it draws what renderNodes walks into a
+// The painter's sink (render.ts): it draws what renderNodes walks into a
 // segment's <svg>, reusing the elements of the previous paint.
 
 import { registerStreamSource } from '../defaults/footnotes.ts';

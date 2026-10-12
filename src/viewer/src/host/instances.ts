@@ -34,7 +34,7 @@ import type {
 } from './types.ts';
 import { onAction } from './actions.ts';
 
-/** Set by the viewer's slots (slots.js): a text instance's own text. */
+/** Set by the viewer's slots (slots.ts): a text instance's own text. */
 export const textHooks = { set: (_id: string, _text: string | null, _mirror?: boolean) => {} };
 
 // The decoded document (engine/model.ts), under the names this module had

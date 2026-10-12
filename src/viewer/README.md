@@ -5,8 +5,8 @@ beyond `protobuf.min.js`, which must load first (it exposes the global
 `protobuf`). Both files are framework-agnostic – the integrations just arrange
 the DOM below.
 
-> **Source and build.** The viewer is written as ES modules in `src/`
-> (`index.js` is the entry; `engine/` breaks lines, lays out and paints,
+> **Source and build.** The viewer is written as TypeScript modules in `src/`
+> (`index.ts` is the entry; `engine/` breaks lines, lays out and paints,
 > `runtime/` runs blocks on the page, `host/` is what pages and packages use,
 > `defaults/` renders footnotes and margin notes). `latex-viewer.js` is a
 > committed bundle of them, one classic script, so site builders never need
@@ -673,7 +673,7 @@ the page (the companion's panes and hints ease with Web Animations and CSS
 transitions), over three frames. A test
 waits for it after acting (a resize, a selection) instead of a fixed time,
 which a busy machine can outlast; `inspect.pending()` names what is still to
-come. The viewer's deferred work goes through `runtime/pending.js` for this.
+come. The viewer's deferred work goes through `runtime/pending.ts` for this.
 The state objects are
 internal and may change between versions; `inspect.version` says which shape
 to expect. Nothing here changes what is drawn.
