@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 9b6606b0eff5525ac70906a5151a797f4cc1e26691d3451147cd961e40c3931a
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 2a4c7b7fb595adf8d4f134c0de9cd24ce5934c87c0d4b795a825335bd4474c52
 'use strict';
 "use strict";
 (() => {
@@ -1415,12 +1415,13 @@
     return x;
   }
 
-  // src/host/links.js
+  // src/host/links.ts
   var linkMap = {};
   var pageLabels = /* @__PURE__ */ new Set();
   var linkTargets = /* @__PURE__ */ new Map();
   var viewSuffix = /* @__PURE__ */ new WeakMap();
-  var siteBase = document.currentScript && document.currentScript.src ? new URL(".", document.currentScript.src).href : typeof location !== "undefined" ? location.href : "/";
+  var script = document.currentScript;
+  var siteBase = script && script.src ? new URL(".", script.src).href : typeof location !== "undefined" ? location.href : "/";
   function loadLinkMap() {
     const el = document.getElementById("latex-link-map");
     if (!el || !el.textContent.trim()) return;
@@ -3734,7 +3735,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     el.dispatchEvent(new CustomEvent("reflowtex:layout", { bubbles: true, detail: { block: el, quick } }));
   }
 
-  // src/host/widgets.js
+  // src/host/widgets.ts
   var widgetMeasure = /* @__PURE__ */ new Map();
   function measureHTML(html, fontPx) {
     const probe = document.createElement("div");
@@ -3759,7 +3760,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     return { width: r.right - r.left, height: Math.max(0, base - r.top), depth: Math.max(0, r.bottom - base) };
   }
   function widgetNodes(fontInfo, slot, id, run, before, after, doc) {
-    const found = inlineOf((docData.get(doc) || {}).el, id);
+    const found = inlineOf(docData.get(doc)?.el, id);
     if (!found) return null;
     const { instance, def } = found;
     const glyph = (ns) => {
@@ -3797,7 +3798,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       part: which,
       inline,
       fontPx,
-      color: t && t.color,
+      color: t?.color,
       width: sp(dims.width),
       height: sp(dims.height),
       depth: sp(dims.depth),
@@ -3821,7 +3822,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
   function widgetSegmentNodes(m, slot, id, inline, fontPx, t, version, sp) {
     const segs = m.segments, gaps = m.gaps || [];
     const H = Math.max(...segs.map((g) => sp(g.height))), D = Math.max(...segs.map((g) => sp(g.depth)));
-    const run = { slot: id, inline, fontPx, color: t && t.color, version, merged: /* @__PURE__ */ new Map(), height: H, depth: D };
+    const run = { slot: id, inline, fontPx, color: t?.color, version, merged: /* @__PURE__ */ new Map(), height: H, depth: D };
     const piece = (role, w, seg) => ({ type: "widget", run, role, seg, width: sp(w), height: H, depth: D });
     const ends = m.ends || {};
     const L = ends.left || {}, R = ends.right || {};

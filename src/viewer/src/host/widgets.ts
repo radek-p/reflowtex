@@ -5,6 +5,18 @@ import { SP_TO_PX } from '../engine/core.ts';
 import { docData } from '../runtime/block-data.ts';
 import { colorFill } from '../runtime/colour.ts';
 import { inlineEnv, inlineOf, inlineVersion } from './inline.ts';
+import type { Doc, FontTable, Slot, TexNode, WidgetInline, WidgetNode, WidgetPart, WidgetRun } from '../engine/model.ts';
+import type { Box, InlineMetrics } from './types.ts';
+
+/** A measurement, whichever form it takes (InlineMetrics). */
+type Metrics = Partial<Box> & {
+    splits?: { first: Box & { overhang?: number }; second: Box & { overhang?: number }; penalty?: number }[];
+    segments?: Box[];
+    gaps?: { width?: number; penalty?: number }[];
+    ends?: { left?: WidgetEnd; right?: WidgetEnd };
+};
+type WidgetEnd = { cap?: number; cut?: number; overhang?: number };
+type Sp = (v: number | undefined) => number;
 // ── end of imports
 
 // ── Widgets (\webwidget) ───────────────────────────────────────────────────
@@ -28,10 +40,10 @@ import { inlineEnv, inlineOf, inlineVersion } from './inline.ts';
 // and invalidate() – measure again and re-break when the content changes.
 // The last measurement is kept per instance, for its font size and
 // invalidation (a new one replaces it).
-export const widgetMeasure = new Map();       // instance.id → { key: `${fontPx}|${version}`, m }
+export const widgetMeasure = new Map<string, { key: string; m: InlineMetrics }>();       // instance.id → { key: `${fontPx}|${version}`, m }
 
 // Size some HTML the way it sits in a line: its box against the baseline.
-export function measureHTML(html, fontPx) {
+export function measureHTML(html: string | Node, fontPx: number): Box {
     const probe = document.createElement('div');
     probe.style.cssText = `position:absolute;left:-10000px;top:0;visibility:hidden;white-space:nowrap;font-size:${fontPx}px;line-height:normal`;
     const mark = document.createElement('span');
@@ -53,29 +65,30 @@ export function measureHTML(html, fontPx) {
     probe.remove();
     return { width: r.right - r.left, height: Math.max(0, base - r.top), depth: Math.max(0, r.bottom - base) };
 }
-export function widgetNodes(fontInfo, slot, id, run, before, after, doc) {
-    const found = inlineOf((docData.get(doc) || {}).el, id);
+export function widgetNodes(fontInfo: FontTable, slot: Slot, id: number, run: TexNode[], before: TexNode[], after: TexNode[],
+                            doc: Doc): TexNode[] | null {
+    const found = inlineOf(docData.get(doc)?.el, id);
     if (!found) return null;
     const { instance, def } = found;
     // The text's size and colour: the default's first glyph, else the nearest
     // glyph of the paragraph around it.
-    const glyph = ns => { for (const n of ns) { if (n.type === 'glyph') return n; if (n.type === 'disc') { const g = glyph(n.replace || []); if (g) return g; } } return null; };
+    const glyph = (ns: TexNode[]): TexNode | null => { for (const n of ns) { if (n.type === 'glyph') return n; if (n.type === 'disc') { const g = glyph(n.replace || []); if (g) return g; } } return null; };
     const t = glyph(run) || glyph([...before].reverse()) || glyph(after);
     const fi = t && fontInfo[String(t.font)];
     const fontPx = fi ? fi.size_px : 20;
     const version = inlineVersion(instance);
     const env = inlineEnv(instance, fontPx, t && t.color ? colorFill(t.color) : null);
-    const inline = { instance, def, env };
+    const inline: WidgetInline = { instance, def, env };
     const key = `${fontPx}|${version}`, kept = widgetMeasure.get(instance.id);
-    let m = kept && kept.key === key ? kept.m : null;
+    let m: Metrics | null = kept && kept.key === key ? kept.m : null;
     if (!m) {
-        try { m = def.measure(instance, env); } catch (e) { console.error(`[latex-viewer] kind "${instance.kind}": measure failed:`, e); return null; }
+        try { m = def.measure!(instance, env); } catch (e) { console.error(`[latex-viewer] kind "${instance.kind}": measure failed:`, e); return null; }
         if (!m) return null;
-        widgetMeasure.set(instance.id, { key, m });
+        widgetMeasure.set(instance.id, { key, m: m as InlineMetrics });
     }
-    const sp = v => Math.round((+v || 0) / SP_TO_PX);
-    const part = (dims, which) => ({ type: 'widget', slot: id, part: which, inline, fontPx,
-        color: t && t.color, width: sp(dims.width), height: sp(dims.height), depth: sp(dims.depth),
+    const sp: Sp = v => Math.round((+v! || 0) / SP_TO_PX);
+    const part = (dims: Partial<Box>, which: WidgetPart): WidgetNode => ({ type: 'widget', slot: id, part: which, inline, fontPx,
+        color: t?.color, width: sp(dims.width), height: sp(dims.height), depth: sp(dims.depth),
         version });
     if (m.segments && m.segments.length) return widgetSegmentNodes(m, slot, id, inline, fontPx, t, version, sp);
     const whole = part(m, 'whole');
@@ -85,7 +98,7 @@ export function widgetNodes(fontInfo, slot, id, run, before, after, doc) {
     // line, and before the second, which starts one, so the text is set to
     // the margin and the piece extends beyond it (a cut-edge mark on it can
     // then sit exactly on the margin).
-    const hang = o => o && +o.overhang ? [{ type: 'kern', subtype: 1, kern: -sp(o.overhang) }] : [];
+    const hang = (o: { overhang?: number } | undefined): TexNode[] => o && +o.overhang! ? [{ type: 'kern', subtype: 1, kern: -sp(o.overhang) }] : [];
     return [{ type: 'wdisc', slot: id, replace: [whole],
               options: m.splits.map((s, i) => ({
                   penalty: s.penalty ?? 100,
@@ -101,19 +114,20 @@ export function widgetNodes(fontInfo, slot, id, run, before, after, doc) {
 // unbroken – so it may break at any number of its points, one line after
 // another. Each line's run of pieces is then drawn as one part
 // (mergeWidgetRuns): { from, to, left: 'cap'|'cut', right: 'cap'|'cut' }.
-export function widgetSegmentNodes(m, slot, id, inline, fontPx, t, version, sp) {
-    const segs = m.segments, gaps = m.gaps || [];
+export function widgetSegmentNodes(m: Metrics, slot: Slot, id: number, inline: WidgetInline, fontPx: number, t: TexNode | null,
+                                   version: number, sp: Sp): TexNode[] {
+    const segs = m.segments!, gaps = m.gaps || [];
     const H = Math.max(...segs.map(g => sp(g.height))), D = Math.max(...segs.map(g => sp(g.depth)));
-    const run = { slot: id, inline, fontPx, color: t && t.color, version, merged: new Map(), height: H, depth: D };
-    const piece = (role, w, seg) => ({ type: 'widget', run, role, seg, width: sp(w), height: H, depth: D });
+    const run: WidgetRun = { slot: id, inline, fontPx, color: t?.color, version, merged: new Map(), height: H, depth: D };
+    const piece = (role: WidgetNode['role'], w: number, seg: number): WidgetNode => ({ type: 'widget', run, role, seg, width: sp(w), height: H, depth: D });
     const ends = m.ends || {};
-    const L = ends.left || {}, R = ends.right || {};
-    const hang = e => e && +e.overhang ? [{ type: 'kern', subtype: 1, kern: -sp(e.overhang) }] : [];
-    const out = [piece('capL', L.cap || 0, 0)];
+    const L: WidgetEnd = ends.left || {}, R: WidgetEnd = ends.right || {};
+    const hang = (e: WidgetEnd): TexNode[] => e && +e.overhang! ? [{ type: 'kern', subtype: 1, kern: -sp(e.overhang) }] : [];
+    const out: TexNode[] = [piece('capL', L.cap || 0, 0)];
     segs.forEach((g, i) => {
         out.push(piece('seg', g.width, i));
         if (i < segs.length - 1) {
-            const gap = gaps[i] || {};
+            const gap: { width?: number; penalty?: number } = gaps[i] || {};
             out.push({ type: 'disc', penalty: gap.penalty ?? 100, slot: id,
                        replace: gap.width ? [piece('gap', gap.width, i)] : [],
                        pre:  [piece('cutR', R.cut || 0, i), ...hang(R)],
@@ -126,19 +140,19 @@ export function widgetSegmentNodes(m, slot, id, inline, fontPx, t, version, sp) 
 // One line's consecutive pieces of a segments widget, as one part to draw.
 // Kept per run and shape, so an unchanged part keeps its element across
 // reflows.
-export function mergeWidgetRuns(nodes) {
+export function mergeWidgetRuns(nodes: TexNode[]): TexNode[] {
     if (!nodes.some(n => (n.type === 'widget' && n.run) || (n.type === 'disc' && n.slot))) return nodes;
     // A break point the line did not break at is its replacement (the gap):
     // unfold it, so the pieces either side join into one part.
     nodes = nodes.flatMap(n => n.type === 'disc' && n.slot ? n.replace : [n]);
-    const out = [];
+    const out: TexNode[] = [];
     for (let i = 0; i < nodes.length; i++) {
         const n = nodes[i];
         if (!(n.type === 'widget' && n.run)) { out.push(n); continue; }
         let j = i, w = 0;
-        while (j < nodes.length && nodes[j].type === 'widget' && nodes[j].run === n.run) { w += nodes[j].width; j++; }
-        const run = nodes.slice(i, j), segs = run.filter(x => x.role === 'seg').map(x => x.seg);
-        const part = { from: segs.length ? Math.min(...segs) : run[0].seg, to: segs.length ? Math.max(...segs) : run[0].seg,
+        while (j < nodes.length && nodes[j].type === 'widget' && (nodes[j] as WidgetNode).run === n.run) { w += nodes[j].width!; j++; }
+        const run = nodes.slice(i, j) as WidgetNode[], segs = run.filter(x => x.role === 'seg').map(x => x.seg);
+        const part: WidgetPart = { from: segs.length ? Math.min(...segs as number[]) : run[0].seg!, to: segs.length ? Math.max(...segs as number[]) : run[0].seg!,
                        left: run[0].role === 'cutL' ? 'cut' : 'cap',
                        right: run[run.length - 1].role === 'cutR' ? 'cut' : 'cap' };
         const key = `${part.from}|${part.to}|${part.left}|${part.right}|${w}`;

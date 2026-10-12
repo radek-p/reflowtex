@@ -4,7 +4,7 @@
 import { buildBreakCandidates, kpBreak } from '../breaker.ts';
 import { SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
-import { mergeWidgetRuns } from '../../host/widgets.js';
+import { mergeWidgetRuns } from '../../host/widgets.ts';
 import type { BoxNode, ContentItem, Doc, FontTable, Paragraph, TexNode } from '../model.ts';
 import type { Line, LineMeta, LinePlacement, Segment, Segments, SegmentGeometry, TextSegment } from './types.ts';
 import type { LayoutCache } from './types.ts';

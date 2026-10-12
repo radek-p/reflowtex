@@ -10,11 +10,13 @@
 // widget measured again (invalidate, a new definition), or the drawing
 // rebuilt after fonts load – and then what its render returned is called.
 import { scheduleSlots } from './slots.js';
-import { measureHTML } from './widgets.js';
+import { measureHTML } from './widgets.ts';
 import { blockOf } from './host.ts';
 import { kindDef, onKindChange } from './kinds.ts';
 import { BLOCK_SELECTOR } from '../runtime/page.ts';
 import type { InlineEnv, Instance, KindDef, PieceHost } from './types.ts';
+import type { WidgetNode } from '../engine/model.ts';
+import type { LayoutCache } from '../engine/layout/types.ts';
 
 const versions = new Map<string, number>();      // instance id → bumped by invalidate
 
@@ -59,9 +61,9 @@ const undo = new WeakMap<Element, () => void>();
 const byCache = new WeakMap<object, Set<Element>>();
 
 /** From paint.js: draw one piece in `box`, the element made for node `n`. */
-export function renderPiece(n: any, el: Element, box: HTMLElement, cache: object): void {
-    const { instance, def, env } = n.inline as { instance: Instance; def: KindDef; env: InlineEnv };
-    const host: PieceHost = { type: 'piece', el: box, instance, piece: n.part, env };
+export function renderPiece(n: WidgetNode, el: Element, box: HTMLElement, cache: object): void {
+    const { instance, def, env } = n.inline!;
+    const host: PieceHost = { type: 'piece', el: box, instance, piece: n.part!, env };
     try {
         const u = def.render(instance, host);
         if (typeof u === 'function') {
@@ -84,7 +86,7 @@ export function disposePiece(el: Element | undefined) {
 }
 
 /** A layout's drawing is rebuilt: end every piece in it, nested layouts too. */
-export function disposePieces(cache: any) {
+export function disposePieces(cache: LayoutCache | null | undefined) {
     if (!cache) return;
     for (const el of byCache.get(cache) || []) disposePiece(el);
     byCache.delete(cache);

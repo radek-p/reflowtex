@@ -8,7 +8,7 @@ import { renderNodes } from './render.ts';
 import { reconcileSink, svgEl } from './sink.ts';
 import { updateDisplayOverflowCue } from './layout/display.ts';
 import { materializeSegment } from './layout/document.ts';
-import { restoreLinkStates } from '../host/links.js';
+import { restoreLinkStates } from '../host/links.ts';
 import { liveInfo } from '../host/marks.ts';
 import type { FontTable, Mark } from './model.ts';
 import type { DomSegment, LayoutCache, LinePair } from './layout/types.ts';

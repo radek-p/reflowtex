@@ -11,7 +11,7 @@ import { keptHostBox } from '../../host/block-hosts.ts';
 import { blockKeyOf } from '../../host/host.ts';
 import { layoutTextSegment, segmentsOf } from './text.ts';
 import { svgEl } from '../sink.ts';
-import { held, linkTargets } from '../../host/links.js';
+import { held, linkTargets } from '../../host/links.ts';
 import { quickLayout } from '../../runtime/blocks.ts';
 import { observeSegments } from '../../runtime/visibility.ts';
 import { frame } from '../../runtime/pending.ts';

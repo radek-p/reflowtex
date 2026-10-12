@@ -5,7 +5,7 @@
 import { registerStreamSource } from '../defaults/footnotes.js';
 import { BREAK_NODES, SP_TO_PX, gD, gH, gW } from './core.ts';
 import { affineOf } from './render.ts';
-import { registerLinkGlyph } from '../host/links.js';
+import { registerLinkGlyph } from '../host/links.ts';
 import { colorFill } from '../runtime/colour.ts';
 import { renderPiece } from '../host/inline.ts';
 import { applyMark, liveOn, registerGlyph } from '../host/marks.ts';
