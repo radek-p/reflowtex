@@ -49,6 +49,12 @@ export function allCases(): Map<string, Case> {
 export const buildDir = (c: Case, extra: number) => join(BUILD, c.name, extra ? `w${extra > 0 ? '+' : ''}${extra}` : 'w0');
 
 /** A tool's lines, into a log file beside what it built. */
+// Nothing is fetched while tests run: the image's lualatex wrapper installs
+// no missing package (docker/lualatex-autoinstall.sh); what the tests need is
+// in docker/test-packages.txt. (REFLOWTEX_NO_AUTOINSTALL=0 lets it, to find
+// what a new fixture needs.)
+process.env.REFLOWTEX_NO_AUTOINSTALL ??= '1';
+
 const logTo = (file: string) => { writeFileSync(file, ''); return (s: string) => appendFileSync(file, `${s}\n`); };
 
 async function pagelessRun(c: Case, extra: number, out = buildDir(c, extra), texPictures = c.tex_pictures): Promise<string> {

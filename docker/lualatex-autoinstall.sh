@@ -8,9 +8,17 @@
 # \usepackage anything (see docs/architecture.md) – if that pulls in something
 # not already installed, this retries via tlmgr instead of failing outright.
 # Needs network access the first time any given package is needed.
+#
+# Two switches, from the environment:
+#   REFLOWTEX_NO_AUTOINSTALL=1   install nothing: a missing package is an
+#       error that names the list it belongs in. The tests set it (CI and
+#       local runs alike): what they need is installed when the image is
+#       built (docker/test-packages.txt), never fetched while they run.
+#   REFLOWTEX_AUTOINSTALL_LOG=<file>   append "<package> <file>" for each
+#       package installed, to find what a set of documents needs.
 set -uo pipefail
 
-REAL_LUALATEX=/usr/bin/lualatex
+REAL_LUALATEX=${REFLOWTEX_REAL_LUALATEX:-/usr/bin/lualatex}   # (another, for its test: tests/unit/autoinstall.test.ts)
 MAX_ATTEMPTS=5
 
 find_logfile() {
@@ -47,6 +55,10 @@ while true; do
   [ -n "$logfile" ] && [ -f "$logfile" ] || exit "$status"
 
   missing=$(find_missing_package "$logfile") || exit "$status"
+  if [ -n "${REFLOWTEX_NO_AUTOINSTALL:-}" ] && [ "${REFLOWTEX_NO_AUTOINSTALL}" != 0 ]; then
+    echo "lualatex-autoinstall: '$missing' is missing, and installing on demand is off (REFLOWTEX_NO_AUTOINSTALL): add the package that has it (tlmgr search --global --file /$missing) to docker/test-packages.txt and rebuild the image" >&2
+    exit "$status"
+  fi
   # Both tlmgr calls go to a random CTAN mirror; one that is broken or behind
   # fails where the next succeeds, so each gets a second try.
   pkg=$(find_owning_tlpkg "$missing")
@@ -69,6 +81,7 @@ while true; do
     tlmgr install "$pkg" >&2 || exit "$status"
   fi
   tlmgr path add >&2 2>/dev/null || true
+  [ -z "${REFLOWTEX_AUTOINSTALL_LOG:-}" ] || echo "$pkg $missing" >> "$REFLOWTEX_AUTOINSTALL_LOG"
 
   attempt=$((attempt + 1))
 done

@@ -18,6 +18,11 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+// Nothing is fetched while tests run: the image's lualatex wrapper installs
+// no missing package (docker/lualatex-autoinstall.sh); what the tests need is
+// in docker/test-packages.txt. (REFLOWTEX_NO_AUTOINSTALL=0 lets it, to find
+// what a new fixture needs.)
+process.env.REFLOWTEX_NO_AUTOINSTALL ??= '1';
 export const REPO = resolve(HERE, '../..');
 const PAGES = join(HERE, 'pages');
 export const BUILD = join(HERE, 'build');

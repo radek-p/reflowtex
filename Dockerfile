@@ -121,10 +121,33 @@ RUN set -eux; \
 COPY docker/lualatex-autoinstall.sh /usr/local/bin/lualatex
 RUN chmod +x /usr/local/bin/lualatex
 
+# ── The tests' packages ──────────────────────────────────────────────────────
+# What the tests' documents (and the website's pages) load on top of the list
+# above: docker/test-packages.txt. Installed here, so nothing is fetched while
+# tests run – they turn the wrapper's install on demand off (above). Last in
+# this stage, so a change to the list rebuilds only this layer and the next. As above,
+# tlmgr's exit status does not say whether every package arrived: each is
+# checked with tlmgr info, and the install retried. tlmgr updates itself first:
+# this layer is rebuilt long after the one above, and CTAN refuses a tlmgr that
+# has fallen behind it.
+COPY docker/test-packages.txt /opt/reflowtex/test-packages.txt
+RUN pkgs=$(sed -e 's/#.*//' /opt/reflowtex/test-packages.txt | tr -s ' \t' '\n' | grep -v '^$' || true); \
+    [ -n "$pkgs" ] || exit 0; \
+    for attempt in 1 2 3; do \
+      tlmgr update --self; tlmgr install $pkgs; \
+      installed=$(tlmgr info --only-installed --data name); missing=; \
+      for p in $pkgs; do echo "$installed" | grep -qx "$p" || missing="$missing $p"; done; \
+      [ -z "$missing" ] && break; \
+      echo "tlmgr install left out:$missing (attempt $attempt/3)" >&2; \
+      [ "$attempt" -lt 3 ] || exit 1; \
+      sleep 10; \
+    done && \
+    tlmgr path add
+
 WORKDIR /workspace
 
 # ── Browsers, for the tests (target: test) ──────────────────────────────────
-# The web and render tests run in Chromium and WebKit through Playwright. Their
+# The web and render tests run in Chromium, WebKit and Firefox through Playwright. Their
 # system libraries (some 225 packages; docker/playwright-deps.sh says why not
 # `playwright install --with-deps`) and the browsers themselves are baked in
 # here, so a test run installs nothing; the layer is rebuilt only when
@@ -136,8 +159,8 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 COPY package.json package-lock.json docker/playwright-deps.sh /opt/playwright/
 RUN cd /opt/playwright && \
     npm ci --no-audit --no-fund --ignore-scripts && \
-    sh playwright-deps.sh chromium webkit && \
-    npx playwright install chromium webkit && \
+    sh playwright-deps.sh chromium webkit firefox && \
+    npx playwright install chromium webkit firefox && \
     rm -rf /var/lib/apt/lists/* node_modules
 
 # The default image: no browsers.

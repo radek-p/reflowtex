@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# TeX Live packages the tests' documents load beyond what the Dockerfile's
+# own list installs (the pipeline's needs): the render, capture, web and unit
+# suites' fixtures, and the website's pages. Installed when the image is
+# built (the Dockerfile reads this file), so a test run fetches nothing: the
+# tests turn the lualatex wrapper's install on demand off
+# (REFLOWTEX_NO_AUTOINSTALL), and a package missing from here fails with a
+# message that names this file. One tlmgr package per line; # starts a comment.
+#
+# Found by running every suite and `make website` in a fresh image with
+# REFLOWTEX_NO_AUTOINSTALL=0 REFLOWTEX_AUTOINSTALL_LOG=<file> (CONTRIBUTING.md, "CI").
+nicematrix      # tests/render/cases/nicematrix.tex; the website's Pictures page
+pgfplots        # tests/render/cases/tikz-nested.tex; examples/demo/figures (the web tests' and the website's pages)
+transparent     # tests/capture/capture.test.ts (colours and opacity)
