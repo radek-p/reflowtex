@@ -38,8 +38,10 @@
 
 import { api } from './page.ts';
 import { allData } from './block-data.ts';
-import { maxOf, inkOf, runsOf } from './a11y-runs.js';
-import { MIN_PX, fitRuns, fitText, layOutRuns, scaleOnto } from './a11y-fit.js';
+import { maxOf, inkOf, runsOf } from './a11y-runs.ts';
+import { MIN_PX, fitRuns, fitText, layOutRuns, scaleOnto, type FitItem, type Lined, type Place } from './a11y-fit.ts';
+import type { BlockData } from './block-data.ts';
+import type { ContentItem } from '../engine/model.ts';
 
 // The layer turns into a zero-height anchor the pieces hang from, and is moved
 // before its block (as shipped it follows it): so every piece hangs below the
@@ -65,21 +67,21 @@ const NEAR = 2;
 
 // ── How formulas are read ────────────────────────────────────────────────────
 const MODE_KEY = 'reflowtex-a11y-math';
-let mode = 'mathml';
+let mode: 'mathml' | 'spoken' = 'mathml';
 try { if (localStorage.getItem(MODE_KEY) === 'spoken') mode = 'spoken'; } catch { /* no storage: the default */ }
 /** 'mathml' or 'spoken'. */
 export const accessibleMath = () => mode;
 /** The reader's choice, remembered; every block's layer is laid again, and
  *  the page told (reflowtex:accessible-math, detail {mode}) so every control
  *  showing the choice follows. */
-export function setAccessibleMath(m) {
+export function setAccessibleMath(m: string): void {
     mode = m === 'spoken' ? 'spoken' : 'mathml';
     try { localStorage.setItem(MODE_KEY, mode); } catch { /* not remembered */ }
     document.dispatchEvent(new CustomEvent('reflowtex:accessible-math', { detail: { mode } }));
     for (const data of allData) {
         const layer = layerOf(data.el);
         if (!layer) continue;
-        for (const piece of layer.children) { restore(piece); delete piece.dataset.lines; delete piece.dataset.size; }
+        for (const piece of layer.children as HTMLCollectionOf<HTMLElement>) { restore(piece); delete piece.dataset.lines; delete piece.dataset.size; }
         placeAccessibleLayer(data);
     }
 }
@@ -108,7 +110,7 @@ try { debug = localStorage.getItem(DEBUG_KEY) === '1'; } catch { /* no storage: 
 export const accessibleDebug = () => debug;
 /** Show the layer or hide it again; remembered, and the page told
  *  (reflowtex:accessible-debug, detail {on}). */
-export function setAccessibleDebug(on) {
+export function setAccessibleDebug(on: boolean): void {
     debug = !!on;
     try { if (debug) localStorage.setItem(DEBUG_KEY, '1'); else localStorage.removeItem(DEBUG_KEY); } catch { /* not remembered */ }
     showDebug();
@@ -157,7 +159,7 @@ try { reader = localStorage.getItem(READER_KEY) === '1'; } catch { /* no storage
 export const screenReaderMode = () => reader;
 /** Screen reader mode on or off; remembered, and the page told
  *  (reflowtex:screen-reader-mode, detail {on}). */
-export function setScreenReaderMode(on) {
+export function setScreenReaderMode(on: boolean): void {
     reader = !!on;
     try { if (reader) localStorage.setItem(READER_KEY, '1'); else localStorage.removeItem(READER_KEY); } catch { /* not remembered */ }
     showReader();
@@ -190,7 +192,7 @@ function addPrompt() {
 }
 // A click on the layer that is a click, not a selection, goes on to what the
 // drawing has there: a link, a footnote mark, a control.
-function passClick(e) {
+function passClick(e: MouseEvent) {
     if (!reader || !e.isTrusted || !(e.target instanceof Element) || !e.target.closest('.latex-a11y')) return;
     if (e.target.closest('summary, a, button, [role="button"]')) return;     // the layer's own (a hint's disclosure)
     const sel = document.getSelection();
@@ -215,13 +217,13 @@ api.screenReaderMode = screenReaderMode;
 api.setScreenReaderMode = setScreenReaderMode;
 
 /** A piece as shipped, before any of this changed it: kept, to lay again. */
-const shipped = new WeakMap();
+const shipped = new WeakMap<Element, string>();
 /** A layer's own style as shipped (hidden), before it was first placed. */
-const shippedStyle = new WeakMap();
-function remember(piece) { if (!shipped.has(piece)) shipped.set(piece, piece.innerHTML); }
-function restore(piece) { if (shipped.has(piece)) piece.innerHTML = shipped.get(piece); }
+const shippedStyle = new WeakMap<Element, string | null>();
+function remember(piece: Element) { if (!shipped.has(piece)) shipped.set(piece, piece.innerHTML); }
+function restore(piece: Element) { if (shipped.has(piece)) piece.innerHTML = shipped.get(piece)!; }
 /** A shipped piece in the reader's mode: spoken, each formula becomes its words. */
-function inMode(piece) {
+function inMode(piece: Element) {
     remember(piece);
     if (mode !== 'spoken') return;
     for (const m of piece.querySelectorAll('math')) {
@@ -234,37 +236,38 @@ function inMode(piece) {
 
 
 /** The layers the viewer made for views (copyLayer), by their element. */
-const ownLayers = new WeakMap();
+const ownLayers = new WeakMap<Element, HTMLElement>();
 
 /** A block's accessible layer: before it once placed, after it as shipped;
  *  a view's its own copy. */
-export function layerOf(el) {
-    if (el && ownLayers.has(el)) return ownLayers.get(el);
-    for (const s of el ? [el.previousElementSibling, el.nextElementSibling] : []) if (s && s.classList.contains('latex-a11y')) return s;
+export function layerOf(el: Element | null | undefined): HTMLElement | null {
+    if (el && ownLayers.has(el)) return ownLayers.get(el)!;
+    for (const s of el ? [el.previousElementSibling, el.nextElementSibling] : []) if (s && s.classList.contains('latex-a11y')) return s as HTMLElement;
     return null;
 }
 
 /** Lay the block's accessible layer, if it has one, over its lines; then
  *  send reflowtex:layer (bubbling, detail { block }). */
-export function placeAccessibleLayer(data) {
+export function placeAccessibleLayer(data: BlockData | undefined): void {
     const el = data && data.el;
     const layer = layerOf(el);
     if (!layer) return;
-    if (layer === el.nextElementSibling) el.before(layer);
-    const cache = data.cache;
+    // (a layer is found only by an element: data and el are there)
+    if (layer === el!.nextElementSibling) el!.before(layer);
+    const cache = data!.cache;
     const laid = cache.layout && cache.layout.laid;
     if (!laid || !cache.dom) return;
     const segs = laid.map(L => L.seg);
 
     // What each segment draws: its paragraphs (by number, with their place in
     // the segment), the display whose first row it starts with, or a stream.
-    const byPara = new Map(), byItem = new Map(), byStream = new Map();
+    const byPara = new Map<number, [number, number]>(), byItem = new Map<ContentItem, number>(), byStream = new Map<number, number>();
     segs.forEach((seg, i) => {
         if (seg.kind === 'text') seg.items.forEach((it, j) => byPara.set(it.index, [i, j]));
         else if (seg.kind === 'display') byItem.set(seg.rows[0].item, i);
         else if (seg.kind === 'stream') byStream.set(seg.index, i);
     });
-    const content = data.doc.content || [];
+    const content = data!.doc.content || [];
 
     if (layer.dataset.placed !== '1') {
         shippedStyle.set(layer, layer.getAttribute('style'));
@@ -272,38 +275,40 @@ export function placeAccessibleLayer(data) {
     }
     // All reads first, then all writes: one layout pass, however long the block.
     const origin = layer.getBoundingClientRect();
-    const places = [...layer.children].map(piece => {
-        let i, j = -1;
-        if (piece.dataset.para) [i, j] = byPara.get(+piece.dataset.para) || [];
+    const dom = cache.dom;
+    const places = ([...layer.children] as HTMLElement[]).map((piece): Place | null => {
+        let i: number | undefined, j = -1;
+        if (piece.dataset.para) [i, j] = byPara.get(+piece.dataset.para) || ([] as number[]);
         else if (piece.dataset.item) i = byItem.get(content[+piece.dataset.item - 1]);
         else if (piece.dataset.stream) i = byStream.get(+piece.dataset.stream);
-        const s = i === undefined ? null : cache.dom.segs[i];
+        const s = i === undefined ? null : dom.segs[i];
         if (!s || !s.box) return null;
         const r = s.box.getBoundingClientRect();
         let y0 = 0, y1 = r.height, lines = 1, a = -1, b = -1;
         // A paragraph among several in one segment: from its first line's top
         // to its last line's bottom (a segment laid out later, off screen,
         // has no lines yet and stands whole until it is drawn).
-        const L = laid[i];
+        const L = laid[i!];
         if (j >= 0 && L.itemStarts && L.lines && L.lines.length) {
             a = L.itemStarts[j];
             b = (j + 1 < L.itemStarts.length ? L.itemStarts[j + 1] : L.lines.length) - 1;
             if (a <= b) {
-                y0 = L.baselineYs[a] - maxOf(L.profiles[a], 'h');
-                y1 = L.baselineYs[b] + maxOf(L.profiles[b], 'd');
+                y0 = L.baselineYs![a] - maxOf(L.profiles![a], 'h');
+                y1 = L.baselineYs![b] + maxOf(L.profiles![b], 'd');
                 lines = b - a + 1;
             }
         }
         const ctm = s.svg && s.svg.getScreenCTM && s.svg.getScreenCTM();
         return { top: r.top - origin.top + y0, left: r.left - origin.left, width: r.width, height: Math.max(1, y1 - y0),
-                 lines, seg: i, a, b, ctm, display: !!piece.dataset.item };
+                 lines, seg: i!, a, b, ctm, display: !!piece.dataset.item };
     });
-    const pieces = [...layer.children];
+    const pieces = [...layer.children] as HTMLElement[];
     for (const piece of pieces) if (!piece.dataset.lines) inMode(piece);
-    const refit = [], lined = [], scaled = [];
+    const refit: { piece: HTMLElement; px: number }[] = [], lined: Lined[] = [];
+    const scaled: { el: HTMLElement | MathMLElement; w: number; h: number }[] = [];
     const h = window.innerHeight;
     pieces.forEach((piece, k) => {
-        const p = places[k] || { top: 0, left: 0, width: 1, height: 1, lines: 1 };   // nothing drawn for it: out of sight
+        const p = places[k] || ({ top: 0, left: 0, width: 1, height: 1, lines: 1 } as Place);   // nothing drawn for it: out of sight
         const top = origin.top + p.top;                    // relative to the window
         const near = top + p.height > -NEAR * h && top < (NEAR + 1) * h;
         const box = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px`;
@@ -312,23 +317,23 @@ export function placeAccessibleLayer(data) {
             const key = `${Math.round(p.width)}x${Math.round(p.height)}@${p.a}-${p.b}/${mode}`;
             piece.style.cssText = box + LINED;
             if (piece.dataset.lines !== key) {
-                const runs = runsOf(data, p.seg, p.a, p.b);
+                const runs = runsOf(data!, p.seg, p.a, p.b);
                 if (runs) { piece.dataset.lines = key; lined.push({ piece, p, runs, origin }); return; }
             } else return;
         }
         // A display near the window: its MathML scaled onto the drawing's ink
         // (the piece spans the display's whole band; the formula is narrower).
         if (near && p.display && p.ctm) {
-            const math = piece.querySelector('math, [data-spoken]');
-            const ink = math && inkOf(data, p.seg);
+            const math = piece.querySelector<HTMLElement | MathMLElement>('math, [data-spoken]');
+            const ink = math && inkOf(data!, p.seg);
             if (ink) {
                 const m = p.ctm, left = m.a * ink.x0 + m.e - origin.left, top = m.d * ink.y0 + m.f - origin.top;
                 const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
                 piece.style.cssText = `${PIECE};top:${top}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
-                math.dataset.run = math.localName === 'math' ? 'display' : 'spoken';
-                if (math.localName !== 'math') math.style.whiteSpace = 'nowrap';   // one line, scaled onto the formula
-                math.style.display = 'inline-block';           // its own size, not the piece's width
-                scaled.push({ el: math, w, h: hh });
+                math!.dataset.run = math!.localName === 'math' ? 'display' : 'spoken';
+                if (math!.localName !== 'math') math!.style.whiteSpace = 'nowrap';   // one line, scaled onto the formula
+                math!.style.display = 'inline-block';           // its own size, not the piece's width
+                scaled.push({ el: math!, w, h: hh });
                 return;
             }
         }
@@ -342,12 +347,12 @@ export function placeAccessibleLayer(data) {
             else delete piece.dataset.size;
         }
     });
-    const runs = [];
+    const runs: FitItem[] = [];
     for (const l of lined) runs.push(...layOutRuns(l, mode));
     fitText(refit);
     fitRuns(runs);
     scaleOnto(scaled);
-    el.dispatchEvent(new CustomEvent('reflowtex:layer', { bubbles: true, detail: { block: el } }));
+    el!.dispatchEvent(new CustomEvent('reflowtex:layer', { bubbles: true, detail: { block: el } }));
 }
 
 
@@ -355,15 +360,15 @@ export function placeAccessibleLayer(data) {
  *  of the block's layer as shipped, after `el`, laid over the view's own
  *  lines from then on. The pieces are the shipped ones, not what placing
  *  made of them (those were fitted to the other view's lines). */
-export function copyLayer(layer, el) {
+export function copyLayer(layer: HTMLElement | null, el: Element): HTMLElement | null {
     if (!layer || ownLayers.has(el)) return null;
-    const copy = layer.cloneNode(true);
+    const copy = layer.cloneNode(true) as HTMLElement;
     if (copy.dataset.placed === '1') {
         delete copy.dataset.placed;
         const style = shippedStyle.get(layer);
         if (style == null) copy.removeAttribute('style'); else copy.setAttribute('style', style);
     }
-    [...copy.children].forEach((piece, i) => {
+    ([...copy.children] as HTMLElement[]).forEach((piece, i) => {
         const shippedHTML = shipped.get(layer.children[i]);
         if (shippedHTML !== undefined) piece.innerHTML = shippedHTML;
         delete piece.dataset.lines;
@@ -376,7 +381,7 @@ export function copyLayer(layer, el) {
 }
 
 /** A view unmounted: its copy of the layer goes too. */
-export function dropLayer(el) {
+export function dropLayer(el: Element): void {
     const copy = ownLayers.get(el);
     if (!copy) return;
     ownLayers.delete(el);

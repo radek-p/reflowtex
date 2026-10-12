@@ -4,10 +4,26 @@
 // their drawn width, formulas scaled onto their glyphs, and a piece's text
 // sized to fill it. Measures first, then writes: one layout each.
 
+import type { LayerRun } from './a11y-runs.ts';
+
+/** Where a piece of the layer goes (a11y.ts, placeAccessibleLayer): its box
+ *  relative to the layer, its lines a..b of segment `seg`, and the
+ *  segment's screen matrix. */
+export interface Place {
+    top: number; left: number; width: number; height: number;
+    lines: number; seg: number; a: number; b: number;
+    ctm: DOMMatrix | null | undefined;
+    display: boolean;
+}
+/** A paragraph near the window, to lay out line by line. */
+export interface Lined { piece: HTMLElement; p: Place; runs: LayerRun[]; origin: DOMRect }
+/** A run's element to fit: letter-spaced to w, or (scale) scaled onto w × h. */
+export interface FitItem { el: HTMLElement | MathMLElement; w: number; h?: number; scale?: boolean; nw?: number; ls?: number }
+
 export const MIN_PX = 1;
-const unescape = s => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+const unescape = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 /** A formula's words: its alttext. */
-const wordsOf = mathml => { const m = /\balttext="([^"]*)"/.exec(mathml); return m ? unescape(m[1]) : ''; };
+const wordsOf = (mathml: string) => { const m = /\balttext="([^"]*)"/.exec(mathml); return m ? unescape(m[1]) : ''; };
 
 /** The runs as one flow of text in the piece (svg units → the piece's own
  *  px, through the segment's screen matrix): line by line, each line set on
@@ -15,15 +31,15 @@ const wordsOf = mathml => { const m = /\balttext="([^"]*)"/.exec(mathml); return
  *  line's top, the box as tall as the line), a spacer before each run that
  *  does not start where the one before ended. Returns what is still to be
  *  fitted: the runs' letter spacing, the formulas' scale. */
-export function layOutRuns({ piece, p, runs, origin }, mode) {
-    const m = p.ctm, pieceLeft = origin.left + p.left, pieceTop = origin.top + p.top;
-    const ratio = textBoxRatio(piece.parentElement);
-    const byLine = new Map();
+export function layOutRuns({ piece, p, runs, origin }: Lined, mode: string): FitItem[] {
+    const m = p.ctm!, pieceLeft = origin.left + p.left, pieceTop = origin.top + p.top;
+    const ratio = textBoxRatio(piece.parentElement!);
+    const byLine = new Map<number, { y0: number; y1: number; runs: LayerRun[] }>();
     for (const r of runs) {
         if (!byLine.has(r.line)) byLine.set(r.line, { y0: r.ly0, y1: r.ly1, runs: [] });
-        byLine.get(r.line).runs.push(r);
+        byLine.get(r.line)!.runs.push(r);
     }
-    const frag = document.createDocumentFragment(), fit = [];
+    const frag = document.createDocumentFragment(), fit: FitItem[] = [];
     let flowTop = 0, first = true;
     for (const ln of byLine.values()) {
         if (!first) frag.appendChild(document.createElement('br'));
@@ -45,7 +61,7 @@ export function layOutRuns({ piece, p, runs, origin }, mode) {
                 const box = document.createElement('span');
                 box.style.cssText = `display:inline-block;position:relative;width:${w}px;height:0;vertical-align:top${gap}`;
                 box.innerHTML = r.mathml;
-                const math = box.firstElementChild;
+                const math = box.firstElementChild as MathMLElement;
                 math.dataset.run = 'math';
                 // (its own size: the flow around it has none)
                 math.style.cssText = `position:absolute;left:0;top:${m.d * r.y0 + m.f - pieceTop - lineTop}px;display:inline-block;transform-origin:0 0;font-size:${c / ratio}px;line-height:normal;white-space:nowrap`;
@@ -56,7 +72,7 @@ export function layOutRuns({ piece, p, runs, origin }, mode) {
                 span.dataset.run = r.mathml ? 'spoken' : 'text';
                 // a formula's words, no spaces of their own: the text around
                 // them has the source's ("The ith", not "The i th")
-                span.textContent = r.mathml ? wordsOf(r.mathml) : r.text;
+                span.textContent = r.mathml ? wordsOf(r.mathml) : r.text!;
                 span.style.cssText = `white-space:pre;font-size:${c / ratio}px;line-height:${lh}px${gap}`;
                 frag.appendChild(span);
                 fit.push({ el: span, w });
@@ -70,9 +86,9 @@ export function layOutRuns({ piece, p, runs, origin }, mode) {
 
 /** The text box's height for a font size of 1px, in the layer's font:
  *  measured once per layer. */
-const ratios = new WeakMap();
-function textBoxRatio(layer) {
-    if (ratios.has(layer)) return ratios.get(layer);
+const ratios = new WeakMap<Element, number>();
+function textBoxRatio(layer: Element): number {
+    if (ratios.has(layer)) return ratios.get(layer)!;
     const probe = document.createElement('span');
     probe.textContent = 'Hxgy';
     probe.style.cssText = 'position:absolute;font-size:100px;line-height:normal;white-space:pre;opacity:0';
@@ -88,7 +104,7 @@ function textBoxRatio(layer) {
 /** The runs fitted to their stretches: a run's letters spaced so its text is
  *  as wide as its stretch; a formula scaled onto its glyphs. All measured
  *  first, then all set: one layout. */
-export function fitRuns(items) {
+export function fitRuns(items: FitItem[]): void {
     for (const it of items) if (it.scale) it.el.style.transform = 'none'; else it.el.style.letterSpacing = '0px';
     const sizes = items.map(({ el }) => {
         const r = el.localName === 'math' ? el.getBoundingClientRect()
@@ -98,7 +114,7 @@ export function fitRuns(items) {
     items.forEach((it, k) => {
         const [nw, nh] = sizes[k];
         it.nw = nw;
-        if (it.scale) { if (nw > 0 && nh > 0) it.el.style.transform = `scale(${it.w / nw}, ${it.h / nh})`; return; }
+        if (it.scale) { if (nw > 0 && nh > 0) it.el.style.transform = `scale(${it.w / nw}, ${it.h! / nh})`; return; }
         const n = [...(it.el.textContent || '')].length;
         if (n && nw > 0) { it.ls = (it.w - nw) / n; it.el.style.letterSpacing = `${it.ls}px`; }
     });
@@ -108,8 +124,8 @@ export function fitRuns(items) {
     const spaced = items.filter(it => it.ls);
     const widths = spaced.map(it => textWidth(it.el));
     spaced.forEach((it, k) => {
-        const letters = (widths[k] - it.nw) / it.ls;
-        if (letters > 0.5 && Math.abs(widths[k] - it.w) > 0.25) it.el.style.letterSpacing = `${(it.w - it.nw) / letters}px`;
+        const letters = (widths[k] - it.nw!) / it.ls!;
+        if (letters > 0.5 && Math.abs(widths[k] - it.w) > 0.25) it.el.style.letterSpacing = `${(it.w - it.nw!) / letters}px`;
     });
     // A run squeezed so hard that letters would need a negative width (WebKit
     // stops at none) stays wider than its stretch: a negative margin as wide
@@ -117,12 +133,12 @@ export function fitRuns(items) {
     const final = spaced.map(it => textWidth(it.el));
     spaced.forEach((it, k) => { if (final[k] > it.w + 0.25) it.el.style.marginRight = `${it.w - final[k]}px`; });
 }
-function textWidth(el) { const g = document.createRange(); g.selectNodeContents(el); return g.getBoundingClientRect().width; }
+function textWidth(el: Element): number { const g = document.createRange(); g.selectNodeContents(el); return g.getBoundingClientRect().width; }
 
 /** Each element scaled from its natural size onto w × h – all measured first,
  *  then all scaled: one layout. The scale a layout before left is taken off
  *  first: the browser measures an element as transformed. */
-export function scaleOnto(items) {
+export function scaleOnto(items: { el: HTMLElement | MathMLElement; w: number; h: number }[]): void {
     for (const { el } of items) el.style.transform = 'none';
     const sizes = items.map(({ el }) => { const r = el.getBoundingClientRect(); return [r.width, r.height]; });
     items.forEach(({ el, w, h }, k) => {
@@ -140,8 +156,8 @@ export function scaleOnto(items) {
  *  that still overflow (a table does not scale evenly) shrink a little each
  *  round. All pieces at once, so a round costs one layout: two for nearly
  *  every page. */
-export function fitText(fits) {
-    const overflows = p => p.scrollHeight > p.clientHeight + 1 || p.scrollWidth > p.clientWidth + 1;
+export function fitText(fits: { piece: HTMLElement; px: number }[]): void {
+    const overflows = (p: HTMLElement) => p.scrollHeight > p.clientHeight + 1 || p.scrollWidth > p.clientWidth + 1;
     for (const f of fits) f.piece.style.fontSize = `${f.px}px`;
     for (let round = 0; round < 8 && fits.length; round++) {
         const scale = fits.map(f => {

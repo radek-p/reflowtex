@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 bc6bf9ba4e6fec75eb353136651f0ad797222c1724fa9c11cc7a8f2e772b79a1
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 ec0b40bd290ea9768712236150cd19ee3bf856c81d78f40817ae057225d4e1c2
 'use strict';
 "use strict";
 (() => {
@@ -3068,7 +3068,7 @@
     });
   });
 
-  // src/runtime/a11y-runs.js
+  // src/runtime/a11y-runs.ts
   var maxOf = (profile, key) => (profile || []).reduce((m, it) => Math.max(m, it[key]), 0);
   function glyphText(cp) {
     if (cp >= 57344 && cp <= 63743 || cp >= 983040) return "";
@@ -3217,7 +3217,7 @@
       let k = 0;
       const starts = L.itemStarts || [0];
       while (k + 1 < starts.length && starts[k + 1] <= j) k++;
-      const item = L.seg.items && L.seg.items[k];
+      const item = L.seg.kind === "text" ? L.seg.items[k] : void 0;
       if (!item) return /* @__PURE__ */ new Map();
       if (!maps.has(item.index)) {
         const m = /* @__PURE__ */ new Map();
@@ -3269,7 +3269,7 @@
     return { x0, x1, y0: L.baselineYs[0] - maxOf(L.profiles[0], "h"), y1: L.baselineYs[last] + maxOf(L.profiles[last], "d") };
   }
 
-  // src/runtime/a11y-fit.js
+  // src/runtime/a11y-fit.ts
   var MIN_PX = 1;
   var unescape = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   var wordsOf = (mathml) => {
@@ -3406,7 +3406,7 @@
     }
   }
 
-  // src/runtime/a11y.js
+  // src/runtime/a11y.ts
   var ANCHOR = "position:relative;height:0;margin:0;padding:0;border:0;overflow-x:clip;overflow-y:visible";
   var PIECE = "position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;white-space:normal;pointer-events:none;user-select:none;-webkit-user-select:none";
   var LINE_HEIGHT = 1.15;
@@ -3605,12 +3605,13 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       layer.dataset.placed = "1";
     }
     const origin = layer.getBoundingClientRect();
+    const dom = cache.dom;
     const places = [...layer.children].map((piece) => {
       let i, j = -1;
       if (piece.dataset.para) [i, j] = byPara.get(+piece.dataset.para) || [];
       else if (piece.dataset.item) i = byItem.get(content[+piece.dataset.item - 1]);
       else if (piece.dataset.stream) i = byStream.get(+piece.dataset.stream);
-      const s = i === void 0 ? null : cache.dom.segs[i];
+      const s = i === void 0 ? null : dom.segs[i];
       if (!s || !s.box) return null;
       const r = s.box.getBoundingClientRect();
       let y0 = 0, y1 = r.height, lines = 1, a = -1, b = -1;
@@ -3640,7 +3641,8 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     });
     const pieces = [...layer.children];
     for (const piece of pieces) if (!piece.dataset.lines) inMode(piece);
-    const refit = [], lined = [], scaled = [];
+    const refit = [], lined = [];
+    const scaled = [];
     const h = window.innerHeight;
     pieces.forEach((piece, k) => {
       const p = places[k] || { top: 0, left: 0, width: 1, height: 1, lines: 1 };

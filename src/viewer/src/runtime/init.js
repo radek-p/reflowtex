@@ -14,7 +14,7 @@ import { inspectable } from '../host/inspect.ts';
 import { installLinks, installWidgetStates, pageLabels, viewSuffix } from '../host/links.ts';
 import { applySlots, slotBlocks, forgetInstanceTexts, joinScope, setBlockScope } from '../host/slots.ts';
 import { viewAdded, viewRemoved } from '../host/marks.ts';
-import { copyLayer, dropLayer, layerOf } from './a11y.js';
+import { copyLayer, dropLayer, layerOf } from './a11y.ts';
 import { installViewerStyles } from '../index.js';
 import {
     NATURAL_PROBE_PT, blockData, naturalWidthPt, reflowBlock, remeasureStreams, ro, scheduleFontRepaint, unobserveAll,
