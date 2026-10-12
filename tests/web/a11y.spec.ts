@@ -466,7 +466,7 @@ test('a paragraph is read to its end, whatever the line a formula ends', async (
 // "para- graph" was read as two words. A hyphen the author wrote stays.
 test('a word broken at a line end is read and copied whole', async ({ openPage }) => {
   const page = await openPage('a11y-streams', { width: 300 });
-  await page.waitForTimeout(300);
+  await idle(page);
   const block = page.locator('.latex-block[data-nodelist-b64]').nth(2);
   expect(await block.locator('tspan[data-break]').count(), 'the narrow column breaks words').toBeGreaterThan(0);
   const layer = page.locator('.latex-a11y').nth(2);
@@ -478,9 +478,16 @@ test('a word broken at a line end is read and copied whole', async ({ openPage }
   const copied = await block.evaluate(el => {
     const sel = getSelection()!, r = document.createRange();
     r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r);
-    const dt = new DataTransfer();
-    document.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
-    return dt.getData('text/plain');
+    // What the copy put in the event's own clipboardData, read while it is
+    // dispatched (on window, after the viewer's listener on document):
+    // Firefox gives the event a copy of the DataTransfer it was made with,
+    // so the one passed in stays empty.
+    let text = '';
+    const read = (e: ClipboardEvent) => { text = e.clipboardData!.getData('text/plain'); };
+    window.addEventListener('copy', read);
+    document.dispatchEvent(new ClipboardEvent('copy', { clipboardData: new DataTransfer(), bubbles: true, cancelable: true }));
+    window.removeEventListener('copy', read);
+    return text;
   });
   expect(copied).not.toMatch(/\p{L}-\s/u);
   for (const w of ['Incomprehensibility', 'representatives', 'counterrevolutionary', 'well-known']) expect(copied, w).toContain(w);
@@ -588,4 +595,21 @@ test('screen reader mode: a prompt at the page’s start, and the reading option
   await off.click();
   expect(await page.evaluate(() => (window as any).reflowtex.screenReaderMode())).toBe(false);
   await expect(prompt).toHaveText(/Turn on/);
+});
+
+// The MathML is well formed: each element with a fixed number of children has
+// that many (Firefox reports an <mfrac/> that has not. It once reported one on this
+// page, where every <mfrac> has two, LaTeX's output included: most likely a
+// formula laid out while the page was still being parsed.)
+test('every MathML element has the children its kind needs', async ({ openPage }) => {
+  for (const name of ['mathml', 'mathml-long']) {
+    const page = await openPage(name);
+    const wrong = await page.evaluate(() => {
+      const arity: Record<string, number> = { mfrac: 2, msub: 2, msup: 2, msubsup: 3, munder: 2, mover: 2, munderover: 3, mroot: 2 };
+      return [...document.querySelectorAll(Object.keys(arity).join(','))]
+        .filter(e => e.children.length !== arity[e.localName]).map(e => e.outerHTML.slice(0, 120));
+    });
+    expect(wrong, name).toEqual([]);
+    expect(await page.locator('.latex-a11y mfrac').count(), `${name} has fractions`).toBeGreaterThan(0);
+  }
 });
