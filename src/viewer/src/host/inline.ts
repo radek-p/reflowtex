@@ -9,7 +9,7 @@
 // back gets the same one); a piece goes for good when its node does – the
 // widget measured again (invalidate, a new definition), or the drawing
 // rebuilt after fonts load – and then what its render returned is called.
-import { scheduleSlots } from './slots.js';
+import { scheduleSlots } from './slots.ts';
 import { measureHTML } from './widgets.ts';
 import { blockOf } from './host.ts';
 import { kindDef, onKindChange } from './kinds.ts';

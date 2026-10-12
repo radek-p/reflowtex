@@ -12,7 +12,7 @@ import { disposePieces } from '../host/inline.ts';
 import { removeMarginNotes } from '../defaults/margin-notes.ts';
 import { inspectable } from '../host/inspect.js';
 import { installLinks, installWidgetStates, pageLabels, viewSuffix } from '../host/links.ts';
-import { applySlots, slotBlocks, forgetInstanceTexts, joinScope, setBlockScope } from '../host/slots.js';
+import { applySlots, slotBlocks, forgetInstanceTexts, joinScope, setBlockScope } from '../host/slots.ts';
 import { viewAdded, viewRemoved } from '../host/marks.ts';
 import { copyLayer, dropLayer, layerOf } from './a11y.js';
 import { installViewerStyles } from '../index.js';

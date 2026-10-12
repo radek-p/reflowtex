@@ -158,7 +158,7 @@ export interface DomSegment {
     sub?: LayoutCache | null;
     /** What is mounted in the box. */
     mount?: Element | null;
-    hc?: HeightCache;
+    hc?: HeightCache | null;
     painted?: boolean;
     dirty?: boolean;
     intersecting?: boolean;

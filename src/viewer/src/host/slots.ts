@@ -11,6 +11,9 @@ import { allData, docData } from '../runtime/block-data.ts';
 import { disposePiece } from './inline.ts';
 import { textHooks } from './instances.ts';
 import { frame, track } from '../runtime/pending.ts';
+import type { BlockData, BlockSource } from '../runtime/block-data.ts';
+import type { Doc, FontTable, GlueNode, GlyphNode, Slot, TexNode, ViewerFont } from '../engine/model.ts';
+import type { LayoutCache } from '../engine/layout/types.ts';
 // ── end of imports
 
 // ── Slots (\webtext) ──────────────────────────────────────────────────────────
@@ -24,21 +27,21 @@ import { frame, track } from '../runtime/pending.ts';
 // shaping handles within them), and between words the interword glue of that
 // font as TeX recorded it. The paragraph then re-breaks around the new text,
 // and only the segments holding it are laid out and painted again.
-export const slotValues = new Map();          // name → string (absent: the default)
-export const slotBlocks = new Set();          // blocks whose document has slots
-export let slotMeasure = null;                // a canvas context, made on first use
+export const slotValues = new Map<string, string>();          // name → string (absent: the default)
+export const slotBlocks = new Set<Element>();          // blocks whose document has slots
+export let slotMeasure: CanvasRenderingContext2D | null = null;                // a canvas context, made on first use
 export let slotScheduled = false;
 // Scopes: a page showing several documents may give each its own texts. A
 // block mounted with a scope (host.mount(el, { scope }), data-latex-scope)
 // takes a name's text from its scope first, then from the page-wide texts.
-export const scopedValues = new Map();        // scope → Map(name → string)
-const scopeBlocks = new Map();                // scope → Set(block element)
-let dirtyScopes = null;                       // scopes changed since the last frame; ALL: every block
-const ALL = Symbol('every block');
+export const scopedValues = new Map<string, Map<string, string>>();        // scope → Map(name → string)
+const scopeBlocks = new Map<string, Set<Element>>();                // scope → Set(block element)
+const ALL: unique symbol = Symbol('every block');
+let dirtyScopes: Set<string> | typeof ALL | null = null;                       // scopes changed since the last frame; ALL: every block
 
 // The width of `text` in font `fi`, in sp, as the browser draws it.
-export function measureSlotText(fi, text) {
-    slotMeasure = slotMeasure || document.createElement('canvas').getContext('2d');
+export function measureSlotText(fi: ViewerFont, text: string): number {
+    slotMeasure = slotMeasure || document.createElement('canvas').getContext('2d')!;
     slotMeasure.font = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
     return Math.round(slotMeasure.measureText(text).width / SP_TO_PX);
 }
@@ -59,9 +62,9 @@ const SLOT_BREAK = /^[^\S\u00A0\u2007\u202F\uFEFF]+$/;
 // The nodes a slot's text becomes. The font and colour are those of the
 // default's first glyph; height and depth the default's own, so replacing a
 // text never moves the line's baseline.
-export function slotNodes(fontInfo, slot, id, run, text) {
-    const glyphs = [];
-    const walk = ns => { for (const n of ns) { if (n.type === 'glyph') glyphs.push(n); else if (n.type === 'disc') walk(n.replace || []); } };
+export function slotNodes(fontInfo: FontTable, slot: Slot, id: number, run: TexNode[], text: string): TexNode[] {
+    const glyphs: GlyphNode[] = [];
+    const walk = (ns: TexNode[]) => { for (const n of ns) { if (n.type === 'glyph') glyphs.push(n); else if (n.type === 'disc') walk(n.replace || []); } };
     walk(run);
     const t = glyphs[0];
     if (!t) return run;                // nothing to take the font from: keep the default
@@ -73,8 +76,8 @@ export function slotNodes(fontInfo, slot, id, run, text) {
     if (document.fonts && !document.fonts.check(spec, text)) {
         track('slot face', document.fonts.load(spec, text)).then(() => scheduleSlots(), () => {});
     }
-    const out = [];
-    const glue = () => ({ type: 'glue', subtype: 13, width: slot.space || 0,
+    const out: TexNode[] = [];
+    const glue = (): GlueNode => ({ type: 'glue', subtype: 13, width: slot.space || 0,
                           stretch: slot.stretch || 0, shrink: slot.shrink || 0, slot: id });
     for (const part of String(text).split(SLOT_SPACES)) {
         if (!part) continue;
@@ -95,30 +98,30 @@ export function slotNodes(fontInfo, slot, id, run, text) {
 // Rebuild the node list of every paragraph holding a slot from its original
 // list, substituting the runs whose name has a text. Returns the indices of
 // the paragraphs whose list changed.
-export function applySlots(fontInfo, doc) {
+export function applySlots(fontInfo: FontTable, doc: Doc): Set<number> {
     const slots = doc.slots || [];
     if (!doc.slotParas) {
         doc.slotParas = [];
         (doc.paragraphs || []).forEach((para, i) => {
-            if ((para.nodes || []).some(n => n.slot)) doc.slotParas.push({ index: i + 1, para, orig: para.nodes, made: [] });
+            if ((para.nodes || []).some(n => n.slot)) doc.slotParas!.push({ index: i + 1, para, orig: para.nodes, made: [] });
         });
     }
     useGlyphMetrics(doc.glyph_metrics);
-    const changed = new Set();
+    const changed = new Set<number>();
     for (const sp of doc.slotParas) {
-        const orig = sp.orig, out = [], made = [];
+        const orig = sp.orig, out: TexNode[] = [], made: TexNode[] = [];
         for (let i = 0; i < orig.length; i++) {
             const id = orig[i].slot, slot = id && slots[id - 1];
             const isWidget = slot && slot.kind === 'widget';
-            const text = slot && !isWidget ? textOf(doc, id, slot) : undefined;
+            const text = slot && !isWidget ? textOf(doc, id!, slot) : undefined;
             if (!slot || (!isWidget && text === undefined)) { out.push(orig[i]); continue; }
             // The run: from here to the last node of this slot (a disc or a
             // font kern between its glyphs carries no id of its own).
             let j = i;
             for (let k = i + 1; k < orig.length; k++) if (orig[k].slot === id) j = k;
             const run = orig.slice(i, j + 1);
-            const nodes = isWidget ? widgetNodes(fontInfo, slot, id, run, orig.slice(0, i), orig.slice(j + 1), doc)
-                                   : slotNodes(fontInfo, slot, id, run, text);
+            const nodes = isWidget ? widgetNodes(fontInfo, slot, id!, run, orig.slice(0, i), orig.slice(j + 1), doc)
+                                   : slotNodes(fontInfo, slot, id!, run, text!);
             if (!nodes) { out.push(orig[i]); continue; }
             out.push(...nodes); made.push(...nodes);
             i = j;
@@ -126,7 +129,7 @@ export function applySlots(fontInfo, doc) {
         // What was substituted, with its measured widths: a text measured
         // again once its font has loaded counts as a change.
         const key = made.map(n => n.text !== undefined ? n.text + '\u0002' + n.width
-                                : n.type === 'wdisc' || n.type === 'widget' ? 'w' + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace[0].version, n.width ?? n.replace[0].width, n.options && n.options.map(o => [o.pre[0].width, o.post[0].width])])
+                                : n.type === 'wdisc' || n.type === 'widget' ? 'w' + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace![0].version, n.width ?? n.replace![0].width, n.options && n.options.map(o => [o.pre[0].width, o.post[0].width])])
                                 : n.type === 'disc' && n.slot ? 'd' + JSON.stringify([n.slot, n.penalty, n.pre.map(x => x.width), n.post.map(x => x.width), n.replace.map(x => x.width)])
                                 : n.type === 'penalty' ? '~'
                                 : ' ').join('\u0001');
@@ -141,33 +144,34 @@ export function applySlots(fontInfo, doc) {
 
 // Forget the layouts of the segments holding those paragraphs (in the nested
 // layouts of streams too), and the drawn elements of the words replaced.
-export function invalidateParagraphs(cache, changed, stale) {
+export function invalidateParagraphs(cache: LayoutCache | null | undefined, changed: Set<number>, stale: TexNode[]): void {
     if (!cache || !cache.dom || !cache.layoutCtx) return;
     for (const i of changed) cache.bcs && cache.bcs.delete(i);
     // A replaced widget piece is gone for good: its drawing ends.
     for (const n of stale) { disposePiece(cache.dom.byNode.get(n)); cache.dom.byNode.delete(n); }
+    const dom = cache.dom;
     cache.layoutCtx.segs.forEach((seg, i) => {
-        const s = cache.dom.segs[i];
+        const s = dom.segs[i];
         if (!s) return;
         if (s.sub) invalidateParagraphs(s.sub, changed, stale);
-        if (seg.items && seg.items.some(it => changed.has(it.index))) {
+        if (seg.kind === 'text' && seg.items.some(it => changed.has(it.index))) {
             s.hc = null;
             if (s.painted) s.dirty = true;
         }
     });
 }
 
-export function refreshSlots(el) {
+export function refreshSlots(el: Element): void {
     const data = blockData.get(el);
     if (!data || !data.cache.dom) return;
     const changed = applySlots(data.fontInfo, data.doc);
     if (!changed.size) return;
     // (a widget's drawn parts sit inside its wdisc: the whole and each split's two)
-    const parts = n => n.type === 'wdisc'
+    const parts = (n: TexNode): TexNode[] => n.type === 'wdisc'
         ? [...n.replace, ...n.options.flatMap(o => [...o.pre, ...o.post])]
         : n.run ? [...n.run.merged.values()] : [n];
-    const stale = data.doc.slotParas.flatMap(sp => (sp.stale || []).flatMap(parts));
-    data.doc.slotParas.forEach(sp => { sp.stale = null; });
+    const stale = data.doc.slotParas!.flatMap(sp => (sp.stale || []).flatMap(parts));
+    data.doc.slotParas!.forEach(sp => { sp.stale = null; });
     invalidateParagraphs(data.cache, changed, stale);
     const params = { ...data.params, align: data.lastAlign };
     layoutDocument(data.fontInfo, data.doc, data.lastWidth, params, data.cache);
@@ -176,9 +180,9 @@ export function refreshSlots(el) {
 
 /** Refresh, in the next frame, the blocks of `scope` (a string), or of no
  *  scope given (undefined): every block. */
-export function scheduleSlots(scope) {
+export function scheduleSlots(scope?: string): void {
     if (scope === undefined) dirtyScopes = ALL;
-    else if (dirtyScopes !== ALL) (dirtyScopes ||= new Set()).add(scope);
+    else if (dirtyScopes !== ALL) ((dirtyScopes ||= new Set()) as Set<string>).add(scope);
     if (slotScheduled) return;
     slotScheduled = true;
     frame('slots', () => {
@@ -191,9 +195,9 @@ export function scheduleSlots(scope) {
 }
 
 /** The scope a block resolves its texts in (null: the page's only). */
-export const scopeOf = el => (blockData.get(el) || {}).scope ?? null;
+export const scopeOf = (el: Element): string | null => blockData.get(el)?.scope ?? null;
 /** From initBlock (before the first layout) and destroyBlock (null). */
-export function joinScope(el, scope, old = null) {
+export function joinScope(el: Element, scope: string | null | undefined, old: string | null = null): void {
     if (old !== null) {
         const set = scopeBlocks.get(old);
         if (set) { set.delete(el); if (!set.size) scopeBlocks.delete(old); }
@@ -205,7 +209,7 @@ export function joinScope(el, scope, old = null) {
     }
 }
 /** Move a block already on the page into `scope` (null: none). */
-export function setBlockScope(el, scope) {
+export function setBlockScope(el: Element, scope: string | null): void {
     const data = blockData.get(el);
     if (!data || (data.scope ?? null) === scope) return;
     joinScope(el, scope, data.scope ?? null);
@@ -223,11 +227,10 @@ export const scopeSizes = () => Object.fromEntries([...scopeBlocks].map(([k, v])
 // { mirror: true }, that instance in every view of its block (host.mount(el,
 // { of })), those mounted later too. Updates within one frame are applied
 // together.
-const instanceTexts = new Map();       // instance id → string
-const mirroredTexts = new WeakMap();   // a block's source → Map(its id past the key → string)
-/** @param {string} name @param {string | null} text @param {string | null} [scope] */
-export function setSlotText(name, text, scope = null) {
-    let values = slotValues;
+const instanceTexts = new Map<string, string>();       // instance id → string
+const mirroredTexts = new WeakMap<BlockSource, Map<string, string>>();   // a block's source → Map(its id past the key → string)
+export function setSlotText(name: string, text: string | null | undefined, scope: string | null = null): void {
+    let values: Map<string, string> | undefined = slotValues;
     if (scope !== null) {
         values = scopedValues.get(scope);
         if (!values) scopedValues.set(scope, values = new Map());
@@ -238,28 +241,24 @@ export function setSlotText(name, text, scope = null) {
     scheduleSlots(scope === null ? undefined : scope);
 }
 /** The text a block of `scope` shows for `name`: the scope's, else the
- *  page's; null: TeX's default.
- *  @param {string} name
- *  @param {string | null} [scope]
- *  @returns {string | null} */
-export function slotText(name, scope = null) {
+ *  page's; null: TeX's default. */
+export function slotText(name: string, scope: string | null = null): string | null {
     const own = scope !== null && scopedValues.get(scope)?.get(String(name));
     if (own !== undefined && own !== false) return own;
     return slotValues.get(String(name)) ?? null;
 }
-/** Every text of `scope` forgotten (null: every page-wide one).
- *  @param {string | null} [scope] */
-export function clearSlotTexts(scope = null) {
+/** Every text of `scope` forgotten (null: every page-wide one). */
+export function clearSlotTexts(scope: string | null = null): void {
     const values = scope === null ? slotValues : scopedValues.get(scope);
     if (!values || !values.size) return;
     values.clear();
     if (scope !== null) scopedValues.delete(scope);
     scheduleSlots(scope === null ? undefined : scope);
 }
-textHooks.set = (id, text, mirror = false) => {
+textHooks.set = (id: string, text: string | null, mirror = false) => {
     const data = mirror && allData.find(d => id.startsWith(d.cache.blockKey + '/'));
     if (data && data.source) {
-        const local = id.slice(data.cache.blockKey.length + 1);
+        const local = id.slice(data.cache.blockKey!.length + 1);
         let texts = mirroredTexts.get(data.source);
         if (!texts) mirroredTexts.set(data.source, texts = new Map());
         if (text === null) texts.delete(local); else texts.set(local, text);
@@ -269,18 +268,18 @@ textHooks.set = (id, text, mirror = false) => {
     scheduleSlots();
 };
 /** From destroyBlock: the texts given to a block's (a view's) own instances. */
-export function forgetInstanceTexts(key) {
+export function forgetInstanceTexts(key: string | undefined): void {
     for (const id of [...instanceTexts.keys()]) if (id.startsWith(key + '/')) instanceTexts.delete(id);
 }
-function textOf(doc, id, slot) {
-    const data = docData.get(doc) || {};
-    const key = (data.cache || {}).blockKey;
+function textOf(doc: Doc, id: number, slot: Slot): string | undefined {
+    const data: Partial<BlockData> = docData.get(doc) || {};
+    const key = (data.cache || {} as Partial<LayoutCache>).blockKey;
     const own = key && instanceTexts.get(`${key}/t${id}`);
     if (own !== undefined && own !== null) return own;
     const mirrored = data.source && mirroredTexts.get(data.source);
     const shared = mirrored && mirrored.get(`t${id}`);
     if (shared !== undefined) return shared;
     const scoped = data.scope != null && scopedValues.get(data.scope);
-    const inScope = scoped && scoped.get(slot.name);
-    return inScope !== undefined && inScope !== false ? inScope : slotValues.get(slot.name);
+    const inScope = scoped && scoped.get(slot.name!);
+    return inScope !== undefined && inScope !== false ? inScope : slotValues.get(slot.name!);
 }

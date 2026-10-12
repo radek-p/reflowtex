@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 2a4c7b7fb595adf8d4f134c0de9cd24ce5934c87c0d4b795a825335bd4474c52
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 ac913b274e16c9e348f262115b7ac593e0830df783dc49ac7c1d5f2126f78892
 'use strict';
 "use strict";
 (() => {
@@ -1730,15 +1730,15 @@
     }
   });
 
-  // src/host/slots.js
+  // src/host/slots.ts
   var slotValues = /* @__PURE__ */ new Map();
   var slotBlocks = /* @__PURE__ */ new Set();
   var slotMeasure = null;
   var slotScheduled = false;
   var scopedValues = /* @__PURE__ */ new Map();
   var scopeBlocks = /* @__PURE__ */ new Map();
-  var dirtyScopes = null;
   var ALL = /* @__PURE__ */ Symbol("every block");
+  var dirtyScopes = null;
   function measureSlotText(fi, text) {
     slotMeasure = slotMeasure || document.createElement("canvas").getContext("2d");
     slotMeasure.font = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
@@ -1844,11 +1844,12 @@
       disposePiece(cache.dom.byNode.get(n));
       cache.dom.byNode.delete(n);
     }
+    const dom = cache.dom;
     cache.layoutCtx.segs.forEach((seg, i) => {
-      const s = cache.dom.segs[i];
+      const s = dom.segs[i];
       if (!s) return;
       if (s.sub) invalidateParagraphs(s.sub, changed3, stale);
-      if (seg.items && seg.items.some((it) => changed3.has(it.index))) {
+      if (seg.kind === "text" && seg.items.some((it) => changed3.has(it.index))) {
         s.hc = null;
         if (s.painted) s.dirty = true;
       }
@@ -1885,7 +1886,7 @@
       for (const sc of dirty || []) for (const el of scopeBlocks.get(sc) || []) if (slotBlocks.has(el)) refreshSlots(el);
     });
   }
-  var scopeOf = (el) => (blockData.get(el) || {}).scope ?? null;
+  var scopeOf = (el) => blockData.get(el)?.scope ?? null;
   function joinScope(el, scope, old = null) {
     if (old !== null) {
       const set = scopeBlocks.get(old);

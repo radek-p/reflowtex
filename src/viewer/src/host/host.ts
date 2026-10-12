@@ -11,7 +11,7 @@ import { normalise, walk, matches, type AnchorSource, type Doc, type DocStream, 
 import { TypesetPartImpl, type BlockData } from './surface.ts';
 import './block-hosts.ts';
 import { defineKind, definedKinds } from './kinds.ts';
-import { clearSlotTexts, scopeOf, setSlotText, slotText } from './slots.js';
+import { clearSlotTexts, scopeOf, setSlotText, slotText } from './slots.ts';
 import { addMark, liveMarks, markHandle, rangesOf } from './marks.ts';
 import { getColorMaps, setColorMaps } from '../runtime/colour.ts';
 import { destroyBlock, mountBlock } from '../runtime/init.js';

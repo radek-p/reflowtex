@@ -81,6 +81,15 @@ export interface NodeFields extends Rates, Floors {
     text?: string;
     /** Leader glue: the copies of its box drawn last (engine/render). */
     _leaderCopies?: TexNode[];
+    // A widget's pieces (WidgetNode, WidgetDiscNode), read through the union.
+    part?: WidgetPart;
+    inline?: WidgetInline;
+    fontPx?: number;
+    version?: number;
+    run?: WidgetRun;
+    role?: 'capL' | 'capR' | 'seg' | 'gap' | 'cutL' | 'cutR';
+    seg?: number;
+    options?: { penalty: number; pre: TexNode[]; post: TexNode[] }[];
 }
 
 export interface GlyphNode extends NodeFields {
@@ -169,15 +178,8 @@ export interface WidgetNode extends NodeFields {
     width: number;
     height: number;
     depth: number;
-    // a part to draw …
-    part?: WidgetPart;
-    inline?: WidgetInline;
-    fontPx?: number;
-    version?: number;
-    // … or one piece of a segments widget, before its line is merged
-    run?: WidgetRun;
-    role?: 'capL' | 'capR' | 'seg' | 'gap' | 'cutL' | 'cutR';
-    seg?: number;
+    // A part to draw (part, inline, fontPx, version), or one piece of a
+    // segments widget before its line is merged (run, role, seg).
 }
 /** A widget that may be split: a discretionary with a pre/post pair per way
  *  to split it, over the one unbroken widget. */
@@ -290,7 +292,16 @@ export interface OutlineEntry {
 
 /** A paragraph holding a \webtext slot: its list as compiled, and what the
  *  viewer made of it (host/slots). */
-export interface SlotParagraph { index: number; para: Paragraph; orig: TexNode[]; made: TexNode[][] }
+export interface SlotParagraph {
+    index: number;
+    para: Paragraph;
+    orig: TexNode[];
+    made: TexNode[];
+    /** What was substituted, as a key: unchanged, nothing is laid out again. */
+    key?: string;
+    /** The nodes replaced by the last change, whose drawings go. */
+    stale?: TexNode[] | null;
+}
 
 export interface Doc {
     fonts: DocFont[];

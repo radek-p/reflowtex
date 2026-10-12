@@ -9,7 +9,7 @@ import { api } from '../runtime/page.ts';
 import { surfacesOf } from './surface.ts';
 import { definedKinds } from './kinds.ts';
 import { idle, pending } from '../runtime/pending.ts';
-import { scopeSizes } from './slots.js';
+import { scopeSizes } from './slots.ts';
 // ── end of imports
 
 // ── Inspection ───────────────────────────────────────────────────────────────
