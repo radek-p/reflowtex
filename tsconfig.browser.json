@@ -2,8 +2,9 @@
   // Type checking of the browser's TypeScript: the viewer (src/viewer/src,
   // bundled into latex-viewer.js), the companion package (src/companion,
   // bundled into companion.js) and the inspector (src/inspector/src, built
-  // into its scripts). esbuild builds; this only checks. JavaScript still
-  // among them is read for its types, not checked.
+  // into its scripts), and the website's own script (website/browser).
+  // esbuild builds; this only checks. All of it is TypeScript: no JavaScript
+  // is read.
   "compilerOptions": {
     "target": "es2022",
     "module": "esnext",
@@ -13,8 +14,6 @@
     "jsxImportSource": "preact",
     "strict": true,
     "noEmit": true,
-    "allowJs": true,
-    "checkJs": false,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
