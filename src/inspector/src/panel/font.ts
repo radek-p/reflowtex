@@ -8,14 +8,17 @@ import { html, useState, useEffect, useMemo, useRef } from '../vendor/preact.js'
 import { call, got } from './bridge.js';
 import { Table, Action, Head, Muted, IconButton, IconClose, copyText } from './ui.js';
 import { resData, resVersion, glyphSel, wantGlyph, markUses, hoverUses, showInTree } from './resources.js';
+import type { FontGlyphs, GlyphCell } from '../protocol.ts';
 
-export const hex = cp => 'U+' + cp.toString(16).toUpperCase().padStart(4, '0');
-const isPUA = cp => (cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000;
-const ptOf = sp => +(sp / 65536).toFixed(3) + 'pt';
-const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+type Rows = [string, string][];
+
+export const hex = (cp: number): string => 'U+' + cp.toString(16).toUpperCase().padStart(4, '0');
+const isPUA = (cp: number): boolean => (cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000;
+const ptOf = (sp: number): string => +(sp / 65536).toFixed(3) + 'pt';
+const plural = (n: number, one: string, many = one + 's'): string => `${n} ${n === 1 ? one : many}`;
 // A glyph the documents use, as a resource of its own (its uses on the page).
-const glyphKey = (d, c) => (c && c.uses ? `glyph:${c.cps.find(cp => cp != null)}:${d.key}` : null);
-function selectGlyph(d, i) {
+const glyphKey = (d: FontGlyphs, c: GlyphCell | undefined): string | null => (c && c.uses ? `glyph:${c.cps.find(cp => cp != null)}:${d.key}` : null);
+function selectGlyph(d: FontGlyphs, i: number): void {
     glyphSel.value = { i, key: glyphKey(d, d.cells[i]) };
     markUses();
 }
@@ -24,11 +27,11 @@ function deselectGlyph() {
     markUses();
 }
 
-export function FontDetails({ fontKey }) {
-    const [d, setD] = useState(undefined);            // undefined: being read; null: gone
+export function FontDetails({ fontKey }: { fontKey: string }) {
+    const [d, setD] = useState<FontGlyphs | null | undefined>(undefined);            // undefined: being read; null: gone
     const [q, setQ] = useState('');
     const [which, setWhich] = useState('all');
-    const grid = useRef(null);
+    const grid = useRef<HTMLDivElement>(null);
     const version = resVersion.value;                   // (read again when the resources are)
     useEffect(() => {
         let live = true;
@@ -61,7 +64,7 @@ export function FontDetails({ fontKey }) {
     if (d === null) return html`<${Muted}>Gone – the page changed.<//>`;
     const res = resData.value && [...resData.value.fonts, ...resData.value.modifiedFonts].find(r => r.key === fontKey);
     const sel = glyphSel.value;
-    const cellOf = e => e.target.closest('.cell');
+    const cellOf = (e: Event) => (e.target as Element).closest<HTMLElement>('.cell');
     return html`<div class="fsplit">
         <div class="fmain">
         <${Head} title=${res ? res.label : fontKey.slice(5)}>
@@ -71,17 +74,17 @@ export function FontDetails({ fontKey }) {
         <div class="gbar">
             <input type="search" class="gsearch" spellcheck="false" aria-label="Search the glyphs"
                 placeholder="A, →, U+2192, 0x41, 65, #12 (glyph index), a name…" value=${q}
-                onInput=${e => setQ(e.currentTarget.value)}
-                onKeyDown=${e => { if (e.key === 'Escape' && q) { e.stopPropagation(); setQ(''); } }}/>
-            <select aria-label="Which glyphs" value=${which} onChange=${e => setWhich(e.currentTarget.value)}>
+                onInput=${(e: Event & { currentTarget: HTMLInputElement }) => setQ(e.currentTarget.value)}
+                onKeyDown=${(e: KeyboardEvent) => { if (e.key === 'Escape' && q) { e.stopPropagation(); setQ(''); } }}/>
+            <select aria-label="Which glyphs" value=${which} onChange=${(e: Event & { currentTarget: HTMLSelectElement }) => setWhich(e.currentTarget.value)}>
                 <option value="all">All glyphs</option><option value="used">Used here</option>
                 <option value="unused">Not used</option><option value="pua">Private use</option>
             </select>
             <span class="gcount muted">${shown.length} of ${d.cells.length}</span>
         </div>
         <div class="grid" role="grid" aria-label="Glyphs" ref=${grid}
-                onClick=${e => { const c = cellOf(e); if (c) selectGlyph(d, +c.dataset.i); }}
-                onMouseMove=${e => { const c = cellOf(e); if (c) hoverUses(glyphKey(d, d.cells[+c.dataset.i])); }}
+                onClick=${(e: MouseEvent) => { const c = cellOf(e); if (c) selectGlyph(d, +c.dataset.i!); }}
+                onMouseMove=${(e: MouseEvent) => { const c = cellOf(e); if (c) hoverUses(glyphKey(d, d.cells[+c.dataset.i!])); }}
                 onMouseLeave=${() => hoverUses(null)}>
             ${shown.map(i => html`<${Cell} key=${i} i=${i} c=${d.cells[i]} family=${d.family} sel=${!!sel && sel.i === i}/>`)}
         </div>
@@ -92,9 +95,9 @@ export function FontDetails({ fontKey }) {
 // (Between two cells – the grid's gaps – the hover stays as it was: it changes
 // on the next glyph, and clears when the pointer leaves the grid.)
 
-function fontRows(d) {
+function fontRows(d: FontGlyphs): Rows {
     const used = d.cells.filter(c => c.uses).length;
-    const rows = [['file', d.file || '(none)'], ['TeX font', d.names.join(', ')], ['sizes', d.sizes.map(ptOf).join(', ')]];
+    const rows: Rows = [['file', d.file || '(none)'], ['TeX font', d.names.join(', ')], ['sizes', d.sizes.map(ptOf).join(', ')]];
     if (d.origin) rows.push(['served', d.origin === 'converted' ? 'converted: a classic Type 1 font the pipeline rebuilt as OpenType'
         : d.origin === 'patched' ? 'patched: the pipeline added cmap entries for code points LuaTeX used, and serves it renamed'
         : 'unmodified, as TeX had it']);
@@ -116,25 +119,25 @@ function fontRows(d) {
 // The glyphs a search asks for: a character; a code point (U+2192, 0x2192);
 // a number, as a glyph index or a decimal code point; #12, a glyph index; or
 // part of a glyph's name. Every reading that applies counts.
-function glyphTest(q) {
+function glyphTest(q: string): ((c: GlyphCell) => boolean) | null {
     q = q.trim();
     if (!q) return null;
-    const tests = [];
-    let m;
+    const tests: ((c: GlyphCell) => boolean)[] = [];
+    let m: RegExpExecArray | null;
     if ((m = /^(?:u\+?|0x|\\u\{?)([0-9a-f]{1,6})\}?$/i.exec(q))) { const cp = parseInt(m[1], 16); tests.push(c => c.cps.includes(cp)); }
     else if ((m = /^(?:#|gid\s*:?\s*)(\d+)$/i.exec(q))) { const g = +m[1]; tests.push(c => c.gid === g); }
     else if (/^\d+$/.test(q)) { const n = +q; tests.push(c => c.gid === n || c.cps.includes(n)); }
     const chars = [...q];
-    if (chars.length === 1 || !/[\p{L}\p{N}]/u.test(q)) { const cps = chars.map(ch => ch.codePointAt(0)); tests.push(c => c.cps.some(cp => cps.includes(cp))); }
+    if (chars.length === 1 || !/[\p{L}\p{N}]/u.test(q)) { const cps = chars.map(ch => ch.codePointAt(0)!); tests.push(c => c.cps.some(cp => cps.includes(cp))); }
     const lq = q.toLowerCase();
     tests.push(c => !!c.name && c.name.toLowerCase().includes(lq));
     return c => tests.some(t => t(c));
 }
 // Which cells, in what order: by code point; then the glyphs with none (by
 // index), which the viewer cannot draw; then characters the file lacks.
-function glyphsShown(d, q, which) {
+function glyphsShown(d: FontGlyphs, q: string, which: string): number[] {
     const test = glyphTest(q);
-    const rank = c => (c.missing ? 2 : c.cps.length ? 0 : 1), first = c => (c.cps.length ? Math.min(...c.cps) : c.gid);
+    const rank = (c: GlyphCell) => (c.missing ? 2 : c.cps.length ? 0 : 1), first = (c: GlyphCell) => (c.cps.length ? Math.min(...c.cps) : c.gid!);
     return d.cells.map((c, i) => i)
         .sort((a, b) => rank(d.cells[a]) - rank(d.cells[b]) || first(d.cells[a]) - first(d.cells[b]))
         .filter(i => {
@@ -145,7 +148,7 @@ function glyphsShown(d, q, which) {
             return !test || test(c);
         });
 }
-function Cell({ i, c, family, sel }) {
+function Cell({ i, c, family, sel }: { i: number; c: GlyphCell; family: string | null; sel: boolean }) {
     const cp = c.cps[0];
     const title = [cp != null ? c.cps.map(hex).join(' ') : 'no code point', c.name,
                    c.gid != null ? `#${c.gid}` : 'not in the file', c.uses ? `used ${c.uses}×` : ''].filter(Boolean).join(' · ');
@@ -158,9 +161,9 @@ function Cell({ i, c, family, sel }) {
 }
 
 // ── A glyph ────────────────────────────────────────────────────────────────────
-function GlyphPane({ d, i }) {
+function GlyphPane({ d, i }: { d: FontGlyphs; i: number }) {
     const c = d.cells[i], key = glyphKey(d, c);
-    const [drawn, setDrawn] = useState(null);          // how many of its uses are on the page now
+    const [drawn, setDrawn] = useState<number | null>(null);          // how many of its uses are on the page now
     const version = resVersion.value;
     useEffect(() => {
         if (!key) return;
@@ -168,14 +171,14 @@ function GlyphPane({ d, i }) {
         call('uses', key).then(ids => { if (live) setDrawn(got(ids) ? ids.length : 0); });
         return () => { live = false; };
     }, [key, version]);
-    const rows = [];
+    const rows: Rows = [];
     if (c.gid != null) rows.push(['glyph index', `#${c.gid}`]);
     if (c.name) rows.push(['name', c.name]);
     rows.push(['code point' + (c.cps.length > 1 ? 's' : ''), c.cps.length
         ? c.cps.map(cp => hex(cp) + (isPUA(cp) ? ' (private use: the pipeline gave the glyph a code point of its own)' : '')).join(', ')
         : 'none: the viewer cannot draw it']);
     if (c.missing) rows.push(['in the file', 'no – the document uses it, but the font\'s cmap has no such character']);
-    if (c.adv != null) rows.push(['advance', `${c.adv} units` + (d.upem ? ` = ${d.sizes.map(sz => ptOf(c.adv / d.upem * sz)).join(', ')}` : '')]);
+    if (c.adv != null) rows.push(['advance', `${c.adv} units` + (d.upem ? ` = ${d.sizes.map(sz => ptOf(c.adv! / d.upem! * sz)).join(', ')}` : '')]);
     for (const [sz, w, ht, dp] of c.tex || []) rows.push([`TeX at ${ptOf(sz)}`, `${ptOf(w)} × ${ptOf(ht)} + ${ptOf(dp)}`]);
     if (c.codes) rows.push(['microtype', `\\lpcode ${c.codes.lp}, \\rpcode ${c.codes.rp}, \\efcode ${c.codes.ef}`]);
     const oh = c.cps.length ? overhang(c, d) : null;
@@ -200,13 +203,15 @@ function GlyphPane({ d, i }) {
 // the baseline, in ems – l and r across (l negative to the left of the
 // origin), a above the baseline and d below. From the canvas's text metrics,
 // which measure the glyph's outline in the loaded font. Null for no font.
-const inkMemo = new Map();
-let inkCtx = null;
-function inkOf(family, cp) {
+/** A glyph's ink about the pen (ems): left, right, ascent, descent. */
+interface Ink { l: number; r: number; a: number; d: number }
+const inkMemo = new Map<string, Ink | null>();
+let inkCtx: CanvasRenderingContext2D | null = null;
+function inkOf(family: string | null, cp: number | undefined): Ink | null {
     if (!family || cp == null) return null;
     const k = family + ' ' + cp;
-    if (inkMemo.has(k)) return inkMemo.get(k);
-    inkCtx = inkCtx || document.createElement('canvas').getContext('2d');
+    if (inkMemo.has(k)) return inkMemo.get(k)!;
+    inkCtx = inkCtx || document.createElement('canvas').getContext('2d')!;
     inkCtx.font = `100px '${family}'`;
     const m = inkCtx.measureText(String.fromCodePoint(cp));
     const ink = { l: -m.actualBoundingBoxLeft / 100, r: m.actualBoundingBoxRight / 100,
@@ -215,10 +220,10 @@ function inkOf(family, cp) {
     inkMemo.set(k, out);
     return out;
 }
-const fontFamily = family => (family ? `'${family}'` : undefined);
+const fontFamily = (family: string | null): string | undefined => (family ? `'${family}'` : undefined);
 // A table cell's glyph: at one size for all, on a common baseline – unless
 // its ink would not fit, when it is shrunk to fit and centred.
-function CellGlyph({ cp, family }) {
+function CellGlyph({ cp, family }: { cp: number; family: string | null }) {
     const W = 40, H = 32, BASE = 22, top = 23;        // px; the baseline 23px down
     const ink = inkOf(family, cp);
     let F = BASE, x0 = -W / 2 + (ink ? (ink.l + ink.r) / 2 * BASE : BASE * 0.3), y0 = -top;
@@ -236,7 +241,7 @@ function CellGlyph({ cp, family }) {
 }
 // A glyph drawn large: its ink whole, the box TeX gave it (dashed, for a
 // glyph the documents use) and the baseline.
-function GlyphFigure({ c, d }) {
+function GlyphFigure({ c, d }: { c: GlyphCell; d: FontGlyphs }) {
     if (!c.cps.length) return html`<span class="big muted">no code point to draw it by</span>`;
     const em = (c.tex ? c.tex[0][0] : d.sizes[0] || 655360) / 65536;              // pt
     const adv = c.adv != null && d.upem ? c.adv / d.upem * em : null;
@@ -258,14 +263,14 @@ function GlyphFigure({ c, d }) {
     </svg>`;
 }
 // Where a glyph's ink goes past the box TeX gave it, at its first size.
-function overhang(c, d) {
+function overhang(c: GlyphCell, d: FontGlyphs): string | null {
     const ink = inkOf(d.family, c.cps[0]);
     if (!ink) return null;
-    const em = (c.tex ? c.tex[0][0] : d.sizes[0] || 655360) / 65536, pt = v => +v.toFixed(2) + 'pt';
+    const em = (c.tex ? c.tex[0][0] : d.sizes[0] || 655360) / 65536, pt = (v: number) => +v.toFixed(2) + 'pt';
     const out = [`${pt(ink.l * em)} to ${pt(ink.r * em)} across, ${pt(ink.a * em)} up, ${pt(ink.d * em)} down`];
     if (c.tex) {
-        const [w, ht, dp] = c.tex[0].slice(1).map(v => v / 65536), past = [];
-        const add = (v, side) => { if (v > 0.01) past.push(`${pt(v)} ${side}`); };
+        const [w, ht, dp] = c.tex[0].slice(1).map(v => v / 65536), past: string[] = [];
+        const add = (v: number, side: string) => { if (v > 0.01) past.push(`${pt(v)} ${side}`); };
         add(-ink.l * em, 'left'); add(ink.r * em - w, 'right'); add(ink.a * em - ht, 'above'); add(ink.d * em - dp, 'below');
         out.push(past.length ? `past TeX's box: ${past.join(', ')}` : 'within TeX\'s box');
     }

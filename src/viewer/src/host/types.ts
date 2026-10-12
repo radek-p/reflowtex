@@ -17,6 +17,7 @@
 import type { TexNode, ViewerFont } from '../engine/model.ts';
 import type { Line } from '../engine/layout/types.ts';
 import type { Params } from '../runtime/params.ts';
+import type { Inspect } from './inspect.ts';
 
 /** Where an instance stands relative to the text. */
 export type Placement =
@@ -569,9 +570,11 @@ export interface ReflowTeX {
     accessibleDebug?(): boolean;
     setAccessibleDebug?(on: boolean): void;
     /** For tools: the viewer's own state (the README's Inspecting). Not
-     *  part of this contract: its shape may change between versions. */
-    inspect?: unknown;
-    /** The inspector (src/inspector), once its script has run. */
+     *  part of this contract: its shape may change between versions (its
+     *  `version` says which). */
+    inspect?: Inspect;
+    /** The inspector (src/inspector), once its script has run: its own
+     *  API (src/inspector/README.md). */
     inspector?: unknown;
 }
 

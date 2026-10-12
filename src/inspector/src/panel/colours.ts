@@ -18,15 +18,19 @@ import { call, got } from './bridge.js';
 import { Action, Muted, copyText } from './ui.js';
 import { say } from './store.js';
 import { ColourPicker } from './picker.js';
+import type { AgentApi, ColourMaps } from '../protocol.ts';
 
-const data = signal(null);
+type Map = ColourMaps['maps'][number];
+
+const data = signal<(Omit<ColourMaps, 'theme'> & { theme: string | null }) | null>(null);
 const pasting = signal(false);
 
-export async function loadColours() {
+export async function loadColours(): Promise<void> {
     const r = await call('colourMaps');
     data.value = got(r) ? r : { theme: null, maps: [], edited: false };
 }
-async function run(what, ...args) {
+async function run<M extends 'setMapColour' | 'setMapTint' | 'setPageTheme' | 'importColourMaps' | 'resetColourMaps'>(
+        what: M, ...args: Parameters<AgentApi[M]>): Promise<boolean> {
     const r = await call(what, ...args);
     if (r !== 'ok') say(got(r) ? String(r) : 'the page did not answer');
     await loadColours();
@@ -36,43 +40,44 @@ const HEX = /^#[0-9a-f]{6}$/i;
 
 // A picker's drag sends a colour per frame; the page is asked one at a time,
 // and only the latest waiting colour is sent next.
-function live(fn) {
-    let busy = false, next = null;
-    const go = async args => { busy = true; await fn(...args); busy = false;
+function live<A extends unknown[]>(fn: (...a: A) => Promise<unknown>): (...a: A) => void {
+    let busy = false, next: A | null = null;
+    const go = async (args: A) => { busy = true; await fn(...args); busy = false;
         if (next) { const a = next; next = null; go(a); } };
-    return (...args) => { if (busy) next = args; else go(args); };
+    return (...args: A) => { if (busy) next = args; else go(args); };
 }
 
-const Swatch = ({ c }) => c
+const Swatch = ({ c }: { c: string | null }) => c
     ? html`<span class="swatch" title=${c}><i style=${{ background: c }}></i><code>${c}</code></span>`
     : html`<span class="swatch none">–</span>`;
 
 // One theme's colour for one TeX colour: a picker (for #rrggbb) and a field
 // (any CSS colour); empty or × drops the mapping.
-function Cell({ map, theme, src, value, swatches }) {
-    const set = useRef(null);
-    set.current = set.current || live(v => run('setMapColour', map, theme, src, v));
+function Cell({ map, theme, src, value, swatches }: { map: string; theme: string; src: string; value: string | null; swatches: string[] }) {
+    const set = useRef<((v: string | null) => void) | null>(null);
+    set.current = set.current || live((v: string | null) => run('setMapColour', map, theme, src, v));
     return html`<span class="ccell">
         <${ColourPicker} value=${value} fallback=${src} swatches=${swatches} title=${`${theme}: choose a colour`}
-                         onInput=${v => set.current(v)}/>
+                         onInput=${(v: string) => set.current!(v)}/>
         <input type="text" class="cval" value=${value || ''} placeholder=${src} spellcheck="false"
-               title="Any CSS colour; empty: the colour as TeX set it" onChange=${e => set.current(e.currentTarget.value.trim() || null)}/>
-        ${value ? html`<button type="button" class="x" title="Drop this mapping" onClick=${() => set.current(null)}>×</button>` : null}
+               title="Any CSS colour; empty: the colour as TeX set it" onChange=${(e: Event & { currentTarget: HTMLInputElement }) => set.current!(e.currentTarget.value.trim() || null)}/>
+        ${value ? html`<button type="button" class="x" title="Drop this mapping" onClick=${() => set.current!(null)}>×</button>` : null}
     </span>`;
 }
 
-function ColourMap({ m, theme }) {
-    const add = useRef(null), tint = useRef(null), setTint = useRef(null);
-    setTint.current = setTint.current || live((hex, base, pct) => run('setMapTint', m.name, hex, base, pct));
+function ColourMap({ m, theme }: { m: Map; theme: string | null }) {
+    const add = useRef<HTMLInputElement>(null), tint = useRef<HTMLTableRowElement>(null);
+    const setTint = useRef<((hex: string, base: string, pct: number) => void) | null>(null);
+    setTint.current = setTint.current || live((hex: string, base: string, pct: number) => run('setMapTint', m.name, hex, base, pct));
     // The colours already in the map, to pick from.
-    const swatches = [...new Set(m.colors.flatMap(c => [c.src, ...Object.values(c.by)]).filter(c => c && HEX.test(c)).map(c => c.toLowerCase()))].slice(0, 24);
+    const swatches = [...new Set(m.colors.flatMap(c => [c.src, ...Object.values(c.by)]).filter((c): c is string => !!c && HEX.test(c)).map(c => c.toLowerCase()))].slice(0, 24);
     const addColour = () => {
-        const v = add.current.value.trim().toLowerCase();
+        const v = add.current!.value.trim().toLowerCase();
         if (!HEX.test(v)) { say('a TeX colour is #rrggbb'); return; }
-        run('setMapColour', m.name, theme || 'light', v, v).then(ok => { if (ok) add.current.value = ''; });
+        run('setMapColour', m.name, theme || 'light', v, v).then(ok => { if (ok) add.current!.value = ''; });
     };
     const addTint = () => {
-        const [hex, base, pct] = [...tint.current.querySelectorAll('input')].map(i => i.value.trim());
+        const [hex, base, pct] = [...tint.current!.querySelectorAll('input')].map(i => i.value.trim());
         run('setMapTint', m.name, hex, base, pct);
     };
     return html`<section class="cmap">
@@ -85,13 +90,13 @@ function ColourMap({ m, theme }) {
                 <td><${Swatch} c=${c.now}/></td></tr>`)}
             <tr class="add"><td colspan=${m.themes.length + 2}>
                 <input ref=${add} type="text" placeholder="#rrggbb" spellcheck="false" title="A colour TeX produced, to map"
-                       onKeyDown=${e => { if (e.key === 'Enter') addColour(); }}/>
+                       onKeyDown=${(e: KeyboardEvent) => { if (e.key === 'Enter') addColour(); }}/>
                 <button type="button" onClick=${addColour}>Add colour</button></td></tr></tbody></table>
         <table class="cgrid tints"><thead><tr><th>Tint in the TeX output</th><th>Base colour</th><th>Share</th><th>Current</th><th></th></tr></thead>
             <tbody>${m.tints.map(t => html`<tr key=${t.hex}><td><${Swatch} c=${t.hex}/></td>
                 <td><span class="ccell"><${ColourPicker} value=${t.base} swatches=${swatches} title="The colour mixed into the page's background"
-                    onInput=${v => setTint.current(t.hex, v, t.pct)}/><code>${t.base}</code></span></td>
-                <td><input type="number" class="pct" min="0" max="100" value=${t.pct} onChange=${e => run('setMapTint', m.name, t.hex, t.base, e.currentTarget.value)}/></td>
+                    onInput=${(v: string) => setTint.current!(t.hex, v, t.pct)}/><code>${t.base}</code></span></td>
+                <td><input type="number" class="pct" min="0" max="100" value=${t.pct} onChange=${(e: Event & { currentTarget: HTMLInputElement }) => run('setMapTint', m.name, t.hex, t.base, e.currentTarget.value)}/></td>
                 <td><${Swatch} c=${t.now}/></td>
                 <td><button type="button" class="x" title="Drop this tint" onClick=${() => run('setMapTint', m.name, t.hex, null)}>×</button></td></tr>`)}
             <tr class="add" ref=${tint}><td><input type="text" placeholder="#rrggbb" spellcheck="false"/></td>
@@ -102,8 +107,8 @@ function ColourMap({ m, theme }) {
 }
 
 function Paste() {
-    const box = useRef(null);
-    const load = async () => { if (await run('importColourMaps', box.current.value)) { pasting.value = false; say('colour maps imported'); } };
+    const box = useRef<HTMLTextAreaElement>(null);
+    const load = async () => { if (await run('importColourMaps', box.current!.value)) { pasting.value = false; say('colour maps imported'); } };
     return html`<div class="cpaste">
         <textarea ref=${box} spellcheck="false" placeholder='{ "site": { "colors": { "dark": { "#000000": "#e7e5e4" } }, "tints": {} } }'></textarea>
         <span><button type="button" onClick=${load}>Import</button><button type="button" onClick=${() => { pasting.value = false; }}>Cancel</button></span>
@@ -111,7 +116,7 @@ function Paste() {
 }
 
 export function ColourView() {
-    const d = data.value, file = useRef(null);
+    const d = data.value, file = useRef<HTMLInputElement>(null);
     const exportJson = async () => {
         const json = await call('exportColourMaps');
         if (!got(json)) return;
@@ -122,7 +127,7 @@ export function ColourView() {
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     };
-    const fromFile = async e => {
+    const fromFile = async (e: Event & { currentTarget: HTMLInputElement }) => {
         const f = e.currentTarget.files && e.currentTarget.files[0];
         if (f && await run('importColourMaps', await f.text())) say(`imported ${f.name}`);
         e.currentTarget.value = '';
@@ -130,7 +135,7 @@ export function ColourView() {
     return html`<div class="colours">
         <div class="cbar">
             <${Action} title="Copy the colour maps as JSON, and download them as color-maps.json" onClick=${exportJson}>Export<//>
-            <${Action} title="Replace the colour maps with those of a JSON file" onClick=${() => file.current.click()}>Import file<//>
+            <${Action} title="Replace the colour maps with those of a JSON file" onClick=${() => file.current!.click()}>Import file<//>
             <${Action} title="Replace the colour maps with pasted JSON" onClick=${() => { pasting.value = !pasting.value; }}>Paste JSON<//>
             <${Action} title="The page's own colour maps again" onClick=${() => run('resetColourMaps')}>Reset<//>
             ${d && d.edited ? html`<span class="muted">edited – not saved to the page's files</span>` : null}

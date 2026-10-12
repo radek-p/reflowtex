@@ -50,12 +50,12 @@ export function setMapColour(name: string, theme: string, src: string, value: st
     return applyMaps(maps);
 }
 // A tint: baked hex → [base, percent]; null to drop it.
-export function setMapTint(name: string, hex: string, base: string | null, pct: number): string {
+export function setMapTint(name: string, hex: string, base: string | null, pct?: number | string): string {
     if (!HEX.test(hex)) return 'a tint is #rrggbb';
     const maps = currentMaps(), m = maps[name] = maps[name] || {};
     const tints = m.tints = m.tints || {};
     if (base === null) delete tints[hex.toLowerCase()];
-    else { if (!HEX.test(base)) return 'a base is #rrggbb'; tints[hex.toLowerCase()] = [base.toLowerCase(), Math.max(0, Math.min(100, +pct || 0))]; }
+    else { if (!HEX.test(base)) return 'a base is #rrggbb'; tints[hex.toLowerCase()] = [base.toLowerCase(), Math.max(0, Math.min(100, +pct! || 0))]; }
     return applyMaps(maps);
 }
 // Every map at once, from JSON as the island has it.

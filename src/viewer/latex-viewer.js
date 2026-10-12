@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 d3aed3ed4075e31e2318eea8d22b2c1a535d758831e789b02cfff785dc30ab7c
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 a6b47c0601568c8209fd8bde9e0be5c5170564f195d04775de58723e523b6828
 'use strict';
 "use strict";
 (() => {

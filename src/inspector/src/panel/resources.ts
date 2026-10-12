@@ -11,25 +11,28 @@ import { Table, Action, Head, Muted, copyText } from './ui.js';
 import { reveal, refresh } from './tree.js';
 import { FontDetails } from './font.js';
 import { setView } from './app.js';
+import type { Resource as ResourceInFull, ResourceRow, Resources } from '../protocol.ts';
 
-const CATS = [['fonts', 'Fonts · originals'], ['modifiedFonts', 'Fonts · modified by Reflow TeX'], ['pictures', 'Pictures'],
+type Cat = keyof Resources;
+
+const CATS: [Cat, string][] = [['fonts', 'Fonts · originals'], ['modifiedFonts', 'Fonts · modified by Reflow TeX'], ['pictures', 'Pictures'],
               ['instances', 'Instances'], ['kinds', 'Kinds the page defines'], ['marks', 'Marks'],
               ['streams', 'Streams'], ['links', 'Links'], ['citations', 'Citations'], ['anchors', 'Anchors'], ['slots', 'Slots']];
 
-export const resData = signal(null);           // the agent's list, by kind
+export const resData = signal<Resources | null>(null);           // the agent's list, by kind
 export const resVersion = signal(0);           // bumped each time it is read again
-export const resSel = signal(null);            // the selected resource's key
-export const glyphSel = signal(null);          // the selected glyph of a font: { i, key }
-export const wantGlyph = signal(null);         // a glyph asked for from elsewhere: { key, cp }
-const detail = signal(null);                   // { key, d }: a resource's details (not a font's)
+export const resSel = signal<string | null>(null);            // the selected resource's key
+export const glyphSel = signal<{ i: number; key: string | null } | null>(null);          // the selected glyph of a font
+export const wantGlyph = signal<{ key: string; cp: number } | null>(null);         // a glyph asked for from elsewhere
+const detail = signal<{ key: string; d: ResourceInFull | null } | null>(null);                   // a resource's details (not a font's)
 const filter = signal('');
-const fontSort = signal(recall('fontsort', 'name', plain) === 'uses' ? 'uses' : 'name');
+const fontSort = signal<string>(recall<string>('fontsort', 'name', plain) === 'uses' ? 'uses' : 'name');
 // Kinds folded away, remembered. While the filter has text, every kind with a
 // match is open: a match is never hidden.
-const collapsed = signal(new Set(recall('collapsed', [])));
-const setCollapsed = set => { collapsed.value = set; keep('collapsed', [...set]); };
+const collapsed = signal(new Set<string>(recall<string[]>('collapsed', [])));
+const setCollapsed = (set: Set<string>) => { collapsed.value = set; keep('collapsed', [...set]); };
 
-export async function loadResources() {
+export async function loadResources(): Promise<void> {
     const r = await call('resources');
     resData.value = got(r) ? r : null;
     resVersion.value++;
@@ -37,36 +40,36 @@ export async function loadResources() {
     if (key && find(key)) { if (!key.startsWith('font:')) loadDetail(key); markUses(); }
     else { resSel.value = null; glyphSel.value = null; }
 }
-const find = key => resData.value && CATS.some(([c]) => resData.value[c].some(r => r.key === key));
-export function forgetResources() { resSel.value = null; glyphSel.value = null; detail.value = null; }
+const find = (key: string) => resData.value && CATS.some(([c]) => resData.value![c].some(r => r.key === key));
+export function forgetResources(): void { resSel.value = null; glyphSel.value = null; detail.value = null; }
 
-export async function selectResource(key, { scroll = true } = {}) {
+export async function selectResource(key: string, { scroll = true } = {}): Promise<void> {
     resSel.value = key; glyphSel.value = null;
     if (scroll) scrollTo = key;
     if (!key.startsWith('font:')) loadDetail(key);
     markUses();
 }
-async function loadDetail(key) {
+async function loadDetail(key: string) {
     const d = await call('resource', key);
     if (resSel.value === key) detail.value = { key, d: got(d) ? d : null };
 }
 // The selected resource's (or glyph's) uses, outlined on the page (while the
 // list is walked with the keyboard: see the panel's selection rule).
-export async function markUses() {
+export async function markUses(): Promise<void> {
     const key = glyphSel.value ? glyphSel.value.key : resSel.value;
     const ids = key ? await call('uses', key) : [];
-    await call('mark', ids === MISSING ? null : ids);
+    await call('mark', ids === MISSING ? null : ids as number[]);
 }
-let hoverKey = null;
-export async function hoverUses(key) {
+let hoverKey: string | null = null;
+export async function hoverUses(key: string | null): Promise<void> {
     if (key === hoverKey) return;
     hoverKey = key;
     const ids = key ? await call('uses', key) : null;
     if (hoverKey === key) call('hover', got(ids) && ids.length ? ids : null);
 }
 // Show in tree: the next of a resource's uses, in the Boxes view.
-const cursor = { key: null, k: -1 };
-export async function showInTree(key) {
+const cursor: { key: string | null; k: number } = { key: null, k: -1 };
+export async function showInTree(key: string): Promise<void> {
     const ids = await call('uses', key);
     if (!got(ids) || !ids.length) { say('none of it is drawn now'); return; }
     cursor.k = cursor.key === key ? (cursor.k + 1) % ids.length : 0;
@@ -79,7 +82,7 @@ export async function showInTree(key) {
 }
 // A glyph in its font's table: Resources, the font selected (its kind opened
 // if folded), and the glyph selected there once the table is read.
-export async function showGlyph(key, cp) {
+export async function showGlyph(key: string, cp: number): Promise<void> {
     wantGlyph.value = { key, cp };
     await (setView('res') || loadResources());         // (switching to Resources reads them)
     const cat = CATS.map(([c]) => c).find(c => resData.value && resData.value[c].some(r => r.key === key));
@@ -88,7 +91,7 @@ export async function showGlyph(key, cp) {
 }
 // A footnote's popover, opened by clicking its marker; the marker may have to
 // be scrolled to and painted first.
-async function openPopover(key) {
+async function openPopover(key: string): Promise<boolean> {
     for (let k = 0; k < 8; k++) {
         const r = await call('openPopover', key);
         if (r !== 'wait') { if (r !== 'ok') say('its marker is not drawn'); return r === 'ok'; }
@@ -113,7 +116,7 @@ const listing = computed(() => {
 const listKeys = computed(() => (listing.value || []).flatMap(k => (k.open ? k.rows.map(r => r.key) : [])));
 // A heading's click opens or closes its kind; with ⌥/Alt, shows that kind
 // only (or, if it is the only one open already, all of them).
-function toggleCat(cat, only) {
+function toggleCat(cat: string, only: boolean) {
     const shut = collapsed.value, present = (listing.value || []).map(k => k.cat);
     if (only) {
         const alone = !shut.has(cat) && present.every(c => c === cat || shut.has(c));
@@ -124,48 +127,48 @@ function toggleCat(cat, only) {
         setCollapsed(s);
     }
 }
-let scrollTo = null;
+let scrollTo: string | null = null;
 
-function ResRow({ r, sel }) {
+function ResRow({ r, sel }: { r: ResourceRow; sel: string | null }) {
     return html`<div class=${`row rrow c-${r.cat}${r.key === sel ? ' sel' : ''}`} role="option" data-key=${r.key}>
         ${r.cat === 'font' && r.family && !r.unresolved && html`<span class="sample" aria-hidden="true" style=${`font-family:'${r.family}'`}>Ag</span>`}
         <span class="label">${r.label}</span><span class="note">${r.note}</span>
     </div>`;
 }
 export function ResourceList() {
-    const body = useRef(null), kinds = listing.value, sel = resSel.value, q = filter.value.trim();
+    const body = useRef<HTMLDivElement>(null), kinds = listing.value, sel = resSel.value, q = filter.value.trim();
     useLayoutEffect(() => { refs.rbody = body.current; }, []);
     useLayoutEffect(() => {
         if (scrollTo == null) return;
-        const row = body.current.querySelector(`[data-key="${CSS.escape(scrollTo)}"]`);
+        const row = body.current!.querySelector(`[data-key="${CSS.escape(scrollTo)}"]`);
         scrollTo = null;
         if (row) row.scrollIntoView({ block: 'nearest' });
     });
-    const onClick = e => {
-        const head = e.target.closest('.rhead');
-        if (head) { toggleCat(head.dataset.cat, e.altKey); return; }
-        const r = e.target.closest('[data-key]');
-        if (r) selectResource(r.dataset.key, { scroll: false });
+    const onClick = (e: MouseEvent) => {
+        const head = (e.target as Element).closest<HTMLElement>('.rhead');
+        if (head) { toggleCat(head.dataset.cat!, e.altKey); return; }
+        const r = (e.target as Element).closest<HTMLElement>('[data-key]');
+        if (r) selectResource(r.dataset.key!, { scroll: false });
     };
     // (over a heading, the hover stays as it was, like between glyphs)
-    const onMouseMove = e => { const r = e.target.closest('[data-key]'); if (r) hoverUses(r.dataset.key); };
-    const onKeyDown = e => {
-        const keys = listKeys.value, i = keys.indexOf(resSel.value);
+    const onMouseMove = (e: MouseEvent) => { const r = (e.target as Element).closest<HTMLElement>('[data-key]'); if (r) hoverUses(r.dataset.key!); };
+    const onKeyDown = (e: KeyboardEvent) => {
+        const keys = listKeys.value, i = keys.indexOf(resSel.value!);
         if (e.key === 'ArrowDown' && i < keys.length - 1) selectResource(keys[i + 1]);
         else if (e.key === 'ArrowUp' && i > 0) selectResource(keys[i - 1]);
         else return;
         e.preventDefault();
     };
-    const onFilterKey = e => {
+    const onFilterKey = (e: KeyboardEvent) => {
         if (e.key === 'Escape' && filter.value) { e.stopPropagation(); filter.value = ''; }
-        else if (e.key === 'ArrowDown') { e.preventDefault(); body.current.focus(); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); body.current!.focus(); }
     };
-    const onSort = e => { fontSort.value = e.currentTarget.value; keep('fontsort', fontSort.value, plain); };
+    const onSort = (e: Event & { currentTarget: HTMLSelectElement }) => { fontSort.value = e.currentTarget.value; keep('fontsort', fontSort.value, plain); };
     const alt = IS_MAC ? '⌥' : 'Alt+';
     return html`<section class="rlist">
         <div class="rtools">
             <input type="search" class="filter" placeholder="Filter" aria-label="Filter the resources" spellcheck="false"
-                value=${filter.value} onInput=${e => { filter.value = e.currentTarget.value; }} onKeyDown=${onFilterKey}/>
+                value=${filter.value} onInput=${(e: Event & { currentTarget: HTMLInputElement }) => { filter.value = e.currentTarget.value; }} onKeyDown=${onFilterKey}/>
             <select class="fsort" aria-label="Order the fonts" title="Order the fonts" value=${fontSort.value} onChange=${onSort}>
                 <option value="name">Fonts by name</option><option value="uses">Fonts by use</option>
             </select>
@@ -188,7 +191,7 @@ export function ResourceList() {
 // ── The selected resource ──────────────────────────────────────────────────────
 export function ResourceDetails() {
     const key = resSel.value;
-    let body;
+    let body: ReturnType<typeof html> | null;
     if (!key) body = html`<${Muted}>Select a resource. Hovering one outlines where the page uses it.<//>`;
     else if (key.startsWith('font:')) body = html`<${FontDetails} key=${key} fontKey=${key}/>`;
     else {
@@ -197,7 +200,7 @@ export function ResourceDetails() {
     }
     return html`<aside class=${'details rdetails' + (key && key.startsWith('font:') ? ' font' : '')}>${body}</aside>`;
 }
-function Resource({ rkey, d }) {
+function Resource({ rkey, d }: { rkey: string; d: ResourceInFull }) {
     // The drawing, scaled to the panel; its colours are the page's custom
     // properties, with their fallbacks here.
     const svg = d.svg && `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${d.svg.vb_w} ${d.svg.vb_h}" fill="currentColor">${d.svg.markup}</svg>`;
@@ -213,11 +216,11 @@ function Resource({ rkey, d }) {
     return html`
         <${Head} title=${d.title}>
             <${Action} title="Select its next use in the Boxes view" onClick=${() => showInTree(rkey)}>Show in tree<//>
-            ${svg && html`<${Action} title="Copy the drawing as an SVG file" onClick=${() => copyText(svgFile, 'SVG')}>Copy SVG<//>`}
+            ${svg && html`<${Action} title="Copy the drawing as an SVG file" onClick=${() => copyText(svgFile!, 'SVG')}>Copy SVG<//>`}
             ${d.footnote && html`
                 <${Action} title="Open the footnote as its marker does, pinned" onClick=${() => openPopover(rkey)}>Open popover<//>
                 <${Action} title="Show the popover's boxes and glue in the Boxes view" onClick=${itsBoxes}>Its boxes<//>`}
-            ${d.text && html`<${Action} title="Copy the stream's text" onClick=${() => copyText(d.text, 'text')}>Copy text<//>`}
+            ${d.text && html`<${Action} title="Copy the stream's text" onClick=${() => copyText(d.text!, 'text')}>Copy text<//>`}
         <//>
         ${svg && html`<div class="preview" dangerouslySetInnerHTML=${{ __html: svg }}></div>`}
         <${Table} rows=${d.rows}/>

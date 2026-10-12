@@ -173,10 +173,37 @@ export interface AgentApi {
     colourMaps(): ColourMaps;
     setPageTheme(t: string): string;
     setMapColour(name: string, theme: string, src: string, value: string | null): string;
-    setMapTint(name: string, hex: string, base: string | null, pct: number): string;
+    /** pct: a number, or a field's text (taken as a number; 0 if none). */
+    setMapTint(name: string, hex: string, base: string | null, pct?: number | string): string;
     importColourMaps(json: unknown): string;
     exportColourMaps(): string;
     resetColourMaps(): string;
+}
+
+/** What the panel's module gives the loader (panel/app.ts, mount): the
+ *  calls window.reflowtex.inspector makes once it is loaded. */
+export interface InspectorPanel {
+    open(block?: Element | null, options?: { dock?: string; scroll?: boolean }): Promise<void>;
+    close(): void;
+    toggle(): unknown;
+    setDock(mode: string): void;
+    dock(container: Element, block?: Element | null): Promise<void>;
+    inspect(win: Window): Promise<void>;
+    isOpen(): boolean;
+}
+
+/** window.reflowtex.inspector (inspector.ts; src/inspector/README.md):
+ *  the panel's calls, loading it on first use. */
+export interface InspectorApi {
+    open(block?: Element | null, options?: { dock?: string; scroll?: boolean }): Promise<unknown>;
+    toggle(): Promise<unknown>;
+    dock(container: Element, block?: Element | null): Promise<unknown>;
+    inspect(win: Window): Promise<unknown>;
+    isOpen(): Promise<boolean>;
+    close(): Promise<void>;
+    setDock(mode: string): Promise<void>;
+    /** The shortcut's label, for a tooltip. */
+    shortcut: string;
 }
 
 declare global {

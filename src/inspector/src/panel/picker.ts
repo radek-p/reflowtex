@@ -5,68 +5,73 @@
 // a hue strip, the hex, and the colours already in the map to pick from.
 // Dragging edits live; Escape puts back the colour it opened with.
 import { html, useState, useRef, useEffect } from '../vendor/preact.js';
+import type { RefObject } from 'preact';
+
+/** A colour as hue (degrees), saturation and value (0–1). */
+export interface Hsv { h: number; s: number; v: number }
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 
-export function hexToHsv(hex) {
+export function hexToHsv(hex: string): Hsv {
     const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
     const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
     let h = 0;
     if (d) h = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
     return { h: h * 60, s: max ? d / max : 0, v: max };
 }
-export function hsvToHex({ h, s, v }) {
-    const f = k => { const x = (k + h / 60) % 6; return v - v * s * clamp(Math.min(x, 4 - x)); };
+export function hsvToHex({ h, s, v }: Hsv): string {
+    const f = (k: number) => { const x = (k + h / 60) % 6; return v - v * s * clamp(Math.min(x, 4 - x)); };
     return '#' + [f(5), f(3), f(1)].map(c => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
 }
 
 // Pointer drags on an element: fn(x, y) in 0..1 of its box.
-function drag(el, fn) {
-    return e => {
+function drag(el: RefObject<HTMLElement>, fn: (x: number, y: number) => void) {
+    return (e: PointerEvent) => {
         e.preventDefault();
-        el.current.setPointerCapture(e.pointerId);
-        const at = ev => { const r = el.current.getBoundingClientRect();
+        el.current!.setPointerCapture(e.pointerId);
+        const at = (ev: PointerEvent) => { const r = el.current!.getBoundingClientRect();
             fn(clamp((ev.clientX - r.left) / r.width), clamp((ev.clientY - r.top) / r.height)); };
         at(e);
-        const move = ev => at(ev), up = () => { el.current.removeEventListener('pointermove', move); el.current.removeEventListener('pointerup', up); };
-        el.current.addEventListener('pointermove', move);
-        el.current.addEventListener('pointerup', up);
+        const move = (ev: PointerEvent) => at(ev), up = () => { el.current!.removeEventListener('pointermove', move); el.current!.removeEventListener('pointerup', up); };
+        el.current!.addEventListener('pointermove', move);
+        el.current!.addEventListener('pointerup', up);
     };
 }
 
-function Popover({ value, swatches, onInput, onClose, anchor }) {
+function Popover({ value, swatches, onInput, onClose, anchor }:
+        { value: string; swatches: string[]; onInput: (hex: string) => void; onClose: () => void; anchor: HTMLElement }) {
     const start = useRef(value);
     const [hsv, setHsv] = useState(() => hexToHsv(HEX.test(value) ? value : '#000000'));
     const [text, setText] = useState(value);
-    const box = useRef(null), sv = useRef(null), hue = useRef(null);
-    const set = next => { setHsv(next); const hex = hsvToHex(next); setText(hex); onInput(hex); };
-    const setHex = hex => { if (!HEX.test(hex)) return; setHsv(hexToHsv(hex)); setText(hex.toLowerCase()); onInput(hex.toLowerCase()); };
+    const box = useRef<HTMLDivElement>(null), sv = useRef<HTMLDivElement>(null), hue = useRef<HTMLDivElement>(null);
+    const set = (next: Hsv) => { setHsv(next); const hex = hsvToHex(next); setText(hex); onInput(hex); };
+    const setHex = (hex: string) => { if (!HEX.test(hex)) return; setHsv(hexToHsv(hex)); setText(hex.toLowerCase()); onInput(hex.toLowerCase()); };
 
     // Placed below the swatch (above, when there is no room), inside the
     // panel. The panel is a size container, so it (not the window) is what
     // position: fixed is relative to, and it clips: the offset of the box
     // drawn at 0, 0 turns window coordinates into the panel's.
-    const [pos, setPos] = useState(null);
+    const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
     useEffect(() => {
-        const r = anchor.getBoundingClientRect(), o = box.current.getBoundingClientRect();
-        const p = (box.current.closest('.rtx') || document.documentElement).getBoundingClientRect();
+        const r = anchor.getBoundingClientRect(), o = box.current!.getBoundingClientRect();
+        const p = (box.current!.closest('.rtx') || document.documentElement).getBoundingClientRect();
         const w = o.width, h = o.height;
         const top = r.bottom + 4 + h > p.bottom ? Math.max(p.top + 4, r.top - 4 - h) : r.bottom + 4;
         const left = clamp(r.left, p.left + 4, Math.max(p.left + 4, p.right - w - 4));
         setPos({ left: left - o.left, top: top - o.top });
-        const outside = e => { if (!e.composedPath().includes(box.current) && !e.composedPath().includes(anchor)) onClose(); };
+        const outside = (e: PointerEvent) => { if (!e.composedPath().includes(box.current!) && !e.composedPath().includes(anchor)) onClose(); };
         document.addEventListener('pointerdown', outside, true);
-        box.current.querySelector('.pk-sv').focus();
+        box.current!.querySelector<HTMLElement>('.pk-sv')!.focus();
         return () => document.removeEventListener('pointerdown', outside, true);
     }, []);
-    const keys = e => {
+    const keys = (e: KeyboardEvent) => {
         if (e.key === 'Escape') { e.stopPropagation(); onInput(start.current); onClose(); return; }
-        if (e.key === 'Enter' && e.target.tagName !== 'INPUT') { onClose(); return; }
-        const step = e.shiftKey ? 0.1 : 0.02, d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
-        if (!d || e.target.tagName === 'INPUT') return;
+        if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'INPUT') { onClose(); return; }
+        const step = e.shiftKey ? 0.1 : 0.02, d = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] } as Record<string, [number, number]>)[e.key];
+        if (!d || (e.target as HTMLElement).tagName === 'INPUT') return;
         e.preventDefault();
-        if (e.target.classList.contains('pk-hue')) set({ ...hsv, h: clamp(hsv.h + (d[0] || d[1]) * step * 360, 0, 360) });
+        if ((e.target as HTMLElement).classList.contains('pk-hue')) set({ ...hsv, h: clamp(hsv.h + (d[0] || d[1]) * step * 360, 0, 360) });
         else set({ ...hsv, s: clamp(hsv.s + d[0] * step), v: clamp(hsv.v + d[1] * step) });
     };
     const pure = hsvToHex({ h: hsv.h, s: 1, v: 1 });
@@ -84,8 +89,8 @@ function Popover({ value, swatches, onInput, onClose, anchor }) {
         <div class="pk-row">
             <span class="pk-now" style=${{ background: hsvToHex(hsv) }}></span>
             <input type="text" class="pk-hex" value=${text} spellcheck="false" aria-label="Hex"
-                   onInput=${e => { setText(e.currentTarget.value); setHex(e.currentTarget.value.trim()); }}
-                   onKeyDown=${e => { if (e.key === 'Enter') onClose(); }}/>
+                   onInput=${(e: Event & { currentTarget: HTMLInputElement }) => { setText(e.currentTarget.value); setHex(e.currentTarget.value.trim()); }}
+                   onKeyDown=${(e: KeyboardEvent) => { if (e.key === 'Enter') onClose(); }}/>
         </div>
         ${swatches.length ? html`<div class="pk-swatches">${swatches.map(c => html`<button type="button" key=${c} title=${c}
             style=${{ background: c }} onClick=${() => setHex(c)}></button>`)}</div>` : null}
@@ -94,9 +99,10 @@ function Popover({ value, swatches, onInput, onClose, anchor }) {
 
 /** A swatch button that opens the picker. value: #rrggbb (else `fallback`
  *  is shown); onInput(hex) on every change; swatches: colours to offer. */
-export function ColourPicker({ value, fallback = '#000000', swatches = [], title, onInput }) {
+export function ColourPicker({ value, fallback = '#000000', swatches = [], title, onInput }:
+        { value: string | null | undefined; fallback?: string; swatches?: string[]; title: string; onInput: (hex: string) => void }) {
     const [open, setOpen] = useState(false);
-    const btn = useRef(null);
+    const btn = useRef<HTMLButtonElement>(null);
     const shown = value && HEX.test(value) ? value : fallback;
     return html`<button ref=${btn} type="button" class="pk-swatch" title=${title} aria-haspopup="dialog" aria-expanded=${open}
                         style=${{ background: shown }} onClick=${() => setOpen(!open)}></button>

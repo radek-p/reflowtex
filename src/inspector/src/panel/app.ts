@@ -12,12 +12,14 @@ import { SIDES, SIDE_TITLES, side, embedded, panelStyle, setDock, applyDock, cho
 import { Tree, Details, RowMenu, selected, refresh, reveal, forgetSelection } from './tree.js';
 import { ResourceList, ResourceDetails, loadResources, markUses, resSel, forgetResources } from './resources.js';
 import { ColourView, loadColours } from './colours.js';
+import type { Guides } from './store.js';
+import type { InspectorPanel } from '../protocol.ts';
 
-const TABS = [['tree', 'Boxes', 'Blocks, lines, boxes and glue'],
+const TABS: [string, string, string][] = [['tree', 'Boxes', 'Blocks, lines, boxes and glue'],
               ['res', 'Resources', 'Fonts and their glyphs, pictures, instances, kinds, marks, streams (footnotes, popovers), links, citations, anchors, slots'],
               ['col', 'Colours', "The page's colour maps: each TeX colour as each theme shows it, and as shown now"]];
 // The page overlays, in the Overlays menu: [key, label, what it draws].
-const OVERLAYS = [
+const OVERLAYS: [keyof Guides, string, string][] = [
     ['baselines', 'Baselines', 'The baseline of every line'],
     ['badness', 'Badness', 'A bar past every line, coloured by its badness: green decent, amber loose or tight, red 100 or more, purple overfull'],
     ['springs', 'Springs', 'Every display glue whose width is recomputed for the reader\'s width, drawn as a spring'],
@@ -30,11 +32,11 @@ const LEGEND = [['box, glyph', 'box'], ['glue', 'glue'], ['kern', 'kern'], ['mat
 // hovering a resource would otherwise dim and restore it at every move – and
 // comes back with the tree. (Switching to Resources reads them again: the
 // promise it answers.)
-export function setView(v) {
+export function setView(v: string): Promise<void> | null {
     if (view.value === v) return null;
-    view.value = v;
+    view.value = v as typeof view.value;
     keep('view', v, plain);
-    const focus = el => requestAnimationFrame(() => el && el.focus({ preventScroll: true }));
+    const focus = (el: HTMLElement | null) => requestAnimationFrame(() => el && el.focus({ preventScroll: true }));
     if (v === 'res') { call('select', null); focus(refs.rbody); return loadResources(); }
     if (v === 'col') { call('select', null); return loadColours(); }
     call('mark', null);
@@ -42,7 +44,7 @@ export function setView(v) {
     focus(refs.tree);
     return null;
 }
-function setGuide(key, on) {
+function setGuide(key: keyof Guides, on: boolean) {
     guides.value = { ...guides.value, [key]: on };
     keep('guides', guides.value);
     applyGuides();
@@ -52,8 +54,8 @@ const applyGuides = () => call('setOptions', { ...guides.value });
 // Like Chrome's: the page outlines what the pointer is over in the panel, and
 // the selection only while it is walked with the keyboard – not while the
 // pointer is over a menu, the details or anywhere else.
-let showSel = null;
-function setShowSel(on) {
+let showSel: boolean | null = null;
+function setShowSel(on: boolean) {
     if (on === showSel) return;
     showSel = on;
     call('setOptions', { selection: on });
@@ -69,7 +71,7 @@ function Toolbar() {
                 <${IconPick}/><//>
             <button type="button" class=${'ib text overlays' + (OVERLAYS.some(([k]) => g[k]) ? ' on' : '')}
                     title="Page overlays: baselines, badness, springs, the accessibility layer" aria-haspopup="menu" aria-expanded=${String(menuOpen('overlays'))}
-                    onClick=${e => toggleMenu('overlays', e.currentTarget)}><span>Overlays</span><${Caret}/></button>
+                    onClick=${(e: MouseEvent) => toggleMenu('overlays', e.currentTarget as HTMLElement)}><span>Overlays</span><${Caret}/></button>
             <span class="sep"></span>
             <span class="tabs" role="tablist">
                 ${TABS.map(([v, label, title]) => html`<button type="button" role="tab" key=${v} data-view=${v} title=${title}
@@ -83,7 +85,7 @@ function Toolbar() {
                     onClick=${() => setDock(m)}><${IconDock} side=${m}/><//>`)}
             </span>
             <${IconButton} class="more" title="Dock side" aria-haspopup="menu" aria-expanded=${String(menuOpen('dock'))}
-                onClick=${e => toggleMenu('dock', e.currentTarget)}><${IconDock} side=${now}/><${Caret}/><//>
+                onClick=${(e: MouseEvent) => toggleMenu('dock', e.currentTarget as HTMLElement)}><${IconDock} side=${now}/><${Caret}/><//>
             <${IconButton} class="close" title=${`Close (${SHORTCUT})`} onClick=${close}><${IconClose}/><//>
         </span>
     </div>`;
@@ -97,14 +99,14 @@ function OverlaysMenu() {
     // kept here.
     const [, redraw] = useState(0);
     const rt = pageWindow() && pageWindow().reflowtex;
-    const debug = rt && rt.setAccessibleDebug && pageWindow().document.querySelector('.latex-a11y') ? !!rt.accessibleDebug() : null;
+    const debug = rt && rt.setAccessibleDebug && pageWindow().document.querySelector('.latex-a11y') ? !!rt.accessibleDebug!() : null;
     return html`<${MenuBox} label="Page overlays">
         ${OVERLAYS.map(([key, label, title]) => html`<button type="button" role="menuitemcheckbox" key=${key} data-overlay=${key}
                 title=${title} aria-checked=${String(!!g[key])} onClick=${() => setGuide(key, !g[key])}>
             <span class="check"><${IconCheck}/></span><span class="label">${label}</span></button>`)}
         ${debug !== null && html`<button type="button" role="menuitemcheckbox" data-overlay="a11y-text"
                 title="The text a screen reader reads, shown where it lies: each element tinted, to see its bounds (debugging)"
-                aria-checked=${String(debug)} onClick=${() => { rt.setAccessibleDebug(!debug); redraw(n => n + 1); }}>
+                aria-checked=${String(debug)} onClick=${() => { rt!.setAccessibleDebug!(!debug); redraw(n => n + 1); }}>
             <span class="check"><${IconCheck}/></span><span class="label">Reader text, shown</span></button>`}
     <//>`;
 }
@@ -125,7 +127,7 @@ function Menus() {
     if (!m) return null;
     if (m.kind === 'overlays') return html`<${OverlaysMenu}/>`;
     if (m.kind === 'dock') return html`<${DockMenu}/>`;
-    if (m.kind === 'row') return html`<${RowMenu} id=${m.id}/>`;
+    if (m.kind === 'row') return html`<${RowMenu} id=${m.id!}/>`;
     return null;
 }
 // The bottom bar: what the outlines' colours mean, and what is going on.
@@ -140,16 +142,16 @@ function Foot() {
     </div>`;
 }
 function Panel() {
-    const el = useRef(null), s = side.value, emb = embedded.value;
+    const el = useRef<HTMLDivElement>(null), s = side.value, emb = embedded.value;
     useLayoutEffect(() => {
         refs.root = el.current;
-        const ro = new ResizeObserver(() => resized(el.current));
-        ro.observe(el.current);
+        const ro = new ResizeObserver(() => resized(el.current!));
+        ro.observe(el.current!);
         return () => ro.disconnect();
     }, []);
     // (a press outside the open menu closes it)
-    const onPointerDownCapture = e => { if (menu.value && !e.target.closest('.menu')) closeMenu(); };
-    const onKeyDownCapture = e => {
+    const onPointerDownCapture = (e: PointerEvent) => { if (menu.value && !(e.target as Element).closest('.menu')) closeMenu(); };
+    const onKeyDownCapture = (e: KeyboardEvent) => {
         if (NAV_KEYS.test(e.key) && e.composedPath().some(x => x === refs.tree || x === refs.rbody)) setShowSel(true);
     };
     // The style is bound to its signal: dragging the panel restyles it
@@ -173,9 +175,9 @@ function Panel() {
 // ── Following the page ─────────────────────────────────────────────────────────
 // Dark when the page is: its background's luminance decides.
 function syncTheme() {
-    const bg = c => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(c); return m && (m[4] === undefined || +m[4] > 0) ? m : null; };
+    const bg = (c: string) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(c); return m && (m[4] === undefined || +m[4] > 0) ? m : null; };
     const m = bg(getComputedStyle(document.body).backgroundColor) || bg(getComputedStyle(document.documentElement).backgroundColor);
-    dark.value = m ? (0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3]) < 110 : matchMedia('(prefers-color-scheme: dark)').matches;
+    dark.value = m ? (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) < 110 : matchMedia('(prefers-color-scheme: dark)').matches;
 }
 // A page in another window draws with its own fonts; the Resources view
 // draws their glyphs here, so this document declares them too (@font-face,
@@ -187,13 +189,13 @@ function mirrorFonts() {
     let css = '', n = 0;
     try {
         for (const sheet of w.document.styleSheets) {
-            let rules;
+            let rules: CSSRuleList;
             try { rules = sheet.cssRules; } catch { continue; }      // (another origin's)
             const base = sheet.href || w.document.baseURI;
             for (const r of rules) {
                 if (r.type !== CSSRule.FONT_FACE_RULE) continue;
                 n++;
-                css += r.cssText.replace(/url\((['"]?)([^'")]+)\1\)/g, (_, q, u) => `url("${new URL(u, base).href}")`) + '\n';
+                css += r.cssText.replace(/url\((['"]?)([^'")]+)\1\)/g, (_: string, q: string, u: string) => `url("${new URL(u, base).href}")`) + '\n';
             }
         }
     } catch { return; }                                                 // (the page is going)
@@ -206,7 +208,7 @@ function mirrorFonts() {
 // Inspect the blocks of another window – a same-origin iframe – from here;
 // again when it has loaded another page. The panel stays where it is, open or
 // not; what it showed of the last page goes.
-async function inspect(w) {
+async function inspect(w: Window): Promise<void> {
     if (isOpen.value) { call('cancelPick'); call('clear'); }
     setPageWindow(w);
     mirrored = -1;
@@ -216,9 +218,9 @@ async function inspect(w) {
     lastPaints = null;
     if (!isOpen.value) return;
     mirrorFonts();
-    try { await refresh(); } catch (e) { say(String(e.message || e), 10000); return; }
+    try { await refresh(); } catch (e) { say(String((e as Error).message || e), 10000); return; }
     if (view.value === 'res') loadResources();
-    if (view.value === 'col') loadColours();
+    if ((view.value as string) === 'col') loadColours();
     applyGuides();
     poll();
 }
@@ -250,7 +252,7 @@ async function poll() {
 // the panel is open, so the rows, the details and the outlines follow the
 // text as it moves. One refresh at a time; one more if the layout moved
 // meanwhile.
-let lastPaints = null, refreshing = false, again = false;
+let lastPaints: number | null = null, refreshing = false, again = false;
 function watchPaints() {
     if (!isOpen.value) return;
     const w = pageWindow(), p = w.reflowtex && w.reflowtex.inspect && w.reflowtex.inspect.paints;
@@ -270,8 +272,8 @@ async function followReflow() {
 }
 
 // ── Opening and closing ────────────────────────────────────────────────────────
-let host = null;
-async function open(block, { dock: where, scroll = true } = {}) {
+let host: HTMLDivElement = null!;
+async function open(block?: Element | null, { dock: where, scroll = true }: { dock?: string; scroll?: boolean } = {}): Promise<void> {
     if (where) setPageDock(where);
     if (!isOpen.value) {
         // Last in the document, so nothing added since stacks above it.
@@ -282,7 +284,7 @@ async function open(block, { dock: where, scroll = true } = {}) {
         pollTimer = setInterval(poll, 400);
         showSel = null; setShowSel(false);
         blocks.value = null;
-        try { await refresh(); } catch (e) { say(String(e.message || e), 10000); return; }
+        try { await refresh(); } catch (e) { say(String((e as Error).message || e), 10000); return; }
         if (view.value === 'res') loadResources();
         applyGuides();
         lastPaints = null;
@@ -292,7 +294,7 @@ async function open(block, { dock: where, scroll = true } = {}) {
     if (block) {
         setView('tree');
         // The block may still be initialising (fonts, first layout): wait a little.
-        let path = null;
+        let path: Awaited<ReturnType<typeof call<'blockPath'>>> | null = null;
         for (let k = 0; k < 40 && !(path = await call('blockPath', block)); k++) await new Promise(r => setTimeout(r, 150));
         if (got(path)) await reveal(path, { openLast: true, page: scroll });
     }
@@ -310,7 +312,7 @@ function close() {
 const toggle = () => (embedded.value ? refs.tree && refs.tree.focus() : isOpen.value ? close() : open());
 // Part of the page rather than over it: inside `container`, filling it, open
 // for good – no dragging, no closing, and the shortcut only focuses it.
-async function embed(container, block) {
+async function embed(container: Element, block?: Element | null): Promise<void> {
     embedded.value = true;
     // Its own stacking layer within the page, above the outlines it draws.
     host.style.cssText = 'display:block;position:relative;z-index:2147483647;width:100%;height:100%';
@@ -319,7 +321,7 @@ async function embed(container, block) {
 }
 
 // ── Making it ──────────────────────────────────────────────────────────────────
-export function mount({ asset }) {
+export function mount({ asset }: { asset: (name: string) => string }): InspectorPanel {
     useAsset(asset);
     host = document.createElement('div');
     host.setAttribute('data-rtx-ui', '');

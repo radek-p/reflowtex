@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex inspector – GENERATED from src/inspector/src/panel/colours.js by esbuild (make build-inspector); sources sha256 0cced8ab9ca76e945218ca562d7af8644e4615b09398231c61361ef972204c17
+// reflowtex inspector – GENERATED from src/inspector/src/panel/colours.ts by esbuild (make build-inspector); sources sha256 d804145e4ff690a9b9102807085ae3c32fbb48784b008089c6cc59884d83cb00
 import { html, signal, useRef } from "../vendor/preact.js";
 import { call, got } from "./bridge.js";
 import { Action, Muted, copyText } from "./ui.js";
@@ -48,9 +48,10 @@ function Cell({ map, theme, src, value, swatches }) {
     </span>`;
 }
 function ColourMap({ m, theme }) {
-  const add = useRef(null), tint = useRef(null), setTint = useRef(null);
+  const add = useRef(null), tint = useRef(null);
+  const setTint = useRef(null);
   setTint.current = setTint.current || live((hex, base, pct) => run("setMapTint", m.name, hex, base, pct));
-  const swatches = [...new Set(m.colors.flatMap((c) => [c.src, ...Object.values(c.by)]).filter((c) => c && HEX.test(c)).map((c) => c.toLowerCase()))].slice(0, 24);
+  const swatches = [...new Set(m.colors.flatMap((c) => [c.src, ...Object.values(c.by)]).filter((c) => !!c && HEX.test(c)).map((c) => c.toLowerCase()))].slice(0, 24);
   const addColour = () => {
     const v = add.current.value.trim().toLowerCase();
     if (!HEX.test(v)) {

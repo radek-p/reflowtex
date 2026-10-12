@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex inspector – GENERATED from src/inspector/src/inspector.js by esbuild (make build-inspector); sources sha256 0cced8ab9ca76e945218ca562d7af8644e4615b09398231c61361ef972204c17
+// reflowtex inspector – GENERATED from src/inspector/src/inspector.ts by esbuild (make build-inspector); sources sha256 d804145e4ff690a9b9102807085ae3c32fbb48784b008089c6cc59884d83cb00
 "use strict";
 (() => {
-  // src/inspector.js
+  // src/inspector.ts
   (() => {
     const api = window.reflowtex = window.reflowtex || {};
     if (api.inspector) return;
@@ -16,7 +16,7 @@
     let panel = null;
     const load = () => panel = panel || import(asset("panel/app.js")).then((m) => m.mount({ asset }));
     const loaded = (name) => async (...args) => (await load())[name](...args);
-    api.inspector = {
+    const inspector = {
       open: loaded("open"),
       toggle: loaded("toggle"),
       dock: loaded("dock"),
@@ -36,6 +36,7 @@
       },
       shortcut: IS_MAC ? "⌥⇧I" : "Alt+Shift+I"
     };
+    api.inspector = inspector;
     addEventListener("keydown", (e) => {
       if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === "KeyI") {
         e.preventDefault();

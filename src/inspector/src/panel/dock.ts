@@ -6,12 +6,17 @@
 import { signal, computed, effect } from '../vendor/preact.js';
 import { isOpen, recall, keep, plain } from './store.js';
 
-export const SIDES = ['float', 'left', 'bottom', 'right'];
-export const SIDE_TITLES = { float: 'Float over the page', left: 'Dock to left', bottom: 'Dock to bottom', right: 'Dock to right' };
+/** Where the panel is: floating, or docked to an edge of the window. */
+export type Side = 'float' | 'left' | 'bottom' | 'right';
+/** A floating panel's place and size (px). */
+interface Geom { x: number; y: number; w: number; h: number }
+
+export const SIDES: Side[] = ['float', 'left', 'bottom', 'right'];
+export const SIDE_TITLES: Record<Side, string> = { float: 'Float over the page', left: 'Dock to left', bottom: 'Dock to bottom', right: 'Dock to right' };
 
 export const embedded = signal(false);         // inside a page's element, open for good
-export const side = signal('float');           // where it is now
-const geom = signal(null);                     // floating: { x, y, w, h }
+export const side = signal<Side>('float');           // where it is now
+const geom = signal<Geom | null>(null);                     // floating: { x, y, w, h }
 const size = signal(0);                        // docked: its width, or its height at the bottom
 
 // The window a docked panel is placed in, as position: fixed sees it: without
@@ -24,21 +29,21 @@ const viewport = () => ({ w: document.documentElement.clientWidth, h: document.d
 // page's (open's `dock`), and floating if it names none. 'auto' is the right
 // edge, or the bottom in a portrait window.
 let pageDock = 'float';
-export const setPageDock = where => { pageDock = where; };
-export function chosenDock() {
-    let m = recall('dock', null, plain);
-    if (!SIDES.includes(m)) m = pageDock;
+export const setPageDock = (where: string): void => { pageDock = where; };
+export function chosenDock(): Side {
+    let m = recall<string | null>('dock', null, plain);
+    if (!SIDES.includes(m as Side)) m = pageDock;
     if (m === 'auto') { const vp = viewport(); m = vp.w >= vp.h ? 'right' : 'bottom'; }
-    return SIDES.includes(m) ? m : 'float';
+    return SIDES.includes(m as Side) ? m as Side : 'float';
 }
-export function setDock(mode) {
-    if (!SIDES.includes(mode)) return;
+export function setDock(mode: string): void {
+    if (!SIDES.includes(mode as Side)) return;
     keep('dock', mode, plain);
-    if (isOpen.value && !embedded.value) applyDock(mode);
+    if (isOpen.value && !embedded.value) applyDock(mode as Side);
 }
-export function applyDock(mode) {
+export function applyDock(mode: Side): void {
     side.value = mode;
-    if (mode === 'float') geom.value = floating(recall(null, null));
+    if (mode === 'float') geom.value = floating(recall<Partial<Geom> | null>(null, null));
     else size.value = dockSize(mode);
 }
 
@@ -46,7 +51,7 @@ export function applyDock(mode) {
 // Remembered, clamped to the window with a grip left on screen. By default,
 // the bottom right corner – above where a page tends to keep a floating
 // button of its own.
-function floating(g) {
+function floating(g: Partial<Geom> | null): Geom {
     const vw = innerWidth, vh = innerHeight;
     const w = Math.min(g && g.w || 620, vw - 16), h = Math.min(g && g.h || Math.round(vh * 0.45), vh - 84);
     const x = g && g.x != null ? g.x : vw - w - 16, y = g && g.y != null ? g.y : Math.max(8, vh - h - 76);
@@ -54,12 +59,12 @@ function floating(g) {
 }
 const saveGeom = () => keep(null, geom.value);
 // Dragged by the toolbar (not by its buttons).
-export function startMove(e) {
-    if (embedded.value || side.value !== 'float' || e.button !== 0 || e.target.closest('button')) return;
-    const bar = e.currentTarget, g = geom.value, dx = e.clientX - g.x, dy = e.clientY - g.y;
+export function startMove(e: PointerEvent): void {
+    if (embedded.value || side.value !== 'float' || e.button !== 0 || (e.target as Element).closest('button')) return;
+    const bar = e.currentTarget as HTMLElement, g = geom.value!, dx = e.clientX - g.x, dy = e.clientY - g.y;
     bar.setPointerCapture(e.pointerId);
     e.preventDefault();
-    const move = ev => { geom.value = floating({ ...geom.value, x: ev.clientX - dx, y: ev.clientY - dy }); };
+    const move = (ev: PointerEvent) => { geom.value = floating({ ...geom.value, x: ev.clientX - dx, y: ev.clientY - dy }); };
     const end = () => {
         bar.removeEventListener('pointermove', move);
         bar.removeEventListener('pointerup', end);
@@ -77,19 +82,19 @@ export function startMove(e) {
 // screen.
 export const FRAME = 3;
 const LEAST = { w: 280, h: 180 };
-export const EDGES = ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw'];
+export const EDGES: string[] = ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw'];
 export const frameStyle = computed(() => {
     const g = geom.value;
     if (!isOpen.value || embedded.value || side.value !== 'float' || !g) return null;
     return `left:${g.x - FRAME}px;top:${g.y - FRAME}px;width:${g.w + 2 * FRAME}px;height:${g.h + 2 * FRAME}px`;
 });
-export function startEdge(e) {
+export function startEdge(e: PointerEvent): void {
     if (e.button !== 0 || side.value !== 'float' || embedded.value) return;
-    const handle = e.currentTarget, edge = handle.dataset.edge;
-    const g0 = { ...geom.value }, px = e.clientX, py = e.clientY;
+    const handle = e.currentTarget as HTMLElement, edge = handle.dataset.edge!;
+    const g0 = { ...geom.value! }, px = e.clientX, py = e.clientY;
     handle.setPointerCapture(e.pointerId);
     e.preventDefault();
-    const move = ev => {
+    const move = (ev: PointerEvent) => {
         const dx = ev.clientX - px, dy = ev.clientY - py;
         let { x, y, w, h } = g0;
         if (edge.includes('e')) w = Math.max(LEAST.w, g0.w + dx);
@@ -112,7 +117,7 @@ export function startEdge(e) {
 // The native resize grip (CSS resize, where a panel still has it): the size
 // it leaves, remembered.
 let saveTimer = 0;
-export function resized(el) {
+export function resized(el: HTMLElement): void {
     const g = geom.value;
     if (side.value !== 'float' || embedded.value || !g || el.hidden) return;
     if (g.w === el.offsetWidth && g.h === el.offsetHeight) return;
@@ -125,9 +130,9 @@ export function resized(el) {
 // Width (left, right) or height (bottom): as asked, as remembered, or a third
 // of the window or so – always leaving the page some room. The left and the
 // right share their width: moving the panel across keeps its size.
-const slot = s => (s === 'bottom' ? 'bottom' : 'side');
-const remembered = s => { const m = recall('docksize', {}); return s === 'bottom' ? m.bottom : m.side ?? m.right ?? m.left; };
-function dockSize(s, want) {
+const slot = (s: Side) => (s === 'bottom' ? 'bottom' : 'side');
+const remembered = (s: Side): number | undefined => { const m = recall<{ bottom?: number; side?: number; right?: number; left?: number }>('docksize', {}); return s === 'bottom' ? m.bottom : m.side ?? m.right ?? m.left; };
+function dockSize(s: Side, want?: number | null): number {
     const vp = viewport(), across = s === 'bottom' ? vp.h : vp.w;
     const n = want ?? remembered(s)
         ?? (s === 'bottom' ? Math.round(vp.h * 0.42) : Math.max(300, Math.min(460, Math.round(vp.w * 0.36))));
@@ -136,14 +141,14 @@ function dockSize(s, want) {
 }
 // The grip on the side facing the page sets the size: one layout of the page
 // per frame, however fast the pointer moves.
-export function startSize(e) {
+export function startSize(e: PointerEvent): void {
     const s = side.value;
     if (s === 'float' || e.button !== 0) return;
-    const grip = e.currentTarget;
+    const grip = e.currentTarget as HTMLElement;
     grip.setPointerCapture(e.pointerId);
     e.preventDefault();
-    let want = null, frame = 0;
-    const move = ev => {
+    let want: number | null = null, frame = 0;
+    const move = (ev: PointerEvent) => {
         const vp = viewport();
         want = s === 'left' ? ev.clientX : s === 'right' ? vp.w - ev.clientX : vp.h - ev.clientY;
         frame = frame || requestAnimationFrame(() => { frame = 0; size.value = dockSize(s, want); });
@@ -171,9 +176,10 @@ export const panelStyle = computed(() => {
 // its end scrolls clear of a bottom panel. The size is published as a CSS
 // variable too – --rtx-dock-left, -right or -bottom – for what the page fixes
 // to the window, such as a floating button.
-const PAD = { left: 'paddingLeft', right: 'paddingRight', bottom: 'paddingBottom' };
-let reserved = null;                           // { side, before: <html>'s own inline padding there }
-function reserve(s, n) {
+const PAD = { left: 'paddingLeft', right: 'paddingRight', bottom: 'paddingBottom' } as const;
+type Docked = keyof typeof PAD;
+let reserved: { side: Docked; before: string } | null = null;   // <html>'s own inline padding there
+function reserve(s: Docked, n: number) {
     const de = document.documentElement;
     if (reserved && reserved.side !== s) release();
     if (!reserved) reserved = { side: s, before: de.style[PAD[s]] };
@@ -189,7 +195,7 @@ function release() {
 }
 effect(() => {
     const s = side.value, n = size.value;
-    if (isOpen.value && !embedded.value && s !== 'float') reserve(s, n);
+    if (isOpen.value && !embedded.value && s !== 'float') reserve(s as Docked, n);
     else release();
 });
 

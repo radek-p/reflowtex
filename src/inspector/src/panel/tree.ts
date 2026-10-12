@@ -10,35 +10,43 @@ import { call, got, MISSING } from './bridge.js';
 import { refs, menu, COPY_KEY, recall, keep, plain } from './store.js';
 import { Table, Action, Head, Muted, MenuBox, IconPick, closeMenu, copyText } from './ui.js';
 import { showGlyph } from './resources.js';
+import type { Accessible, Details as NodeDetails, Row as Summary } from '../protocol.ts';
+
+/** A row of the tree as the panel keeps it: the agent's summary, its
+ *  children's ids once read, and whether it is open. */
+interface TreeNode { s: Summary; kids: number[] | null; open: boolean }
+/** A row drawn: one node, or a run of letters. */
+type Item = { key: number | string; id: number; n: TreeNode; depth: number; ids?: undefined }
+          | { key: string; ids: number[]; depth: number; id?: undefined; n?: undefined };
 
 // ── The model ──────────────────────────────────────────────────────────────────
-const nodes = new Map();          // id → { s: the agent's summary, kids: [id] | null, open }
-let roots = [];
+const nodes = new Map<number, TreeNode>();          // id → { s: the agent's summary, kids: [id] | null, open }
+let roots: number[] = [];
 const version = signal(0);        // bumped whenever `nodes` or `roots` change
 const bump = () => { version.value++; };
-const empty = signal(null);       // why there is no tree: 'viewer' | 'none' | null
-export const selected = signal(null);
-const details = signal(null);     // { id, d }: the selected node's details (d null: gone)
-let scrollTo = null;              // a row to bring into view once it is drawn
+const empty = signal<'viewer' | 'none' | null>(null);       // why there is no tree
+export const selected = signal<number | null>(null);
+const details = signal<{ id: number; d: NodeDetails | null } | null>(null);     // the selected node's details (d null: gone)
+let scrollTo: number | null = null;              // a row to bring into view once it is drawn
 
-const remember = list => list.map(s => {
+const remember = (list: Summary[]) => list.map(s => {
     const n = nodes.get(s.id);
     if (n) n.s = s; else nodes.set(s.id, { s, kids: null, open: false });
     return s.id;
 });
-async function loadKids(id) { nodes.get(id).kids = remember(await call('children', id) || []); }
+async function loadKids(id: number) { nodes.get(id)!.kids = remember(await call('children', id) as Summary[] || []); }
 
 // The blocks again, and every open branch below them: after a reflow, or
 // when blocks come or go.
-export async function refresh() {
+export async function refresh(): Promise<void> {
     const list = await call('blocks');
     if (list === MISSING) { roots = []; nodes.clear(); empty.value = 'viewer'; bump(); return; }
     empty.value = list.length ? null : 'none';
     roots = remember(list);
-    const walk = async ids => {
+    const walk = async (ids: number[]) => {
         for (const id of ids) {
             const n = nodes.get(id);
-            if (n && n.open && n.s.hasChildren) { await loadKids(id); await walk(n.kids); }
+            if (n && n.open && n.s.hasChildren) { await loadKids(id); await walk(n.kids!); }
             else if (n) n.kids = null;
         }
     };
@@ -46,7 +54,7 @@ export async function refresh() {
     bump();
     if (selected.value != null) loadDetails(selected.value);
 }
-export async function toggle(id, open) {
+export async function toggle(id: number, open?: boolean): Promise<void> {
     const n = nodes.get(id);
     if (!n || !n.s.hasChildren) return;
     open = open ?? !n.open;
@@ -56,14 +64,14 @@ export async function toggle(id, open) {
 }
 // `scroll`: the row into view; `page: false` leaves the page where it is,
 // even if the node is off screen.
-export async function select(id, { scroll = true, page = true } = {}) {
+export async function select(id: number, { scroll = true, page = true } = {}): Promise<void> {
     selected.value = id;
     if (scroll) scrollTo = id;
     await call('select', id, { scroll: page });
     loadDetails(id);
 }
 // Expand along a path (block → … → node) and select its end.
-export async function reveal(path, { openLast = false, page = true } = {}) {
+export async function reveal(path: number[] | null, { openLast = false, page = true } = {}): Promise<void> {
     if (!path || !path.length) return;
     if (!roots.includes(path[0])) await refresh();
     for (const id of openLast ? path : path.slice(0, -1)) {
@@ -74,12 +82,12 @@ export async function reveal(path, { openLast = false, page = true } = {}) {
     bump();
     await select(path[path.length - 1], { page });
 }
-async function loadDetails(id) {
+async function loadDetails(id: number) {
     const d = await call('details', id);
     if (selected.value === id) details.value = { id, d: got(d) ? d : null };
 }
-export function forgetSelection() { selected.value = null; details.value = null; }
-export async function copyXml(id) {
+export function forgetSelection(): void { selected.value = null; details.value = null; }
+export async function copyXml(id: number | null): Promise<void> {
     if (id == null) return;
     const text = await call('xml', id);
     if (typeof text === 'string') copyText(text, 'XML');
@@ -94,16 +102,16 @@ export async function copyXml(id) {
 // ligature – ends the run.
 const rows = computed(() => {
     version.value;
-    const out = [];
-    const plainGlyph = id => { const n = nodes.get(id); return n && n.s.type === 'glyph' && !n.s.hasChildren; };
-    const hyphen = id => { const n = nodes.get(id); return n && n.s.point === true; };
-    const emit = (id, depth) => {
+    const out: Item[] = [];
+    const plainGlyph = (id: number) => { const n = nodes.get(id); return n && n.s.type === 'glyph' && !n.s.hasChildren; };
+    const hyphen = (id: number) => { const n = nodes.get(id); return n && n.s.point === true; };
+    const emit = (id: number, depth: number) => {
         const n = nodes.get(id);
         if (!n) return;
         out.push({ key: id, id, n, depth });
         if (n.open && n.kids) emitKids(n.kids, depth + 1);
     };
-    const emitKids = (kids, depth) => {
+    const emitKids = (kids: number[], depth: number) => {
         for (let i = 0; i < kids.length;) {
             let j = i, letters = 0;
             while (j < kids.length && (plainGlyph(kids[j]) || hyphen(kids[j]))) { if (plainGlyph(kids[j])) letters++; j++; }
@@ -115,12 +123,12 @@ const rows = computed(() => {
     return out;
 });
 // Every selectable thing in row order: a node row, or one letter of a run.
-const order = computed(() => rows.value.flatMap((item, row) =>
+const order = computed(() => rows.value.flatMap((item, row): { id: number; row: number; k?: number; run?: number[] }[] =>
     item.ids ? item.ids.map((id, k) => ({ id, row, k, run: item.ids })) : [{ id: item.id, row }]));
-const firstOf = item => (item.ids ? item.ids[0] : item.id);
-const indent = depth => `padding-left:${4 + depth * 14}px`;
+const firstOf = (item: Item): number => (item.ids ? item.ids[0] : item.id);
+const indent = (depth: number) => `padding-left:${4 + depth * 14}px`;
 
-function Row({ item, sel }) {
+function Row({ item, sel }: { item: Item & { n: TreeNode }; sel: number | null }) {
     const { id, n, depth } = item, s = n.s;
     return html`<div class=${`row t-${s.type}${id === sel ? ' sel' : ''}${s.drawn === false ? ' undrawn' : ''}`}
             role="treeitem" data-id=${id} aria-expanded=${s.hasChildren ? String(!!n.open) : undefined} style=${indent(depth)}>
@@ -130,11 +138,11 @@ function Row({ item, sel }) {
         <span class="note">${s.note}</span>
     </div>`;
 }
-function Run({ item, sel }) {
-    const fonts = new Set();
+function Run({ item, sel }: { item: Item & { ids: number[] }; sel: number | null }) {
+    const fonts = new Set<string>();
     let letters = 0;
     const chips = item.ids.map(id => {
-        const s = nodes.get(id).s, hyphen = s.point === true, m = /^font (\S+)/.exec(s.note);
+        const s = nodes.get(id)!.s, hyphen = s.point === true, m = /^font (\S+)/.exec(s.note);
         if (m) fonts.add(m[1]);
         if (!hyphen) letters++;
         return html`<span key=${id} class=${'chip' + (hyphen ? ' disc' : '') + (id === sel ? ' sel' : '') + (s.drawn === false ? ' undrawn' : '')}
@@ -150,48 +158,48 @@ function Run({ item, sel }) {
 }
 
 // ── The tree ───────────────────────────────────────────────────────────────────
-let hoverKey = null;
+let hoverKey: string | null = null;
 export function Tree() {
-    const el = useRef(null), sel = selected.value;
+    const el = useRef<HTMLElement>(null), sel = selected.value;
     useLayoutEffect(() => { refs.tree = el.current; }, []);
     useLayoutEffect(() => {                   // a selection made from elsewhere, in view
         if (scrollTo == null) return;
-        const row = el.current.querySelector(`[data-id="${scrollTo}"]`);
+        const row = el.current!.querySelector(`[data-id="${scrollTo}"]`);
         scrollTo = null;
         if (row) row.scrollIntoView({ block: 'nearest' });
     });
-    const rowEl = id => el.current.querySelector(`[data-id="${id}"]`);
+    const rowEl = (id: number) => el.current!.querySelector(`[data-id="${id}"]`);
     // A press selects (a second in quick succession, or one on the twisty,
     // opens or closes), like Chrome's Elements tree.
-    const onMouseDown = e => {
+    const onMouseDown = (e: MouseEvent) => {
         if (e.button !== 0) return;
-        const r = e.target.closest('[data-id]');
+        const r = (e.target as Element).closest<HTMLElement>('[data-id]');
         if (!r) return;
-        const id = +r.dataset.id;
-        if (e.target.classList.contains('twisty') || e.detail === 2) toggle(id); else select(id, { scroll: false });
+        const id = +r.dataset.id!;
+        if ((e.target as Element).classList.contains('twisty') || e.detail === 2) toggle(id); else select(id, { scroll: false });
     };
     // A letter hovers that glyph; the rest of a run's row, all its letters.
-    const onMouseMove = e => {
-        const one = e.target.closest('[data-id]'), run = !one && e.target.closest('.row.run');
-        const id = one ? +one.dataset.id : run ? [...run.querySelectorAll('[data-id]')].map(c => +c.dataset.id) : null;
+    const onMouseMove = (e: MouseEvent) => {
+        const one = (e.target as Element).closest<HTMLElement>('[data-id]'), run = !one && (e.target as Element).closest('.row.run');
+        const id = one ? +one.dataset.id! : run ? [...run.querySelectorAll<HTMLElement>('[data-id]')].map(c => +c.dataset.id!) : null;
         const key = JSON.stringify(id);
         if (key !== hoverKey) { hoverKey = key; call('hover', id); }
     };
     const onMouseLeave = () => { hoverKey = null; call('hover', null); };
     // A right click selects the row and offers to copy it: the panel's own
     // menu, so it can say what it copies.
-    const onContextMenu = e => {
-        const r = e.target.closest('[data-id]');
+    const onContextMenu = (e: MouseEvent) => {
+        const r = (e.target as Element).closest<HTMLElement>('[data-id]');
         if (!r) return;
         e.preventDefault();
-        const id = +r.dataset.id;
+        const id = +r.dataset.id!;
         select(id, { scroll: false });
         menu.value = { kind: 'row', id, x: e.clientX, y: e.clientY };
     };
     // Up and Down go row by row (a run of letters is one row); Right and Left
     // open and close, and within a run step from letter to letter.
-    const onKeyDown = e => {
-        const id = selected.value;
+    const onKeyDown = (e: KeyboardEvent) => {
+        const id = selected.value!;
         if ((e.metaKey || e.ctrlKey) && e.key === 'c' && id != null) { e.preventDefault(); copyXml(id); return; }
         if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && id != null) {
             e.preventDefault();
@@ -206,11 +214,11 @@ export function Tree() {
         } else if (e.key === 'ArrowUp') {
             if (me && me.row > 0) select(firstOf(items[me.row - 1]));
         } else if (e.key === 'ArrowRight' && me) {
-            if (me.run) { if (me.k < me.run.length - 1) select(me.run[me.k + 1]); }
+            if (me.run) { if (me.k! < me.run.length - 1) select(me.run[me.k! + 1]); }
             else toggle(id, true);
         } else if (e.key === 'ArrowLeft' && me) {
             const n = nodes.get(id);
-            if (me.run && me.k > 0) select(me.run[me.k - 1]);
+            if (me.run && me.k! > 0) select(me.run[me.k! - 1]);
             else if (!me.run && n && n.open) toggle(id, false);
             else {                                         // to the parent row
                 const depth = items[me.row].depth;
@@ -240,20 +248,20 @@ export function Tree() {
 // screen reader is given for it (the accessible layer's paragraphs and
 // displays it belongs to), each formula shown as MathML or spelled out as its
 // alttext says. Both choices are remembered.
-const dtab = signal(recall('dtab', 'props', plain) === 'a11y' ? 'a11y' : 'props');
-const a11yMode = signal(recall('a11yMode', 'mathml', plain) === 'spoken' ? 'spoken' : 'mathml');
-const setDtab = t => { dtab.value = t; keep('dtab', t, plain); };
+const dtab = signal<string>(recall<string>('dtab', 'props', plain) === 'a11y' ? 'a11y' : 'props');
+const a11yMode = signal<string>(recall<string>('a11yMode', 'mathml', plain) === 'spoken' ? 'spoken' : 'mathml');
+const setDtab = (t: string) => { dtab.value = t; keep('dtab', t, plain); };
 const DTABS = [['props', 'Details', 'Every field of the node'],
                ['a11y', 'Accessibility', 'What a screen reader is given for it: its text, and each formula as MathML or spelled out']];
 function DetailTabs() {
     return html`<div class="dtabs" role="tablist">${DTABS.map(([t, label, title]) => html`<button type="button" role="tab" key=${t}
         data-dtab=${t} title=${title} aria-selected=${String(dtab.value === t)} onClick=${() => setDtab(t)}>${label}</button>`)}</div>`;
 }
-function AccessibleText({ id }) {
-    const [a, setA] = useState(null);
+function AccessibleText({ id }: { id: number }) {
+    const [a, setA] = useState<Accessible | null>(null);
     useEffect(() => { let live = true; call('accessible', id).then(r => { if (live) setA(got(r) ? r : null); }); return () => { live = false; }; }, [id]);
     const mode = a11yMode.value;
-    const setMode = m => { a11yMode.value = m; keep('a11yMode', m, plain); };
+    const setMode = (m: string) => { a11yMode.value = m; keep('a11yMode', m, plain); };
     const body = !a ? html`<${Muted}>…<//>`
         : !a.layer ? html`<${Muted}>This block has no accessible layer (build it with --a11y).<//>`
         : !a.pieces.length ? html`<${Muted}>Nothing in the accessible layer stands for this row.<//>`
@@ -281,7 +289,7 @@ export function Details() {
     return html`<aside class="details"><${DetailTabs}/>
         <${Head} title=${`${d.summary.label}  ${d.summary.note}`}>
             ${d.glyph && html`<${Action} title=${`Show it in the glyph table of ${d.glyph.font} (Resources)`}
-                onClick=${() => showGlyph(d.glyph.key, d.glyph.cp)}>In its font<//>`}
+                onClick=${() => showGlyph(d.glyph!.key, d.glyph!.cp)}>In its font<//>`}
             <${Action} title=${`Copy this fragment – all it holds – as XML (${COPY_KEY} in the tree)`} onClick=${() => copyXml(id)}>Copy XML<//>
         <//>
         <${Table} rows=${d.rows}/>
@@ -289,10 +297,10 @@ export function Details() {
 }
 
 // ── The row menu ───────────────────────────────────────────────────────────────
-export function RowMenu({ id }) {
-    const s = nodes.get(id) && nodes.get(id).s;
-    const item = (label, hint, act) => html`<button type="button" role="menuitem"
-            onClick=${async () => { closeMenu(); await act(); refs.tree.focus({ preventScroll: true }); }}>
+export function RowMenu({ id }: { id: number }) {
+    const s = nodes.get(id) && nodes.get(id)!.s;
+    const item = (label: string, hint: string, act: () => unknown) => html`<button type="button" role="menuitem"
+            onClick=${async () => { closeMenu(); await act(); refs.tree!.focus({ preventScroll: true }); }}>
         <span>${label}</span><span class="hint">${hint}</span></button>`;
     return html`<${MenuBox} label="Copy">
         ${item('Copy XML', COPY_KEY, () => copyXml(id))}

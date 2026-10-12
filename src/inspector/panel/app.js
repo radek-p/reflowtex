@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex inspector – GENERATED from src/inspector/src/panel/app.js by esbuild (make build-inspector); sources sha256 0cced8ab9ca76e945218ca562d7af8644e4615b09398231c61361ef972204c17
+// reflowtex inspector – GENERATED from src/inspector/src/panel/app.ts by esbuild (make build-inspector); sources sha256 d804145e4ff690a9b9102807085ae3c32fbb48784b008089c6cc59884d83cb00
 import { html, render, useLayoutEffect, useRef, useState, Fragment } from "../vendor/preact.js";
 import { call, got, useAsset, assetUrl, pageWindow, setPageWindow } from "./bridge.js";
 import { isOpen, view, dark, guides, picking, blocks, noViewer, flash, menu, refs, keep, plain, say, SHORTCUT } from "./store.js";
@@ -162,7 +162,7 @@ function syncTheme() {
     return m2 && (m2[4] === void 0 || +m2[4] > 0) ? m2 : null;
   };
   const m = bg(getComputedStyle(document.body).backgroundColor) || bg(getComputedStyle(document.documentElement).backgroundColor);
-  dark.value = m ? 0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3] < 110 : matchMedia("(prefers-color-scheme: dark)").matches;
+  dark.value = m ? 0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3] < 110 : matchMedia("(prefers-color-scheme: dark)").matches;
 }
 let mirrored = -1;
 function mirrorFonts() {
