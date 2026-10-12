@@ -17,7 +17,7 @@ HTM_VERSION        = 3.1.1
 SIGNALS_VERSION    = 2.11.2
 ESBUILD_VERSION    = 0.28.2
 
-.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all render-report test-capture test-web typecheck build-companion build-inspector clean vendor-protobuf vendor-inspector build-viewer
+.PHONY: help node-deps demo display-model-smoke serve hugo-demo testmath-demo website website-clean check test-render test-render-all render-report test-capture test-conformance test-web typecheck build-companion build-inspector clean vendor-protobuf vendor-inspector build-viewer
 
 help:
 	@echo "Reflow TeX targets:"
@@ -37,6 +37,7 @@ help:
 	@echo "  make test-render-all  the same, with the whole-document cases (testmath)"
 	@echo "  make render-report    the render tests' results side by side, served locally (after test-render)"
 	@echo "  make test-capture     the capture tests: what the serializer records of small documents (tests/capture)"
+	@echo "  make test-conformance the backend conformance suite: each backend's claimed capabilities checked (tests/backends)"
 	@echo "  make typecheck        type-check all the TypeScript: the Node side and the browser's (viewer host API, companion)"
 	@echo "  make build-companion  bundle src/companion/src/ (TypeScript) into src/companion/companion.js"
 	@echo "  make build-inspector  build src/inspector/src/ into the inspector's scripts"
@@ -104,6 +105,11 @@ render-report: node-deps
 # The capture tests (tests/capture/README.md): node:test; TeX only, no browser.
 test-capture: node-deps
 	node --test tests/capture/capture.test.ts
+
+# The backend conformance suite (docs/backends.md): every registered backend,
+# or those in REFLOWTEX_BACKENDS; TeX only, no browser.
+test-conformance: node-deps
+	node --test tests/backends/conformance.test.ts
 
 # The web tests (tests/web/README.md): Playwright Test, in Chromium, WebKit
 # and Firefox (downloaded once); Hugo for the integration's site.

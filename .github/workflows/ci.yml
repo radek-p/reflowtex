@@ -3,7 +3,8 @@ name: CI
 # Every check of a change, in one run (CONTRIBUTING.md, "CI"):
 #   typescript  type checking and the unit tests, on Node alone;
 #   render      every glyph the browser draws against TeX's own pageless PDF
-#               (tests/render/README.md), and the capture tests;
+#               (tests/render/README.md), the capture tests and the backend
+#               conformance suite (docs/backends.md);
 #   web         what a site does in the browser: the viewer, the companion
 #               package and the Hugo integration, in Chromium, WebKit and
 #               Firefox (tests/web/README.md).
@@ -48,12 +49,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: .github/scripts/ci-image.sh login && .github/scripts/ci-image.sh pull "$IMAGE"
-      - name: Run the capture and render tests
+      - name: Run the capture, conformance and render tests
         run: |
           docker run --rm -v "$PWD":/workspace -w /workspace reflowtex:test bash -lc '
             set -e
             npm ci --no-audit --no-fund
-            make test-capture test-render-all
+            make test-capture test-conformance test-render-all
           '
       # The results, for the site (Deploy website shows them, for this
       # commit) and, when a test failed, for a look.

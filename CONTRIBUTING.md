@@ -51,8 +51,9 @@ One workflow, **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)),
 checks every push to main and every pull request:
 
 - **typescript**: `npm run typecheck` and the unit tests, on Node alone;
-- **render**: the capture tests and the render tests, every glyph against
-  TeX's pageless PDF;
+- **render**: the capture tests, the backend conformance suite
+  ([docs/backends.md](docs/backends.md)) and the render tests, every glyph
+  against TeX's pageless PDF;
 - **web**: the web tests, in Chromium, WebKit and Firefox.
 
 **The image.** render and web run in the CI image, the Dockerfile's `test`

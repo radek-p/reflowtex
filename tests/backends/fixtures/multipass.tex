@@ -1,0 +1,11 @@
+% multiPass: a reference to a later section resolves once the .aux is read back.
+\documentclass{article}
+\begin{document}
+See Section~\ref{sec:later}.
+
+\section{First}
+Text.
+
+\section{Second}\label{sec:later}
+More text.
+\end{document}

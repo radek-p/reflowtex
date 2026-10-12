@@ -1,0 +1,8 @@
+% shellEscape: a shell command runs only when the caller asks for shell
+% escape. (\write18 is not a LuaTeX primitive; shellesc gives \ShellEscape.)
+\documentclass{article}
+\usepackage{shellesc}
+\begin{document}
+\ShellEscape{echo ran > shell-escape-ran.txt}
+Text.
+\end{document}
