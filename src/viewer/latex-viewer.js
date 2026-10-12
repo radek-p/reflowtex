@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 84cbbcd0ccf8a9497507e9d2549f9cdd7105331c8d3a5eff28f6a1f4e9a85f83
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 84d543ad37cb4e888b5497412f6803d2f26b06abbab9ae4082f7c81e67904c28
 'use strict';
 "use strict";
 (() => {
@@ -2396,6 +2396,17 @@
   }
   .latex-block rect.latex-selection { fill: var(--latex-selection-color, Highlight); }
 `;
+  function keepSelection(root) {
+    const sel = typeof getSelection === "function" ? getSelection() : null;
+    if (!sel || !sel.rangeCount || sel.isCollapsed) return null;
+    const { anchorNode, anchorOffset, focusNode, focusOffset } = sel;
+    if (!anchorNode || !focusNode || !(root.contains(anchorNode) || root.contains(focusNode))) return null;
+    return () => {
+      if (sel.anchorNode === anchorNode && sel.anchorOffset === anchorOffset && sel.focusNode === focusNode && sel.focusOffset === focusOffset) return;
+      if (!anchorNode.isConnected || !focusNode.isConnected) return;
+      sel.setBaseAndExtent(anchorNode, anchorOffset, focusNode, focusOffset);
+    };
+  }
 
   // src/engine/sink.ts
   function svgEl(tag, attrs) {
@@ -2730,6 +2741,7 @@
     const L = cache.layout.laid[i];
     const s = dom.segs[i];
     const svg = s.svg;
+    const restoreSelection = keepSelection(svg);
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
     const used = /* @__PURE__ */ new Set();
     const sink = reconcileSink(dom.byNode, used, stats, cache);
@@ -2782,6 +2794,7 @@
     s.live = used;
     s.painted = true;
     s.dirty = false;
+    restoreSelection?.();
     if (s.wrap && svg.parentNode === s.wrap) {
       updateDisplayOverflowCue(s.wrap);
     }
@@ -3670,7 +3683,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
           piece.style.cssText = `${PIECE};top:${top2}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
           math.dataset.run = math.localName === "math" ? "display" : "spoken";
           if (math.localName !== "math") math.style.whiteSpace = "nowrap";
-          math.style.display = "inline-block";
+          Object.assign(math.style, { position: "absolute", left: "0", top: "0", width: "max-content" });
           scaled.push({ el: math, w, h: hh });
           return;
         }

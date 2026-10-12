@@ -59,15 +59,23 @@ test('bands: one even rect per line, and none once the selection goes', async ({
   expect(await bands(page)).toEqual([]);
 });
 
+// A reflow moves the glyphs into new lines, and the selection with them: it
+// still holds the same text. (Moving a node takes a selection's end out of
+// it, to its parent: the selection held other words, and Firefox, which
+// reports that change, drew their one band.)
 test('bands follow the text into new lines', async ({ openPage }) => {
   const page = await openPage('selection');
   await page.evaluate(() => document.documentElement.setAttribute('data-latex-selection', 'bands'));
   await select(page);
   const wide = (await bands(page)).length;
+  // (line breaks aside, and the hyphens of words broken at them)
+  const selected = () => page.evaluate(() => getSelection()!.toString().replace(/[\s-]+/g, ''));
+  const before = await selected();
   await page.evaluate(() => { (document.querySelector('.latex-block') as HTMLElement).style.width = '260px'; });
   await idle(page);
   const lines = await page.evaluate(() => reflowtex.host.mark('key').rects().length);
   expect(lines).toBeGreaterThan(wide);
+  expect(await selected(), 'the same text selected').toBe(before);
   expect((await bands(page)).length).toBe(lines);
 });
 

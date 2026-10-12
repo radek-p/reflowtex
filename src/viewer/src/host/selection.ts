@@ -114,3 +114,26 @@ export const SELECTION_CSS = `
   }
   .latex-block rect.latex-selection { fill: var(--latex-selection-color, Highlight); }
 `;
+
+/** Before a paint of `root` (a segment's <svg>): the selection's ends, to
+ *  put back afterwards. A paint moves glyph elements between lines, and
+ *  moving a node out of its parent moves a selection's end inside it to the
+ *  parent (the DOM's rule for live ranges): after a reflow the selection
+ *  would hold other text, and the browser that reports the change (Firefox
+ *  fires selectionchange) drew its bands over that. The ends are text
+ *  nodes, which move with their glyphs: the same nodes and offsets select
+ *  the same text again. Returns the function that puts them back, or null
+ *  when no end lies in `root`. */
+export function keepSelection(root: Element): (() => void) | null {
+    const sel = typeof getSelection === 'function' ? getSelection() : null;
+    if (!sel || !sel.rangeCount || sel.isCollapsed) return null;
+    const { anchorNode, anchorOffset, focusNode, focusOffset } = sel;
+    if (!anchorNode || !focusNode || !(root.contains(anchorNode) || root.contains(focusNode))) return null;
+    return () => {
+        if (sel.anchorNode === anchorNode && sel.anchorOffset === anchorOffset
+            && sel.focusNode === focusNode && sel.focusOffset === focusOffset) return;
+        // an end whose glyph is no longer drawn (a hyphen the new break left out): as the browser left it
+        if (!anchorNode.isConnected || !focusNode.isConnected) return;
+        sel.setBaseAndExtent(anchorNode, anchorOffset, focusNode, focusOffset);
+    };
+}

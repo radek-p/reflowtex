@@ -60,8 +60,6 @@ const LINE_HEIGHT = 1.15;          // the pieces' line-height, as in PIECE
 const FITTED   = ';overflow:hidden';
 const UNFITTED = ';overflow-x:clip;overflow-y:visible';   // no sideways page scroll from wide maths
 const LINED    = ';overflow:visible;font-size:0;line-height:0;white-space:nowrap';   // the runs' flow sets the lines
-// A run: placed at its stretch of a line, scaled from its natural size to it.
-const RUN = 'position:absolute;margin:0;padding:0;white-space:pre;transform-origin:0 0;display:block';
 /** Near the window: within this many window heights above or below it. */
 const NEAR = 2;
 
@@ -332,7 +330,11 @@ export function placeAccessibleLayer(data: BlockData | undefined): void {
                 piece.style.cssText = `${PIECE};top:${top}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
                 math!.dataset.run = math!.localName === 'math' ? 'display' : 'spoken';
                 if (math!.localName !== 'math') math!.style.whiteSpace = 'nowrap';   // one line, scaled onto the formula
-                math!.style.display = 'inline-block';           // its own size, not the piece's width
+                // its own size, not the piece's width, on the piece's corner: out of
+                // the flow, as a formula in a line is. (An inline-block in the
+                // flow is what it was; Firefox lays a <math> out inline whatever
+                // its display says, and an inline box takes no transform.)
+                Object.assign(math!.style, { position: 'absolute', left: '0', top: '0', width: 'max-content' });
                 scaled.push({ el: math!, w, h: hh });
                 return;
             }

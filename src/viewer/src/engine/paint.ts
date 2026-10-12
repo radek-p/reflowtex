@@ -10,6 +10,7 @@ import { updateDisplayOverflowCue } from './layout/display.ts';
 import { materializeSegment } from './layout/document.ts';
 import { restoreLinkStates } from '../host/links.ts';
 import { liveInfo } from '../host/marks.ts';
+import { keepSelection } from '../host/selection.ts';
 import type { FontTable, Mark } from './model.ts';
 import type { DomSegment, LayoutCache, LinePair } from './layout/types.ts';
 import type { ElementRun, Run } from './sink.ts';
@@ -31,6 +32,7 @@ export function paintSegment(fontInfo: FontTable, cache: LayoutCache, i: number)
     const L   = cache.layout!.laid[i];
     const s   = dom.segs[i];
     const svg = s.svg!;
+    const restoreSelection = keepSelection(svg);   // (glyphs moved between lines take it with them: see there)
     const stats = cache.stats || (cache.stats = { created: 0, moved: 0, repositioned: 0, removed: 0 });
     const used  = new Set<Element>();
     const sink  = reconcileSink(dom.byNode, used, stats, cache);
@@ -79,6 +81,7 @@ export function paintSegment(fontInfo: FontTable, cache: LayoutCache, i: number)
     s.live = used;
     s.painted = true;
     s.dirty = false;
+    restoreSelection?.();
 
     // Overflow cues only. The wrapper's vertical geometry – the headroom padding
     // and the margins that take it back – is fixed at layout time (see
