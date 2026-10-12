@@ -11,8 +11,8 @@
 
 import { SP_TO_PX, ZOOM, sumWidthSp } from '../engine/core.ts';
 import { layoutDocument } from '../engine/layout/document.ts';
-import { NATURAL_PROBE_PT, markDirty, unobserveAll } from '../runtime/blocks.js';
-import { paintVisibleNow } from '../runtime/visibility.js';
+import { NATURAL_PROBE_PT, markDirty, unobserveAll } from '../runtime/blocks.ts';
+import { paintVisibleNow } from '../runtime/visibility.ts';
 import { paintDocument } from '../engine/paint.ts';
 import { disposePieces } from './inline.ts';
 // block-hosts.ts and this module import each other: only functions, called

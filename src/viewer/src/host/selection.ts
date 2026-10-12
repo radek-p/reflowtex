@@ -14,7 +14,7 @@
 // It runs beside marks, not through them: a separate set of glyph nodes
 // (selectedGlyph, asked by the painter) and a separate layer of rects
 // (rect.latex-selection, over marks' bands, under the text).
-import { allData } from '../runtime/block-data.js';
+import { allData } from '../runtime/block-data.ts';
 import { glyphNodeOf, nodesOf, rangesOf, repaint, type BlockData } from './marks.ts';
 import { frame as nextFrame } from '../runtime/pending.ts';
 

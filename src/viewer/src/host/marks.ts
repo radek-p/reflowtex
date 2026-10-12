@@ -13,9 +13,10 @@
 // its position in the block's text: every glyph, in reading order (glyphIndex
 // below), which is the same on every load of the same document.
 import { glyphScreenRect } from '../defaults/footnotes.js';
-import { allData } from '../runtime/block-data.js';
-import { markDirty } from '../runtime/blocks.js';
-import { paintVisibleNow } from '../runtime/visibility.js';
+import { allData, type BlockData, type BlockSource } from '../runtime/block-data.ts';
+import type { ContentItem, Doc, TexNode } from '../engine/model.ts';
+import { markDirty } from '../runtime/blocks.ts';
+import { paintVisibleNow } from '../runtime/visibility.ts';
 import { surfacesOf } from './surface.ts';
 import type { LiveMark, LiveMarkOptions, MarkHandle, TextRange } from './types.ts';
 
@@ -58,15 +59,11 @@ export function markHandle(id: string): MarkHandle {
 
 // ── Glyph positions ─────────────────────────────────────────────────────────
 
-type GNode = { type?: string; char?: number; text?: string; stream?: number;
-              children?: GNode[]; pre?: GNode[]; post?: GNode[]; replace?: GNode[] };
-type Item = { kind?: string; para?: number; box?: GNode; stream?: number };
-type Doc = { paragraphs?: { nodes?: GNode[] }[]; content?: Item[]; streams?: { content?: Item[] }[] };
-/** A block's source: what every view of it shares (runtime/init.js). */
-export interface Source { views: BlockData[] }
-export interface BlockData { doc: Doc; el: HTMLElement; fontInfo: unknown; cache: { blockKey?: string }; source?: Source;
-                            /** Mounted as a view of another (host.mount(el, { of })). */
-                            mountedOf?: boolean }
+type GNode = TexNode;
+type Item = ContentItem;
+export type { BlockData };
+/** A block's source: what every view of it shares (runtime/init.ts). */
+type Source = BlockSource;
 
 interface GlyphIndex {
     nodes: GNode[];
@@ -133,7 +130,7 @@ const textOf = (ix: GlyphIndex, from: number, to: number) =>
     ix.text.slice(ix.starts[from], to + 1 < ix.starts.length ? ix.starts[to + 1] : ix.text.length);
 
 const blockByKey = (key: string): BlockData | undefined =>
-    (allData as BlockData[]).find(d => d.cache.blockKey === key && d.el.isConnected);
+    allData.find(d => d.cache.blockKey === key && d.el.isConnected);
 
 // A painted glyph element → its node (paint.js registers each as it makes it).
 const nodeOfEl = new WeakMap<Element, GNode>();
@@ -340,7 +337,7 @@ export function addMark(ranges: readonly TextRange[], options: LiveMarkOptions =
 
 const overlaps = (a: TextRange, b: TextRange) => a.block === b.block && a.from <= b.to && b.from <= a.to;
 // A mirrored mark is in every view of its block: a range in any of them meets it.
-const sourceOfKey = (key: string) => (allData as BlockData[]).find(d => d.cache.blockKey === key)?.source;
+const sourceOfKey = (key: string) => allData.find(d => d.cache.blockKey === key)?.source;
 const meets = (m: Live, q: TextRange) => m.ranges.some(r => overlaps(r, q))
     || (m.spans.length > 0 && m.spans.some(s => s.source === sourceOfKey(q.block) && s.from <= q.to && q.from <= s.to));
 

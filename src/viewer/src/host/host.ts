@@ -15,7 +15,7 @@ import { clearSlotTexts, scopeOf, setSlotText, slotText } from './slots.js';
 import { addMark, liveMarks, markHandle, rangesOf } from './marks.ts';
 import { getColorMaps, setColorMaps } from '../runtime/colour.ts';
 import { destroyBlock, mountBlock } from '../runtime/init.js';
-import { blockData } from '../runtime/blocks.js';
+import { blockData } from '../runtime/blocks.ts';
 import { applyFade, applyFit, displayFadeDefault, displayFadeOf, displayFitDefault, displayFitOf, fadesNow, forgetFade, forgetFit,
          revealInDisplay, setDisplayFadeDefault, setDisplayFadeOf, setDisplayFitDefault, setDisplayFitOf } from './displays.ts';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';

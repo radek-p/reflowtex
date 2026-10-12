@@ -39,7 +39,7 @@
 import { BREAK_NODES, SP_TO_PX, useGlyphMetrics } from '../engine/core.ts';
 import { renderNodes } from '../engine/render.ts';
 import { api } from './page.ts';
-import { allData } from './block-data.js';
+import { allData } from './block-data.ts';
 
 // The layer turns into a zero-height anchor the pieces hang from, and is moved
 // before its block (as shipped it follows it): so every piece hangs below the

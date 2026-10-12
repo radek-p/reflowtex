@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 26ee5eb3a744318d4175a83ef52015b2050e9a38f6d6013da7c37f99b239ee2e
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 9b6606b0eff5525ac70906a5151a797f4cc1e26691d3451147cd961e40c3931a
 'use strict';
 "use strict";
 (() => {
@@ -1659,7 +1659,7 @@
     return css;
   }
 
-  // src/runtime/visibility.js
+  // src/runtime/visibility.ts
   var observedBlocks = /* @__PURE__ */ new Set();
   var segRef = /* @__PURE__ */ new WeakMap();
   var segIO = new IntersectionObserver((entries) => {
@@ -2892,7 +2892,7 @@
     };
   }
 
-  // src/runtime/settle.js
+  // src/runtime/settle.ts
   var SETTLE_MS = 150;
   var unsettled = /* @__PURE__ */ new Set();
   var settleTimer = 0;
@@ -2958,7 +2958,7 @@
     });
   }
 
-  // src/runtime/blocks.js
+  // src/runtime/blocks.ts
   var blockData = /* @__PURE__ */ new WeakMap();
   var quickLayout = false;
   var NATURAL_PROBE_PT = 5e3;
@@ -3713,7 +3713,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     copy.remove();
   }
 
-  // src/runtime/block-data.js
+  // src/runtime/block-data.ts
   var docData = /* @__PURE__ */ new WeakMap();
   var allData = [];
   var LAYER_MS = 200;

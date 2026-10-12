@@ -4,14 +4,18 @@
 import { DEFAULT_WIDTH_PT, ZOOM } from '../engine/core.ts';
 import { layoutDocument } from '../engine/layout/document.ts';
 import { paintDocument } from '../engine/paint.ts';
-import { announceLayout } from './block-data.js';
+import { announceLayout } from './block-data.ts';
 import { rerenderSurfaces } from '../host/surface.ts';
 import { disposePieces } from '../host/inline.ts';
 import { debugLog } from './page.ts';
 import { alignFromEl } from './params.ts';
-import { scheduleSettle } from './settle.js';
-import { observedBlocks, paintVisibleNow, segIO } from './visibility.js';
+import { scheduleSettle } from './settle.ts';
+import { observedBlocks, paintVisibleNow, segIO } from './visibility.ts';
 import { frame } from './pending.ts';
+import type { BlockData } from './block-data.ts';
+import type { Doc, FontTable } from '../engine/model.ts';
+import type { LayoutCache, LayoutStats, PaintStats } from '../engine/layout/types.ts';
+import type { Params } from './params.ts';
 // ── end of imports
 
 // ── Per-page shared state ─────────────────────────────────────────────────────
@@ -19,7 +23,7 @@ import { frame } from './pending.ts';
 // Per-block cache so ResizeObserver can re-render without re-decoding.
 // cache holds width-independent layout state (break candidates) and the
 // previously rendered SVG so resize can move elements instead of recreating.
-export const blockData = new WeakMap(); // el → { doc, lastWidth, lastAlign, params, cache }
+export const blockData = new WeakMap<Element, BlockData>(); // el → { doc, lastWidth, lastAlign, params, cache }
 // Set while reflowBlock runs a quick reflow (a resize under way): layoutDocument
 // then lets the segments far from the screen keep their boxes (see settleAll).
 export let quickLayout = false;
@@ -33,7 +37,7 @@ export let quickLayout = false;
 // keeps that width; its element is given it as a CSS width. Meant for a line
 // of text: a display would be centred in the probe and measured from there.
 export const NATURAL_PROBE_PT = 5000;
-export function naturalWidthPt(el, fontInfo, cache, probePt) {
+export function naturalWidthPt(el: HTMLElement, fontInfo: FontTable, cache: LayoutCache, probePt: number): number {
     paintDocument(fontInfo, cache);
     const root = el.firstElementChild;
     if (!root) return probePt;
@@ -52,7 +56,7 @@ export function naturalWidthPt(el, fontInfo, cache, probePt) {
 
 // Re-layout one block for its current width/alignment. Returns false if nothing
 // needed doing (so the caller can stay quiet).
-export function reflowBlock(el, quick = false) {
+export function reflowBlock(el: HTMLElement, quick = false): boolean {
     const data = blockData.get(el);
     if (!data) return false;
     // A block inside a collapsed section is display:none and reports clientWidth
@@ -62,7 +66,7 @@ export function reflowBlock(el, quick = false) {
     // fires the observer once more.
     if (el.clientWidth === 0 && !el.dataset.latexWidth) return false;
     const newWidth = data.naturalPt || (el.dataset.latexWidth
-        ? parseInt(el.dataset.latexWidth)
+        ? parseInt(el.dataset.latexWidth!)
         : (el.clientWidth / ZOOM) || DEFAULT_WIDTH_PT);
     // Re-read alignment every time: a media query may have changed --latex-align.
     const newAlign = alignFromEl(el);
@@ -77,7 +81,7 @@ export function reflowBlock(el, quick = false) {
     // the segments near the viewport, and those whose height is cached; the
     // rest keep their boxes until the resize stops (settleBlock).
     quickLayout = quick && !!data.cache.layout;
-    let root;
+    let root: HTMLElement;
     try {
         root = layoutDocument(data.fontInfo, data.doc, newWidth, params, data.cache);
         if (root !== el.firstElementChild) el.replaceChildren(root);
@@ -94,8 +98,8 @@ export function reflowBlock(el, quick = false) {
     markDirty(data.cache);
     const tp = performance.now();
     const repainted = paintVisibleNow(data.fontInfo, data.cache);
-    const st = data.cache.stats || {};
-    const ls = data.cache.layoutStats || {};
+    const st: Partial<PaintStats> = data.cache.stats || {};
+    const ls: Partial<LayoutStats> = data.cache.layoutStats || {};
     debugLog(`[latex-viewer] re-render at ${newWidth.toFixed(0)}pt: layout ${(tp - t0).toFixed(1)} ms, paint ${(performance.now() - tp).toFixed(1)} ms (${repainted} visible segment(s); ${st.repositioned||0} repositioned, ${st.created||0} created; segments: ${ls.computed||0} laid out, ${ls.reused||0} reused, ${ls.deferred||0} deferred to scroll)`);
     announceLayout(el, quick);
     return true;
@@ -109,7 +113,7 @@ export function reflowBlock(el, quick = false) {
 // now-loaded face instead of the fallback it painted first. Break candidates
 // (cache.bcs) survive, so this costs a layout pass and a visible-segment repaint,
 // not a re-decode.
-export function rerenderBlock(el) {
+export function rerenderBlock(el: HTMLElement): void {
     const data = blockData.get(el);
     if (!data) return;
     // Rebuilding makes fresh <svg>s, so stop observing the old ones (segIO would
@@ -129,14 +133,14 @@ export function rerenderBlock(el) {
 
 // Stream segments (see layoutStreamSegment) nest a whole layout, with its own
 // cache, inside the segment's box. These walk a block's cache tree.
-export function markDirty(cache) {
+export function markDirty(cache: LayoutCache): void {
     if (!cache.dom) return;
     for (const s of cache.dom.segs) {
         if (s.painted) s.dirty = true;
         if (s.sub) markDirty(s.sub);
     }
 }
-export function unobserveAll(cache) {
+export function unobserveAll(cache: LayoutCache): void {
     if (!cache.dom) return;
     for (const s of cache.dom.segs) {
         if (s.svg) segIO.unobserve(s.svg);
@@ -147,7 +151,7 @@ export function unobserveAll(cache) {
 // not measure the box's inner width and used the column's. Once the block is
 // mounted, one more layout pass reads the real width; everything but the
 // stream segments comes straight from the cache, so it is cheap.
-export function remeasureStreams(fontInfo, doc, widthPt, params, cache) {
+export function remeasureStreams(fontInfo: FontTable, doc: Doc, widthPt: number, params: Params, cache: LayoutCache): void {
     if (!cache.streamsUnmeasured) return;
     cache.streamsUnmeasured = false;
     layoutDocument(fontInfo, doc, widthPt, params, cache);
@@ -165,7 +169,7 @@ export function remeasureStreams(fontInfo, doc, widthPt, params, cache) {
 // once every face has settled. Wired up (see init) only when a face was still
 // pending at first paint, so a warm load does none of this.
 export let fontRepaintScheduled = false;
-export function scheduleFontRepaint() {
+export function scheduleFontRepaint(): void {
     if (fontRepaintScheduled) return;
     fontRepaintScheduled = true;
     frame('font repaint', () => {
@@ -182,10 +186,10 @@ export function scheduleFontRepaint() {
 // the observer then reports as "ResizeObserver loop completed with undelivered
 // notifications" – harmless but noisy. Deferring to the next frame breaks that
 // synchronous feedback loop and coalesces bursts of resizes into one pass.
-export const roPending = new Set();
+export const roPending = new Set<HTMLElement>();
 export let roScheduled = false;
 export const ro = new ResizeObserver(entries => {
-    for (const entry of entries) roPending.add(entry.target);
+    for (const entry of entries) roPending.add(entry.target as HTMLElement);
     if (roScheduled) return;
     roScheduled = true;
     frame('reflow', () => {

@@ -23,7 +23,7 @@
 // that have instances of it, so they are drawn the new way.
 
 import { ZOOM } from '../engine/core.ts';
-import { blockData, rerenderBlock } from '../runtime/blocks.js';
+import { blockData, rerenderBlock } from '../runtime/blocks.ts';
 import { blockOf } from './host.ts';
 import { surfacesOf, type Cache, type Edges, type SurfaceImpl } from './surface.ts';
 import type { BlockHost, KindDef, Instance, Surface } from './types.ts';

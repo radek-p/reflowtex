@@ -12,8 +12,8 @@ import { blockKeyOf } from '../../host/host.ts';
 import { layoutTextSegment, segmentsOf } from './text.ts';
 import { svgEl } from '../sink.ts';
 import { held, linkTargets } from '../../host/links.js';
-import { quickLayout } from '../../runtime/blocks.js';
-import { observeSegments } from '../../runtime/visibility.js';
+import { quickLayout } from '../../runtime/blocks.ts';
+import { observeSegments } from '../../runtime/visibility.ts';
 import { frame } from '../../runtime/pending.ts';
 import type { Doc, FontTable } from '../model.ts';
 import type {

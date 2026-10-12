@@ -4,10 +4,10 @@
 import { SP_TO_PX, gD, gH, useGlyphMetrics } from '../engine/core.ts';
 import { layoutDocument } from '../engine/layout/document.ts';
 import { widgetNodes } from './widgets.js';
-import { blockData } from '../runtime/blocks.js';
+import { blockData } from '../runtime/blocks.ts';
 import { api } from '../runtime/page.ts';
-import { paintVisibleNow } from '../runtime/visibility.js';
-import { allData, docData } from '../runtime/block-data.js';
+import { paintVisibleNow } from '../runtime/visibility.ts';
+import { allData, docData } from '../runtime/block-data.ts';
 import { disposePiece } from './inline.ts';
 import { textHooks } from './instances.ts';
 import { frame, track } from '../runtime/pending.ts';

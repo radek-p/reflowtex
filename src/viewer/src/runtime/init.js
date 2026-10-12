@@ -4,7 +4,7 @@
 import { closeFootnote, installFootnotes } from '../defaults/footnotes.js';
 import { DEFAULT_WIDTH_PT, ZOOM } from '../engine/core.ts';
 import { layoutDocument, newBlockKey } from '../engine/layout/document.ts';
-import { allData, announceLayout, docData } from './block-data.js';
+import { allData, announceLayout, docData } from './block-data.ts';
 import { registerBlock, unregisterBlock } from '../host/host.ts';
 import { disposeSurfaces } from '../host/surface.ts';
 import { disposeHosts } from '../host/block-hosts.ts';
@@ -18,14 +18,14 @@ import { copyLayer, dropLayer, layerOf } from './a11y.js';
 import { installViewerStyles } from '../index.js';
 import {
     NATURAL_PROBE_PT, blockData, naturalWidthPt, reflowBlock, remeasureStreams, ro, scheduleFontRepaint, unobserveAll,
-} from './blocks.js';
+} from './blocks.ts';
 import { installColorMaps } from './colour.ts';
 import './copy.ts';                 // (a broken word copied whole)
 import { decodeBlock, loadSchema } from './decode.ts';
 import { fontsPending, loadFontMap, registerFonts } from './fonts.ts';
 import { debugLog } from './page.ts';
 import { paramsFromEl } from './params.ts';
-import { observedBlocks, paintVisibleNow } from './visibility.js';
+import { observedBlocks, paintVisibleNow } from './visibility.ts';
 import { track } from './pending.ts';
 // ── end of imports
 

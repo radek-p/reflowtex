@@ -4,7 +4,7 @@
 import { SP_TO_PX, useGlyphMetrics } from '../engine/core.ts';
 import { paintCount } from '../engine/paint.ts';
 import { renderNodes } from '../engine/render.ts';
-import { blockData } from '../runtime/blocks.js';
+import { blockData } from '../runtime/blocks.ts';
 import { api } from '../runtime/page.ts';
 import { surfacesOf } from './surface.ts';
 import { definedKinds } from './kinds.ts';

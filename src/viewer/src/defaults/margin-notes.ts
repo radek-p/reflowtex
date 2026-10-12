@@ -19,7 +19,7 @@
 // the window leaves beside the block, up to MARGIN.max. Placed again after
 // every layout, drawing and resize.
 import { registerFootnoteSource } from './footnotes.js';
-import { allData } from '../runtime/block-data.js';
+import { allData, type BlockData } from '../runtime/block-data.ts';
 import { blockOf } from '../host/host.ts';
 import { kindDef, onKindChange } from '../host/kinds.ts';
 import { surfacesOf, type SurfaceImpl } from '../host/surface.ts';
@@ -36,6 +36,9 @@ interface Item {
     surface: Surface | null;              // the default drawing's
     edges: { top?: Surface | null };      // the kind's choice (setEdges)
 }
+
+/** A block's margin notes: their layer, and each note by its instance's id. */
+export interface MarginLayer { layer: HTMLDivElement; items: Map<string, Item> }
 
 function marginHost(it: Item, instance: Instance, again: () => void): NoteHost {
     return {
@@ -85,7 +88,7 @@ function edgeOf(it: Item, instance: Instance, blockEl: HTMLElement): Surface | n
 }
 
 /** block.destroy: its notes undrawn and their layer gone. */
-export function removeMarginNotes(data: any) {
+export function removeMarginNotes(data: BlockData | undefined) {
     const M = data && data.margin;
     if (!M) return;
     for (const it of M.items.values()) undraw(it);
@@ -93,14 +96,15 @@ export function removeMarginNotes(data: any) {
     data.margin = null;
 }
 
-export function placeMarginNotes(data: any) {
+export function placeMarginNotes(data: BlockData | undefined) {
     const el: HTMLElement | undefined = data && data.el;
     if (!el || !el.isConnected) return;
     const block = blockOf(el);
     const notes = block ? block.instances({ placement: 'detached', place: 'margin' }) : [];
     if (!notes.length) return;
     const again = () => frame('margin notes', () => placeMarginNotes(data));
-    const M = data.margin = data.margin || { layer: document.createElement('div'), items: new Map<string, Item>() };
+    // (data is there: el is its element)
+    const M = data!.margin = data!.margin || { layer: document.createElement('div'), items: new Map<string, Item>() };
     M.layer.className = 'latex-margin';
     if (M.layer.parentNode !== el) el.appendChild(M.layer);
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
