@@ -87,13 +87,18 @@ export function viewerScript(log: (s: string) => void = console.log): string {
   return bundle;
 }
 
+/** What src/inspector holds that a site does not need: its sources (built into
+ *  the files beside them), its build script and its README. */
+export const INSPECTOR_UNSHIPPED = new Set(['src', 'build.sh', 'README.md']);
+
 /** Copy the viewer (and, if asked, the inspector: its script and what it loads
- *  from beside itself when opened) into a site directory. */
+ *  from beside itself when opened – the built files, not its sources) into a
+ *  site directory. */
 export function installViewer(outDir: string, { inspector = false, log }: { inspector?: boolean; log?: (s: string) => void } = {}): void {
   mkdirSync(outDir, { recursive: true });
   copyFileSync(viewerScript(log), join(outDir, 'latex-viewer.js'));
   copyFileSync(join(VIEWER_DIR, 'protobuf.min.js'), join(outDir, 'protobuf.min.js'));
-  if (inspector) cpSync(join(SRC, 'inspector'), join(outDir, 'inspector'), { recursive: true, filter: s => !s.endsWith('README.md') });
+  if (inspector) cpSync(join(SRC, 'inspector'), join(outDir, 'inspector'), { recursive: true, filter: s => !INSPECTOR_UNSHIPPED.has(relative(join(SRC, 'inspector'), s)) });
   // The companion package's browser side, for a site that turns it on (the
   // Hugo integration's params.reflowtexCompanion): two files, no Node needed.
   mkdirSync(join(outDir, 'companion'), { recursive: true });

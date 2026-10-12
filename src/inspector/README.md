@@ -166,8 +166,9 @@ dragged to resize. The browser remembers the place and the sizes.
 
 ## Adding it to a page
 
-Serve this folder as it is – `inspector.js`, `inspector.css`, `agent.js`,
-`panel/` and `vendor/` – and include the script after the viewer:
+Serve the folder's built files – `inspector.js`, `inspector.css`,
+`agent.js`, `panel/` and `vendor/`; not `src/`, their sources – and include
+the script after the viewer:
 
 ```html
 <script src="latex-viewer.js"></script>
@@ -227,13 +228,19 @@ size. Anything the page fixes to the window can keep clear with them:
   panel in a shadow root, so the page's styles (`inspector.css` is the
   panel's) and the panel's never meet. It talks to the agent only through
   `window.__rtxInspector` (`panel/bridge.js`).
-- **The panel** is Preact components written with htm – tagged templates,
-  so there is no build step – and its state is Preact Signals
+- **The panel** is Preact components written with htm (tagged templates),
+  and its state is Preact Signals
   (`panel/store.js`): `dock.js` places it, `tree.js` is the Boxes view,
   `resources.js` and `font.js` the Resources view, `ui.js` the shared
   parts. The rows are keyed by node id, so a reflow changes only the text
   that changed: the tree does not flicker while a width moves, and a press
   on a row lands on the row it began on.
+- **The sources** are in `src/`: `src/inspector.*`, `src/agent/` and
+  `src/panel/`. `make build-inspector` (`build.sh`) builds them into the
+  files above, which are committed, so a site needs no Node: the loader and
+  the agent bundled into one classic script each, the panel's modules one
+  file each. Each built file names, on its second line, the sources it was
+  built from; a unit test fails when they have changed since.
 - **`vendor/preact.js`** is Preact, htm and Preact Signals in one ES module
   (MIT; 23 KB, 9 KB gzipped), rebuilt at pinned versions by
   `make vendor-inspector`.

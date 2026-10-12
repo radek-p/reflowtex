@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The committed bundles are built from the sources as they stand: each
 // records the SHA-256 of its sources on its second line (build.sh), and a
-// source edited without `make build-viewer` / `make build-companion` fails
-// here. (A stale companion.js once made a web test look like a code bug.)
+// source edited without `make build-viewer` / `make build-companion` /
+// `make build-inspector` fails here. (A stale companion.js once made a web test look like a code bug.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { viewerSourcesSha256 } from '../../src/pipeline/site.ts';
+import { installViewer, viewerSourcesSha256 } from '../../src/pipeline/site.ts';
 
 const SRC = fileURLToPath(new URL('../../src/', import.meta.url));
 
@@ -41,4 +42,27 @@ test('latex-viewer.js is built from the viewer as it stands', () => {
 test('companion.js is built from the companion as it stands', () => {
   const sha = sourcesSha256(join(SRC, 'companion'), f => f.endsWith('.ts') || f.endsWith('.tsx'));
   assert.ok(secondLine(join(SRC, 'companion/companion.js')).includes(`sources sha256 ${sha}`), 'run make build-companion');
+});
+
+test('the inspector is built from its sources as they stand', () => {
+  const dir = join(SRC, 'inspector');
+  const sha = sourcesSha256(dir, f => f.endsWith('.ts') || f.endsWith('.js'));
+  const built = ['inspector.js', 'agent.js', ...readdirSync(join(dir, 'panel')).map(f => `panel/${f}`)];
+  assert.ok(built.length > 2);
+  for (const f of built)
+    assert.ok(secondLine(join(dir, f)).includes(`sources sha256 ${sha}`), `${f}: run make build-inspector`);
+  // every panel module has its source, and none is left over from one that went
+  const sources = readdirSync(join(dir, 'src/panel')).map(f => f.replace(/\.(ts|js)$/, ''));
+  assert.deepEqual(readdirSync(join(dir, 'panel')).map(f => f.replace(/\.js$/, '')).sort(), sources.sort());
+});
+
+test('a site gets the inspector as built, not its sources', () => {
+  const out = mkdtempSync(join(tmpdir(), 'rtx-install-'));
+  try {
+    installViewer(out, { inspector: true, log: () => {} });
+    for (const f of ['inspector.js', 'agent.js', 'inspector.css', 'panel/app.js', 'vendor/preact.js'])
+      assert.ok(existsSync(join(out, 'inspector', f)), f);
+    for (const f of ['src', 'build.sh', 'README.md'])
+      assert.ok(!existsSync(join(out, 'inspector', f)), `${f} is not shipped`);
+  } finally { rmSync(out, { recursive: true, force: true }); }
 });
