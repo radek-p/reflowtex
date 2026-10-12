@@ -9,7 +9,7 @@ import {
 import { updateDisplayOverflowCue } from './layout/display.js';
 import { materializeSegment } from './layout/document.js';
 import { registerLinkGlyph, restoreLinkStates } from '../host/links.js';
-import { colorFill } from '../runtime/colour.js';
+import { colorFill } from '../runtime/colour.ts';
 import { renderPiece } from '../host/inline.ts';
 import { applyMark, liveInfo, liveOn, registerGlyph } from '../host/marks.ts';
 import { registerSpace, selectedGlyph, selectionEdges } from '../host/selection.ts';

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 86bc4cff19590c620aab46ce633fdc3f702a48e27beef84a81321aa9b16c3d49
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 081a60cfc20eb22af02f36c04d2e127286d1e86d10da7b14c2ae7e725d29ee35
 'use strict';
 "use strict";
 (() => {
@@ -1413,7 +1413,7 @@
     }
   }
 
-  // src/runtime/colour.js
+  // src/runtime/colour.ts
   function colorFill(c) {
     return `var(--latex-color-${c.slice(1)}, ${c})`;
   }
@@ -5948,7 +5948,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     }
   };
 
-  // src/runtime/copy.js
+  // src/runtime/copy.ts
   var SENTINEL = "⁣";
   var JOIN = new RegExp(`${SENTINEL}+[ \\t]*(?:\\r?\\n[ \\t]*)?`, "g");
   function copiedText(sel) {
@@ -6001,7 +6001,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     return sharedDocType.toObject(msg, { defaults: false, arrays: true, enums: String, longs: Number });
   }
 
-  // src/runtime/fonts.js
+  // src/runtime/fonts.ts
   var registeredFontFaces = /* @__PURE__ */ new Set();
   var fontUrlMap = {};
   var fontBase = SCRIPT_URL ? new URL("fonts/", SCRIPT_URL).href : "/fonts/";

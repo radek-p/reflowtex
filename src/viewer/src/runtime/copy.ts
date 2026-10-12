@@ -17,13 +17,13 @@ const SENTINEL = '\u2063';     // INVISIBLE SEPARATOR
 const JOIN = new RegExp(`${SENTINEL}+[ \\t]*(?:\\r?\\n[ \\t]*)?`, 'g');
 
 /** The selection's text, with the words broken at line ends whole again. */
-export function copiedText(sel) {
-    const marks = [...document.querySelectorAll('.latex-block tspan[data-break]')]
+export function copiedText(sel: Selection): string | null {
+    const marks = [...document.querySelectorAll<SVGTSpanElement>('.latex-block tspan[data-break]')]
         .filter(t => t.firstChild && sel.containsNode(t, true));
     if (!marks.length) return null;
-    const kept = marks.map(t => ({ node: t.firstChild, data: t.firstChild.data, keep: t.dataset.break === 'keep' }));
+    const kept = marks.map(t => ({ node: t.firstChild as Text, data: (t.firstChild as Text).data, keep: t.dataset.break === 'keep' }));
     for (const k of kept) k.node.data = SENTINEL.repeat(k.data.length);
-    let text;
+    let text: string;
     try { text = sel.toString(); } finally { for (const k of kept) k.node.data = k.data; }
     // the runs, in order: each is the next marks' characters (the selection
     // may take only part of the first or last)

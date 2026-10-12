@@ -13,7 +13,7 @@ import './block-hosts.ts';
 import { defineKind, definedKinds } from './kinds.ts';
 import { clearSlotTexts, scopeOf, setSlotText, slotText } from './slots.js';
 import { addMark, liveMarks, markHandle, rangesOf } from './marks.ts';
-import { getColorMaps, setColorMaps } from '../runtime/colour.js';
+import { getColorMaps, setColorMaps } from '../runtime/colour.ts';
 import { destroyBlock, mountBlock } from '../runtime/init.js';
 import { blockData } from '../runtime/blocks.js';
 import { applyFade, applyFit, displayFadeDefault, displayFadeOf, displayFitDefault, displayFitOf, fadesNow, forgetFade, forgetFit,

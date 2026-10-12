@@ -19,10 +19,10 @@ import { installViewerStyles } from '../index.js';
 import {
     NATURAL_PROBE_PT, blockData, naturalWidthPt, reflowBlock, remeasureStreams, ro, scheduleFontRepaint, unobserveAll,
 } from './blocks.js';
-import { installColorMaps } from './colour.js';
-import './copy.js';                 // (a broken word copied whole)
+import { installColorMaps } from './colour.ts';
+import './copy.ts';                 // (a broken word copied whole)
 import { decodeBlock, loadSchema } from './decode.ts';
-import { fontsPending, loadFontMap, registerFonts } from './fonts.js';
+import { fontsPending, loadFontMap, registerFonts } from './fonts.ts';
 import { debugLog } from './page.ts';
 import { paramsFromEl } from './params.ts';
 import { observedBlocks, paintVisibleNow } from './visibility.js';
