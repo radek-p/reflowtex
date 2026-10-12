@@ -22,14 +22,14 @@
 // index, in cache.hosts). Defining or undefining a kind rebuilds the blocks
 // that have instances of it, so they are drawn the new way.
 
-import { ZOOM } from '../engine/core.js';
+import { ZOOM } from '../engine/core.ts';
 import { blockData, rerenderBlock } from '../runtime/blocks.js';
 import { blockOf } from './host.ts';
 import { surfacesOf, type Cache, type Edges, type SurfaceImpl } from './surface.ts';
 import type { BlockHost, KindDef, Instance, Surface } from './types.ts';
 import { kindDef, onKindChange } from './kinds.ts';
-import { frame as nextFrame } from '../runtime/pending.js';
-import { BLOCK_SELECTOR } from '../runtime/page.js';
+import { frame as nextFrame } from '../runtime/pending.ts';
+import { BLOCK_SELECTOR } from '../runtime/page.ts';
 
 interface HostRecord {
     box: HTMLElement;

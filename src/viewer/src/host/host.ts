@@ -5,8 +5,8 @@
 // them (registerBlock, from initBlock), each with its instances built on
 // first use.
 
-import { api } from '../runtime/page.js';
-import { SP_TO_PX } from '../engine/core.js';
+import { api } from '../runtime/page.ts';
+import { SP_TO_PX } from '../engine/core.ts';
 import { normalise, walk, matches, type AnchorSource, type Doc, type DocStream, type InstanceImpl } from './instances.ts';
 import { TypesetPartImpl, type BlockData } from './surface.ts';
 import './block-hosts.ts';

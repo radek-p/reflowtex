@@ -9,7 +9,7 @@
 // only as far as it is on screen, and one inside a hidden element (a
 // collapsed pane) painted when it is shown. Nothing to call.
 
-import { SP_TO_PX, ZOOM, sumWidthSp } from '../engine/core.js';
+import { SP_TO_PX, ZOOM, sumWidthSp } from '../engine/core.ts';
 import { layoutDocument } from '../engine/layout/document.js';
 import { NATURAL_PROBE_PT, markDirty, unobserveAll } from '../runtime/blocks.js';
 import { paintVisibleNow } from '../runtime/visibility.js';
@@ -20,7 +20,7 @@ import { disposePieces } from './inline.ts';
 import { disposeHosts, surfaceChanged } from './block-hosts.ts';
 import type { Doc, DocStream } from './instances.ts';
 import type { Instance, MountOptions, Surface, SurfaceMetrics, TypesetPart } from './types.ts';
-import { cancelFrame, frame } from '../runtime/pending.js';
+import { cancelFrame, frame } from '../runtime/pending.ts';
 
 /** What a part needs of its block: the viewer's per-block data. */
 export interface BlockData {

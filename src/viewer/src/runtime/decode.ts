@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-export let   sharedDocType       = null;   // protobuf.js Document type (see loadSchema)
+import type { Type } from 'protobufjs';
+import type { Doc } from '../engine/model.ts';
+
+export let   sharedDocType: Type | null = null;   // protobuf.js Document type (see loadSchema)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-export function b64ToBytes(b64) {
+export function b64ToBytes(b64: string): Uint8Array {
     return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 }
 
@@ -14,7 +17,7 @@ export function b64ToBytes(b64) {
 // protobuf.js's default camelCase. (Runtime .proto parsing is the simple option;
 // precompiling a descriptor with pbjs + the minimal runtime is the future size
 // win – see README.)
-export function loadSchema() {
+export function loadSchema(): void {
     const el = document.getElementById('latex-schema');
     if (!el?.dataset.schemaB64) throw new Error('#latex-schema element with data-schema-b64 not found');
     const protoText = new TextDecoder().decode(b64ToBytes(el.dataset.schemaB64));
@@ -28,7 +31,7 @@ export function loadSchema() {
 // width===undefined); arrays:true gives empty repeated fields as [] (not
 // undefined); enums:String yields the lowercase enum names the renderer compares
 // against ('glyph', 'display'); longs:Number keeps ints as plain numbers.
-export function decodeBlock(b64) {
-    const msg = sharedDocType.decode(b64ToBytes(b64));
-    return sharedDocType.toObject(msg, { defaults: false, arrays: true, enums: String, longs: Number });
+export function decodeBlock(b64: string): Doc {
+    const msg = sharedDocType!.decode(b64ToBytes(b64));
+    return sharedDocType!.toObject(msg, { defaults: false, arrays: true, enums: String, longs: Number }) as Doc;
 }

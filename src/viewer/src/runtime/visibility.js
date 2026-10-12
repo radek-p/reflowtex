@@ -4,8 +4,8 @@
 import { paintDocument, paintSegment } from '../engine/paint.js';
 import { announceLayout } from './block-data.js';
 import { blockData } from './blocks.js';
-import { frame } from './pending.js';
-import { BLOCK_SELECTOR } from './page.js';
+import { frame } from './pending.ts';
+import { BLOCK_SELECTOR } from './page.ts';
 // ── end of imports
 
 // ── Per-segment painting (grow-only) ──────────────────────────────────────────

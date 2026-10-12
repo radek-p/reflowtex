@@ -508,9 +508,37 @@ export interface BlockMountOptions {
     displayFit?: 'natural' | 'column';
 }
 
+/** window.reflowtex: the host API, and a few page-wide switches (the
+ *  viewer's README). A page may create it first, with the switches set. */
+export interface ReflowTeX {
+    host?: Host;
+    /** Timing lines in the console, read on each line (or ?reflowtex-debug). */
+    debug?: boolean;
+    /** false: no warning bar when fonts fail to download. */
+    fontWarning?: boolean;
+    /** How the accessible layer gives formulas: as MathML, or as their
+     *  words. The reader's choice, remembered; reflowtex:accessible-math on
+     *  document when it changes. */
+    accessibleMath?(): 'mathml' | 'spoken';
+    setAccessibleMath?(mode: 'mathml' | 'spoken'): void;
+    /** Screen reader mode: the drawing hidden, the accessible layer shown;
+     *  remembered. */
+    screenReaderMode?(): boolean;
+    setScreenReaderMode?(on: boolean): void;
+    /** The accessible layer shown over the drawing (a debugging aid);
+     *  remembered. */
+    accessibleDebug?(): boolean;
+    setAccessibleDebug?(on: boolean): void;
+    /** For tools: the viewer's own state (the README's Inspecting). Not
+     *  part of this contract: its shape may change between versions. */
+    inspect?: unknown;
+    /** The inspector (src/inspector), once its script has run. */
+    inspector?: unknown;
+}
+
 declare global {
     interface Window {
-        reflowtex?: { host?: Host } & Record<string, unknown>;
+        reflowtex?: ReflowTeX;
     }
     interface DocumentEventMap {
         /** Sent once, on document, when window.reflowtex.host exists. */

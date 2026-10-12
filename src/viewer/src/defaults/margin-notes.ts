@@ -24,7 +24,7 @@ import { blockOf } from '../host/host.ts';
 import { kindDef, onKindChange } from '../host/kinds.ts';
 import { surfacesOf, type SurfaceImpl } from '../host/surface.ts';
 import type { Instance, KindDef, NoteHost, Surface } from '../host/types.ts';
-import { frame } from '../runtime/pending.js';
+import { frame } from '../runtime/pending.ts';
 
 export const MARGIN = { gap: 28, min: 150, max: 260 };   // px, by default
 

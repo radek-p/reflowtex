@@ -36,9 +36,9 @@
 // (a screen reader skips clipped text). Without the viewer the layer keeps its
 // shipped form.
 
-import { BREAK_NODES, SP_TO_PX, useGlyphMetrics } from '../engine/core.js';
+import { BREAK_NODES, SP_TO_PX, useGlyphMetrics } from '../engine/core.ts';
 import { renderNodes } from '../engine/paint.js';
-import { api } from './page.js';
+import { api } from './page.ts';
 import { allData } from './block-data.js';
 
 // The layer turns into a zero-height anchor the pieces hang from, and is moved

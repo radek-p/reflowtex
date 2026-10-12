@@ -5,7 +5,7 @@ import { registerStreamSource } from '../defaults/footnotes.js';
 import {
     BREAK_NODES, RUNNING_RULE, SP_TO_PX, gD, gH, gW, glyphExpandScale, hlistGlueRatio, kernExpandScale,
     setGlue, useGlyphMetrics, vlistGlueRatio,
-} from './core.js';
+} from './core.ts';
 import { updateDisplayOverflowCue } from './layout/display.js';
 import { materializeSegment } from './layout/document.js';
 import { registerLinkGlyph, restoreLinkStates } from '../host/links.js';

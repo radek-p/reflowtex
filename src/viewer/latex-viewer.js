@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 0b5681e17ac915717861218ab313e2ea4fe7afbf789f9c8c9b758567d5227d53
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 86bc4cff19590c620aab46ce633fdc3f702a48e27beef84a81321aa9b16c3d49
 'use strict';
 "use strict";
 (() => {
@@ -159,7 +159,7 @@
     return { ratio: 0, fillOrder: 0 };
   }
 
-  // src/runtime/page.js
+  // src/runtime/page.ts
   var SCRIPT_URL = document.currentScript?.src;
   var BUILD = (SCRIPT_URL?.match(/v=([a-f0-9]+)/) || [])[1] || "unversioned";
   var api = window.reflowtex = window.reflowtex || {};
@@ -1024,7 +1024,7 @@
     };
   }
 
-  // src/runtime/pending.js
+  // src/runtime/pending.ts
   var waiting = /* @__PURE__ */ new Map();
   var frameTokens = /* @__PURE__ */ new Map();
   var timerTokens = /* @__PURE__ */ new Map();
@@ -1059,6 +1059,7 @@
     return id;
   }
   function cancelLater(id) {
+    if (id === void 0) return;
     const token = timerTokens.get(id);
     if (token) {
       waiting.delete(token);
@@ -2849,7 +2850,7 @@
     }
   }
 
-  // src/runtime/params.js
+  // src/runtime/params.ts
   function alignFromEl(el) {
     const css = getComputedStyle(el).getPropertyValue("--latex-align").trim();
     return css || el.dataset.align || DEFAULT_ALIGN;
@@ -5983,7 +5984,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     });
   }
 
-  // src/runtime/decode.js
+  // src/runtime/decode.ts
   var sharedDocType = null;
   function b64ToBytes(b64) {
     return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));

@@ -4,7 +4,7 @@
 import { placeMarginNotes } from '../defaults/margin-notes.ts';
 import { blockData } from './blocks.js';
 import { placeAccessibleLayer } from './a11y.js';
-import { cancelLater, later } from './pending.js';
+import { cancelLater, later } from './pending.ts';
 // ── end of imports
 
 // Per-block data the host modules look up. Asides themselves (\webaside:

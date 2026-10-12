@@ -13,7 +13,7 @@ import { scheduleSlots } from './slots.js';
 import { measureHTML } from './widgets.js';
 import { blockOf } from './host.ts';
 import { kindDef, onKindChange } from './kinds.ts';
-import { BLOCK_SELECTOR } from '../runtime/page.js';
+import { BLOCK_SELECTOR } from '../runtime/page.ts';
 import type { InlineEnv, Instance, KindDef, PieceHost } from './types.ts';
 
 const versions = new Map<string, number>();      // instance id → bumped by invalidate

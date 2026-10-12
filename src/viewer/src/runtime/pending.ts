@@ -10,41 +10,43 @@
 // host/inspect.js). Frames can be held back for seconds on a busy machine, so
 // no fixed time is ever enough.
 
-const waiting = new Map();      // a token → its name
-const frameTokens = new Map();  // a frame's id → its token, while it waits
-const timerTokens = new Map();  // a timer's id → its token, while it waits
+type Token = { name: string };
+const waiting = new Map<Token, string>();      // a token → its name
+const frameTokens = new Map<number, Token>();  // a frame's id → its token, while it waits
+const timerTokens = new Map<number, Token>();  // a timer's id → its token, while it waits
 
 /** requestAnimationFrame, counted. Returns the frame's id (for cancelFrame). */
-export function frame(name, cb) {
-    const token = { name };
+export function frame(name: string, cb: FrameRequestCallback): number {
+    const token: Token = { name };
     waiting.set(token, name);
     const id = requestAnimationFrame(t => { waiting.delete(token); frameTokens.delete(id); cb(t); });
     frameTokens.set(id, token);
     return id;
 }
-export function cancelFrame(id) {
+export function cancelFrame(id: number): void {
     const token = frameTokens.get(id);
     if (token) { waiting.delete(token); frameTokens.delete(id); }
     cancelAnimationFrame(id);
 }
 
 /** setTimeout, counted. Returns the timer's id (for cancelLater). */
-export function later(name, cb, ms) {
-    const token = { name };
+export function later(name: string, cb: () => void, ms: number): number {
+    const token: Token = { name };
     waiting.set(token, name);
     const id = setTimeout(() => { waiting.delete(token); timerTokens.delete(id); cb(); }, ms);
     timerTokens.set(id, token);
     return id;
 }
-export function cancelLater(id) {
+export function cancelLater(id: number | undefined): void {
+    if (id === undefined) return;
     const token = timerTokens.get(id);
     if (token) { waiting.delete(token); timerTokens.delete(id); }
     clearTimeout(id);
 }
 
 /** A promise, counted until it settles. Returns it. */
-export function track(name, promise) {
-    const token = { name };
+export function track<T>(name: string, promise: Promise<T>): Promise<T> {
+    const token: Token = { name };
     waiting.set(token, name);
     promise.finally(() => waiting.delete(token)).catch(() => {});
     return promise;
@@ -54,12 +56,12 @@ export function track(name, promise) {
  *  loading, and an animation still running on the page (a Web Animation or a
  *  CSS transition – the companion's panes and hints ease with them); one that
  *  never ends, a spinner, is not waited for. */
-export function pending() {
+export function pending(): string[] {
     const names = [...waiting.values()];
     if (document.fonts && document.fonts.status !== 'loaded') names.push('fonts loading');
     for (const a of document.getAnimations ? document.getAnimations() : []) {
         if (a.playState === 'running' && a.effect && a.effect.getComputedTiming().endTime !== Infinity)
-            names.push(`animation ${a.animationName || a.transitionProperty || a.id || ''}`.trim());
+            names.push(`animation ${(a as CSSAnimation).animationName || (a as CSSTransition).transitionProperty || a.id || ''}`.trim());
     }
     return names;
 }
@@ -70,7 +72,7 @@ export function pending() {
  *  (hence the task after each frame), and an animation may begin a frame or
  *  two after what started it. Three, so that what one frame started is seen
  *  by a later look. */
-export async function idle() {
+export async function idle(): Promise<void> {
     for (let quiet = 0; quiet < 3;) {
         await new Promise(r => requestAnimationFrame(r));
         await new Promise(r => setTimeout(r, 0));

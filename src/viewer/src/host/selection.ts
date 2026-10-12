@@ -16,7 +16,7 @@
 // (rect.latex-selection, over marks' bands, under the text).
 import { allData } from '../runtime/block-data.js';
 import { glyphNodeOf, nodesOf, rangesOf, repaint, type BlockData } from './marks.ts';
-import { frame as nextFrame } from '../runtime/pending.js';
+import { frame as nextFrame } from '../runtime/pending.ts';
 
 let selected = new Set<object>();
 let blocks = new Set<BlockData>();

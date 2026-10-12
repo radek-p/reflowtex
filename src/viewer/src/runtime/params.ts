@@ -8,22 +8,53 @@ import {
     DEFAULT_LAST_LINE_PENALTY, DEFAULT_LINE_PENALTY, DEFAULT_MAX_EXPAND, DEFAULT_MAX_SHRINK,
     DEFAULT_MIN_GAP, DEFAULT_PAD, DEFAULT_PRETOLERANCE, DEFAULT_TOLERANCE, DEFAULT_TOLERANCE_2,
     DEFAULT_USE_EXPANSION, DEFAULT_USE_PROTRUSION,
-} from '../engine/core.js';
+} from '../engine/core.ts';
 // ── end of imports
+
+/** A block's layout parameters: the line breaker's (TeX's names, as
+ *  data attributes on the block) and the viewer's own. */
+export interface Params {
+    linePenalty: number;
+    adjDemerits: number;
+    doubleHyphenDemerits: number;
+    finalHyphenDemerits: number;
+    pretolerance: number;
+    tolerance: number;
+    tolerance2: number;
+    emergencyTolerance: number;
+    lastLineMin: number;
+    lastLinePenalty: number;
+    maxExpand: number;
+    maxShrink: number;
+    minGapPt: number;
+    padPt: number;
+    displayMinSpacePt: number;
+    displayOverflowTolerancePx: number;
+    useProtrusion: boolean;
+    useExpansion: boolean;
+    /** true: TeX's final pass unless it sets an overfull line; 'strict':
+     *  TeX's, overfull lines too; false: the viewer's fallbacks (kpBreak). */
+    texFinalPass: boolean | 'strict';
+    /** 'justify' | 'left' | 'right' | 'center' */
+    align: string;
+    /** Set by the layout for a paragraph that is not justified: any line
+     *  that fits costs nothing. */
+    ragged?: boolean;
+}
 
 // ── Per-block params ──────────────────────────────────────────────────────────
 
 // Read the current alignment for an element: CSS custom property wins over data attr.
 // Called both at mount time and on every resize so media-query changes are picked up.
-export function alignFromEl(el) {
+export function alignFromEl(el: HTMLElement): string {
     const css = getComputedStyle(el).getPropertyValue('--latex-align').trim();
     return css || el.dataset.align || DEFAULT_ALIGN;
 }
 
-export function paramsFromEl(el) {
+export function paramsFromEl(el: HTMLElement): Params {
     const d   = el.dataset;
-    const num  = (key, def) => key in d ? parseFloat(d[key]) : def;
-    const bool = (key, def) => key in d ? d[key] !== 'false'  : def;
+    const num  = (key: string, def: number) => key in d ? parseFloat(d[key]!) : def;
+    const bool = (key: string, def: boolean) => key in d ? d[key] !== 'false'  : def;
     return {
         linePenalty:          num('linePenalty',          DEFAULT_LINE_PENALTY),
         adjDemerits:          num('adjDemerits',          DEFAULT_ADJ_DEMERITS),
