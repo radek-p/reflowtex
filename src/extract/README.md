@@ -13,11 +13,11 @@ This stage turns a LaTeX snippet into `output.json`, the finished node list.
 
 ## Placeholders
 
-The pipeline (`src/pipeline/pipeline.ts`) does a plain text substitution of two
-markers in `template.tex` – each is the word `PREAMBLE` or `CONTENT` wrapped in
-double percent signs. Because the replacement is literal, those exact tokens must
-appear **only** at their two real sites; the template's own comments deliberately
-avoid spelling them out.
+The LuaTeX backend (`src/pipeline/backend/luatex.ts`) does a plain text
+substitution of two markers in `template.tex` – each is the word `PREAMBLE` or
+`CONTENT` wrapped in double percent signs. Because the replacement is literal,
+those exact tokens must appear **only** at their two real sites; the template's
+own comments deliberately avoid spelling them out.
 
 ## Hooks the template installs
 

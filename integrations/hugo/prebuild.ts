@@ -38,6 +38,7 @@ import { basename, join, relative, resolve, sep } from 'node:path';
 import { Pipeline, contentKey, toolchainHash } from '../../src/pipeline/pipeline.ts';
 import { readSerializerOutput } from '../../src/pipeline/nodes.ts';
 import { a11yLayerFromBytes } from '../../src/pipeline/a11y.ts';
+import { listBackends, formatBackends } from '../../src/pipeline/backend/registry.ts';
 import { installViewer, passesFor, REF_PASSES, schemaBase64, pyJsonDumps, jsonSorted } from '../../src/pipeline/site.ts';
 
 // Two ways to write a block:
@@ -64,14 +65,22 @@ const { values: o, positionals } = parseArgs({
     prune: { type: 'boolean', default: false },
     jobs: { type: 'string', short: 'j', default: '4' },
     'no-font-subset': { type: 'boolean', default: false },
+    backend: { type: 'string' },
+    'list-backends': { type: 'boolean', default: false },
+    json: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h' },
   },
 });
-if (o.help) {
-  console.log(`usage: node integrations/hugo/prebuild.ts [SITE_DIR] [--demos-dir DIR]… [--force] [--prune] [-j N] [--no-font-subset]`);
+if (o['list-backends']) {
+  console.log(o.json ? JSON.stringify(listBackends(), null, 2) : formatBackends());
   process.exit(0);
 }
-const fail = (msg: string): never => { console.error(`ERROR: ${msg}`); process.exit(1); };
+if (o.help) {
+  console.log(`usage: node integrations/hugo/prebuild.ts [SITE_DIR] [--demos-dir DIR]… [--force] [--prune] [-j N] [--no-font-subset] [--backend ID]
+       node integrations/hugo/prebuild.ts --list-backends [--json]`);
+  process.exit(0);
+}
+const fail: (msg: string) => never = msg => { console.error(`ERROR: ${msg}`); process.exit(1); };
 
 const site = resolve(positionals[0] ?? '.');
 const contentDir = join(site, 'content'), preambleDir = join(site, 'latex-preambles'), colorMapDir = join(site, 'latex-color-maps');
@@ -83,8 +92,11 @@ if (!existsSync(contentDir)) fail(`${contentDir} not found – is ${site} a Hugo
 mkdirSync(dataDir, { recursive: true });
 
 // A file ref's figures (\includegraphics) are found beside it.
-const pipe = new Pipeline({ buildRoot, fontsDir: join(site, 'static', 'fonts'),
-  localFontsDir: existsSync(localFonts) ? localFonts : null, searchDirs: demosDirs });
+let pipe: Pipeline;
+try {
+  pipe = new Pipeline({ buildRoot, fontsDir: join(site, 'static', 'fonts'),
+    localFontsDir: existsSync(localFonts) ? localFonts : null, searchDirs: demosDirs, backend: o.backend });
+} catch (e) { fail((e as Error).message); }
 writeFileSync(join(site, 'data', 'latex_schema.json'), JSON.stringify({ schema_b64: schemaBase64() }, null, 2));
 // the viewer's assets, so the partial loads them from the site root
 installViewer(join(site, 'static'));
@@ -212,7 +224,7 @@ if (!blocks.size && !batches.size) { console.log('No {{< latex >}} blocks found.
 // Each block's data records the hash of its content and of the toolchain
 // that compiled it (the packages, serializer, template, encoder): a block is
 // up to date only when both match, so a new package version recompiles it.
-const toolchain = toolchainHash();
+const toolchain = toolchainHash(undefined, pipe.backend.id);
 // With it, the block's accessible layer (src/pipeline/a11y.ts): the shortcode
 // puts it after the block when the site asks (params.reflowtexA11y, a11y="…").
 const writeBlock = (key: string, bytes: Uint8Array, hash: string) =>

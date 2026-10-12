@@ -21,6 +21,7 @@ import { basename, join, resolve } from 'node:path';
 import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
 import { DEFAULT_SOURCE_URL, blockHtml, installViewer, passesFor } from '../../src/pipeline/site.ts';
 import { renderPage } from './page.ts';
+import { listBackends, formatBackends } from '../../src/pipeline/backend/registry.ts';
 
 const { values: o, positionals } = parseArgs({
   allowPositionals: true,
@@ -33,12 +34,20 @@ const { values: o, positionals } = parseArgs({
     jobs: { type: 'string', short: 'j', default: '1' },
     'local-fonts': { type: 'string' },
     a11y: { type: 'boolean', default: false },
+    backend: { type: 'string' },
+    'list-backends': { type: 'boolean', default: false },
+    json: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h' },
   },
 });
+if (o['list-backends']) {
+  console.log(o.json ? JSON.stringify(listBackends(), null, 2) : formatBackends());
+  process.exit(0);
+}
 if (o.help || positionals.length !== 1) {
   console.log(`usage: node integrations/vanilla/build.ts <snippets-dir> [-o site/] [--title T] [--source-url URL]
-       [--fonts-base fonts/] [--batch] [-j N] [--local-fonts DIR] [--a11y]
+       [--fonts-base fonts/] [--batch] [-j N] [--local-fonts DIR] [--a11y] [--backend ID]
+       node integrations/vanilla/build.ts --list-backends [--json]
 
   --batch       compile all snippets as ONE document (a book's chapters, in
                 file name order), so numbering, macros and cross-references
@@ -49,7 +58,9 @@ if (o.help || positionals.length !== 1) {
   --a11y        after each block, its text for screen readers, and the
                 drawing hidden from them; formulas as MathML where the
                 document enables luamml (\\DocumentMetadata{tagging=on}, and
-                \\tagpdfsetup{math/mathml/luamml/load=true} for classic fonts)`);
+                \\tagpdfsetup{math/mathml/luamml/load=true} for classic fonts)
+  --backend     the capture backend (default: REFLOWTEX_BACKEND, else luatex);
+                --list-backends lists them and what each can do`);
   process.exit(o.help ? 0 : 2);
 }
 
@@ -63,7 +74,10 @@ const snippets = readdirSync(srcDir).filter(f => f.endsWith('.tex') && f !== 'pr
 if (!snippets.length) { console.error(`error: no .tex snippets found in ${srcDir}`); process.exit(1); }
 
 // A snippet's figures and \input files are found next to it.
-const pipe = new Pipeline({ buildRoot, fontsDir: join(out, 'fonts'), localFontsDir: localFonts, searchDirs: [srcDir] });
+let pipe: Pipeline;
+try {
+  pipe = new Pipeline({ buildRoot, fontsDir: join(out, 'fonts'), localFontsDir: localFonts, searchDirs: [srcDir], backend: o.backend });
+} catch (e) { console.error(`error: ${(e as Error).message}`); process.exit(1); }
 console.log(`reflowtex: compiling ${snippets.length} snippet(s) from ${srcDir}`);
 const jobs = snippets.map(name => {
   const content = readFileSync(join(srcDir, name), 'utf8');

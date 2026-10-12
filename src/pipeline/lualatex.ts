@@ -12,7 +12,8 @@
 // read any file the build user can and typeset it – into a page. Compile
 // untrusted input in a container without network access (docs/security.md).
 // A caller that needs shell escape (minted over snippets it wrote itself)
-// sets REFLOWTEX_SHELL_ESCAPE=1, asserting every snippet is trusted.
+// sets REFLOWTEX_SHELL_ESCAPE=1 (or the backend option shellEscape),
+// asserting every snippet is trusted.
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
@@ -31,10 +32,13 @@ export interface LuaLatexOptions {
   onPass?: (pass: number, log: string) => void;
   /** how the block is named in messages */
   block?: string;
+  /** shell escape on (the caller asserts the document is trusted); default:
+   *  REFLOWTEX_SHELL_ESCAPE=1 */
+  shellEscape?: boolean;
 }
 
-function lualatex(cwd: string, env: NodeJS.ProcessEnv): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  const shellEscape = process.env.REFLOWTEX_SHELL_ESCAPE === '1' ? '-shell-escape' : '-no-shell-escape';
+function lualatex(cwd: string, env: NodeJS.ProcessEnv, trusted: boolean): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  const shellEscape = trusted ? '-shell-escape' : '-no-shell-escape';
   return new Promise((resolve, reject) => {
     const p = spawn('lualatex', [shellEscape, '-interaction=nonstopmode', 'input.tex'], { cwd, env });
     let stdout = '', stderr = '';
@@ -73,7 +77,7 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<s
     // the PDF, which fails on a character it cannot read (luamml's raw DEL
     // for a classic font's double accent). The PDF here needs none: gone.
     rmSync(join(dir, 'input-luamml-mathml.html'), { force: true });
-    result = await lualatex(dir, env);
+    result = await lualatex(dir, env, opts.shellEscape ?? process.env.REFLOWTEX_SHELL_ESCAPE === '1');
     opts.onPass?.(n + 1, existsSync(log) ? readFileSync(log, 'utf8') : '');
     const after = readBack(dir);
     if (opts.settle !== false && n > 0 && after === before) break;

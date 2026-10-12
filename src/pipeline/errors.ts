@@ -12,7 +12,7 @@ export class BuildError extends Error {
   }
 }
 
-/** LuaTeX failed, or reported an error it carried on past (nonstopmode): the
+/** TeX failed, or reported an error it carried on past (nonstopmode): the
  *  node list would be a repaired document, not the one written. */
 export class TexError extends BuildError {}
 /** A picture could not be converted (a missing file, an unsupported format,
@@ -23,3 +23,11 @@ export class FontError extends BuildError {}
 /** The data does not fit latex.proto: an untransformed node type, or a
  *  schema behind the serializer. */
 export class SchemaMismatch extends BuildError {}
+/** The backend asked for is not one this build knows. */
+export class UnknownBackend extends BuildError {}
+/** The backend asked for is known but cannot be used in this build (a
+ *  placeholder, or a part it needs is missing). */
+export class BackendUnavailable extends BuildError {}
+/** A document needs what the backend does not have (a capability it lacks):
+ *  built anyway, the result would be wrong or incomplete. */
+export class MissingCapability extends BuildError {}

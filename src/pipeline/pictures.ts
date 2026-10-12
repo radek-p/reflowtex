@@ -21,6 +21,7 @@ import { basename, isAbsolute, join } from 'node:path';
 import { inflateSync, constants as zlibConstants } from 'node:zlib';
 import { forEachNode, type SerializerOutput } from './nodes.ts';
 import { PictureError } from './errors.ts';
+import type { PictureSource } from './backend/types.ts';
 
 const run = promisify(execFile);
 
@@ -95,9 +96,12 @@ export function usesIccColour(pdf: string): boolean {
 /** Turn every picture node's PDF page into inline SVG (Document.pictures);
  *  returns how many pictures were converted. `docTag` tells this document's
  *  pictures from another's on the same page: by default the first characters
- *  of the build directory's name, which is the document's content key. */
+ *  of the build directory's name, which is the document's content key. A
+ *  backend that makes its pictures' SVG itself passes its `source`; without
+ *  one, each picture's PDF page is converted with dvisvgm. */
 export async function convertPictures(data: SerializerOutput, buildDir: string, block?: string,
-                                      docTag = basename(buildDir).replace(/[^0-9A-Za-z]/g, '').slice(0, 8)): Promise<number> {
+                                      docTag = basename(buildDir).replace(/[^0-9A-Za-z]/g, '').slice(0, 8),
+                                      source?: PictureSource): Promise<number> {
   if (!Array.isArray(data.pictures)) data.pictures = [];
   const pictures = data.pictures as Picture[];
   const bySource = new Map<string, number>();
@@ -139,6 +143,15 @@ export async function convertPictures(data: SerializerOutput, buildDir: string, 
       delete n.file; delete n.page; delete n.externalized; delete n.generated;
       if (!src) throw new PictureError('a picture node has no source file – the template image hook did not record it', block);
       const key = JSON.stringify([src, page, externalized, generated]);
+      if (!bySource.has(key) && source) {
+        const ref = { file: src, page, externalized, generated };
+        let svg: string;
+        try { svg = await source.svg(ref); }
+        catch (e) { throw new PictureError(`the backend's picture source failed on ${src} (page ${page}): ${(e as Error).message}`, block); }
+        pictures.push(rewritePictureSvg(svg, `p${docTag}-${pictures.length + 1}-`, source.stripsBackground?.(ref) ?? (!externalized && !generated)));
+        bySource.set(key, pictures.length);          // 1-based
+        converted++;
+      }
       if (!bySource.has(key)) {
         let pdf: string, out: string;
         if (generated) { pdf = join(buildDir, src); out = join(buildDir, `captured-picture-${page}.svg`); }

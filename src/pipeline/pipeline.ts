@@ -8,16 +8,17 @@
 //     await pipe.finishFonts();          // after every block
 //     pipe.fontMap();                    // original font file → served file
 //
-// One snippet → one build/<key>/ directory holding input.tex, the LuaTeX run,
+// A capture backend (backend/: LuaTeX by default) turns LaTeX into node
+// lists; everything after is shared. One snippet → one build/<key>/
+// directory holding the backend's run (LuaTeX's: input.tex and its log),
 // output.json and nodelist.pb, so the artefacts are there to inspect when
 // something looks wrong (and an integration can skip an unchanged snippet).
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { basename, join, relative, resolve } from 'node:path';
 import { readSerializerOutput, writeSerializerOutput, type SerializerOutput } from './nodes.ts';
 import { encodeDocument } from './encode.ts';
-import { runLuaLatex } from './lualatex.ts';
 import * as DM from './display-model.ts';
 import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from './transforms.ts';
 import { attachMathML, readMathmlFile, speaker } from './mathml.ts';
@@ -25,60 +26,25 @@ import { convertPictures } from './pictures.ts';
 import { Fonts, glyphRequirements, drawnCodepoints } from './fonts/fonts.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
 import { protoText } from './schema.ts';
-import { BuildError } from './errors.ts';
+import { BackendUnavailable, BuildError, MissingCapability } from './errors.ts';
+import { documentNeeds, supports, unmetNeeds, capabilityInfo } from './backend/capabilities.ts';
+import { createBackend, selectedBackendId } from './backend/registry.ts';
+import type { CaptureBackend, CaptureResult, Diagnostic, PictureSource } from './backend/types.ts';
+import { DEFAULT_TEMPLATE, WIDTH_EXTRA_MARK } from './backend/luatex.ts';
+import { splitDocument } from './document.ts';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));             // src/
-export const DEFAULT_TEMPLATE = join(SRC, 'extract/template.tex');
-export const DEFAULT_SERIALIZER = join(SRC, 'extract/serializer.lua');
-/** MathML capture (src/extract/mathml.lua): the serializer loads it when it
- *  lies next to it. */
-export const MATHML_LUA = join(SRC, 'extract/mathml.lua');
-const LATEX_DIR = join(SRC, 'latex');                                  // the companion package
+// The LuaTeX template's names and the document's parts, where they were
+// before backends: tools and integrations import them from here.
+export { DEFAULT_TEMPLATE, DEFAULT_SERIALIZER, MATHML_LUA, PREAMBLE_MARK, CONTENT_MARK, WIDTH_EXTRA_MARK, METADATA_MARK, TEMPLATE_CLASS_RE } from './backend/luatex.ts';
+export { takeMetadata, splitDocument } from './document.ts';
 
-export const PREAMBLE_MARK = '%%PREAMBLE%%';
-export const CONTENT_MARK = '%%CONTENT%%';
-export const WIDTH_EXTRA_MARK = '%%WIDTH-EXTRA-SP%%';
-/** Where the author's \\DocumentMetadata goes: the template's first line, as
- *  LaTeX wants it before \\documentclass. An author who enables tagging and
- *  luamml there (\\DocumentMetadata{tagging=on}, and
- *  \\tagpdfsetup{math/mathml/luamml/load=true} for classic fonts) gets LaTeX's
- *  MathML for every formula (src/pipeline/mathml.ts reads it); a document
- *  without it gets none. */
-export const METADATA_MARK = '%%DOCUMENT-METADATA%%';
-
-/** An author's \\DocumentMetadata{…} in `tex` (its braces balanced), and
- *  `tex` without it. */
-export function takeMetadata(tex: string): [string, string] {
-  const m = /\\DocumentMetadata\s*\{/.exec(tex);
-  if (!m) return ['', tex];
-  let depth = 0, end = -1;
-  for (let i = m.index + m[0].length - 1; i < tex.length; i++) {
-    if (tex[i] === '{') depth++;
-    else if (tex[i] === '}' && --depth === 0) { end = i + 1; break; }
-  }
-  if (end < 0) return ['', tex];
-  return [tex.slice(m.index, end), tex.slice(0, m.index) + tex.slice(end)];
-}
 /** Display samples are taken at an additive step, not 2× or 3×: the fits stay
  *  well-conditioned without nearing TeX's \maxdimen. */
 export const DISPLAY_SAMPLE_STEP_SP = 128 * 65536;
 export const TEX_MAX_DIMEN_SP = 1073741823;
 
 // ── Documents and keys ──────────────────────────────────────────────────────
-
-const DOCCLASS_RE = /^[ \t]*\\documentclass\b[^\n]*$/m;
-const BEGIN_DOC_RE = /^[ \t]*\\begin\{document\}[^\n]*\n?/m;
-const END_DOC_RE = /^[ \t]*\\end\{document\}/m;
-export const TEMPLATE_CLASS_RE = /^\\documentclass\b[^\n]*$/m;
-
-/** [class line, preamble, body] of a complete LaTeX document, or null for a
- *  snippet. Anything before the class line (comments, \RequirePackage) is
- *  dropped, anything after \end{document} ignored, as LaTeX ignores it. */
-export function splitDocument(tex: string): [string, string, string] | null {
-  const c = DOCCLASS_RE.exec(tex), b = BEGIN_DOC_RE.exec(tex), e = END_DOC_RE.exec(tex);
-  if (!(c && b && e && c.index < b.index && b.index < e.index)) return null;
-  return [c[0].trim(), tex.slice(c.index + c[0].length, b.index), tex.slice(b.index + b[0].length, e.index)];
-}
 
 /** A stable 16-hex key for a (content, preamble) pair; integrations name each
  *  block's artefacts by it. (The Hugo shortcode computes the same.) */
@@ -92,9 +58,12 @@ export function contentKey(content: string, preamble = ''): string {
  *  itself: the template, the serializer, the LaTeX packages, the schema and
  *  this pipeline's own code. A build made with other versions of these is
  *  stale however unchanged its snippet is – an integration that skips
- *  unchanged snippets records this beside the content key and compares both. */
-export function toolchainHash(src = SRC): string {
+ *  unchanged snippets records this beside the content key and compares both.
+ *  A backend other than LuaTeX is part of the hash (LuaTeX's is the hash
+ *  as it was before there were backends). */
+export function toolchainHash(src = SRC, backend = 'luatex'): string {
   const h = createHash('sha256');
+  if (backend !== 'luatex') h.update(`backend\0${backend}\0`);
   const walk = (dir: string) => {
     for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const p = join(dir, e.name);
@@ -118,16 +87,25 @@ export interface PipelineOptions {
   /** where TeX also looks for what a document reads (figures, \input files)
    *  before its own tree: a document is compiled away from its directory */
   searchDirs?: string[];
+  /** the capture backend: an id (backend/registry.ts: 'luatex', …) or a
+   *  backend object; default: REFLOWTEX_BACKEND, else 'luatex' */
+  backend?: string | CaptureBackend;
+  /** the LaTeX template (the LuaTeX backend's, when it is chosen by id) */
   template?: string;
+  /** the capture code the template loads (the LuaTeX backend's) */
   serializer?: string;
   /** record MathML for every formula (default on; needs TeX Live's luamml) */
   mathml?: boolean;
+  /** a document needing a capability the backend lacks: 'error' (default)
+   *  stops the build where the result would be wrong or incomplete; 'warn'
+   *  builds it, saying what is missing */
+  missingCapabilities?: 'error' | 'warn';
   log?: (line: string) => void;
 }
 
 export interface CompileOptions {
   key?: string;
-  /** at most this many LuaTeX passes (cross-references need two or three) */
+  /** at most this many TeX passes (cross-references need two or three) */
   passes?: number;
   /** how the caller knows the snippet (a file, a page and line): messages only */
   name?: string;
@@ -136,9 +114,13 @@ export interface CompileOptions {
 export class Pipeline {
   readonly buildRoot: string;
   readonly fonts: Fonts;
+  /** the capture backend: what it is and can do (backend.capabilities) */
+  readonly backend: CaptureBackend;
   private readonly searchDirs: string[];
   private readonly template: string;
-  private readonly serializer: string;
+  private readonly missingCapabilities: 'error' | 'warn';
+  /** the warnings of each block's last compilation, by key */
+  readonly diagnostics = new Map<string, Diagnostic[]>();
   private readonly mathml: boolean;
   private readonly localFonts: string[];
   private readonly log: (line: string) => void;
@@ -150,7 +132,11 @@ export class Pipeline {
     this.buildRoot = resolve(o.buildRoot);
     this.searchDirs = (o.searchDirs ?? []).map(d => resolve(d));
     this.template = o.template ?? DEFAULT_TEMPLATE;
-    this.serializer = o.serializer ?? DEFAULT_SERIALIZER;
+    this.backend = typeof o.backend === 'object' ? o.backend
+      : createBackend(selectedBackendId({ flag: o.backend }), { template: o.template, serializer: o.serializer });
+    const a = this.backend.availability();
+    if (!a.ok) throw new BackendUnavailable(a.reason);
+    this.missingCapabilities = o.missingCapabilities ?? 'error';
     this.mathml = o.mathml ?? true;
     this.log = o.log ?? (s => console.log(s));
     const local = o.localFontsDir ? resolve(o.localFontsDir) : null;
@@ -184,7 +170,7 @@ export class Pipeline {
         throw new BuildError(`part ${p.key} is a complete document; a batch is made of parts, and a named preamble holds the setup`, o.name ?? o.key);
     }
     const key = o.key ?? contentKey(joined, preamble);
-    const { data, label } = await this.compileData(joined, preamble, { ...o, key });
+    const { data, label } = await this.compileData(joined, preamble, { ...o, key, batch: true });
     this.blocks.set(key, data);
     const split = batchParts(data);
     if (split.length !== parts.length) throw new BuildError(`expected ${parts.length} part(s), found ${split.length}`, label);
@@ -211,9 +197,9 @@ export class Pipeline {
       catch (e) { failures.set(s.key, e as Error); }
     };
     const queue = [...snippets];
-    // One block first, alone: on a cold luaotfload cache every run would
-    // rebuild the cache at once and race.
-    if (jobs > 1 && queue.length) await one(queue.shift()!);
+    // One block first, alone, when the backend says so: on a cold cache (LuaTeX:
+    // luaotfload's) every run would rebuild it at once and race.
+    if (jobs > 1 && queue.length && this.backend.runtime.firstRunAlone) await one(queue.shift()!);
     await Promise.all(Array.from({ length: Math.max(1, Math.min(jobs, queue.length)) }, async () => {
       for (let s = queue.shift(); s; s = queue.shift()) await one(s);
     }));
@@ -251,99 +237,66 @@ export class Pipeline {
 
   // ── One document ──────────────────────────────────────────────────────────
 
-  private async compileData(content: string, preamble: string, o: CompileOptions): Promise<{ data: SerializerOutput; dir: string; key: string; label: string }> {
+  private async compileData(content: string, preamble: string, o: CompileOptions & { batch?: boolean }): Promise<{ data: SerializerOutput; dir: string; key: string; label: string }> {
     const key = o.key ?? contentKey(content, preamble);
     const label = o.name ? `${o.name} (${key})` : key;
     const dir = join(this.buildRoot, key);
-    mkdirSync(join(dir, 'pics'), { recursive: true });      // PGF externalisation's conventional prefix
+    mkdirSync(dir, { recursive: true });
+    const caps = this.backend.capabilities;
+    const passes = o.passes ?? 1;
 
-    let template = readFileSync(this.template, 'utf8');
-    // A complete document: its class replaces the template's, its preamble
-    // becomes the preamble (the caller's, if any, follows), its body the content.
-    // The author's \DocumentMetadata: before their class, at the template's top.
-    let metadata = '';
-    const doc = splitDocument(content);
-    if (doc) {
-      // (the document's own, else the caller's preamble's)
-      metadata = takeMetadata(content.slice(0, DOCCLASS_RE.exec(content)!.index))[0];
-      const [callers, rest] = takeMetadata(preamble);
-      preamble = rest;
-      metadata ||= callers;
-      const [classLine, docPreamble, body] = doc;
-      let replaced = false;
-      template = template.replace(TEMPLATE_CLASS_RE, () => { replaced = true; return classLine; });
-      preamble = (replaced ? '' : `${classLine}\n`) + docPreamble + (preamble ? `\n${preamble}` : '');
-      content = body;
-    } else {
-      [metadata, preamble] = takeMetadata(preamble);
-      // A preamble may bring its own class (a book's chapters: \documentclass{book}).
-      const m = DOCCLASS_RE.exec(preamble);
-      if (m) {
-        let replaced = false;
-        template = template.replace(TEMPLATE_CLASS_RE, () => { replaced = true; return m[0].trim(); });
-        if (replaced) preamble = preamble.slice(0, m.index) + preamble.slice(m.index + m[0].length);
-      }
+    // What the document needs of the backend, asked of its descriptor.
+    for (const n of unmetNeeds(documentNeeds(content, preamble, { passes, batch: o.batch }), caps)) {
+      const msg = `backend ${this.backend.id} lacks ${n.capability}, which this document needs: ${n.reason}`;
+      if (capabilityInfo(n.capability).whenMissing === 'error' && this.missingCapabilities === 'error')
+        throw new MissingCapability(`${msg} (missingCapabilities: 'warn' builds it anyway)`, label);
+      this.log(`  ${label}: warning: ${msg}`);
     }
-    const input = (widthExtraSp: number) => template
-      .replaceAll(PREAMBLE_MARK, () => preamble).replaceAll(CONTENT_MARK, () => content)
-      .replaceAll(WIDTH_EXTRA_MARK, () => String(widthExtraSp))
-      .replaceAll(METADATA_MARK, () => metadata);
 
-    // Always refreshed: a stale serializer would silently lack newer features.
-    copyFileSync(this.serializer, join(dir, 'serializer.lua'));
-    if (this.mathml) copyFileSync(MATHML_LUA, join(dir, 'mathml.lua'));
-    else rmSync(join(dir, 'mathml.lua'), { force: true });
-    for (const otf of this.localFonts) {
-      const dst = join(dir, basename(otf));
-      if (!existsSync(dst) || statSync(dst).mtimeMs < statSync(otf).mtimeMs) copyFileSync(otf, dst);
-    }
-    const texinputs = [LATEX_DIR, ...this.searchDirs];
-
-    const run = async (sampleDir: string, widthExtraSp: number, passes: number): Promise<SerializerOutput> => {
-      writeFileSync(join(sampleDir, 'input.tex'), input(widthExtraSp));
-      return readSerializerOutput(await runLuaLatex(sampleDir, { texinputs, passes, block: label }));
-    };
-    // A wider sample (or a probe) runs in a directory of its own – a copy of
-    // the document's, so it reads back the same .aux/.toc/.bbl – and several
-    // run at once. Each keeps its own PDF, which its pictures come from.
-    let sampleSeq = 0;
-    const sampleDir = () => {
-      const d = join(dir, 'samples', String(++sampleSeq));
-      rmSync(d, { recursive: true, force: true });
-      mkdirSync(d, { recursive: true });
-      for (const f of readdirSync(dir)) {
-        const p = join(dir, f);
-        if (statSync(p).isFile() && !['input.pdf', 'input.log', 'output.json', 'nodelist.pb'].includes(f)) cpSync(p, join(d, f));
-      }
-      return d;
-    };
-    rmSync(join(dir, 'samples'), { recursive: true, force: true });
-
-    // The document at its own width, then (sampleDisplays) at wider ones if it
-    // has displays to model.
-    const first: Sample = { data: await run(dir, 0, o.passes ?? 1), dir };
-    const final = await sampleDisplays(first, {
-      at: async extraSp => { const d = sampleDir(); return { data: await run(d, extraSp, 1), dir: d }; },
-      probe: async extraSp => run(sampleDir(), extraSp, 1),
-      label, log: this.log, template: this.template,
+    const job = await this.backend.open({
+      content, preamble, dir, label, searchDirs: this.searchDirs, localFonts: this.localFonts, mathml: this.mathml,
     });
+    try {
+      // The document at its own width, then (sampleDisplays) at wider ones if it
+      // has displays to model – unless the backend modelled them itself.
+      const first = await job.capture({ widthExtraSp: 0, passes: supports(caps, 'multiPass') ? passes : 1 });
+      let final: CaptureResult = first;
+      if (supports(caps, 'singlePassDisplays') && first.data.display_model) final = first;
+      else if (supports(caps, 'widthResampling')) {
+        final = await sampleDisplays(first, {
+          at: extraSp => job.capture({ widthExtraSp: extraSp, passes: 1 }),
+          probe: async extraSp => (await job.capture({ widthExtraSp: extraSp, passes: 1 })).data,
+          label, log: this.log, template: this.template,
+        });
+      } else if (DM.wantsModel(first.data)) {
+        this.log(`  ${label}: warning: backend ${this.backend.id} cannot compile at other widths; displays stay at the document's width`);
+      }
+      this.diagnostics.set(key, final.diagnostics);
 
-    const data = final.data;
-    await this.transform(data, final.dir, { block: label, docTag: key.replace(/[^0-9A-Za-z]/g, '').slice(0, 8) });
-    writeFileSync(join(dir, 'output.json'), writeSerializerOutput(data));
-    return { data, dir, key, label };
+      const data = final.data;
+      await this.transform(data, final.dir, {
+        block: label, docTag: key.replace(/[^0-9A-Za-z]/g, '').slice(0, 8), formulas: final.mathml, pictures: final.pictures,
+      });
+      writeFileSync(join(dir, 'output.json'), writeSerializerOutput(data));
+      return { data, dir, key, label };
+    } finally {
+      await job.close?.();
+    }
   }
 
-  /** The passes between the serializer and the encoder, in their order: MathML
+  /** The passes between the capture and the encoder, in their order: MathML
    *  strings from what the capture recorded (first: it reads formula numbers
-   *  and boxes the later passes may drop), forget unreferenced paragraphs, pictures to SVG (from `dir`'s PDF), strip what the
-   *  wire format does not model, convert classic fonts (first: it gives
-   *  'unknown' fonts real files, which the glyph addressing and provisioning
-   *  that follow then see), address glyphs. Changes `data`. */
-  async transform(data: SerializerOutput, dir: string, o: { block?: string; docTag?: string } = {}): Promise<void> {
-    const nMathml = attachMathML(data, { speak: (await speaker()) ?? undefined, formulas: readMathmlFile(dir) });
+   *  and boxes the later passes may drop), forget unreferenced paragraphs,
+   *  pictures to SVG (from the backend's picture source, else `dir`'s PDF),
+   *  strip what the wire format does not model, convert classic fonts (first:
+   *  it gives 'unknown' fonts real files, which the glyph addressing and
+   *  provisioning that follow then see), address glyphs. `formulas` is
+   *  LaTeX's MathML as captured (default: read from `dir`). Changes `data`. */
+  async transform(data: SerializerOutput, dir: string,
+                  o: { block?: string; docTag?: string; formulas?: Map<number, string>; pictures?: PictureSource } = {}): Promise<void> {
+    const nMathml = attachMathML(data, { speak: (await speaker()) ?? undefined, formulas: o.formulas ?? readMathmlFile(dir) });
     const nDropped = dropUnreferencedParagraphs(data);
-    const nPictures = await convertPictures(data, dir, o.block, o.docTag);
+    const nPictures = await convertPictures(data, dir, o.block, o.docTag, o.pictures);
     const nStripped = stripUnsupportedNodes(data);
     const nLegacy = normaliseLegacyFontAddressing(data, this.fonts);
     const nRewritten = normaliseGlyphAddressing(data, this.fonts, this.log);
@@ -370,9 +323,9 @@ export class Pipeline {
 
 export interface Sample { data: SerializerOutput; dir: string }
 
-export interface SamplingOptions {
+export interface SamplingOptions<S extends Sample = Sample> {
   /** compile at the document's width + extraSp (a sample) */
-  at(extraSp: number): Promise<Sample>;
+  at(extraSp: number): Promise<S>;
   /** compile at the document's width + extraSp to find where a display
    *  changes regime (display-model.ts, wideVariants) */
   probe(extraSp: number): Promise<SerializerOutput | null>;
@@ -384,14 +337,14 @@ export interface SamplingOptions {
 
 /** The document of record with its display model: `first` (the document at
  *  its own width) with rates attached, or a wider sample's when the model
- *  had to be anchored elsewhere. */
-export async function sampleDisplays(first: Sample, o: SamplingOptions): Promise<Sample> {
+ *  had to be anchored elsewhere; whatever else a sample carries comes with it. */
+export async function sampleDisplays<S extends Sample>(first: S, o: SamplingOptions<S>): Promise<S> {
   if (!DM.wantsModel(first.data)) return first;
   const { label } = o;
-  const ahead: Promise<Sample>[] = [o.at(DISPLAY_SAMPLE_STEP_SP), o.at(2 * DISPLAY_SAMPLE_STEP_SP)];
+  const ahead: Promise<S>[] = [o.at(DISPLAY_SAMPLE_STEP_SP), o.at(2 * DISPLAY_SAMPLE_STEP_SP)];
   let next = 3;
-  let samples: Sample[] = [];
-  for (let s: Sample = first; ; s = await ahead.shift()!) {
+  let samples: S[] = [];
+  for (let s: S = first; ; s = await ahead.shift()!) {
     if (s !== first && !DM.wantsModel(s.data)) return s;
     const w = Number(s.data.source_width ?? 0);
     if (w <= 0) throw new BuildError(`display-bearing template ${o.template ?? ''} did not report a positive source width ` +
@@ -406,7 +359,7 @@ export async function sampleDisplays(first: Sample, o: SamplingOptions): Promise
         const widths = [a, b, c].map(x => DM.pyG(Number(x.data.source_width) / 65536)).join(', ');
         if (a === first) {
           o.log(`  ${label}: display model stable at ${widths} pt`);
-          return { data: DM.attachModel(a.data, b.data, c.data), dir: a.dir };
+          return { ...a, data: DM.attachModel(a.data, b.data, c.data) };
         }
         // The document's own width fell outside the affine law; it is still the
         // width the page must match exactly. Displays set another way there get
@@ -417,7 +370,7 @@ export async function sampleDisplays(first: Sample, o: SamplingOptions): Promise
         const [nWide, nProbes] = await DM.wideVariants(data, b.data, c.data, async wd => o.probe(wd - x0));
         o.log(`  ${label}: display model stable at ${widths} pt, anchored at the document's ${DM.pyG(x0 / 65536)} pt` +
           (nWide ? `; ${nWide} display(s) set another way there get a wide form (${nProbes} more compilation(s) to find where)` : ''));
-        return { data, dir: first.dir };
+        return { ...first, data };
       }
       o.log(`  ${label}: rejected display sample at ${DM.pyG(Number(a.data.source_width) / 65536)} pt: ${reason}`);
       samples = samples.slice(-2);

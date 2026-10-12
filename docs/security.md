@@ -24,7 +24,8 @@ of helper programs – `latexminted` (Python), `texosquery-jre8` (Java),
 a speed bump, not a boundary.
 
 A caller whose own preamble genuinely needs shell escape (minted, gnuplottex)
-can set `REFLOWTEX_SHELL_ESCAPE=1`. That is an assertion that every snippet
+can set `REFLOWTEX_SHELL_ESCAPE=1` (or create the backend with
+`shellEscape: true`). That is an assertion that every snippet
 compiled in the run is trusted. Do not set it in a build that touches input from
 elsewhere.
 

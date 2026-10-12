@@ -94,6 +94,11 @@ narrower than its ink and never wider than the measure it was compiled at, and
 becomes horizontally scrollable. Reflow TeX does not reproduce amsmath's
 print-oriented fallback of moving an equation number onto another line.
 
+The extraction runs behind a capture backend (`src/pipeline/backend/`):
+LuaTeX is the default and the only one this build has; the pipeline asks a
+backend's capabilities instead of assuming LuaTeX's
+([backends.md](backends.md)).
+
 ### 2. Encode (`src/pipeline`)
 
 After display-width modelling, three transforms run on `output.json` before it
