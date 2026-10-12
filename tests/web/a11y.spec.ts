@@ -6,7 +6,7 @@ import { test, expect } from './fixtures.ts';
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { BUILD, idle } from './web.ts';
+import { BUILD, READY, idle } from './web.ts';
 import { INSERT_MATH } from '../../src/pipeline/a11y.ts';
 
 test('every formula reaches assistive technology as MathML; the drawing does not', async ({ openPage }) => {
@@ -460,7 +460,7 @@ test('a paragraph is read to its end, whatever the line a formula ends', async (
   const page = await openPage('a11y-streams', { width: 900 });
   for (let w = 260; w <= 620; w += 12) {
     await page.setViewportSize({ width: w, height: 900 });
-    await page.waitForTimeout(150);
+    await idle(page);                                              // relaid at this width
     const text = await page.locator('.latex-a11y p').first().textContent();
     expect(text, `at ${w}px`).toContain('up to the very end');
   }
@@ -513,7 +513,7 @@ test('without luamml: the text, no MathML', async ({ openPage }) => {
 // framed the wrong glyphs.)
 test('each word of the layer lies on its drawn word', async ({ openPage }) => {
   const page = await openPage('a11y-streams', { width: 700 });
-  await page.waitForTimeout(300);
+  await idle(page);
   const bad = await page.evaluate(() => {
     const layer = document.querySelectorAll('.latex-a11y')[2];          // c-hyphen: plain words
     const block = layer.nextElementSibling!;
@@ -558,7 +558,7 @@ async function whatIsUnder(page: import('@playwright/test').Page, word: string) 
 }
 test('screen reader mode: clicks and the selection reach the layer’s words, and only then', async ({ openPage }) => {
   const page = await openPage('a11y-streams', { width: 700 });
-  await page.waitForTimeout(300);
+  await idle(page);
   const off = await whatIsUnder(page, 'uncompromising');
   expect(off.inLayer, 'off: the drawing is clicked').toBe(false);
   expect(off.drawnSelect).not.toBe('none');
@@ -566,7 +566,8 @@ test('screen reader mode: clicks and the selection reach the layer’s words, an
   const on = await whatIsUnder(page, 'uncompromising');
   expect(on).toEqual({ inLayer: true, text: 'uncompromising', drawnSelect: 'none' });
   await page.reload();
-  await page.waitForTimeout(500);
+  await page.waitForFunction(READY);                              // drawn again, the viewer's API on window
+  await idle(page);
   expect(await page.evaluate(() => (window as any).reflowtex.screenReaderMode()), 'remembered').toBe(true);
   await page.evaluate(() => (window as any).reflowtex.setScreenReaderMode(false));
 });
@@ -574,7 +575,7 @@ test('screen reader mode: clicks and the selection reach the layer’s words, an
 test('screen reader mode: a click on a drawn footnote mark still opens the footnote', async ({ openPage }) => {
   const page = await openPage('a11y-streams', { width: 900 });
   await page.evaluate(() => (window as any).reflowtex.setScreenReaderMode(true));
-  await page.waitForTimeout(300);
+  await idle(page);
   const mark = page.locator('.latex-block [data-footnote]').first();
   const box = (await mark.boundingBox())!;
   expect(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)!.closest('.latex-a11y'), [box.x + box.width / 2, box.y + box.height / 2]),
