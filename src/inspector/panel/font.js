@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex inspector – GENERATED from src/inspector/src/panel/font.js by esbuild (make build-inspector); sources sha256 b30f95facc87229bc842a9308d355dd27aedb7d8d243cf0bee13c268415c7181
+// reflowtex inspector – GENERATED from src/inspector/src/panel/font.js by esbuild (make build-inspector); sources sha256 0cced8ab9ca76e945218ca562d7af8644e4615b09398231c61361ef972204c17
 import { html, useState, useEffect, useMemo, useRef } from "../vendor/preact.js";
 import { call, got } from "./bridge.js";
 import { Table, Action, Head, Muted, IconButton, IconClose, copyText } from "./ui.js";

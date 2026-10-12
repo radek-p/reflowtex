@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { SP } from './context.js';
-import { entries, gapId } from './ids.js';
-import { rootCache, segParts } from './resolve.js';
-import { toScreen } from './geometry.js';
-import { GLUE_SUB, glueSpec, maxOf, pt } from './format.js';
+import { SP } from './context.ts';
+import { entries, gapId, type PartEntry } from './ids.ts';
+import { rootCache, segParts } from './resolve.ts';
+import { toScreen, type ScreenRect } from './geometry.ts';
+import { GLUE_SUB, glueSpec, maxOf, pt } from './format.ts';
+import type { DetailRow, Row } from '../protocol.ts';
+import type { TexNode } from '../../../viewer/src/engine/model.ts';
+import type { LayoutCache, LineMeta } from '../../../viewer/src/engine/layout/types.ts';
+
+/** How TeX chose an interline glue (sp). */
+export interface InterlineRule { baselineskip: number; lineskip: number; lineskiplimit: number; depthAbove: number; heightBelow: number }
+/** A part of a vertical space: a glue or kern (as recorded, or redone), and
+ *  for the interline glue its rule ({} without one). */
+export interface GapPart { n: TexNode; interline?: InterlineRule | Record<string, never> }
+/** A vertical space: its parts, its total (sp), what TeX recorded, and its band. */
+export interface GapInfo { totalSp: number; amount: number | null; parts: GapPart[]; band: ScreenRect | null }
 
 // ── Vertical space ─────────────────────────────────────────────────────────────
 // What TeX put between two paragraphs, or around a heading or a display: the
@@ -18,7 +29,8 @@ import { GLUE_SUB, glueSpec, maxOf, pt } from './format.js';
 // streams), and between two paragraphs within a run of text.
 // The interline glue between a depth above and a height below, and TeX's name
 // for it: \baselineskip unless that would leave less than \lineskiplimit.
-export function interline(prevDepth, ascent, lm, px) {
+export function interline(prevDepth: number, ascent: number, lm: LineMeta | null | undefined, px: number):
+        { width: number; subtype: number; rule?: InterlineRule } {
     if (!lm) return { width: px / SP(), subtype: 2 };
     const b = lm.bskip - prevDepth - ascent;
     return { width: px / SP(), subtype: b >= lm.lskiplimit ? 2 : 1,
@@ -27,33 +39,33 @@ export function interline(prevDepth, ascent, lm, px) {
 }
 // The parts of a gap, in TeX's order, each { n: a glue- or kern-like node,
 // interline?: its rule }, and the gap's total and band (viewport px).
-export function gapInfo(id) {
+export function gapInfo(id: number): GapInfo | null {
     const e = entries.get(id);
     if (!e) return null;
     if (e.kind === 'vgap') {
-        let cache = rootCache(e.block, e.root);
+        let cache: LayoutCache | null | undefined = rootCache(e.block, e.root);
         for (const k of e.cachePath) cache = cache && cache.dom && cache.dom.segs[k] && cache.dom.segs[k].sub;
         const L = cache && cache.layout && cache.layout.laid[e.i], s = cache && cache.dom && cache.dom.segs[e.i];
         if (!L || !s || !s.gap) return null;
         const totalSp = (parseFloat(s.gap.style.height) || 0) / SP();
         const vs = L.seg.vspace;
-        const parts = [];
+        const parts: GapPart[] = [];
         for (const g of (vs && vs.glue) || []) {
             if (g.type === 'glue' && (g.subtype === 1 || g.subtype === 2)) continue;   // redone below
             let n = g;
             // A display's above skip: the full or the short one, as chosen at this width.
             if (g.type === 'glue' && (g.subtype === 4 || g.subtype === 6) && L.seg.kind === 'display' && L.displayFull != null) {
                 const it = L.seg.rows[0].item;
-                n = { ...g, subtype: L.displayFull ? 4 : 6, width: L.displayFull ? it.display_above : it.display_above_short };
+                n = { ...g, subtype: L.displayFull ? 4 : 6, width: L.displayFull ? it.display_above! : it.display_above_short! };
             }
             parts.push({ n });
         }
         const sum = parts.reduce((a, p) => a + (p.n.type === 'kern' ? p.n.kern || 0 : p.n.width || 0), 0);
         const rest = totalSp - sum;
         if (Math.abs(rest) > 655) {                       // more than 0.01pt left: the interline glue
-            const prev = e.i > 0 && cache.layout.laid[e.i - 1];
+            const prev = e.i > 0 && cache!.layout!.laid[e.i - 1];
             const il = interline(prev ? prev.lastDepth || 0 : 0, L.firstAscent || 0, L.firstMeta, rest * SP());
-            parts.push({ n: { type: 'glue', subtype: il.subtype, width: rest }, interline: il.rule || {} });
+            parts.push({ n: { type: 'glue', subtype: il.subtype, width: rest } as TexNode, interline: il.rule || {} });
         }
         const r = s.gap.getBoundingClientRect();
         return { totalSp, amount: vs ? vs.amount || 0 : null, parts,
@@ -65,38 +77,40 @@ export function gapInfo(id) {
         const j = laid.itemStarts[e.k];
         if (!(j > 0) || j >= laid.lines.length) return null;
         const prevD = maxOf(laid.profiles[j - 1], 'd'), asc = maxOf(laid.profiles[j], 'h');
-        const px = laid.baselineYs[j] - laid.baselineYs[j - 1] - prevD - asc;
-        const vs = laid.seg.items[e.k] && laid.seg.items[e.k].vspace;
-        const parts = ((vs && vs.glue) || []).map(n => ({ n }));
+        const px = laid.baselineYs![j] - laid.baselineYs![j - 1] - prevD - asc;
+        // (a text segment's: it has paragraphs)
+        const items = laid.seg.kind === 'text' ? laid.seg.items : [];
+        const vs = items[e.k] && items[e.k].vspace;
+        const parts: GapPart[] = ((vs && vs.glue) || []).map(n => ({ n }));
         const il = interline(prevD, asc, laid.meta && laid.meta[j], px);
-        parts.push({ n: { type: 'glue', subtype: il.subtype, width: il.width }, interline: il.rule || {} });
-        const top = laid.baselineYs[j - 1] + prevD;
+        parts.push({ n: { type: 'glue', subtype: il.subtype, width: il.width } as TexNode, interline: il.rule || {} });
+        const top = laid.baselineYs![j - 1] + prevD;
         const band = toScreen(s.svg, { x: 0, y: top, w: s.svg.viewBox.baseVal.width || s.svg.getBoundingClientRect().width, h: px });
         return { totalSp: px / SP(), amount: vs ? vs.amount || 0 : null, parts, band };
     }
     return null;
 }
 // A part's band: its share of the gap's, in order from the top.
-export function partRect(id) {
-    const e = entries.get(id), g = e && gapInfo(e.gap);
+export function partRect(id: number): ScreenRect | null {
+    const e = entries.get(id) as PartEntry | undefined, g = e && gapInfo(e.gap);
     if (!g || !g.band) return null;
     const scale = g.totalSp ? g.band.height / g.totalSp : 0;
     let y = g.band.top;
     for (let k = 0; k < g.parts.length; k++) {
         const n = g.parts[k].n, h = (n.type === 'kern' ? n.kern || 0 : n.width || 0) * scale;
-        if (k === e.k) return { left: g.band.left, top: Math.min(y, y + h), width: g.band.width, height: Math.abs(h) };
+        if (k === e!.k) return { left: g.band.left, top: Math.min(y, y + h), width: g.band.width, height: Math.abs(h) };
         y += h;
     }
     return null;
 }
 // Where a gap is listed: before segment i (if there is space, or TeX's glue).
-export function gapBefore(bid, cachePath, cache, i, root = null) {
-    const L = cache.layout.laid[i], s = cache.dom && cache.dom.segs[i];
+export function gapBefore(bid: number, cachePath: number[], cache: LayoutCache, i: number, root: string | null = null): number | null {
+    const L = cache.layout!.laid[i], s = cache.dom && cache.dom.segs[i];
     const px = s && s.gap ? parseFloat(s.gap.style.height) || 0 : 0;
     return (L && L.seg.vspace) || px > 0.05 ? gapId(bid, cachePath, i, root) : null;
 }
-export const GAP_NAME = n => n.type === 'kern' ? 'kern' : n.subtype ? '\\' + GLUE_SUB[n.subtype] : 'skip';
-export function gapSummary(id, out) {
+export const GAP_NAME = (n: TexNode): string => n.type === 'kern' ? 'kern' : n.subtype ? '\\' + GLUE_SUB[n.subtype] : 'skip';
+export function gapSummary(id: number, out: Row): void {
     const g = gapInfo(id);
     out.type = 'vspace';
     out.label = 'vertical space';
@@ -105,8 +119,8 @@ export function gapSummary(id, out) {
     out.hasChildren = g.parts.length > 0;
     out.drawn = true;
 }
-export function partSummary(id, out) {
-    const e = entries.get(id), g = gapInfo(e.gap), p = g && g.parts[e.k];
+export function partSummary(id: number, out: Row): void {
+    const e = entries.get(id) as PartEntry, g = gapInfo(e.gap), p = g && g.parts[e.k];
     if (!p) { out.type = 'glue'; out.label = 'glue'; out.note = 'gone'; return; }
     const n = p.n;
     out.type = n.type;
@@ -115,15 +129,15 @@ export function partSummary(id, out) {
     out.label = 'glue ' + (n.subtype ? '\\' + GLUE_SUB[n.subtype] : '(skip)');
     out.note = p.interline ? `→ ${pt(n.width || 0)}` : glueSpec(n);
 }
-export function gapDetails(id, rows) {
-    const e = entries.get(id);
+export function gapDetails(id: number, rows: DetailRow[]): void {
+    const e = entries.get(id)!;
     if (e.kind === 'vpart') {
         const g = gapInfo(e.gap), p = g && g.parts[e.k];
         if (!p) return;
         const n = p.n;
         if (n.type === 'kern') rows.push(['kern', pt(n.kern || 0)]);
         else if (p.interline) {
-            const r = p.interline;
+            const r = p.interline as InterlineRule;
             rows.push(['set to', pt(n.width || 0)]);
             if (r.baselineskip != null) rows.push(['\\baselineskip', pt(r.baselineskip)], ['depth above', pt(r.depthAbove)],
                 ['height below', pt(r.heightBelow)], ['\\lineskiplimit', pt(r.lineskiplimit)], ['\\lineskip', pt(r.lineskip)]);

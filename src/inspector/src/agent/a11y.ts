@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { I, near } from './context.js';
-import { entries } from './ids.js';
-import { segParts } from './resolve.js';
-import { geometry } from './geometry.js';
+import { I, near } from './context.ts';
+import { entries } from './ids.ts';
+import { segParts } from './resolve.ts';
+import { geometry } from './geometry.ts';
+import type { Accessible, AccessiblePart } from '../protocol.ts';
+import type { TexNode } from '../../../viewer/src/engine/model.ts';
 
 // ── Accessibility ──────────────────────────────────────────────────────────────
 // A block built with the accessible layer (src/pipeline/a11y.ts) has it beside
@@ -12,34 +14,35 @@ import { geometry } from './geometry.js';
 // as runs (data-run: text, math). The inspector says what the layer holds for
 // a box, and draws where it lies.
 // (before its block once the viewer placed it, after it as shipped)
-export const layerOf = el => (el ? [el.previousElementSibling, el.nextElementSibling] : []).find(l => l && l.classList.contains('latex-a11y')) || null;
+export const layerOf = (el: Element | null | undefined): HTMLElement | null =>
+    ((el ? [el.previousElementSibling, el.nextElementSibling] : []).find(l => l && l.classList.contains('latex-a11y')) as HTMLElement | undefined) || null;
 // The layer's pieces for a row: a block's, all; a segment's, its paragraphs'
 // or its display's; a line's or a node's, its paragraph's.
-export function accessiblePieces(id) {
+function accessiblePieces(id: number): { el: HTMLElement | null; pieces: HTMLElement[] } {
     const e = entries.get(id);
     if (!e) return { el: null, pieces: [] };
-    if (e.kind === 'block') { const l = layerOf(e.el); return { el: e.el, pieces: l ? [...l.children] : [] }; }
-    let sid = e.kind === 'seg' ? id : e.kind === 'line' ? e.seg : e.kind === 'node' ? e.seg : null;
+    if (e.kind === 'block') { const l = layerOf(e.el); return { el: e.el, pieces: l ? [...l.children] as HTMLElement[] : [] }; }
+    const sid = e.kind === 'seg' ? id : e.kind === 'line' ? e.seg : e.kind === 'node' ? e.seg : null;
     if (sid == null) return { el: null, pieces: [] };
     const { seg, laid, el } = segParts(sid);
     const layer = layerOf(el);
     if (!layer || !laid || seg.cachePath.length || seg.root != null) return { el, pieces: [] };
-    const doc = (I.state(el) || {}).doc || {};
-    const byPara = n => layer.querySelector(`:scope > [data-para="${n}"]`);
+    const doc = I.state(el)?.doc;
+    const byPara = (n: number) => layer.querySelector<HTMLElement>(`:scope > [data-para="${n}"]`);
     if (laid.seg.kind === 'display') {
-        const k = (doc.content || []).indexOf(laid.seg.rows[0].item) + 1;
-        const p = k > 0 && layer.querySelector(`:scope > [data-item="${k}"]`);
+        const k = ((doc && doc.content) || []).indexOf(laid.seg.rows[0].item) + 1;
+        const p = k > 0 && layer.querySelector<HTMLElement>(`:scope > [data-item="${k}"]`);
         return { el, pieces: p ? [p] : [] };
     }
     if (laid.seg.kind !== 'text') return { el, pieces: [] };
     const items = laid.seg.items;
-    if (e.kind === 'seg') return { el, pieces: items.map(it => byPara(it.index)).filter(Boolean) };
+    if (e.kind === 'seg') return { el, pieces: items.map(it => byPara(it.index)).filter((p): p is HTMLElement => !!p) };
     // a line's paragraph: the item whose lines hold it
     let j = e.kind === 'line' ? e.j : -1;
     if (e.kind === 'node') {
         const g = geometry(sid);
-        let n = e.n;
-        while (g && g.parent.has(n) && !g.lines.some(L => L.line === g.parent.get(n))) n = g.parent.get(n);
+        let n: TexNode = e.n;
+        while (g && g.parent.has(n) && !g.lines.some(L => L.line === g.parent.get(n))) n = g.parent.get(n) as TexNode;
         const L = g && g.lines.find(L => L.line === g.parent.get(n));
         j = L ? L.j : -1;
     }
@@ -51,13 +54,14 @@ export function accessiblePieces(id) {
 }
 // A piece's content, as a reader gets it: text, and each formula as its
 // MathML and its words (alttext).
-export function accessibleParts(piece) {
-    const parts = [];
-    const text = t => { if (!t) return; const last = parts[parts.length - 1];
+function accessibleParts(piece: Element): AccessiblePart[] {
+    const parts: AccessiblePart[] = [];
+    const text = (t: string | null) => { if (!t) return; const last = parts[parts.length - 1];
         if (last && last.type === 'text') last.text += t; else parts.push({ type: 'text', text: t }); };
-    const walk = n => {
-        if (n.nodeType === 3) { text(n.nodeValue); return; }
-        if (n.nodeType !== 1) return;
+    const walk = (node: Node) => {
+        if (node.nodeType === 3) { text(node.nodeValue); return; }
+        if (node.nodeType !== 1) return;
+        const n = node as Element;
         if (n.localName === 'math') { parts.push({ type: 'math', mathml: n.outerHTML.replace(/ style="[^"]*"/, '').replace(/ data-run="[^"]*"/, ''), alttext: n.getAttribute('alttext') || '' }); return; }
         for (const c of n.childNodes) walk(c);
     };
@@ -65,7 +69,7 @@ export function accessibleParts(piece) {
     for (const p of parts) if (p.type === 'text') p.text = p.text.replace(/\s+/g, ' ');
     return parts;
 }
-export function accessible(id) {
+export function accessible(id: number): Accessible {
     const { el, pieces } = accessiblePieces(id);
     return {
         layer: !!layerOf(el),
@@ -74,8 +78,8 @@ export function accessible(id) {
 }
 // The overlay: every piece near the window dashed, its runs outlined – text
 // orange, formulas green – so a run that misses its glyphs shows.
-export function drawAccessible(ink) {
-    const box = (r, css, kind) => {
+export function drawAccessible(ink: DocumentFragment): void {
+    const box = (r: DOMRect, css: string, kind: string) => {
         const d = document.createElement('div');
         d.dataset.a11y = kind;
         d.style.cssText = `position:absolute;box-sizing:border-box;left:${r.left}px;top:${r.top}px;width:${Math.max(r.width, 1)}px;height:${Math.max(r.height, 1)}px;${css}`;
@@ -84,11 +88,11 @@ export function drawAccessible(ink) {
     for (const el of I.blocks()) {
         const layer = layerOf(el);
         if (!layer) continue;
-        for (const piece of layer.children) {
+        for (const piece of layer.children as HTMLCollectionOf<HTMLElement>) {
             const r = piece.getBoundingClientRect();
             if (!near(r)) continue;
             box(r, 'border:1px dashed rgba(123,31,162,.7)', 'piece');
-            const runs = piece.querySelectorAll('[data-run]');
+            const runs = piece.querySelectorAll<HTMLElement>('[data-run]');
             for (const run of runs) {
                 const m = run.dataset.run !== 'text';
                 box(run.getBoundingClientRect(), m ? 'outline:1px solid rgba(46,125,50,.9);background:rgba(46,125,50,.12)'

@@ -1,8 +1,9 @@
 {
-  // Type checking of the browser's TypeScript: the viewer's host modules
-  // (bundled with its JavaScript into latex-viewer.js) and the companion
-  // package (src/companion, bundled into companion.js). esbuild bundles; this
-  // only checks. The viewer's JavaScript is read for its types, not checked.
+  // Type checking of the browser's TypeScript: the viewer (src/viewer/src,
+  // bundled into latex-viewer.js), the companion package (src/companion,
+  // bundled into companion.js) and the inspector (src/inspector/src, built
+  // into its scripts). esbuild builds; this only checks. JavaScript still
+  // among them is read for its types, not checked.
   "compilerOptions": {
     "target": "es2022",
     "module": "esnext",
@@ -20,5 +21,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["src/viewer/src/**/*", "src/companion/src/**/*"]
+  "include": ["src/viewer/src/**/*", "src/companion/src/**/*", "src/inspector/src/**/*"]
 }

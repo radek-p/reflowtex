@@ -13,29 +13,31 @@
 // evaluated as a script, is the result: 'ok', or 'no-api' when the page has
 // no inspectable viewer yet. window.__rtxInspectorInstall() tries again.
 //
-// The parts: ids for what the panel names (ids.js), resolved to the viewer's
-// layout (resolve.js) and measured (geometry.js, rects.js); described as
-// rows (describe.js, vspace.js, format.js) and as text (text.js); drawn over
-// the page (overlay.js) and picked from it (pick.js); the resources the
-// blocks draw with (census.js, resources.js, fonts.js), their colour maps
-// (colours.js) and their accessible layer (a11y.js).
-import { setInspect } from './context.js';
-import { blockId } from './ids.js';
-import { pathTo } from './paths.js';
-import { children, details, summary } from './describe.js';
-import { textOf, xmlOf } from './text.js';
-import { accessible } from './a11y.js';
-import { guidesPaints, listen, options, redraw, schedule, scrollIntoViewIfNeeded, state } from './overlay.js';
-import { elementOf, fromElement, startPick, stopPick } from './pick.js';
-import { fontGlyphs } from './fonts.js';
-import { openPopover, resource, resources, uses } from './resources.js';
-import { colourMaps, exportColourMaps, importColourMaps, resetColourMaps, setMapColour, setMapTint, setPageTheme } from './colours.js';
+// The parts: ids for what the panel names (ids.ts), resolved to the viewer's
+// layout (resolve.ts) and measured (geometry.ts, rects.ts); described as
+// rows (describe.ts, vspace.ts, format.ts) and as text (text.ts); drawn over
+// the page (overlay.ts) and picked from it (pick.ts); the resources the
+// blocks draw with (census.ts, resources.ts, fonts.ts), their colour maps
+// (colours.ts) and their accessible layer (a11y.ts).
+import { setInspect } from './context.ts';
+import { blockId } from './ids.ts';
+import { pathTo } from './paths.ts';
+import { children, details, summary } from './describe.ts';
+import { textOf, xmlOf } from './text.ts';
+import { accessible } from './a11y.ts';
+import { guidesPaints, listen, options, redraw, schedule, scrollIntoViewIfNeeded, state } from './overlay.ts';
+import { elementOf, fromElement, startPick, stopPick } from './pick.ts';
+import { fontGlyphs } from './fonts.ts';
+import { openPopover, resource, resources, uses } from './resources.ts';
+import { colourMaps, exportColourMaps, importColourMaps, resetColourMaps, setMapColour, setMapTint, setPageTheme } from './colours.ts';
+import type { ViewerInspect } from './context.ts';
+import type { AgentApi } from '../protocol.ts';
 
-window.__rtxInspectorInstall = () => {
+window.__rtxInspectorInstall = (): 'ok' | 'no-api' => {
 const AGENT = 7;
 const prev = window.__rtxInspector;
 if (prev && prev.agent === AGENT) return 'ok';
-const I = window.reflowtex && window.reflowtex.inspect;
+const I = window.reflowtex && window.reflowtex.inspect as ViewerInspect | undefined;
 // No viewer yet (or one that predates the inspection API): install nothing,
 // so the panel can try again later.
 if (!I) return 'no-api';
@@ -44,7 +46,7 @@ if (prev) try { prev.cancelPick(); prev.clear(); } catch { /* not ours to fix */
 setInspect(I);
 listen();
 
-window.__rtxInspector = {
+const api: AgentApi = {
     agent: AGENT,
     // Page-wide guides: { baselines, badness, springs, a11y }, any of them.
     setOptions(o) { Object.assign(options, o); redraw(); },
@@ -66,7 +68,7 @@ window.__rtxInspector = {
     cancelPick() { stopPick(); redraw(); },
     fromElement, elementOf,
     // The path to a block element (the panel's open(block)).
-    blockPath: el => (I.state(el) ? [blockId(el)] : null),
+    blockPath: el => (I.state(el) ? [blockId(el as HTMLElement)] : null),
     // Resources (see "Resources"): the page's list; one in full; the ids of
     // its things on the current layout; a font's glyphs (a promise); the rows
     // down to an id; outlining a list of ids until told otherwise; opening a
@@ -77,5 +79,6 @@ window.__rtxInspector = {
     accessible,
     openPopover, colourMaps, setPageTheme, setMapColour, setMapTint, importColourMaps, exportColourMaps, resetColourMaps,
 };
+window.__rtxInspector = api;
 return 'ok';
 };

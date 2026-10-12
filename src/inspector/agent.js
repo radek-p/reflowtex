@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex inspector – GENERATED from src/inspector/src/agent/ by esbuild (make build-inspector); sources sha256 b30f95facc87229bc842a9308d355dd27aedb7d8d243cf0bee13c268415c7181
+// reflowtex inspector – GENERATED from src/inspector/src/agent/ by esbuild (make build-inspector); sources sha256 0cced8ab9ca76e945218ca562d7af8644e4615b09398231c61361ef972204c17
 "use strict";
 (() => {
-  // src/agent/context.js
+  // src/agent/context.ts
   var I = null;
   function setInspect(api) {
     I = api;
@@ -13,7 +13,7 @@
   var near = (r) => r.top < 2 * innerHeight && r.top + r.height > -innerHeight;
   var host = () => window.reflowtex && window.reflowtex.host;
 
-  // src/agent/ids.js
+  // src/agent/ids.ts
   var nextId = 1;
   var byObj = /* @__PURE__ */ new WeakMap();
   var byKey = /* @__PURE__ */ new Map();
@@ -28,17 +28,16 @@
     }
     return id;
   }
+  var blockOf = (id) => entries.get(id);
+  var segOf = (id) => entries.get(id);
+  var nodeOf = (id) => entries.get(id);
   var blockId = (el) => register(el, null, () => ({ kind: "block", el }));
-  var segId = (bid, cachePath, i, root = null) => register(
-    null,
-    `s${bid}/${root ?? ""}/${cachePath.join(".")}/${i}`,
-    () => ({ kind: "seg", block: bid, cachePath, i, root })
-  );
+  var segId = (bid, cachePath, i, root = null) => register(null, `s${bid}/${root ?? ""}/${cachePath.join(".")}/${i}`, () => ({ kind: "seg", block: bid, cachePath, i, root }));
   var sideId = (bid, root) => register(null, `f${bid}/${root}`, () => ({ kind: "side", block: bid, root }));
   var lineId = (sid, j) => register(null, `l${sid}/${j}`, () => ({ kind: "line", seg: sid, j }));
   function nodeId(n, sid, parent) {
     const id = register(n.affineSource || n, null, () => ({ kind: "node", n }));
-    const e = entries.get(id);
+    const e = nodeOf(id);
     e.n = n;
     if (sid !== void 0) {
       e.seg = sid;
@@ -46,34 +45,30 @@
     }
     return id;
   }
-  var gapId = (bid, cachePath, i, root = null) => register(
-    null,
-    `g${bid}/${root ?? ""}/${cachePath.join(".")}/${i}`,
-    () => ({ kind: "vgap", block: bid, cachePath, i, root })
-  );
+  var gapId = (bid, cachePath, i, root = null) => register(null, `g${bid}/${root ?? ""}/${cachePath.join(".")}/${i}`, () => ({ kind: "vgap", block: bid, cachePath, i, root }));
   var parGapId = (sid, k) => register(null, `p${sid}/${k}`, () => ({ kind: "vpar", seg: sid, k }));
   var partId = (gid, k) => register(null, `v${gid}/${k}`, () => ({ kind: "vpart", gap: gid, k }));
   function nodeRef(n, sid) {
     const id = register(n.affineSource || n, null, () => ({ kind: "node", n }));
-    const e = entries.get(id);
+    const e = nodeOf(id);
     e.n = n;
     e.seg = sid;
     return id;
   }
 
-  // src/agent/resolve.js
+  // src/agent/resolve.ts
   function rootCache(bid, root) {
-    const st = I.state(entries.get(bid).el);
+    const st = I.state(blockOf(bid).el);
     if (!st) return null;
     if (root == null) return st.cache;
     const sf = surfaceOf(bid, root);
     return sf ? sf.cache : null;
   }
   var surfacesOf = (el) => I.surfaces ? I.surfaces(el) : [];
-  var surfaceOf = (bid, key) => surfacesOf(entries.get(bid).el).find((sf) => sf.key === key);
+  var surfaceOf = (bid, key) => surfacesOf(blockOf(bid).el).find((sf) => sf.key === key);
   var WHERE = { popover: "in the popover", margin: "in the margin", page: "drawn by the page" };
   var popoverRoot = (bid, k) => {
-    const sf = surfacesOf(entries.get(bid).el).find((x) => x.where === "popover" && x.instance.endsWith(`/s${k}`));
+    const sf = surfacesOf(blockOf(bid).el).find((x) => x.where === "popover" && x.instance.endsWith(`/s${k}`));
     return sf ? sf.key : null;
   };
   function cacheOf(seg) {
@@ -82,14 +77,15 @@
     return cache;
   }
   function segParts(sid) {
-    const seg = entries.get(sid), cache = cacheOf(seg);
-    const el = entries.get(seg.block).el;
+    const seg = segOf(sid), cache = cacheOf(seg);
+    const el = blockOf(seg.block).el;
     const laid = cache && cache.layout && cache.layout.laid[seg.i];
     const s = cache && cache.dom && cache.dom.segs[seg.i];
     return { seg, cache, el, laid, s };
   }
+  var stateOfSeg = (sid) => I.state(blockOf(segOf(sid).block).el);
   function* segmentsOf(bid) {
-    const el = entries.get(bid).el;
+    const el = blockOf(bid).el;
     function* walk(cache, cachePath, root) {
       if (!cache || !cache.dom) return;
       for (let i = 0; i < cache.dom.segs.length; i++) {
@@ -103,7 +99,7 @@
   }
   var rootsOf = (el) => surfacesOf(el).map((sf) => sf.key);
 
-  // src/agent/geometry.js
+  // src/agent/geometry.ts
   var ctms = null;
   function readingMatrices(on) {
     ctms = on ? /* @__PURE__ */ new Map() : null;
@@ -180,22 +176,23 @@
       const L = g.lines.find((L2) => L2.line === n);
       return L ? { x: L.x0, y: L.y - L.h, w: L.x1 - L.x0, h: L.h + L.d, base: L.y } : null;
     }
-    const k = SP(), par = g.parent.get(n);
+    const node = n;
+    const k = SP(), par = g.parent.get(node);
     if (p.vertical) {
-      let w = n.type === "hlist" || n.type === "vlist" || n.type === "rule" && n.width !== RUNNING ? (n.width || 0) * k : (par && par.width || 0) * k;
-      return { x: p.x + (n.shift || 0) * k, y: p.top, w, h: p.h, base: n.type === "hlist" ? p.top + (n.height || 0) * k : null };
+      let w = node.type === "hlist" || node.type === "vlist" || node.type === "rule" && node.width !== RUNNING ? (node.width || 0) * k : (par && par.width || 0) * k;
+      return { x: p.x + (node.shift || 0) * k, y: p.top, w, h: p.h, base: node.type === "hlist" ? p.top + (node.height || 0) * k : null };
     }
-    let e = extentOf(g, n);
+    let e = extentOf(g, node);
     if (!e) {
       if (par && par.nodes) {
         const L = g.lines.find((L2) => L2.line === par);
         e = L ? { h: L.h, d: L.d } : { h: 0, d: 0 };
       } else if (par) {
-        const pp = g.at.get(par);
+        const box = par, pp = g.at.get(box);
         if (pp && pp.vertical) {
-          const pr = rectOf(g, par);
+          const pr = rectOf(g, box);
           e = { h: pr.base - pr.y, d: pr.y + pr.h - pr.base };
-        } else e = { h: (par.height || 0) * k, d: (par.depth || 0) * k };
+        } else e = { h: (box.height || 0) * k, d: (box.depth || 0) * k };
       } else e = { h: 0, d: 0 };
     }
     return { x: p.x, y: p.y - e.h, w: p.w, h: e.h + e.d, base: p.y };
@@ -214,7 +211,7 @@
     return out;
   }
 
-  // src/agent/paths.js
+  // src/agent/paths.ts
   function pathOf(n, sid) {
     const g = geometry(sid), chain = [];
     let cur = n;
@@ -233,7 +230,7 @@
     return [...segPath(sid), ...ids];
   }
   function segPath(sid) {
-    const seg = entries.get(sid), out = [seg.block];
+    const seg = segOf(sid), out = [seg.block];
     if (seg.root != null) out.push(sideId(seg.block, seg.root));
     for (let k = 0; k < seg.cachePath.length; k++) out.push(segId(seg.block, seg.cachePath.slice(0, k), seg.cachePath[k], seg.root));
     out.push(sid);
@@ -252,7 +249,7 @@
     return [id];
   }
 
-  // src/agent/format.js
+  // src/agent/format.ts
   var AFFINE_FIELDS = [
     "width",
     "height",
@@ -318,7 +315,7 @@
   var maxOf = (items, f) => (items || []).reduce((m, it) => Math.max(m, it[f]), 0);
   var kb = (n) => n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
 
-  // src/agent/vspace.js
+  // src/agent/vspace.ts
   function interline(prevDepth, ascent, lm, px) {
     if (!lm) return { width: px / SP(), subtype: 2 };
     const b = lm.bskip - prevDepth - ascent;
@@ -376,7 +373,8 @@
       if (!(j > 0) || j >= laid.lines.length) return null;
       const prevD = maxOf(laid.profiles[j - 1], "d"), asc = maxOf(laid.profiles[j], "h");
       const px = laid.baselineYs[j] - laid.baselineYs[j - 1] - prevD - asc;
-      const vs = laid.seg.items[e.k] && laid.seg.items[e.k].vspace;
+      const items = laid.seg.kind === "text" ? laid.seg.items : [];
+      const vs = items[e.k] && items[e.k].vspace;
       const parts = (vs && vs.glue || []).map((n) => ({ n }));
       const il = interline(prevD, asc, laid.meta && laid.meta[j], px);
       parts.push({ n: { type: "glue", subtype: il.subtype, width: il.width }, interline: il.rule || {} });
@@ -464,8 +462,9 @@
     if (g.amount != null) rows.push(["recorded by TeX", pt(g.amount)]);
   }
 
-  // src/agent/rects.js
+  // src/agent/rects.ts
   function screenRectOf(id) {
+    if (id == null) return null;
     const e = entries.get(id);
     if (!e) return null;
     if (e.kind === "vgap" || e.kind === "vpar") {
@@ -495,7 +494,7 @@
       const L = g2 && g2.lines[e.j];
       return L ? toScreen(g2.svg, { x: L.x0, y: L.y - L.h, w: L.x1 - L.x0, h: L.h + L.d, base: L.y }) : null;
     }
-    const g = e.seg && geometry(e.seg);
+    const g = e.seg ? geometry(e.seg) : null;
     const r = g && rectOf(g, e.n);
     return r ? toScreen(g.svg, r) : null;
   }
@@ -508,7 +507,8 @@
       j = e.j;
     } else if (e.kind === "node" && e.seg != null) {
       const g2 = geometry(e.seg);
-      const L2 = g2 && g2.lines.find((L3) => L3.line.nodes[0] === e.n);
+      const n = e.n;
+      const L2 = g2 && g2.lines.find((L3) => L3.line.nodes[0] === n);
       if (!L2) return null;
       sid = e.seg;
       j = L2.j;
@@ -525,12 +525,12 @@
     };
   }
 
-  // src/agent/census.js
+  // src/agent/census.ts
   var censusMemo = /* @__PURE__ */ new WeakMap();
   function census(doc) {
     let c = censusMemo.get(doc);
     if (c) return c;
-    c = {
+    const made = c = {
       glyphs: /* @__PURE__ */ new Map(),
       pictures: /* @__PURE__ */ new Map(),
       markers: /* @__PURE__ */ new Map(),
@@ -549,17 +549,17 @@
     const walk = (list) => {
       for (const n of list || []) {
         if (n.type === "glyph" && n.text === void 0) {
-          let f = c.glyphs.get(n.font);
-          if (!f) c.glyphs.set(n.font, f = /* @__PURE__ */ new Map());
+          let f = made.glyphs.get(n.font);
+          if (!f) made.glyphs.set(n.font, f = /* @__PURE__ */ new Map());
           bump(f, n.char, { metrics: n.metrics ? (doc.glyph_metrics || [])[n.metrics - 1] : n });
         }
-        if (n.type === "picture" && n.picture) bump(c.pictures, n.picture, { box: n });
-        if (n.stream) bump(c.markers, n.stream);
-        if (n.link) bump(c.links, n.link);
-        if (n.cite) bump(c.cites, n.cite);
-        if (n.citetarget) bump(c.citeTargets, n.citetarget);
-        if (n.slot) bump(c.slots, n.slot);
-        if (n.anchor) bump(c.anchors, n.anchor, { where: "box" });
+        if (n.type === "picture" && n.picture) bump(made.pictures, n.picture, { box: n });
+        if (n.stream) bump(made.markers, n.stream);
+        if (n.link) bump(made.links, n.link);
+        if (n.cite) bump(made.cites, n.cite);
+        if (n.citetarget) bump(made.citeTargets, n.citetarget);
+        if (n.slot) bump(made.slots, n.slot);
+        if (n.anchor) bump(made.anchors, n.anchor, { where: "box" });
         walk(n.children);
         walk(n.pre);
         walk(n.post);
@@ -571,8 +571,8 @@
     const items = (list, parent) => {
       for (const it of list || []) {
         if (it.box) walk([it.box]);
-        if (it.kind === "anchorpoint" && it.anchor) bump(c.anchors, it.anchor, { where: "point" });
-        if (it.kind === "stream" && it.stream) c.parents.set(it.stream, parent);
+        if (it.kind === "anchorpoint" && it.anchor) bump(made.anchors, it.anchor, { where: "point" });
+        if (it.kind === "stream" && it.stream) made.parents.set(it.stream, parent);
       }
     };
     items(doc.content, 0);
@@ -615,7 +615,7 @@
     }
   }
 
-  // src/agent/describe.js
+  // src/agent/describe.ts
   function affineRows(e, rows) {
     const n = e.n, fields = affineFields(n);
     if (!fields.length) return;
@@ -635,7 +635,7 @@
     }
   }
   function setWidth(e) {
-    const g = e.seg && geometry(e.seg), p = g && g.at.get(e.n);
+    const g = e.seg ? geometry(e.seg) : null, p = g && g.at.get(e.n);
     if (!p) return null;
     return (p.vertical ? p.h : p.w) / SP();
   }
@@ -685,7 +685,7 @@
       out.type = "line";
       out.label = `line ${e.j + 1}`;
       if (L) {
-        const { laid } = segParts(e.seg), lrp = laid.lrp[e.j];
+        const laid = segParts(e.seg).laid, lrp = laid.lrp[e.j];
         const r = lrp.fillOrder ? lrp.fillRatio : lrp.ratio;
         const bad = badnessOf(lrp);
         out.note = `${L.line.nodes.length} nodes · glue ${r >= 0 ? "+" : ""}${(+r).toFixed(3)}${lrp.fillOrder ? " " + ORDER[lrp.fillOrder] : ""}` + (lrp.er ? ` · expansion ${(lrp.er * 100).toFixed(1)}%` : "") + (laid.seg.kind === "display" ? "" : ` · badness ${bad.overfull ? "overfull" : bad.b}`);
@@ -700,9 +700,10 @@
       out.hasChildren = childLists(n).length > 0;
       switch (n.type) {
         case "glyph": {
-          const pua = n.text === void 0 && (n.char >= 57344 && n.char <= 63743 || n.char >= 983040);
-          const ch = n.text !== void 0 ? n.text : pua ? "U+" + n.char.toString(16).toUpperCase() : String.fromCodePoint(n.char || 32);
-          const m = n.metrics ? (I.state(entries.get(entries.get(e.seg).block).el).cache.metrics || [])[n.metrics - 1] : n;
+          const c = n.char;
+          const pua = n.text === void 0 && (c >= 57344 && c <= 63743 || c >= 983040);
+          const ch = n.text !== void 0 ? n.text : pua ? "U+" + c.toString(16).toUpperCase() : String.fromCodePoint(n.char || 32);
+          const m = n.metrics ? (stateOfSeg(e.seg).cache.metrics || [])[n.metrics - 1] : n;
           out.label = `‘${ch}’`;
           out.note = `font ${n.font} · ${pt(m && m.width || 0)}`;
           break;
@@ -773,7 +774,7 @@
         rows.push([k, DIM.has(k) && typeof v === "number" && v !== RUNNING ? `${v} sp (${pt(v)})` : String(v)]);
       }
       if (e.n.metrics) {
-        const m = (I.state(entries.get(entries.get(e.seg).block).el).cache.metrics || [])[e.n.metrics - 1];
+        const m = (stateOfSeg(e.seg).cache.metrics || [])[e.n.metrics - 1];
         if (m) rows.push(["metrics → w×h+d", `${pt(m.width || 0)} × ${pt(m.height || 0)} + ${pt(m.depth || 0)}`]);
       }
       const model = [];
@@ -814,7 +815,7 @@
     if (r) rows.push(["on screen", `${r.width.toFixed(1)} × ${r.height.toFixed(1)} px at (${r.left.toFixed(0)}, ${r.top.toFixed(0)})`]);
     let glyph = null;
     if (e.kind === "node" && e.n.type === "glyph" && e.n.text === void 0 && e.seg != null) {
-      const doc = I.state(entries.get(entries.get(e.seg).block).el).doc, fk = fontKeyIn(doc, e.n.font);
+      const doc = stateOfSeg(e.seg).doc, fk = fontKeyIn(doc, e.n.font);
       if (fk) glyph = { key: "font:" + fk, cp: e.n.char, font: fk.replace(/^tex /, "").replace(/\.otf$/i, "") };
     }
     return { summary: sum, rows, glyph };
@@ -863,7 +864,7 @@
     return out;
   }
 
-  // src/agent/text.js
+  // src/agent/text.ts
   var num = (sp) => String(+(sp / 65536).toFixed(3));
   var esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]).replace(/[-]|[\u{F0000}-\u{10FFFF}]/gu, (c) => `&#x${c.codePointAt(0).toString(16).toUpperCase()};`);
   var glyphText = (n) => n.text !== void 0 ? n.text : String.fromCodePoint(n.char || 32);
@@ -1028,7 +1029,7 @@
     } else if (e.kind === "line") {
       const g = geometry(e.seg), L = g && g.lines[e.j];
       if (!L) return out;
-      const { laid } = segParts(e.seg), lrp = laid.lrp[e.j], bad = badnessOf(lrp);
+      const laid = segParts(e.seg).laid, lrp = laid.lrp[e.j], bad = badnessOf(lrp);
       const r = lrp.fillOrder ? lrp.fillRatio : lrp.ratio;
       out.push(`${ind}<line${attrs([
         ["n", e.j + 1],
@@ -1051,7 +1052,7 @@
     return out;
   }
 
-  // src/agent/a11y.js
+  // src/agent/a11y.ts
   var layerOf = (el) => (el ? [el.previousElementSibling, el.nextElementSibling] : []).find((l) => l && l.classList.contains("latex-a11y")) || null;
   function accessiblePieces(id) {
     const e = entries.get(id);
@@ -1060,21 +1061,21 @@
       const l = layerOf(e.el);
       return { el: e.el, pieces: l ? [...l.children] : [] };
     }
-    let sid = e.kind === "seg" ? id : e.kind === "line" ? e.seg : e.kind === "node" ? e.seg : null;
+    const sid = e.kind === "seg" ? id : e.kind === "line" ? e.seg : e.kind === "node" ? e.seg : null;
     if (sid == null) return { el: null, pieces: [] };
     const { seg, laid, el } = segParts(sid);
     const layer2 = layerOf(el);
     if (!layer2 || !laid || seg.cachePath.length || seg.root != null) return { el, pieces: [] };
-    const doc = (I.state(el) || {}).doc || {};
+    const doc = I.state(el)?.doc;
     const byPara = (n) => layer2.querySelector(`:scope > [data-para="${n}"]`);
     if (laid.seg.kind === "display") {
-      const k2 = (doc.content || []).indexOf(laid.seg.rows[0].item) + 1;
+      const k2 = (doc && doc.content || []).indexOf(laid.seg.rows[0].item) + 1;
       const p2 = k2 > 0 && layer2.querySelector(`:scope > [data-item="${k2}"]`);
       return { el, pieces: p2 ? [p2] : [] };
     }
     if (laid.seg.kind !== "text") return { el, pieces: [] };
     const items = laid.seg.items;
-    if (e.kind === "seg") return { el, pieces: items.map((it) => byPara(it.index)).filter(Boolean) };
+    if (e.kind === "seg") return { el, pieces: items.map((it) => byPara(it.index)).filter((p2) => !!p2) };
     let j = e.kind === "line" ? e.j : -1;
     if (e.kind === "node") {
       const g = geometry(sid);
@@ -1097,12 +1098,13 @@
       if (last && last.type === "text") last.text += t;
       else parts.push({ type: "text", text: t });
     };
-    const walk = (n) => {
-      if (n.nodeType === 3) {
-        text(n.nodeValue);
+    const walk = (node) => {
+      if (node.nodeType === 3) {
+        text(node.nodeValue);
         return;
       }
-      if (n.nodeType !== 1) return;
+      if (node.nodeType !== 1) return;
+      const n = node;
       if (n.localName === "math") {
         parts.push({ type: "math", mathml: n.outerHTML.replace(/ style="[^"]*"/, "").replace(/ data-run="[^"]*"/, ""), alttext: n.getAttribute("alttext") || "" });
         return;
@@ -1144,7 +1146,7 @@
     }
   }
 
-  // src/agent/overlay.js
+  // src/agent/overlay.ts
   var COLORS = {
     box: ["rgba(111,168,220,.30)", "#4a90d9"],
     glyph: ["rgba(111,168,220,.25)", "#4a90d9"],
@@ -1361,7 +1363,7 @@
     }
   }
 
-  // src/agent/pick.js
+  // src/agent/pick.ts
   function nodeAt(x, y) {
     let best = null, bestArea = Infinity;
     const pop = overPopover(x, y);
@@ -1372,9 +1374,10 @@
       for (const sid of segmentsOf(bid)) {
         const { s } = segParts(sid);
         if (!shown(s.svg)) continue;
-        const inPop = !!s.svg.closest("#latex-footnote-pop");
-        if (pop ? !inPop : entries.get(sid).root == null ? !inBlock : inPop) continue;
-        const sr = s.svg.getBoundingClientRect();
+        const svg = s.svg;
+        const inPop = !!svg.closest("#latex-footnote-pop");
+        if (pop ? !inPop : segOf(sid).root == null ? !inBlock : inPop) continue;
+        const sr = svg.getBoundingClientRect();
         if (x < sr.left - 2 || x > sr.right + 2 || y < sr.top || y > sr.bottom) continue;
         const g = geometry(sid);
         if (!g) continue;
@@ -1431,7 +1434,7 @@
     return null;
   }
   function* gapsOf(bid) {
-    const el = entries.get(bid).el;
+    const el = blockOf(bid).el;
     function* walk(cache, cachePath, path, root) {
       if (!cache || !cache.dom || !cache.layout) return;
       for (let i = 0; i < cache.layout.laid.length; i++) {
@@ -1555,7 +1558,7 @@
     return s && s.svg;
   }
 
-  // src/agent/fonts.js
+  // src/agent/fonts.ts
   var MODIFIED_FILE = /\.reflowtex-[0-9a-f]{8}\.otf$/i;
   var isPUA = (cp) => cp >= 57344 && cp <= 63743 || cp >= 983040;
   function fontOrigin(file, family) {
@@ -1762,7 +1765,7 @@
       codes: (f0.codes || []).length
     };
     const cell = (gid, name, cps, adv) => {
-      const u = cps.map((c) => used.get(c)).filter(Boolean);
+      const u = cps.map((c) => used.get(c)).filter((r) => !!r);
       return {
         gid,
         name,
@@ -1800,7 +1803,7 @@
     return out;
   }
 
-  // src/agent/resources.js
+  // src/agent/resources.ts
   function streamText(doc, stream, depth = 0) {
     const out = [];
     for (const it of stream.content || []) {
@@ -1841,7 +1844,8 @@
   }
   var markLabel = (m) => [m.id ? `#${m.id}` : "", ...(m.classes || "").split(/\s+/).filter(Boolean).map((c) => `.${c}`)].join(" ") || "(empty)";
   function resources() {
-    const fonts = /* @__PURE__ */ new Map(), pictures = [], streams = [], links = [], cites = /* @__PURE__ */ new Map(), anchors = [], slots = [];
+    const fonts = /* @__PURE__ */ new Map(), pictures = [], streams = [], links = [];
+    const cites = /* @__PURE__ */ new Map(), anchors = [], slots = [];
     const instances = [], marks = [], kindUse = /* @__PURE__ */ new Map();
     const bib = citeEntries();
     I.blocks().forEach((el, bi) => {
@@ -1994,13 +1998,13 @@
     }
     if (cat === "cite") return { cat, num: +rest };
     if (cat === "kind") return { cat, name: rest };
-    const [bs, ks] = rest.split(":"), b = Number(bs), k = cat === "inst" ? ks : Number(ks), e = entries.get(b);
-    return e && e.kind === "block" ? { cat, bid: b, el: e.el, k, doc: I.state(e.el) && I.state(e.el).doc } : null;
+    const [bs, ks] = rest.split(":"), b = Number(bs), e = entries.get(b);
+    return e && e.kind === "block" ? { cat, bid: b, el: e.el, k: Number(ks), local: ks, doc: I.state(e.el) && I.state(e.el).doc } : null;
   }
   function matcher(key) {
     const p = parseKey(key);
     if (!p) return null;
-    const docOf = (bid) => I.state(entries.get(bid).el).doc;
+    const docOf = (bid) => I.state(blockOf(bid).el).doc;
     switch (p.cat) {
       case "font":
         return (n, bid) => n.type === "glyph" && fontKeyIn(docOf(bid), n.font) === p.font;
@@ -2050,7 +2054,7 @@
       });
     };
     walk(rootCache(bid, null), [], null);
-    for (const f of rootsOf(entries.get(bid).el)) walk(rootCache(bid, f), [], f);
+    for (const f of rootsOf(blockOf(bid).el)) walk(rootCache(bid, f), [], f);
     return out;
   }
   function uses(key, limit = Infinity) {
@@ -2075,16 +2079,17 @@
     const p = parseKey(key);
     if (!p) return null;
     const rows = [], out = { key, cat: p.cat, rows };
+    const doc = p.doc, k = p.k;
     const where = p.el ? blockLabel(I.blocks().indexOf(p.el) + 1) : null;
     const onPage = uses(key).length;
     if (p.cat === "inst") {
-      const h = host(), b = h && h.block(p.el), inst = b && b.find(`${b.key}/${p.k}`);
+      const h = host(), b = h && h.block(p.el), inst = b && b.find(`${b.key}/${p.local}`);
       if (!inst) return null;
       out.title = `${inst.kind || "plain"} · ${where}`;
       rows.push(["id", inst.id], ["kind", inst.kind || "(none)"], ["placement", inst.placement]);
-      for (const [k, v] of Object.entries(inst.attrs)) rows.push([`${k}=`, v]);
+      for (const [k2, v] of Object.entries(inst.attrs)) rows.push([`${k2}=`, v]);
       if (inst.presentation.classes.length) rows.push(["classes", inst.presentation.classes.join(" ")]);
-      for (const [k, v] of Object.entries(inst.presentation.properties)) rows.push([k, v]);
+      for (const [k2, v] of Object.entries(inst.presentation.properties)) rows.push([k2, v]);
       for (const [role, part] of inst.parts) rows.push([`part ${role}`, part.type === "data" ? `data, ${part.data.length} characters` : `typeset${part.spaceBefore ? `, ${part.spaceBefore.toFixed(1)} px of TeX's space before it` : ""}`]);
       rows.push(
         ["parent", inst.parent ? `${inst.parent.kind} (${inst.parent.id})` : "none: the block's own text"],
@@ -2105,7 +2110,7 @@
       return out;
     }
     if (p.cat === "kind") {
-      const def = (I.kinds ? I.kinds() : []).find((k) => k.kind === p.name);
+      const def = (I.kinds ? I.kinds() : []).find((k2) => k2.kind === p.name);
       out.title = `kind ${p.name}`;
       rows.push(["defined", def ? "by the page (host.define)" : "no"], ["measures", def && def.inline ? "yes: an inline kind" : "no"]);
       const by = {};
@@ -2114,12 +2119,12 @@
       return out;
     }
     if (p.cat === "mark") {
-      const m = (p.doc.marks || [])[p.k - 1];
+      const m = (doc.marks || [])[k - 1];
       if (!m) return null;
-      const count = markCounts(p.doc).get(p.k) || 0, h = host(), handle = m.id && h && h.mark ? h.mark(m.id) : null;
+      const count = markCounts(doc).get(k) || 0, h = host(), handle = m.id && h && h.mark ? h.mark(m.id) : null;
       out.title = `${markLabel(m)} · ${where}`;
       rows.push(
-        ["mark", `${p.k} of the block's ${p.doc.marks.length} (Document.marks)`],
+        ["mark", `${k} of the block's ${doc.marks.length} (Document.marks)`],
         ["id", m.id || "(none)"],
         ["classes", m.classes || "(none)"],
         ["glyphs", String(count)]
@@ -2128,11 +2133,11 @@
       return out;
     }
     if (p.cat === "pic") {
-      const pic = (p.doc.pictures || [])[p.k - 1], u = census(p.doc).pictures.get(p.k);
+      const pic = (doc.pictures || [])[k - 1], u = census(doc).pictures.get(k);
       if (!pic) return null;
-      out.title = `picture ${p.k} · ${where}`;
+      out.title = `picture ${k} · ${where}`;
       out.svg = { markup: pic.svg || "", vb_w: pic.vb_w || 0, vb_h: pic.vb_h || 0 };
-      rows.push(["picture", `${p.k} of the block's ${p.doc.pictures.length} (Document.pictures)`]);
+      rows.push(["picture", `${k} of the block's ${doc.pictures.length} (Document.pictures)`]);
       if (u) rows.push(["box", `${pt(u.box.width || 0)} × ${pt(u.box.height || 0)} + ${pt(u.box.depth || 0)}`]);
       rows.push(
         ["viewBox", `${+(+pic.vb_w).toFixed(2)} × ${+(+pic.vb_h).toFixed(2)} bp`],
@@ -2141,38 +2146,38 @@
         ["in the document", u ? `${u.count} box${u.count === 1 ? "" : "es"}` : "unused"]
       );
     } else if (p.cat === "stream") {
-      const s = (p.doc.streams || [])[p.k - 1];
+      const s = (doc.streams || [])[k - 1];
       if (!s) return null;
-      const c = census(p.doc), markers = c.markers.get(p.k), parent = c.parents.get(p.k);
-      out.title = `${s.kind || "stream"} ${p.k} · ${where}`;
+      const c = census(doc), markers = c.markers.get(k), parent = c.parents.get(k);
+      out.title = `${s.kind || "stream"} ${k} · ${where}`;
       out.footnote = s.kind === "footnote";
       out.flow = parent !== void 0;
-      rows.push(["kind", s.kind || "(none)"], ["stream", `${p.k} of the block's ${p.doc.streams.length} (Document.streams)`]);
+      rows.push(["kind", s.kind || "(none)"], ["stream", `${k} of the block's ${doc.streams.length} (Document.streams)`]);
       if (markers) rows.push(["referenced by", `a marker of ${markers.count} glyph${markers.count === 1 ? "" : "s"}` + (out.footnote ? "; shown in the popover" : "")]);
-      if (parent !== void 0) rows.push(["stands", parent === 0 ? "in the block's flow" : `in stream ${parent} (${p.doc.streams[parent - 1].kind})`]);
+      if (parent !== void 0) rows.push(["stands", parent === 0 ? "in the block's flow" : `in stream ${parent} (${doc.streams[parent - 1].kind})`]);
       if (!markers && parent === void 0) rows.push(["referenced by", "nothing"]);
       for (const a of s.attrs || []) rows.push([`data-${a.key}`, a.value || ""]);
       const kinds = {};
       for (const it of s.content || []) kinds[it.kind] = (kinds[it.kind] || 0) + 1;
-      rows.push(["content", Object.entries(kinds).map(([k, v]) => `${v} ${k}${v === 1 ? "" : "s"}`).join(", ") || "empty"]);
+      rows.push(["content", Object.entries(kinds).map(([k2, v]) => `${v} ${k2}${v === 1 ? "" : "s"}`).join(", ") || "empty"]);
       if (out.footnote) {
-        const root = popoverRoot(p.bid, p.k), fc = root && rootCache(p.bid, root);
+        const root = popoverRoot(p.bid, k), fc = root && rootCache(p.bid, root);
         rows.push(["popover", fc && fc.layout ? shown(fc.dom && fc.dom.root) ? "open" : "laid out, not shown" : "not open"]);
         if (root) out.side = sideId(p.bid, root);
       }
-      out.text = s.text ? s.text : streamText(p.doc, s);
+      out.text = s.text ? s.text : streamText(doc, s);
       out.textIsCode = !!s.text;
     } else if (p.cat === "link") {
-      const l = (p.doc.links || [])[p.k - 1];
+      const l = (doc.links || [])[k - 1];
       if (!l) return null;
-      out.title = `link ${p.k} · ${where}`;
+      out.title = `link ${k} · ${where}`;
       if (l.action) rows.push(["action", l.action], ["does", "sends a reflowtex:action event; the enclosing stream kind that knows it acts"]);
       else if (l.url) rows.push(["URL", l.url]);
       else {
         const t = document.getElementById(l.label);
         rows.push(["label", l.label], ["resolves", t ? "on this page" : "through the page's link map, or not at all"]);
       }
-      const u = census(p.doc).links.get(p.k);
+      const u = census(doc).links.get(k);
       rows.push(["glyphs", String(u ? u.count : 0)]);
     } else if (p.cat === "cite") {
       const e = citeEntries()[p.num];
@@ -2184,7 +2189,7 @@
         if (e.link && e.link.href) rows.push(["link", e.link.href]);
       } else rows.push(["entry", "none in the page's #lr-citations: the popover stays inert"]);
     } else if (p.cat === "anchor") {
-      const a = (p.doc.anchors || [])[p.k - 1], u = census(p.doc).anchors.get(p.k);
+      const a = (doc.anchors || [])[k - 1], u = census(doc).anchors.get(k);
       out.title = `anchor ${a}`;
       rows.push(
         ["label", a],
@@ -2192,8 +2197,8 @@
         ["element", document.getElementById(a) ? `#${a} on this page` : "none"]
       );
     } else if (p.cat === "slot") {
-      const s = (p.doc.slots || [])[p.k - 1], u = census(p.doc).slots.get(p.k);
-      out.title = `slot ${s.name || p.k}`;
+      const s = (doc.slots || [])[k - 1], u = census(doc).slots.get(k);
+      out.title = `slot ${s.name || k}`;
       rows.push(["name", s.name || ""], ["kind", s.kind || "text"]);
       if (s.space) rows.push(["interword glue", `${pt(s.space)} plus ${pt(s.stretch || 0)} minus ${pt(s.shrink || 0)}`]);
       rows.push(["nodes", String(u ? u.count : 0)]);
@@ -2211,7 +2216,7 @@
     if (fc && fc.dom && shown(fc.dom.root)) return "ok";
     const id = uses(key).find((i) => entries.get(i).kind === "node");
     if (id == null) return "none";
-    const e = entries.get(id), { cache } = segParts(e.seg), el = cache.dom && cache.dom.byNode.get(e.n);
+    const e = nodeOf(id), { cache } = segParts(e.seg), el = cache.dom && cache.dom.byNode.get(e.n);
     const r = screenRectOf(id);
     if (!el || !el.isConnected || !r || r.top < 0 || r.top + r.height > viewBottom()) {
       scrollIntoViewIfNeeded(id);
@@ -2221,7 +2226,7 @@
     return "ok";
   }
 
-  // src/agent/colours.js
+  // src/agent/colours.ts
   function toHex(c) {
     const n = (c.match(/[\d.]+/g) || []).map(Number);
     if (n.length < 3) return c;
@@ -2331,7 +2336,7 @@
     return { theme, maps: out, edited: JSON.stringify(maps) !== JSON.stringify(originalMaps ?? maps) };
   }
 
-  // src/agent/index.js
+  // src/agent/index.ts
   window.__rtxInspectorInstall = () => {
     const AGENT = 7;
     const prev = window.__rtxInspector;
@@ -2345,7 +2350,7 @@
     }
     setInspect(I2);
     listen();
-    window.__rtxInspector = {
+    const api = {
       agent: AGENT,
       // Page-wide guides: { baselines, badness, springs, a11y }, any of them.
       setOptions(o) {
@@ -2422,6 +2427,7 @@
       exportColourMaps,
       resetColourMaps
     };
+    window.__rtxInspector = api;
     return "ok";
   };
 })();

@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { I, shown } from './context.js';
-import { blockId, entries, lineId, parGapId, partId, segId, sideId } from './ids.js';
-import { rootCache, rootsOf, segParts, segmentsOf } from './resolve.js';
-import { geometry, rectOf, toScreen } from './geometry.js';
-import { gapBefore, gapInfo, partRect } from './vspace.js';
-import { pathOf, pathOfLine } from './paths.js';
-import { redraw, state } from './overlay.js';
+import { I, shown } from './context.ts';
+import { blockId, entries, lineId, parGapId, partId, segId, sideId } from './ids.ts';
+import { rootCache, rootsOf, segParts, segmentsOf } from './resolve.ts';
+import { geometry, rectOf, toScreen } from './geometry.ts';
+import { gapBefore, gapInfo, partRect } from './vspace.ts';
+import { pathOf, pathOfLine } from './paths.ts';
+import { redraw, state } from './overlay.ts';
+import { blockOf, segOf } from './ids.ts';
+import type { ScreenRect } from './geometry.ts';
+import type { Hit } from '../protocol.ts';
+import type { TexNode } from '../../../viewer/src/engine/model.ts';
+import type { LayoutCache } from '../../../viewer/src/engine/layout/types.ts';
 
 // ── Picking ────────────────────────────────────────────────────────────────────
 // The node under a point: the smallest drawn rectangle containing it, over
 // the segments whose <svg> contains it.
-export function nodeAt(x, y) {
-    let best = null, bestArea = Infinity;
+function nodeAt(x: number, y: number): Hit | null {
+    let best: { n?: TexNode; line?: number; sid: number } | null = null, bestArea = Infinity;
     const pop = overPopover(x, y);
     for (const el of I.blocks()) {
         const br = el.getBoundingClientRect();
@@ -20,12 +25,13 @@ export function nodeAt(x, y) {
         const bid = blockId(el);
         for (const sid of segmentsOf(bid)) {
             const { s } = segParts(sid);
-            if (!shown(s.svg)) continue;
+            if (!shown(s!.svg)) continue;
+            const svg = s!.svg!;
             // The block's own text where the block is; a surface's wherever it
             // is drawn; over an open popover, only what is in it.
-            const inPop = !!s.svg.closest('#latex-footnote-pop');
-            if (pop ? !inPop : (entries.get(sid).root == null ? !inBlock : inPop)) continue;
-            const sr = s.svg.getBoundingClientRect();
+            const inPop = !!svg.closest('#latex-footnote-pop');
+            if (pop ? !inPop : (segOf(sid).root == null ? !inBlock : inPop)) continue;
+            const sr = svg.getBoundingClientRect();
             if (x < sr.left - 2 || x > sr.right + 2 || y < sr.top || y > sr.bottom) continue;
             const g = geometry(sid);
             if (!g) continue;
@@ -52,24 +58,24 @@ export function nodeAt(x, y) {
     }
     if (!best) return gapAt(x, y);
     if (best.line != null) return { id: lineId(best.sid, best.line), path: pathOfLine(best.sid, best.line) };
-    const path = pathOf(best.n, best.sid);
+    const path = pathOf(best.n!, best.sid);
     return path && { id: path[path.length - 1], path };
 }
 // Between the lines: a vertical space, and the part of it under the pointer.
-export function gapAt(x, y) {
-    const inside = r => r && x >= r.left && x <= r.left + r.width && y >= r.top - 1 && y <= r.top + Math.max(r.height, 2) + 1;
+function gapAt(x: number, y: number): Hit | null {
+    const inside = (r: ScreenRect | null) => r && x >= r.left && x <= r.left + r.width && y >= r.top - 1 && y <= r.top + Math.max(r.height, 2) + 1;
     const pop = overPopover(x, y);
     for (const el of I.blocks()) {
         const br = el.getBoundingClientRect();
         if (!pop && (x < br.left || x > br.right || y < br.top || y > br.bottom)) continue;
         const bid = blockId(el);
         for (const { gid, path } of gapsOf(bid)) {
-            if (pop !== (path.length > 1 && entries.get(path[1]).kind === 'side')) continue;
+            if (pop !== (path.length > 1 && entries.get(path[1])!.kind === 'side')) continue;
             const g = gapInfo(gid);
             if (!g || !inside(g.band)) continue;
             for (let k = 0; k < g.parts.length; k++) {
                 const pid = partId(gid, k);
-                if (inside(partRect(pid)) && partRect(pid).height >= 1) return { id: pid, path: [...path, gid, pid] };
+                if (inside(partRect(pid)) && partRect(pid)!.height >= 1) return { id: pid, path: [...path, gid, pid] };
             }
             return { id: gid, path: [...path, gid] };
         }
@@ -77,9 +83,9 @@ export function gapAt(x, y) {
     return null;
 }
 // Every vertical space of a block, with the path of rows above it.
-export function* gapsOf(bid) {
-    const el = entries.get(bid).el;
-    function* walk(cache, cachePath, path, root) {
+function* gapsOf(bid: number): Generator<{ gid: number; path: number[] }> {
+    const el = blockOf(bid).el;
+    function* walk(cache: LayoutCache | null | undefined, cachePath: number[], path: number[], root: string | null): Generator<{ gid: number; path: number[] }> {
         if (!cache || !cache.dom || !cache.layout) return;
         for (let i = 0; i < cache.layout.laid.length; i++) {
             const g = gapBefore(bid, cachePath, cache, i, root);
@@ -89,12 +95,12 @@ export function* gapsOf(bid) {
             else if (L && L.itemStarts) for (let k = 1; k < L.itemStarts.length; k++) yield { gid: parGapId(sid, k), path: [...path, sid] };
         }
     }
-    yield* walk(I.state(el).cache, [], [bid], null);
+    yield* walk(I.state(el)!.cache, [], [bid], null);
     for (const k of rootsOf(el)) yield* walk(rootCache(bid, k), [], [bid, sideId(bid, k)], k);
 }
 // Over the viewer's footnote popover, open: it floats above the text, so what
 // is under the pointer is in it.
-export function overPopover(x, y) {
+function overPopover(x: number, y: number): boolean {
     const pop = document.getElementById('latex-footnote-pop');
     if (!pop || !shown(pop)) return false;
     const r = pop.getBoundingClientRect();
@@ -102,14 +108,14 @@ export function overPopover(x, y) {
 }
 // On screen at all (not display: none, as a closed popover's body is).
 // An inspector's own UI on the page (marked data-rtx-ui) is not part of it.
-export const onUI = ev => !!(ev.target && ev.target.closest && ev.target.closest('[data-rtx-ui]'));
-export function onMove(ev) {
+const onUI = (ev: Event): boolean => !!(ev.target && (ev.target as Element).closest && (ev.target as Element).closest('[data-rtx-ui]'));
+function onMove(ev: MouseEvent) {
     if (onUI(ev)) { if (state.pickHover != null) { state.pickHover = null; redraw(); } return; }
     const hit = nodeAt(ev.clientX, ev.clientY);
     const id = hit ? hit.id : null;
     if (id !== state.pickHover) { state.pickHover = id; redraw(); }
 }
-export function onClick(ev) {
+function onClick(ev: MouseEvent) {
     if (onUI(ev)) return;
     ev.preventDefault(); ev.stopPropagation();
     const hit = nodeAt(ev.clientX, ev.clientY);
@@ -117,9 +123,9 @@ export function onClick(ev) {
     if (hit) { state.selected = hit.id; state.picked = { id: hit.id, path: hit.path, seq: (state.picked ? state.picked.seq : 0) + 1 }; }
     redraw();
 }
-export const swallow = ev => { if (onUI(ev)) return; ev.preventDefault(); ev.stopPropagation(); };
-export function onKey(ev) { if (ev.key === 'Escape') { stopPick(); redraw(); } }
-export function startPick() {
+const swallow = (ev: Event) => { if (onUI(ev)) return; ev.preventDefault(); ev.stopPropagation(); };
+function onKey(ev: KeyboardEvent) { if (ev.key === 'Escape') { stopPick(); redraw(); } }
+export function startPick(): void {
     if (state.picking) return;
     state.picking = true;
     addEventListener('mousemove', onMove, true);
@@ -129,7 +135,7 @@ export function startPick() {
     addEventListener('keydown', onKey, true);
     document.documentElement.style.cursor = 'crosshair';
 }
-export function stopPick() {
+export function stopPick(): void {
     state.picking = false; state.pickHover = null;
     removeEventListener('mousemove', onMove, true);
     removeEventListener('click', onClick, true);
@@ -140,36 +146,36 @@ export function stopPick() {
 }
 
 // An element (the Elements panel's $0) → the node it draws.
-export function fromElement(el) {
+export function fromElement(el: Element | null): Hit | null {
     if (!el || !el.closest) return null;
-    const block = el.closest('[data-nodelist-b64], [data-latex-view]');
+    const block = el.closest<HTMLElement>('[data-nodelist-b64], [data-latex-view]');
     if (!block || !I.state(block)) return null;
     const bid = blockId(block);
     for (const sid of segmentsOf(bid)) {
         const { cache } = segParts(sid);
         const g = geometry(sid);
-        if (!g || !cache.dom) continue;
-        for (let e = el; e && e !== block; e = e.parentNode) {
-            for (const [n, drawn] of cache.dom.byNode) {
+        if (!g || !cache!.dom) continue;
+        for (let e: Node | null = el; e && e !== block; e = e.parentNode) {
+            for (const [n, drawn] of cache!.dom.byNode) {
                 if (drawn === e && g.at.has(n)) {
                     const path = pathOf(n, sid);
-                    if (path) { state.selected = path[path.length - 1]; redraw(); return { id: state.selected, path }; }
+                    if (path) { state.selected = path[path.length - 1]; redraw(); return { id: state.selected!, path }; }
                 }
             }
         }
     }
     return null;
 }
-export function elementOf(id) {
+export function elementOf(id: number): Element | null | undefined {
     const e = entries.get(id);
     if (!e) return null;
     if (e.kind === 'block') return e.el;
     if (e.kind === 'seg') { const { s } = segParts(id); return s && (s.svg || s.box); }
     if (e.kind === 'side') { const c = rootCache(e.block, e.root); return c && c.dom && c.dom.root; }
-    const sid = e.seg;
+    const sid = (e as { seg: number }).seg;
     const { cache, s } = segParts(sid);
     if (e.kind === 'node') {
-        const direct = cache.dom.byNode.get(e.n);
+        const direct = cache!.dom!.byNode.get(e.n);
         if (direct) return direct;
     }
     return s && s.svg;

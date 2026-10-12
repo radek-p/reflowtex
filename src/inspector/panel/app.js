@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex inspector – GENERATED from src/inspector/src/panel/app.js by esbuild (make build-inspector); sources sha256 b30f95facc87229bc842a9308d355dd27aedb7d8d243cf0bee13c268415c7181
+// reflowtex inspector – GENERATED from src/inspector/src/panel/app.js by esbuild (make build-inspector); sources sha256 0cced8ab9ca76e945218ca562d7af8644e4615b09398231c61361ef972204c17
 import { html, render, useLayoutEffect, useRef, useState, Fragment } from "../vendor/preact.js";
 import { call, got, useAsset, assetUrl, pageWindow, setPageWindow } from "./bridge.js";
 import { isOpen, view, dark, guides, picking, blocks, noViewer, flash, menu, refs, keep, plain, say, SHORTCUT } from "./store.js";
