@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // define / defineInline: a kind drawn by a Preact component, through the
 // viewer's one registry (host.define, types.ts KindDef).
-import { Component, render, type ComponentType } from 'preact';
+import { Component, render, type ComponentChildren, type ComponentType } from 'preact';
 import { InstanceContext } from './context.ts';
 import { onHost, type AnyHost, type BlockHost, type InlineEnv, type InlineMetrics, type Instance, type NoteHost, type PieceHost } from './host.ts';
 import { Typeset } from './typeset.tsx';
@@ -24,7 +24,7 @@ export interface BlockOptions {
 }
 
 // A component that throws draws its instance plainly instead: the body.
-class Boundary extends Component<{ kind: string; plain: boolean; children: any }, { failed: boolean }> {
+class Boundary extends Component<{ kind: string; plain: boolean; children: ComponentChildren }, { failed: boolean }> {
     state = { failed: false };
     componentDidCatch(error: unknown) {
         console.error(`[reflowtex/companion] kind "${this.props.kind}" failed, drawn plainly:`, error);
@@ -47,7 +47,7 @@ function autoFrame(host: BlockHost): () => void {
     return () => ro.disconnect();
 }
 
-function mount(kind: string, instance: Instance, host: AnyHost, view: any, plain: boolean) {
+function mount(kind: string, instance: Instance, host: AnyHost, view: ComponentChildren, plain: boolean) {
     render(
         <InstanceContext.Provider value={{ instance, host }}>
             <Boundary kind={kind} plain={plain}>{view}</Boundary>
