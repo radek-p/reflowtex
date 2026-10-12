@@ -4,7 +4,7 @@
 // bands of its marks and of the selection.
 
 import { useGlyphMetrics } from './core.ts';
-import { renderNodes } from './render.js';
+import { renderNodes } from './render.ts';
 import { reconcileSink, svgEl } from './sink.js';
 import { updateDisplayOverflowCue } from './layout/display.js';
 import { materializeSegment } from './layout/document.js';

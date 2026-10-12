@@ -5,7 +5,7 @@ import { ZOOM, useGlyphMetrics } from '../core.ts';
 import {
     displaySkipAdjust, layoutDisplaySegment, preDisplaySizeSp, updateDisplayOverflowCue,
 } from './display.js';
-import { lineProfile, minRequiredAdvance, texInterlineAdvance, texInterlineGlue } from './lines.js';
+import { lineProfile, minRequiredAdvance, texInterlineAdvance, texInterlineGlue } from './lines.ts';
 import { layoutStreamSegment } from './stream.js';
 import { keptHostBox } from '../../host/block-hosts.ts';
 import { blockKeyOf } from '../../host/host.ts';

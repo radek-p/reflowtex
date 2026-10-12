@@ -4,9 +4,9 @@
 import {
     RUNNING_RULE, SP_TO_PX, ZOOM, gD, gH, gW, glyphExpandScale, kernExpandScale, nodeWidthSp,
 } from '../core.ts';
-import { texInterlineGlue } from './lines.js';
+import { texInterlineGlue } from './lines.ts';
 import { HL_ALIGNMENT, HL_EQUATION } from './text.js';
-import { affineMul, affineOf, renderNodes } from '../render.js';
+import { affineMul, affineOf, renderNodes } from '../render.ts';
 // ── end of imports
 
 // Where a box's ink ends, used only to size its horizontal scroll area.

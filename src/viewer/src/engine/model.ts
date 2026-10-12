@@ -79,6 +79,8 @@ export interface NodeFields extends Rates, Floors {
     affineSource?: TexNode;
     /** A word of live text (host/slots): its text, instead of a character. */
     text?: string;
+    /** Leader glue: the copies of its box drawn last (engine/render). */
+    _leaderCopies?: TexNode[];
 }
 
 export interface GlyphNode extends NodeFields {

@@ -4,7 +4,40 @@
 import {
     BREAK_NODES, breakKind, LEFT_PROTRUSION, RIGHT_PROTRUSION, expandableSp, gW, nodeWidthSp, sumWidthSp,
 } from './core.ts';
+import type { Expansion, FontTable, Paragraph, TexNode, ViewerFont } from './model.ts';
+import type { Line } from './layout/types.ts';
+import type { Params } from '../runtime/params.ts';
 // ── end of imports
+
+/** The widths of a node list, or of one of a discretionary's three: natural
+ *  (w), expandable (g), and TeX's font stretch and shrink (fs, fz), sp. */
+export interface Widths { w: number; g: number; fs: number; fz: number }
+/** A place a line may end (buildBreakCandidates). */
+export interface BreakCandidate {
+    kind: 'start' | 'end' | 'space' | 'disc' | 'penalty';
+    nodeIdx: number;
+    penalty: number;
+    pre: Widths; post: Widths; replace: Widths;
+    leadW: number; leadS: number; leadZ: number;
+    trailW: number; trailN: number;
+    cumW: number; cumS: number; cumZ: number; cumGlyphW: number; cumFS: number; cumFZ: number; cumFill: number;
+    rightProtrusion: number;
+    leftProtrusion: number;
+    /** The end: the last line's right protrusion, counted when it is packed. */
+    packRightProtrusion?: number;
+    /** A discretionary that was in the source (\\discretionary, \\-, a hyphen). */
+    explicit?: boolean;
+    /** A widget's split: its own two parts. */
+    preNodes?: TexNode[];
+    postNodes?: TexNode[];
+}
+/** A paragraph's candidates, and its expansion limits when it expands. */
+export type BreakCandidates = BreakCandidate[] & { expansion?: Expansion | null; adjustSpacing?: number };
+/** A line's measures between two candidates (lineMetrics). */
+export interface LineMetrics { w: number; s: number; z: number; g: number; fs: number; fz: number }
+/** One chosen break: its candidate, fitness class and total demerits. */
+export interface Break { bcIdx: number; fc: number; demerits: number }
+interface Active { demerits: number; prev_j: number; prev_fc: number; hyphenated: boolean; overfull?: boolean }
 
 // ── Protrusion ────────────────────────────────────────────────────────────────
 
@@ -12,7 +45,7 @@ import {
 // (cp_skipable): penalties, empty glue, a font kern or an empty one, a math
 // node without surround, an empty discretionary. An italic correction or an
 // explicit kern stops the search, so the character before it does not hang.
-export function protSkipable(n) {
+export function protSkipable(n: TexNode): boolean {
     switch (n.type) {
         case 'penalty': case 'local_par': return true;
         case 'glue':    return !n.width && !n.stretch && !n.shrink;
@@ -26,7 +59,7 @@ export function protSkipable(n) {
 // find_protchar_right finds it: stepping back over what protSkipable allows,
 // into a box to its last character, and over a box with nothing in it but
 // such things (an anchor, an empty \hbox).
-export function findLastGlyph(nodes, idx) {
+export function findLastGlyph(nodes: TexNode[], idx: number): TexNode | null {
     for (let k=idx-1;k>=0;k--) {
         const n=nodes[k];
         if (protSkipable(n)) continue;
@@ -43,21 +76,21 @@ export function findLastGlyph(nodes, idx) {
 // finds it: past empty boxes, then over what protSkipable allows, into a box
 // to its first character – but a box with nothing to protrude ends the
 // search there.
-export function findFirstGlyph(nodes, idx) {
+export function findFirstGlyph(nodes: TexNode[], idx: number): TexNode | null {
     let k=idx;
-    const emptyBox = n => n.type==='hlist' && !(n.children||[]).length && !n.width && !n.height && !n.depth;
+    const emptyBox = (n: TexNode) => n.type==='hlist' && !(n.children||[]).length && !n.width && !n.height && !n.depth;
     while (k<nodes.length-1 && emptyBox(nodes[k])) k++;
     for (;k<nodes.length;k++) {
         const n=nodes[k];
         if (protSkipable(n)) continue;
-        if (n.type==='hlist' && (n.children||[]).length) return findFirstGlyph(n.children, 0);
+        if (n.type==='hlist' && (n.children||[]).length) return findFirstGlyph(n.children!, 0);
         return n.type==='glyph'?n:null;
     }
     return null;
 }
 
 // TeX's round_xn_over_d: x·n/d rounded half away from zero, in integers.
-export function roundXnOverD(x, n, d) {
+export function roundXnOverD(x: number, n: number, d: number): number {
     const s = x < 0 ? -1 : 1;
     return s * Math.floor((Math.abs(x) * n + Math.floor(d / 2)) / d);
 }
@@ -74,19 +107,20 @@ export function roundXnOverD(x, n, d) {
 // of characters of the same font, and protruded the first or the last of
 // them: so its codes are those of its first character at a line's start and
 // of its last at a line's end ("[Gaj+20," hangs by the comma's \rpcode).
-export function edgeChar(g, left) {
+export function edgeChar(g: TexNode, left: boolean): number | undefined {
     if (g.text === undefined) return g.char;
     // (a word joiner or U+FEFF at its edge has no width: past it)
     const cps = [...String(g.text).replace(/^[\u2060\uFEFF]+|[\u2060\uFEFF]+$/g, '')];
     const c = left ? cps[0] : cps[cps.length - 1];
     return c === undefined ? undefined : c.codePointAt(0);
 }
-export function protrusionOf(fontInfo, para, g, left) {
+export function protrusionOf(fontInfo: FontTable | null | undefined, para: Partial<Paragraph> | null | undefined,
+                             g: TexNode | null, left: boolean): number {
     if (!g) return 0;
     const fi = fontInfo && fontInfo[String(g.font)];
     const ch = edgeChar(g, left);
     if (fi && fi.quad > 0) {
-        if (!(para && para.protrude_chars > 0)) return 0;
+        if (!(para && (para.protrude_chars ?? 0) > 0)) return 0;
         const c = fi.codes && fi.codes.get(ch);
         const code = c ? (left ? c.lp : c.rp) || 0 : 0;
         return code ? roundXnOverD(fi.quad, code, 1000) : 0;
@@ -94,7 +128,7 @@ export function protrusionOf(fontInfo, para, g, left) {
     // (the fallback is a share of the character's own width, which a word
     // of live text does not record: it protrudes nothing there)
     if (g.text !== undefined) return 0;
-    return ((left ? LEFT_PROTRUSION : RIGHT_PROTRUSION)[ch] || 0) * gW(g);
+    return ((left ? LEFT_PROTRUSION : RIGHT_PROTRUSION)[ch!] || 0) * gW(g);
 }
 
 // ── Font expansion in the breaker ────────────────────────────────────────────
@@ -102,15 +136,15 @@ export function protrusionOf(fontInfo, para, g, left) {
 // LuaTeX's char_stretch/char_shrink and kern_stretch/kern_shrink: how much a
 // glyph, or a font kern between two glyphs, widens (shrink: narrows) at its
 // font's full \expandglyphsinfont limit, in sp, with TeX's rounding.
-export function efCodeOf(fi, n) {
+export function efCodeOf(fi: ViewerFont | null | undefined, n: TexNode): number {
     const c = fi && fi.codes && fi.codes.get(n.char);
     return c && c.ef !== undefined ? c.ef : 1000;
 }
-export function expandLimit(fontInfo, n, shrink) {
+export function expandLimit(fontInfo: FontTable | null | undefined, n: TexNode, shrink: boolean): number {
     const fi = fontInfo && fontInfo[String(n.font)];
     return fi && fi.expand ? (shrink ? fi.expand.shrink : fi.expand.stretch) || 0 : 0;
 }
-export function fontStretchSp(fontInfo, ns, i, shrink) {
+export function fontStretchSp(fontInfo: FontTable, ns: TexNode[], i: number, shrink: boolean): number {
     const n = ns[i];
     if (n.type === 'glyph') {
         const m = expandLimit(fontInfo, n, shrink);
@@ -136,8 +170,8 @@ export function fontStretchSp(fontInfo, ns, i, shrink) {
 
 // \expandglyphsinfont's limits and step for a paragraph (LuaTeX insists they
 // are the same for every font in it), or null when nothing in it expands.
-export function paragraphExpansion(fontInfo, nodes) {
-    const walk = ns => {
+export function paragraphExpansion(fontInfo: FontTable, nodes: TexNode[]): Expansion | null {
+    const walk = (ns: TexNode[] | undefined): Expansion | null => {
         for (const n of ns || []) {
             if (n.type === 'glyph') {
                 const fi = fontInfo && fontInfo[String(n.font)];
@@ -156,7 +190,7 @@ export function paragraphExpansion(fontInfo, nodes) {
 
 // Nodes after which glue is a legal breakpoint (TeX's precedes_break, plus
 // the viewer's own drawn-box kinds).
-export const PRECEDES_BREAK = new Set(['glyph', 'hlist', 'vlist', 'rule', 'disc', 'wdisc', 'picture', 'widget', 'transform']);
+export const PRECEDES_BREAK = new Set<string>(['glyph', 'hlist', 'vlist', 'rule', 'disc', 'wdisc', 'picture', 'widget', 'transform']);
 
 // Every candidate carries the running totals up to its node: natural width
 // (cumW), finite stretch and shrink (cumS, cumZ), infinite fills (cumFill),
@@ -167,22 +201,22 @@ export const PRECEDES_BREAK = new Set(['glyph', 'hlist', 'vlist', 'rule', 'disc'
 // at the start of the next line, `trail*` what it drops from the end of this
 // one (TeX breaks *at* an explicit kern or a math node before glue, so they
 // leave with the glue).
-export function buildBreakCandidates(nodes, fontInfo, para) {
+export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para?: Partial<Paragraph> | null): BreakCandidates {
     para = para || {};
     const adjust = para.adjust_spacing || 0;
-    const fsOf = (ns, i, shrink) => adjust > 0 ? fontStretchSp(fontInfo, ns, i, shrink) : 0;
-    const part = ns => {
+    const fsOf = (ns: TexNode[], i: number, shrink: boolean) => adjust > 0 ? fontStretchSp(fontInfo, ns, i, shrink) : 0;
+    const part = (ns: TexNode[] | undefined): Widths => {
         const r = { w: 0, g: 0, fs: 0, fz: 0 };
         for (let i = 0; i < (ns || []).length; i++) {
-            r.w += nodeWidthSp(ns[i]); r.g += expandableSp(fontInfo, ns, i);
-            r.fs += fsOf(ns, i, false); r.fz += fsOf(ns, i, true);
+            r.w += nodeWidthSp(ns![i]); r.g += expandableSp(fontInfo, ns!, i);
+            r.fs += fsOf(ns!, i, false); r.fz += fsOf(ns!, i, true);
         }
         return r;
     };
-    const prot = (g, left) => protrusionOf(fontInfo, para, g, left);
-    const NONE = { w: 0, g: 0, fs: 0, fz: 0 };
+    const prot = (g: TexNode | null, left: boolean) => protrusionOf(fontInfo, para, g, left);
+    const NONE: Widths = { w: 0, g: 0, fs: 0, fz: 0 };
     let cumW=0, cumS=0, cumZ=0, cumGlyphW=0, cumFS=0, cumFZ=0, cumFill=0;
-    const cand = (kind, i, penalty, extra) => ({
+    const cand = (kind: BreakCandidate['kind'], i: number, penalty: number, extra?: Partial<BreakCandidate>): BreakCandidate => ({
         kind, nodeIdx: i, penalty, pre: NONE, post: NONE, replace: NONE,
         leadW: 0, leadS: 0, leadZ: 0, trailW: 0, trailN: 0,
         cumW, cumS, cumZ, cumGlyphW, cumFS, cumFZ, cumFill,
@@ -190,7 +224,7 @@ export function buildBreakCandidates(nodes, fontInfo, para) {
     });
     // What a break at node i discards after itself: glue, kerns and penalties
     // up to the next thing that is kept.
-    const lead = from => {
+    const lead = (from: number) => {
         let W = 0, S = 0, Z = 0, k = from;
         for (; k < nodes.length; k++) {
             const m = nodes[k];
@@ -200,7 +234,7 @@ export function buildBreakCandidates(nodes, fontInfo, para) {
         }
         return { leadW: W, leadS: S, leadZ: Z, leftProtrusion: prot(findFirstGlyph(nodes, k), true) };
     };
-    const bcs = [cand('start', -1, 0, { leftProtrusion: prot(findFirstGlyph(nodes, 0), true) })];
+    const bcs: BreakCandidates = [cand('start', -1, 0, { leftProtrusion: prot(findFirstGlyph(nodes, 0), true) })];
     bcs.expansion = adjust > 0 ? paragraphExpansion(fontInfo, nodes) : null;
     bcs.adjustSpacing = bcs.expansion ? adjust : 0;
     let inMath = false;
@@ -228,7 +262,7 @@ export function buildBreakCandidates(nodes, fontInfo, para) {
         // that contains it as "filled" (cumFill), so its slack is absorbed there
         // rather than justified, exactly like a last line. Treating the first such
         // fill as the end would silently drop everything after a \\.
-        if (n.type==='glue' && n.stretch_order>0) {
+        if (n.type==='glue' && (n.stretch_order ?? 0)>0) {
             cumW+=n.width; cumFill+=1;
             continue;
         }
@@ -286,12 +320,12 @@ export function buildBreakCandidates(nodes, fontInfo, para) {
 // (w, less the protrusion at both ends), finite glue stretch and shrink
 // (s, z), font stretch and shrink (fs, fz) and the expandable width the
 // renderer's expansion factor acts on (g).
-export function lineMetrics(a, b, p) {
+export function lineMetrics(a: BreakCandidate, b: BreakCandidate, p: Params): LineMetrics {
     const protrude = p.useProtrusion ? a.leftProtrusion + b.rightProtrusion : 0;
     // Where the line starts (after the break at a, less what that break
     // discards) and ends (at b, with a discretionary's pre-break text).
-    const from = (key, lead) => a[key] + (a.kind==='disc' ? a.replace[lead] - a.post[lead] : 0);
-    const upto = (key, part) => b[key] + (b.kind==='disc' ? b.pre[part] : 0);
+    const from = (key: 'cumW' | 'cumGlyphW' | 'cumFS' | 'cumFZ', lead: keyof Widths) => a[key] + (a.kind==='disc' ? a.replace[lead] - a.post[lead] : 0);
+    const upto = (key: 'cumW' | 'cumGlyphW' | 'cumFS' | 'cumFZ', part: keyof Widths) => b[key] + (b.kind==='disc' ? b.pre[part] : 0);
     const on = p.useExpansion !== false;
     return {
         w:  upto('cumW', 'w') - b.trailW - from('cumW', 'w') - a.leadW - protrude,
@@ -310,7 +344,7 @@ export function lineMetrics(a, b, p) {
 // line be perfect. In that pass lines are therefore weighed by their real,
 // uncapped looseness, so a slightly loose line always beats a nearly empty one.
 // (TeX avoids the same flatness in practice with \emergencystretch.)
-export function rawBadness(shortage, total) {
+export function rawBadness(shortage: number, total: number): number {
     if (shortage === 0) return 0;
     if (total <= 0) return 1e7;
     const r = shortage / total;
@@ -320,7 +354,7 @@ export function rawBadness(shortage, total) {
 // TeX's badness, in its own integer arithmetic (§108): about 100·(t/s)³, but
 // the rounding decides where a line crosses the 12 and 99 of the fitness
 // classes and the tolerances, so it has to be TeX's.
-export function badness(t, s) {
+export function badness(t: number, s: number): number {
     t = Math.round(t); s = Math.round(s);
     if (t <= 0) return 0;
     if (s <= 0) return 10000;
@@ -337,7 +371,7 @@ export function badness(t, s) {
 // is weighed against the glue. LuaTeX's shrinking branch comes out with the
 // sign flipped – a line its glyphs can narrow enough counts as a hair short –
 // and so does this one.
-export function expansionShortfall(shortfall, m, ex) {
+export function expansionShortfall(shortfall: number, m: LineMetrics, ex: Expansion | null | undefined): number {
     if (!ex || shortfall === 0) return shortfall;
     if (shortfall > 0 && m.fs > 0)
         return m.fs > shortfall ? Math.trunc(Math.trunc(m.fs / Math.max(1, Math.trunc(ex.stretch / ex.step))) / 2)
@@ -355,14 +389,15 @@ export function expansionShortfall(shortfall, m, ex) {
 // dies with nothing feasible found yet, its overfull line is taken anyway at
 // no cost (artificial demerits), so the pass always ends with a paragraph –
 // as a PDF shows it, a line sticking out rather than a very loose one.
-export function kpPass(bcs, lineWidthSp, threshold, firstPass, p, final) {
+export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: number, firstPass: boolean, p: Params, final?: boolean):
+        { breaks: Break[] | null; minRejectedBadness: number | null; overfull?: boolean } {
     const N=bcs.length;
-    const dp=Array.from({length:N},()=>[null,null,null,null]);
+    const dp=Array.from({length:N},(): (Active | null)[]=>[null,null,null,null]);
     const alive=final ? dp.map(()=>[true,true,true,true]) : null;
     dp[0][2]={demerits:0,prev_j:-1,prev_fc:-1,hyphenated:false};
-    let minRejectedBadness=null;
+    let minRejectedBadness: number | null=null;
     // Font expansion enters the breaker only under \adjustspacing=2.
-    const ex = bcs.adjustSpacing > 1 ? bcs.expansion : null;
+    const ex = (bcs.adjustSpacing ?? 0) > 1 ? bcs.expansion : null;
 
     // A forced break (penalty <= -10000, e.g. from \\) is mandatory: no line may
     // span across it. lastForced[j] is the candidate index of the nearest forced
@@ -380,9 +415,9 @@ export function kpPass(bcs, lineWidthSp, threshold, firstPass, p, final) {
         const isEnd = bcJ.kind==='end';
         let feasibleAtJ = false;
         // Is (i, fc) the only start still in play for a line ending at j?
-        const onlyStart = (i, fc) => {
+        const onlyStart = (i: number, fc: number) => {
             for (let k=Math.max(0,lastForced[j]);k<j;k++) for (let f=0;f<4;f++)
-                if (dp[k][f] && alive[k][f] && !(k===i && f===fc)) return false;
+                if (dp[k][f] && alive![k][f] && !(k===i && f===fc)) return false;
             return true;
         };
         for (let i=0;i<j;i++) {
@@ -390,10 +425,10 @@ export function kpPass(bcs, lineWidthSp, threshold, firstPass, p, final) {
             // Two candidates at one node (a widget's alternative splits) are
             // one place: a line may not start and end there.
             if (bcs[i].nodeIdx===bcJ.nodeIdx) continue;
-            let m=null;
+            let m: LineMetrics | null=null;
             for (let fc_i=0;fc_i<4;fc_i++) {
                 const si=dp[i][fc_i]; if(!si) continue;
-                if (final && !alive[i][fc_i]) continue;
+                if (final && !alive![i][fc_i]) continue;
                 if (!m) m=lineMetrics(bcs[i],bcJ,p);
                 // A line carrying an infinite-order fill (\hfil from \\, \hfill,
                 // the \parfillskip of the last line) absorbs positive slack
@@ -404,22 +439,22 @@ export function kpPass(bcs, lineWidthSp, threshold, firstPass, p, final) {
                 // the fewest lines, hyphenating only when it must.
                 const hasFill = isEnd || p.ragged || bcJ.cumFill>bcs[i].cumFill;
                 const shortfall = expansionShortfall(lineWidthSp-m.w, m, ex);
-                let b, fc_j;
+                let b: number, fc_j: number;
                 if (shortfall>0) {
                     if (hasFill) { b=0; fc_j=2; }
                     else { b=badness(shortfall,m.s); fc_j=b>99?0:b>12?1:2; }
                 } else if (shortfall<0) {
                     if (-shortfall>m.z) {                         // overfull
                         if (final) {
-                            alive[i][fc_i] = false;
-                            if (!feasibleAtJ && onlyStart(i, fc_i) && (!dp[j][3] || si.demerits<=dp[j][3].demerits))
+                            alive![i][fc_i] = false;
+                            if (!feasibleAtJ && onlyStart(i, fc_i) && (!dp[j][3] || si.demerits<=dp[j][3]!.demerits))
                                 dp[j][3]={demerits:si.demerits,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc',overfull:true};
                         }
                         continue;
                     }
                     b=badness(-shortfall,m.z); fc_j=b>12?3:2;
                 } else { b=0; fc_j=2; }
-                if (b>threshold) { if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b; continue; }
+                if (b!>threshold) { if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b; continue; }
                 feasibleAtJ = true;
                 const emergency = threshold>=10000;
                 const bd = emergency&&!(hasFill&&shortfall>=0) ? rawBadness(Math.abs(shortfall),shortfall>=0?m.s:m.z) : b;
@@ -437,16 +472,16 @@ export function kpPass(bcs, lineWidthSp, threshold, firstPass, p, final) {
                 const td=si.demerits+d;
                 // Ties go to the later start, as in TeX (`d <= minimal_demerits`,
                 // scanning the active list in order): the earlier lines longer.
-                if(!dp[j][fc_j]||td<=dp[j][fc_j].demerits) dp[j][fc_j]={demerits:td,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc'};
+                if(!dp[j][fc_j]||td<=dp[j][fc_j]!.demerits) dp[j][fc_j]={demerits:td,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc'};
             }
         }
     }
     const endIdx=N-1; if(bcs[endIdx].kind!=='end') return {breaks:null,minRejectedBadness};
     let bestFc=-1, bestD=Infinity;
-    for(let fc=0;fc<4;fc++) if(dp[endIdx][fc]&&dp[endIdx][fc].demerits<bestD){bestD=dp[endIdx][fc].demerits;bestFc=fc;}
+    for(let fc=0;fc<4;fc++) if(dp[endIdx][fc]&&dp[endIdx][fc]!.demerits<bestD){bestD=dp[endIdx][fc]!.demerits;bestFc=fc;}
     if(bestFc===-1) return {breaks:null,minRejectedBadness};
-    const breaks=[]; let j=endIdx,fc=bestFc,overfull=false;
-    while(j>0){breaks.push({bcIdx:j,fc,demerits:dp[j][fc].demerits});if(dp[j][fc].overfull)overfull=true;const pj=dp[j][fc].prev_j,pfc=dp[j][fc].prev_fc;j=pj;fc=pfc;}
+    const breaks: Break[]=[]; let j=endIdx,fc=bestFc,overfull=false;
+    while(j>0){const a=dp[j][fc]!;breaks.push({bcIdx:j,fc,demerits:a.demerits});if(a.overfull)overfull=true;const pj=a.prev_j,pfc=a.prev_fc;j=pj;fc=pfc;}
     // overfull: the final pass set a line it could not shrink to fit
     breaks.reverse(); return {breaks,minRejectedBadness,overfull};
 }
@@ -457,7 +492,8 @@ export function kpPass(bcs, lineWidthSp, threshold, firstPass, p, final) {
 // filled line (fil glue, a last line with room) neither expands nor stretches.
 // Returns the glue ratio and the line's expansion (a fraction; the renderer
 // widens each glyph by it, times the glyph's \efcode).
-export function packLine(bcs, a, b, lineWidthSp, p, hasFill) {
+export function packLine(bcs: BreakCandidates, a: BreakCandidate, b: BreakCandidate, lineWidthSp: number, p: Params, hasFill: boolean):
+        { ratio: number; expand: number } {
     const m = lineMetrics(a, b, p);
     const x = lineWidthSp - m.w + (p.useProtrusion ? b.packRightProtrusion || 0 : 0);
     if (x === 0 || (hasFill && x > 0)) return { ratio: 0, expand: 0 };
@@ -482,10 +518,10 @@ export function packLine(bcs, a, b, lineWidthSp, p, hasFill) {
     return { ratio, expand };
 }
 
-export function extractLineNodes(startBC, endBC, nodes) {
-    const result=[]; let from;
+export function extractLineNodes(startBC: BreakCandidate, endBC: BreakCandidate, nodes: TexNode[]): TexNode[] {
+    const result: TexNode[]=[]; let from: number;
     if(startBC.kind==='start'){from=0;}
-    else{if(startBC.kind==='disc') for(const pn of (startBC.postNodes||nodes[startBC.nodeIdx].post)) result.push(pn); from=startBC.nodeIdx+1;}
+    else{if(startBC.kind==='disc') for(const pn of (startBC.postNodes||nodes[startBC.nodeIdx].post!)) result.push(pn); from=startBC.nodeIdx+1;}
     // Glue, kerns and penalties are discarded at a line break, but only at a
     // *break*: at the very start of a paragraph they are real content.
     // \subparagraph* and friends make this visible – \@xsect drops the usual
@@ -496,12 +532,12 @@ export function extractLineNodes(startBC, endBC, nodes) {
     const to=endBC.nodeIdx-(endBC.trailN||0);
     for(let i=from;i<to;i++) if(nodes[i].type!=='local_par') result.push(nodes[i]);
     if(endBC.kind==='disc') { const kind = breakKind(nodes[endBC.nodeIdx]);
-        for(const pn of (endBC.preNodes||nodes[endBC.nodeIdx].pre)) { BREAK_NODES.set(pn, kind); result.push(pn); } }
+        for(const pn of (endBC.preNodes||nodes[endBC.nodeIdx].pre!)) { BREAK_NODES.set(pn, kind); result.push(pn); } }
     return result;
 }
 
-export function greedyFallback(bcs, nodes, lineWidthSp, p) {
-    const breaks=[]; let s=0;
+export function greedyFallback(bcs: BreakCandidates, nodes: TexNode[], lineWidthSp: number, p: Params): Break[] {
+    const breaks: Break[]=[]; let s=0;
     for(let j=1;j<bcs.length;j++){
         const {w}=lineMetrics(bcs[s],bcs[j],p);
         if(bcs[j].kind==='end'){breaks.push({bcIdx:j,fc:2,demerits:0});break;}
@@ -510,8 +546,8 @@ export function greedyFallback(bcs, nodes, lineWidthSp, p) {
     return breaks;
 }
 
-export function kpBreak(bcs, nodes, lineWidthSp, p) {
-    let breaks=null;
+export function kpBreak(bcs: BreakCandidates, nodes: TexNode[], lineWidthSp: number, p: Params): Line[] {
+    let breaks: Break[] | null=null;
     if (p.pretolerance >= 0)
         breaks = kpPass(bcs,lineWidthSp,p.pretolerance,true,p).breaks;
     // TeX's second pass is its final one (\emergencystretch=0): when nothing
@@ -523,7 +559,7 @@ export function kpBreak(bcs, nodes, lineWidthSp, p) {
     // breaks only if those find nothing either (a word wider than the
     // measure). data-tex-final-pass="strict" keeps TeX's breaks always, as a
     // replay against TeX needs; "false" skips the final pass altogether.
-    let texBreaks=null;
+    let texBreaks: Break[] | null=null;
     if(!breaks) {
         const r = kpPass(bcs,lineWidthSp,p.tolerance,false,p,!!p.texFinalPass);
         if (!r.overfull || p.texFinalPass === 'strict') breaks = r.breaks;
@@ -533,7 +569,7 @@ export function kpBreak(bcs, nodes, lineWidthSp, p) {
     if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.emergencyTolerance,false,p).breaks;
     if(!breaks) breaks = texBreaks;
     if(!breaks) breaks = greedyFallback(bcs,nodes,lineWidthSp,p);
-    const lines=[];
+    const lines: Line[]=[];
     for(let k=0;k<breaks.length;k++){
         const startBC=k===0?bcs[0]:bcs[breaks[k-1].bcIdx], endBC=bcs[breaks[k].bcIdx];
         const hasFill = endBC.kind==='end' || p.ragged || endBC.cumFill>startBC.cumFill;

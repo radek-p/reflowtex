@@ -7,6 +7,34 @@
 import {
     RUNNING_RULE, SP_TO_PX, gW, glyphExpandScale, hlistGlueRatio, kernExpandScale, setGlue, vlistGlueRatio,
 } from './core.ts';
+import type {
+    BoxNode, FontTable, GlueNode, GlyphNode, PictureNode, RuleNode, TexNode, TransformNode, ViewerFont, WidgetNode,
+} from './model.ts';
+
+/** What renderNodes hands each thing it meets, at its pen position (px; y
+ *  the baseline, or a rule's top). The optional calls are for sinks that
+ *  want them: a widget, a \webaside's mark, the gaps the affine model
+ *  sizes, and every node with its advance (an inspection's replay). */
+export interface Sink {
+    beginTransform(n: TransformNode, tf: SvgMatrix): void;
+    endTransform(): void;
+    glyph(n: GlyphNode, x: number, y: number, fi: ViewerFont | undefined): void;
+    /** An interword space (glue of subtype 13). */
+    space(n: GlueNode, x: number, y: number): void;
+    rule(n: RuleNode, x: number, y: number, w: number, h: number): void;
+    picture(n: PictureNode, x: number, y: number): void;
+    widget?(n: WidgetNode, x: number, y: number): void;
+    aside?(n: BoxNode, x: number, y: number): void;
+    gap?(n: TexNode, field: 'width' | 'kern' | 'surround', x: number, w: number): void;
+    node?(n: TexNode, x: number, y: number, advance: number): void;
+    /** A vertical list's item: its top and advance. */
+    vnode?(n: TexNode, x: number, y: number, advance: number): void;
+}
+
+/** A transform's matrix as SVG takes it, about the point (x, y). */
+export interface SvgMatrix { a: number; b: number; c: number; d: number; x: number; y: number }
+/** An affine map (a, b, c, d, e, f): x' = a·x + c·y + e, y' = b·x + d·y + f. */
+export type Affine = [number, number, number, number, number, number];
 
 // ── Transforms ────────────────────────────────────────────────────────────────
 // A `transform` node (\rotatebox and friends) carries a PDF matrix applied
@@ -19,20 +47,20 @@ import {
 //     mirrored – 90° turns the wrong way.
 //   * The matrix acts about the reference point, not the origin, so it is
 //     wrapped in translate(±ref).
-export function svgMatrixOf(n, x, y) {
+export function svgMatrixOf(n: TexNode, x: number, y: number): SvgMatrix {
     return { a: n.m_a ?? 1, b: -(n.m_b ?? 0), c: -(n.m_c ?? 0), d: n.m_d ?? 1, x, y };
 }
 
 // The affine (a,b,c,d,e,f) of a transform about its reference point, in the
 // order SVG's matrix() takes: x' = a·x + c·y + e, y' = b·x + d·y + f.
-export function affineOf(t) {
+export function affineOf(t: SvgMatrix): Affine {
     return [t.a, t.b, t.c, t.d,
             t.x - (t.a * t.x + t.c * t.y),
             t.y - (t.b * t.x + t.d * t.y)];
 }
 
 // m1 ∘ m2 – apply m2, then m1.
-export function affineMul(m1, m2) {
+export function affineMul(m1: Affine | null, m2: Affine | null): Affine | null {
     if (!m1) return m2;
     if (!m2) return m1;
     const [a1,b1,c1,d1,e1,f1] = m1, [a2,b2,c2,d2,e2,f2] = m2;
@@ -59,25 +87,25 @@ export const GLUE_LEADERS = 100, GLUE_CLEADERS = 101, GLUE_XLEADERS = 102;
 // element N times, move it, and leave a single copy at the last position. The
 // clones are cached on the glue node and reused while the count holds, which
 // keeps the elements – and the reconciler's work – stable across reflows.
-export function deepCloneNode(o){
-    if(Array.isArray(o)) return o.map(deepCloneNode);
+export function deepCloneNode<T>(o: T): T {
+    if(Array.isArray(o)) return o.map(deepCloneNode) as T;
     if(o&&typeof o==='object'){
-        const r={};
-        for(const k of Object.keys(o)) r[k]=deepCloneNode(o[k]);
-        return r;
+        const r: Record<string, unknown>={};
+        for(const k of Object.keys(o)) r[k]=deepCloneNode((o as Record<string, unknown>)[k]);
+        return r as T;
     }
     return o;
 }
 
-export function leaderCopies(n, count){
+export function leaderCopies(n: GlueNode, count: number): TexNode[] {
     if(!n._leaderCopies || n._leaderCopies.length!==count){
         n._leaderCopies=[];
-        for(let i=0;i<count;i++) n._leaderCopies.push(deepCloneNode(n.leader));
+        for(let i=0;i<count;i++) n._leaderCopies.push(deepCloneNode(n.leader!));
     }
     return n._leaderCopies;
 }
 
-export function renderLeaders(fontInfo, sink, n, x, baselineY, wSp){
+export function renderLeaders(fontInfo: FontTable, sink: Sink, n: GlueNode, x: number, baselineY: number, wSp: number): void {
     const L=n.leader;
     if(!L || wSp<=0) return;
 
@@ -114,7 +142,7 @@ export function renderLeaders(fontInfo, sink, n, x, baselineY, wSp){
 // nested inside another vlist can reuse it – without this, a vlist child was
 // dropped, which silently deleted the inner half of a stacked construction
 // (double math accents, \substack, nested roots, …), leaving one piece too high.
-export function renderVlistBody(fontInfo, sink, n, vlistX, refY){
+export function renderVlistBody(fontInfo: FontTable, sink: Sink, n: BoxNode, vlistX: number, refY: number): void {
     const{ratio:vr,fillOrder:vfo}=vlistGlueRatio(n);
     const vlistW=n.width;
     let curY=refY-n.height*SP_TO_PX;
@@ -147,7 +175,8 @@ export function renderVlistBody(fontInfo, sink, n, vlistX, refY){
 // dimension (the RUNNING_RULE sentinel) inherits it – that is how a \vrule stretches
 // to the exact height of the \hbox it sits in (e.g. the two side edges of the amsthm
 // QED box). Without this the rule is dropped and only the top/bottom edges show.
-export function renderNodes(fontInfo, sink, nodes, x, baselineY, ratio, expandRatio, fillOrder, runH, runD) {
+export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x: number, baselineY: number,
+                            ratio?: number, expandRatio?: number, fillOrder?: number, runH?: number, runD?: number): number {
     ratio=ratio||0; expandRatio=expandRatio||0; fillOrder=fillOrder||0; runH=runH||0; runD=runD||0;
     for(let i=0;i<nodes.length;i++){
         const n=nodes[i], x0=x;

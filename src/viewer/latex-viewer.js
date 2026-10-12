@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 730505dd9f5191f5d5d78ef187c9b8e374a0c3616330368f123c96ff415d1644
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 0b3263ae8cc2e2b769e5b17c9bc230ae96ce13e27ef7d797a36f1140b4c068bc
 'use strict';
 "use strict";
 (() => {
@@ -459,7 +459,7 @@
     return true;
   }
 
-  // src/engine/layout/lines.js
+  // src/engine/layout/lines.ts
   function lineProfile(fontInfo, nodes, xStart, ratio, expandRatio) {
     const items = [];
     function walk2(ns, x, r, er) {
@@ -529,7 +529,7 @@
     return texInterlineAdvance(prevDepth, thisAscent, m) - prevDepth - thisAscent;
   }
 
-  // src/engine/breaker.js
+  // src/engine/breaker.ts
   function protSkipable(n) {
     switch (n.type) {
       case "penalty":
@@ -587,7 +587,7 @@
     const fi = fontInfo && fontInfo[String(g.font)];
     const ch = edgeChar(g, left);
     if (fi && fi.quad > 0) {
-      if (!(para && para.protrude_chars > 0)) return 0;
+      if (!(para && (para.protrude_chars ?? 0) > 0)) return 0;
       const c = fi.codes && fi.codes.get(ch);
       const code = c ? (left ? c.lp : c.rp) || 0 : 0;
       return code ? roundXnOverD(fi.quad, code, 1e3) : 0;
@@ -706,7 +706,7 @@
         bcs.push(cand("end", i, -1e4, { packRightProtrusion: prot(findLastGlyph(nodes, i), false) }));
         break;
       }
-      if (n.type === "glue" && n.stretch_order > 0) {
+      if (n.type === "glue" && (n.stretch_order ?? 0) > 0) {
         cumW += n.width;
         cumFill += 1;
         continue;
@@ -818,7 +818,7 @@
     const alive = final ? dp.map(() => [true, true, true, true]) : null;
     dp[0][2] = { demerits: 0, prev_j: -1, prev_fc: -1, hyphenated: false };
     let minRejectedBadness = null;
-    const ex = bcs.adjustSpacing > 1 ? bcs.expansion : null;
+    const ex = (bcs.adjustSpacing ?? 0) > 1 ? bcs.expansion : null;
     const lastForced = new Array(N).fill(-1);
     for (let k = 1, lf = -1; k < N; k++) {
       lastForced[k] = lf;
@@ -903,9 +903,10 @@
     const breaks = [];
     let j = endIdx, fc = bestFc, overfull = false;
     while (j > 0) {
-      breaks.push({ bcIdx: j, fc, demerits: dp[j][fc].demerits });
-      if (dp[j][fc].overfull) overfull = true;
-      const pj = dp[j][fc].prev_j, pfc = dp[j][fc].prev_fc;
+      const a = dp[j][fc];
+      breaks.push({ bcIdx: j, fc, demerits: a.demerits });
+      if (a.overfull) overfull = true;
+      const pj = a.prev_j, pfc = a.prev_fc;
       j = pj;
       fc = pfc;
     }
@@ -1230,7 +1231,7 @@
     for (const d of allData) if (d.margin) placeMarginNotes(d);
   });
 
-  // src/engine/render.js
+  // src/engine/render.ts
   function svgMatrixOf(n, x, y) {
     return { a: n.m_a ?? 1, b: -(n.m_b ?? 0), c: -(n.m_c ?? 0), d: n.m_d ?? 1, x, y };
   }
