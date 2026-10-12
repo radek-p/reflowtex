@@ -5,11 +5,12 @@
 // stay on the device, and are never sent anywhere; nothing on the site tracks
 // the reader. Its OK is remembered the same way. Loaded by every page of the
 // site (layouts/_default/baseof.html) and by the render tests page
-// (build.sh adds it there).
+// (build.sh adds it there), as static/privacy-notice.js: build.sh builds it
+// from this file.
 (() => {
     const KEY = 'reflowtex-privacy-notice';
     // (the site's root: this file is at it, on every page)
-    const about = new URL('about/', document.currentScript?.src ?? location.href).href;
+    const about = new URL('about/', (document.currentScript as HTMLScriptElement | null)?.src ?? location.href).href;
     try { if (localStorage.getItem(KEY)) return; } catch { return; }      // (no storage: nothing is kept either)
     const show = () => {
         const box = document.createElement('div');
@@ -41,7 +42,7 @@
           :root[data-theme="dark"]:not(.dark) .rtx-privacy button { color: #1f2023; }   /* (the render tests page) */
           @media (max-width: 600px) { .rtx-privacy { font-size: 16px; gap: .8rem; } }
           @media print { .rtx-privacy { display: none; } }`;
-        box.querySelector('button').addEventListener('click', () => {
+        box.querySelector('button')!.addEventListener('click', () => {
             try { localStorage.setItem(KEY, 'ok'); } catch { /* shown again next time */ }
             box.remove(); style.remove();
         });

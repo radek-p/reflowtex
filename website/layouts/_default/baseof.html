@@ -13,7 +13,7 @@
      and the AGPL-3.0 source-offer footer. Include once per page. */}}
 {{ partial "reflowtex-viewer.html" . }}
 {{ partial "inspector.html" . }}
-{{/* What the site keeps in the browser, said once (static/privacy-notice.js). */}}
+{{/* What the site keeps in the browser, said once (browser/privacy-notice.ts, built into static/). */}}
 <script src="{{ "privacy-notice.js" | relURL }}" defer></script>
 </body>
 </html>

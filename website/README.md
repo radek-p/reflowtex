@@ -37,7 +37,7 @@ that is fine, since `public/` is not tracked.
 | `content/about/` | license and project notes |
 | `layouts/` | base template, home, page layouts, and the hero/nav/switch partials |
 | `layouts/partials/hero.html` | the animated hero (ported from `experiments/26-reflow-tex-hero`) |
-| `static/privacy-notice.js` | the note, shown once, on what the site keeps in the browser (About › Privacy) |
+| `browser/privacy-notice.ts` | the note, shown once, on what the site keeps in the browser (About › Privacy); build.sh makes it `static/privacy-notice.js` |
 | `static/images/` | pictures the docs show (the render tests page's screenshot) |
 
 Built into `static/` by `build.sh`, not kept in git: the render tests' report

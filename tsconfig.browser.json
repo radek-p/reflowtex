@@ -21,5 +21,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["src/viewer/src/**/*", "src/companion/src/**/*", "src/inspector/src/**/*"]
+  "include": ["src/viewer/src/**/*", "src/companion/src/**/*", "src/inspector/src/**/*", "website/browser/**/*"]
 }

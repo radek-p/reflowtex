@@ -33,3 +33,5 @@
 # The render tests' report, copied into static/ by build.sh, and its results,
 # fetched from a release (render-tests.lock).
 /static/render-tests/
+# The privacy note, built by build.sh from browser/privacy-notice.ts.
+/static/privacy-notice.js

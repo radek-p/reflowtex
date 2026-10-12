@@ -90,6 +90,9 @@ fi
 #    beside it. The deploy runs the tests first (.github/workflows/hugo.yml);
 #    locally, run them (make test-render-all), or the page has no results to
 #    show.
+#    …and the site's own script: the privacy note (website/browser).
+"$REPO/node_modules/.bin/esbuild" "$SITE/browser/privacy-notice.ts" --charset=utf8 --legal-comments=none \
+    --log-level=warning --outfile="$SITE/static/privacy-notice.js"
 rm -rf "$SITE/static/render-tests"
 mkdir -p "$SITE/static/render-tests"
 cp "$REPO/tests/render/report/report.css" "$SITE/static/render-tests/"
