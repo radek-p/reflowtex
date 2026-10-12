@@ -10,7 +10,36 @@ import { surfacesOf } from './surface.ts';
 import { definedKinds } from './kinds.ts';
 import { idle, pending } from '../runtime/pending.ts';
 import { scopeSizes } from './slots.ts';
+import type { BlockData } from '../runtime/block-data.ts';
+import type { TexNode } from '../engine/model.ts';
+import type { LayoutCache, Line } from '../engine/layout/types.ts';
 // ── end of imports
+
+/** What replay calls, all optional (coordinates: the segment <svg>'s). */
+export interface ReplaySink {
+    line?(j: number, line: Line, x0: number, baselineY: number): void;
+    node?(n: TexNode, x: number, baselineY: number, advance: number): void;
+    vnode?(n: TexNode, x: number, top: number, advance: number): void;
+}
+/** A surface (a part laid out elsewhere), for tools. */
+export interface InspectSurface {
+    key: string; cache: LayoutCache; instance: string; kind: string; role: string; el: HTMLElement;
+    where: 'popover' | 'margin' | 'page';
+}
+/** window.reflowtex.inspect (see the list above). */
+export interface Inspect {
+    readonly version: 1;
+    readonly spToPx: number;
+    blocks(): HTMLElement[];
+    state(el: Element): BlockData | undefined;
+    readonly paints: number;
+    idle(): Promise<void>;
+    pending(): string[];
+    scopes(): Record<string, number>;
+    surfaces(el: HTMLElement): InspectSurface[];
+    kinds(): ReturnType<typeof definedKinds>;
+    replay(el: Element, i: number, sink: ReplaySink, cache?: LayoutCache): boolean;
+}
 
 // ── Inspection ───────────────────────────────────────────────────────────────
 // For developer tools – a browser extension that shows boxes and glue, a test
@@ -28,7 +57,7 @@ import { scopeSizes } from './slots.ts';
 //                           waits for, the fonts loaded, no animation running
 //                           on the page – over three frames. A test waits for
 //                           it after acting, instead of a fixed time
-//                           (runtime/pending.js).
+//                           (runtime/pending.ts).
 //   pending()               the names of what is still to come, to tell why
 //                           idle() has not resolved
 //   surfaces(el)            the parts of el's instances laid out elsewhere
@@ -50,10 +79,10 @@ import { scopeSizes } from './slots.ts';
 //                           (cache.dom.segs[i].svg). False when the segment has
 //                           no lines yet (a stream, or a layout deferred until
 //                           it scrolls near).
-export const inspectable = new Set();
-const surfaceKeys = new WeakMap();
+export const inspectable = new Set<HTMLElement>();
+const surfaceKeys = new WeakMap<object, string>();
 let surfaceSeq = 0;
-api.inspect = {
+const inspect: Inspect = {
     version: 1,
     spToPx: SP_TO_PX,          // scaled points → svg user units
     blocks: () => [...inspectable].filter(el => el.isConnected),
@@ -66,28 +95,30 @@ api.inspect = {
         return [...surfacesOf(el)].filter(s => !s.isDisposed).map(s => {
             let key = surfaceKeys.get(s);
             if (!key) surfaceKeys.set(s, key = `u${++surfaceSeq}`);
-            const where = s.el.closest('#latex-footnote-pop') ? 'popover' : s.el.closest('.latex-margin') ? 'margin' : 'page';
+            const where: InspectSurface['where'] = s.el.closest('#latex-footnote-pop') ? 'popover' : s.el.closest('.latex-margin') ? 'margin' : 'page';
             const i = s.part.instance;
             return { key, cache: s.layoutCache, instance: i.id, kind: i.kind, role: s.part.role, el: s.el, where };
         });
     },
     kinds: () => definedKinds(),
     replay(el, i, sink, cache) {
+        // (a block's own cache, or one given: a stream's nested one, a surface's)
         const data = blockData.get(el);
         cache = cache || (data && data.cache);
         const L = cache && cache.layout && cache.layout.laid[i];
         if (!L || L.deferred || !L.lines || !L.lrp) return false;
-        useGlyphMetrics(cache.metrics);
+        useGlyphMetrics(cache!.metrics);
         const noop = () => {};
         const s = { glyph: noop, missing: noop, space: noop, rule: noop, picture: noop,
                     beginTransform: noop, endTransform: noop,
                     node: sink.node, vnode: sink.vnode };
         for (let j = 0; j < L.lines.length; j++) {
             const { ratio, er, x0, fillRatio, fillOrder } = L.lrp[j];
-            if (sink.line) sink.line(j, L.lines[j], x0, L.baselineYs[j]);
-            renderNodes(data.fontInfo, s, L.lines[j].nodes, x0, L.baselineYs[j],
+            if (sink.line) sink.line(j, L.lines[j], x0, L.baselineYs![j]);
+            renderNodes(data!.fontInfo, s, L.lines[j].nodes, x0, L.baselineYs![j],
                         fillOrder ? fillRatio : ratio, er, fillOrder || 0);
         }
         return true;
     },
 };
+api.inspect = inspect;

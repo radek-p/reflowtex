@@ -10,7 +10,7 @@ import { disposeSurfaces } from '../host/surface.ts';
 import { disposeHosts } from '../host/block-hosts.ts';
 import { disposePieces } from '../host/inline.ts';
 import { removeMarginNotes } from '../defaults/margin-notes.ts';
-import { inspectable } from '../host/inspect.js';
+import { inspectable } from '../host/inspect.ts';
 import { installLinks, installWidgetStates, pageLabels, viewSuffix } from '../host/links.ts';
 import { applySlots, slotBlocks, forgetInstanceTexts, joinScope, setBlockScope } from '../host/slots.ts';
 import { viewAdded, viewRemoved } from '../host/marks.ts';

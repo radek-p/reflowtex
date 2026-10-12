@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 23bf6016b2403cd8a1e9554c3bf6f187374d33c0312a3de216400ed31db53f32
+// reflowtex latex-viewer.js – GENERATED from src/viewer/src/ by esbuild@0.28.2 (make build-viewer); sources sha256 6cbf23ee2eea45b559d783db0291118cf572a1b5131788e56d14fdc75fa6a586
 'use strict';
 "use strict";
 (() => {
@@ -5893,11 +5893,11 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
     return { left: L, top: T, right: R, bottom: B, width: R - L, height: B - T };
   }
 
-  // src/host/inspect.js
+  // src/host/inspect.ts
   var inspectable = /* @__PURE__ */ new Set();
   var surfaceKeys = /* @__PURE__ */ new WeakMap();
   var surfaceSeq = 0;
-  api.inspect = {
+  var inspect = {
     version: 1,
     spToPx: SP_TO_PX,
     // scaled points → svg user units
@@ -5956,6 +5956,7 @@ html.latex-reader-probe .latex-a11y, html.latex-reader-probe .latex-a11y * { poi
       return true;
     }
   };
+  api.inspect = inspect;
 
   // src/runtime/copy.ts
   var SENTINEL = "⁣";
