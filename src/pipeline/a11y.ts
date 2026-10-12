@@ -45,7 +45,7 @@ const HIDDEN = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;bor
  *  Without scripts, the <noscript>'s content is the MathML itself, read as
  *  before. (MathML holding "</noscript" could not be shipped so, and is
  *  shipped as markup.) */
-function shippedMath(mathml: string): string {
+export function shippedMath(mathml: string): string {
   return /<\/noscript/i.test(mathml) ? mathml : `<noscript data-mathml>${mathml}</noscript>`;
 }
 
@@ -58,6 +58,12 @@ function shippedMath(mathml: string): string {
  *  insertShippedMath (src/viewer/src/runtime/a11y-math.ts). */
 export const INSERT_MATH = '<script>(s=>{for(const n of s.previousElementSibling.querySelectorAll("noscript[data-mathml]"))' +
   '{const t=document.createElement("template");t.innerHTML=n.textContent;n.replaceWith(t.content)}s.remove()})(document.currentScript)</script>';
+
+/** One element's HTML (the layer, or another page part holding formulas made with shippedMath), followed by
+ *  INSERT_MATH when it holds any: its formulas then go in place whole as soon as it is parsed. */
+export function withMathInserted(html: string): string {
+  return html + (html.includes('<noscript data-mathml>') ? INSERT_MATH : '');
+}
 
 const escapeText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /** A glyph's text: private-use code points (glyphs addressed by index,
@@ -115,7 +121,7 @@ function nodesHtml(nodes: LayerNode[], refs: number[] = []): string {
  *  stream's number (its drawn box). */
 export function a11yLayer(doc: LayerDocument): string {
   const inner = itemsHtml(doc, doc.content, true, new Set());
-  return `<div class="latex-a11y" style="${HIDDEN}">${inner}</div>` + (inner.includes('<noscript data-mathml>') ? INSERT_MATH : '');
+  return withMathInserted(`<div class="latex-a11y" style="${HIDDEN}">${inner}</div>`);
 }
 
 /** Content items as the layer's pieces. `top`: the block's own content,

@@ -46,8 +46,8 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: Number(o.width), height: 1400 } });
 await page.goto(url + '/');
 await page.waitForFunction(() => document.querySelector('.latex-a11y [data-run]'), undefined, { timeout: 60000 });
-await page.evaluate(() => document.fonts.ready);
-await page.waitForTimeout(800);
+const idle = () => page.evaluate(() => (window as any).reflowtex.inspect.idle());   // nothing left to draw or lay out
+await idle();
 
 /** In the page: the chosen pieces, line by line, in the reader's current mode. */
 const readLines = ([from, displays]: readonly [string, number]) => {
@@ -80,10 +80,10 @@ const readLines = ([from, displays]: readonly [string, number]) => {
 
 const mathml = await page.evaluate(readLines, [o.from!, Number(o.displays)] as const);
 await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('spoken'));
-await page.waitForTimeout(500);
+await idle();
 const spoken = await page.evaluate(readLines, [o.from!, Number(o.displays)] as const);
 await page.evaluate(() => (window as any).reflowtex.setAccessibleMath('mathml'));
-await page.waitForTimeout(300);
+await idle();
 
 // The drawn glyphs and rules of the block, in page coordinates, and where
 // each font family's file is.

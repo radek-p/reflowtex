@@ -6,6 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { composeFigure, type Captured } from '../../website/tools/a11y-figure-compose.ts';
+import { INSERT_MATH } from '../../src/pipeline/a11y.ts';
 
 const MATH = '<math alttext="x squared"><msup><mi>𝑥</mi><mn>2</mn></msup></math>';
 const captured = (): Captured => ({
@@ -44,7 +45,7 @@ test('each drawn line: its glyphs as outlines, once each, and its regions; hidde
 test('under each line, what a reader is given: MathML with alttext, or the words', () => {
   const html = composeFigure(captured(), outline);
   const said = (mode: string) => html.match(new RegExp(`<p class="a11y-said" data-mode="${mode}">([\\s\\S]*?)</p>`))![1];
-  assert.equal(said('mathml').replace(/<span class="a11y-speaker"[\s\S]*?<\/span>/, ''), `Let ${MATH} be &lt;big&gt;.`);
+  assert.equal(said('mathml').replace(/<span class="a11y-speaker"[\s\S]*?<\/span>/, ''), `Let <noscript data-mathml>${MATH}</noscript> be &lt;big&gt;.`);
   assert.equal(said('spoken').replace(/<span class="a11y-speaker"[\s\S]*?<\/span>/, ''), 'Let x squared be &lt;big&gt;.');
   assert.match(said('mathml'), /^<span class="a11y-speaker" aria-hidden="true">/);
 });
@@ -54,4 +55,12 @@ test('the figure is as wide as its drawn lines, so a long reading row wraps unde
   // runs from x 100 to 210, with 4 px on each side
   assert.match(html, /^<div class="a11y-reading-figure" data-mode="mathml" style="max-width:118px">/);
   assert.match(html, /<svg class="a11y-drawn"[^>]* width="118"/);
+});
+
+// Shipped as the accessible layer ships them (src/pipeline/a11y.ts): as text in a <noscript data-mathml> while
+// scripts run, put in place whole by the script after the figure, so no browser lays one out half parsed.
+test('its formulas are shipped whole: in <noscript data-mathml>, the layer\'s script after the figure', () => {
+  const html = composeFigure(captured(), outline);
+  assert.ok(!/<math[\s>]/.test(html.replace(/<noscript data-mathml>[\s\S]*?<\/noscript>/g, '')), 'no MathML outside a <noscript>');
+  assert.ok(html.trimEnd().endsWith(`</div>${INSERT_MATH}`), 'the script right after the figure');
 });

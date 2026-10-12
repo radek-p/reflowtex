@@ -5,6 +5,11 @@
 // it what a screen reader is given for that line, as the page's own content:
 // a row with the formulas as MathML (their spoken form in alttext), and a row
 // with them spoken. The page shows the row of the reader's choice.
+//
+// The formulas are shipped as the accessible layer ships them (src/pipeline/a11y.ts): each inside a
+// <noscript data-mathml>, put in place whole by the script after the figure, so no browser lays one out half
+// parsed while the page arrives (Firefox: "Incorrect number of children for <mfrac/> tag").
+import { shippedMath, withMathInserted } from '../../src/pipeline/a11y.ts';
 
 export interface Box { x: number; y: number; w: number; h: number }
 export interface Part { kind: string; text?: string; mathml?: string; box: Box }
@@ -50,7 +55,7 @@ export function composeFigure(c: Captured, outline: (family: string, ch: string)
       const regions = line.parts.map(p => `<rect class="a11y-region${p.kind === 'math' ? ' math' : ''}" x="${X(p.box.x)}" y="${Y(p.box.y)}" width="${n(p.box.w)}" height="${n(p.box.h)}"/>`);
       const svg = `<svg class="a11y-drawn" aria-hidden="true" focusable="false" viewBox="0 0 ${n(w)} ${n(h)}" width="${n(w)}" height="${n(h)}">`
         + uses.join('') + rules.join('') + regions.join('') + '</svg>';
-      const withMath = line.parts.map(p => (p.kind === 'math' ? p.mathml ?? '' : esc(p.text ?? ''))).join('');
+      const withMath = line.parts.map(p => (p.kind === 'math' ? (p.mathml ? shippedMath(p.mathml) : '') : esc(p.text ?? ''))).join('');
       const spokenLine = c.spoken[k]?.lines[j];
       const words = spokenLine ? spokenLine.parts.map(p => esc(p.text ?? '')).join('') : '';
       return `<div class="a11y-line">${svg}`
@@ -61,7 +66,7 @@ export function composeFigure(c: Captured, outline: (family: string, ch: string)
   });
 
   // (as wide as its drawn lines: a longer reading row wraps under its line)
-  return `<div class="a11y-reading-figure" data-mode="mathml" style="max-width:${n(width)}px">`
+  return withMathInserted(`<div class="a11y-reading-figure" data-mode="mathml" style="max-width:${n(width)}px">`
     + `<svg class="a11y-glyphs" width="0" height="0" aria-hidden="true" focusable="false"><defs>${defs.join('')}</defs></svg>`
-    + pieces.join('') + '</div>\n';
+    + pieces.join('') + '</div>') + '\n';
 }

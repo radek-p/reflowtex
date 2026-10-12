@@ -6,7 +6,7 @@ import { test, expect } from './fixtures.ts';
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { BUILD, READY, idle } from './web.ts';
+import { BUILD, READY, REPO, idle } from './web.ts';
 import { INSERT_MATH } from '../../src/pipeline/a11y.ts';
 
 test('every formula reaches assistive technology as MathML; the drawing does not', async ({ openPage }) => {
@@ -642,15 +642,20 @@ const ARITY_WATCH = `(() => {
   }).observe(document, { childList: true, subtree: true });
 })();`;
 
-/** BUILD over HTTP, a page's formulas (from <math to </math>) arriving in
- *  pieces of `size` bytes, `gap` ms apart; the rest of it at once. */
-function slowServer(size: number, gap: number): Promise<{ url: string; close: () => void }> {
+/** BUILD over HTTP (and `pages`, path -> HTML, from memory), a page's formulas
+ *  (from <math to </math>) arriving in pieces of `size` bytes, `gap` ms apart;
+ *  the rest of it at once. */
+function slowServer(size: number, gap: number, pages: Record<string, string> = {}): Promise<{ url: string; close: () => void }> {
   const pause = () => new Promise(ok => setTimeout(ok, gap));
   const server = createServer(async (req, res) => {
-    const file = join(BUILD, decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname));
-    if (!file.startsWith(BUILD + sep) || !existsSync(file)) { res.writeHead(404).end(); return; }
-    if (!file.endsWith('.html')) { res.writeHead(200, { 'cache-control': 'no-store' }); createReadStream(file).pipe(res); return; }
-    const html = readFileSync(file, 'latin1');   // (a byte a character: the pieces cut anywhere)
+    const path = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname), file = join(BUILD, path);
+    const page = pages[path];
+    if (page === undefined) {
+      if (!file.startsWith(BUILD + sep) || !existsSync(file)) { res.writeHead(404).end(); return; }
+      if (!file.endsWith('.html')) { res.writeHead(200, { 'cache-control': 'no-store' }); createReadStream(file).pipe(res); return; }
+    }
+    // (a byte a character: the pieces cut anywhere)
+    const html = page !== undefined ? Buffer.from(page).toString('latin1') : readFileSync(file, 'latin1');
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
     let at = 0;
     for (const m of html.matchAll(/<math[\s>][\s\S]*?<\/math>/g)) {
@@ -680,6 +685,30 @@ test('no formula is ever in the page with a part missing, however the page arriv
         [...document.scripts].filter(s => s.textContent!.includes('data-mathml')).length)).toBe(0);
     }
   } finally { server.close(); }
+});
+
+// The website's Accessibility figure (website/tools/a11y-figure-compose.ts) shows
+// formulas as MathML in the page itself, outside any layer: shipped the
+// layer's way, they too are never in the page with a part missing.
+test('the website\'s accessibility figure: no formula ever in the page with a part missing', async ({ browser }) => {
+  const figure = readFileSync(join(REPO, 'website/assets/a11y/testmath-reading.html'), 'utf8');
+  // as made now (a figure from before ships its MathML as markup: make it again with website/tools/a11y-figure.ts)
+  expect(figure.replace(/<noscript data-mathml>[\s\S]*?<\/noscript>/g, ''), 'no MathML outside a <noscript>').not.toMatch(/<math[\s>]/);
+  expect(figure).toContain(INSERT_MATH);
+  const server = await slowServer(8, 2, { '/figure.html': `<!doctype html><meta charset="utf-8"><body>${figure}</body>` });
+  const ctx = await browser.newContext();
+  try {
+    await ctx.addInitScript(ARITY_WATCH);
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('console', m => { if (m.type() === 'error' || /Invalid markup/.test(m.text())) errors.push(m.text()); });
+    await page.goto(`${server.url}/figure.html`);
+    expect(await page.evaluate(() => window.__incomplete)).toEqual([]);
+    expect(await page.locator('.a11y-reading-figure math').count()).toBeGreaterThan(0);
+    expect(await page.locator('.a11y-reading-figure mfrac, .a11y-reading-figure msub, .a11y-reading-figure msup').count()).toBeGreaterThan(0);
+    expect(await page.evaluate(() => document.querySelectorAll('noscript[data-mathml]').length + document.scripts.length)).toBe(0);
+    expect(errors).toEqual([]);
+  } finally { await ctx.close(); server.close(); }
 });
 
 // Without scripts, the layer still gives every formula as MathML.
