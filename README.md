@@ -140,7 +140,6 @@ snippets come from anywhere but you, read
 | [`src/inspector/`](src/inspector/) | a floating panel showing the boxes and glue behind the blocks on a page (Alt+Shift+I on the website; TypeScript in `src/`, built into its scripts) |
 | [`integrations/vanilla/`](integrations/vanilla/) | reference integration: `.tex` snippets → a static site |
 | [`integrations/hugo/`](integrations/hugo/) | Hugo shortcode + prebuild (also a runnable example) |
-| [`integrations/jekyll/`](integrations/jekyll/) | Jekyll integration (planned – see its README) |
 | [`examples/demo/`](examples/demo/) | the snippets `make demo` renders |
 | [`examples/testmath/`](examples/testmath/) | AMS' `testmath.tex` rendered with classic CM fonts (`make testmath-demo`) |
 | [`tests/linebreak/`](tests/linebreak/) | paragraph-breaking fixtures: captures TeX's exact breaks for byte-for-byte comparison |
@@ -158,9 +157,8 @@ open site/index.html                 # self-contained – works straight off dis
 ```
 
 For a **Hugo** site, copy two layout files and run the prebuild before `hugo` –
-see [integrations/hugo/README.md](integrations/hugo/README.md). **Jekyll** is
-planned. To embed blocks in a hand-written page, follow the DOM contract in
-[src/viewer/README.md](src/viewer/README.md).
+see [integrations/hugo/README.md](integrations/hugo/README.md). To embed blocks in a hand-written
+page, follow the DOM contract in [src/viewer/README.md](src/viewer/README.md).
 
 ## Prerequisites
 
