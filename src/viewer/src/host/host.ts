@@ -20,6 +20,7 @@ import { blockData } from '../runtime/blocks.ts';
 import { applyFade, applyFit, displayFadeDefault, displayFadeOf, displayFitDefault, displayFitOf, fadesNow, forgetFade, forgetFit,
          revealInDisplay, setDisplayFadeDefault, setDisplayFadeOf, setDisplayFitDefault, setDisplayFitOf } from './displays.ts';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
+import { screenCTM } from '../runtime/screen-ctm.ts';
 
 /** A block's (a view's) data (runtime/block-data.ts). */
 type ViewerBlockData = BlockData;
@@ -27,7 +28,7 @@ type ViewerBlockData = BlockData;
 // A point in an SVG element's own coordinates, in the window's: through its
 // transform, as WebKit gives an empty or text element's box wrongly.
 function screenPoint(el: Element | null, x: number, y: number): DOMRect | null {
-    const ctm = el && (el as SVGGraphicsElement).getScreenCTM && (el as SVGGraphicsElement).getScreenCTM();
+    const ctm = screenCTM(el);
     if (!ctm) return null;
     const p = new DOMPoint(x, y).matrixTransform(ctm);
     return new DOMRect(p.x, p.y, 0, 0);

@@ -43,6 +43,7 @@ import { insertShippedMath } from './a11y-math.ts';
 import { MIN_PX, fitRuns, fitText, layOutRuns, scaleOnto, type FitItem, type Lined, type Place } from './a11y-fit.ts';
 import type { BlockData } from './block-data.ts';
 import type { ContentItem } from '../engine/model.ts';
+import { screenCTM } from './screen-ctm.ts';
 
 // The layer turns into a zero-height anchor the pieces hang from, and is moved
 // before its block (as shipped it follows it): so every piece hangs below the
@@ -300,7 +301,7 @@ export function placeAccessibleLayer(data: BlockData | undefined): void {
                 lines = b - a + 1;
             }
         }
-        const ctm = s.svg && s.svg.getScreenCTM && s.svg.getScreenCTM();
+        const ctm = screenCTM(s.svg);
         return { top: r.top - origin.top + y0, left: r.left - origin.left, width: r.width, height: Math.max(1, y1 - y0),
                  lines, seg: i!, a, b, ctm, display: !!piece.dataset.item };
     });

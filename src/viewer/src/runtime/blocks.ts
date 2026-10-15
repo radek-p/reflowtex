@@ -15,6 +15,7 @@ import type { BlockData } from './block-data.ts';
 import type { Doc, FontTable } from '../engine/model.ts';
 import type { LayoutCache, LayoutStats, PaintStats } from '../engine/layout/types.ts';
 import type { Params } from './params.ts';
+import { screenCTM } from './screen-ctm.ts';
 
 // ── Per-page shared state ─────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ export function naturalWidthPt(el: HTMLElement, fontInfo: FontTable, cache: Layo
     const left = root.getBoundingClientRect().left;
     let right = 0;                                         // unzoomed px from the block's left
     for (const svg of root.querySelectorAll('svg')) {
-        const ctm = svg.getScreenCTM();
+        const ctm = screenCTM(svg);
         if (!ctm || !ctm.a) continue;
         const inv = ctm.inverse(), at = (svg.getBoundingClientRect().left - left) / ctm.a;
         for (const e of svg.querySelectorAll('text, foreignObject'))

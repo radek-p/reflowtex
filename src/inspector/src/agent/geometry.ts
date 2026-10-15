@@ -4,6 +4,7 @@ import { I, RUNNING, SP } from './context.ts';
 import { segParts } from './resolve.ts';
 import type { GlyphMetrics, TexNode } from '../../../viewer/src/engine/model.ts';
 import type { Line, SegmentLayout } from '../../../viewer/src/engine/layout/types.ts';
+import { screenCTM } from '../../../viewer/src/runtime/screen-ctm.ts';
 
 /** A node's pen position (svg units): on a line, x, the baseline y and its
  *  advance; in a vertical list, x, its top and its height. */
@@ -117,7 +118,7 @@ export function rectOf(g: Geometry, n: TexNode | Line): SvgRect | null {
 // svg units → viewport pixels. During a redraw, each svg's matrix is read once.
 export function toScreen(svg: SVGGraphicsElement, r: SvgRect): ScreenRect | null {
     let m = ctms ? ctms.get(svg) : undefined;
-    if (m === undefined) { m = svg.getScreenCTM(); if (ctms) ctms.set(svg, m); }
+    if (m === undefined) { m = screenCTM(svg); if (ctms) ctms.set(svg, m); }
     if (!m) return null;
     const x1 = m.a * r.x + m.c * r.y + m.e, y1 = m.b * r.x + m.d * r.y + m.f;
     const x2 = m.a * (r.x + r.w) + m.c * (r.y + r.h) + m.e, y2 = m.b * (r.x + r.w) + m.d * (r.y + r.h) + m.f;

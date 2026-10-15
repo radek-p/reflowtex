@@ -5,6 +5,7 @@ import { kindDef } from '../host/kinds.ts';
 import { BLOCK_SELECTOR } from '../runtime/page.ts';
 import type { Instance, Surface } from '../host/types.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
+import { screenCTM } from '../runtime/screen-ctm.ts';
 
 /** An element that opens a stream in the popover: a glyph, or a margin mark. */
 type Source = HTMLElement | SVGElement;
@@ -238,7 +239,7 @@ export function registerStreamSource(el: Source, idx: number, cache: LayoutCache
 // folds in every ancestor transform and the SVG's own screen position.
 export function glyphScreenRect(el: Element): ScreenRect {
     const svg = (el as SVGGraphicsElement).ownerSVGElement;
-    const ctm = (el as SVGGraphicsElement).getScreenCTM && (el as SVGGraphicsElement).getScreenCTM();
+    const ctm = screenCTM(el);
     const x = parseFloat(el.getAttribute('x')!);
     const y = parseFloat(el.getAttribute('y')!);
     const fs = parseFloat(el.getAttribute('font-size')!);

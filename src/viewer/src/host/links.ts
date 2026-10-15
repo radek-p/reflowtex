@@ -4,6 +4,7 @@ import { svgEl } from '../engine/sink.ts';
 import { dispatchAction } from './actions.ts';
 import type { Link } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
+import { screenCTM } from '../runtime/screen-ctm.ts';
 
 // ── Cross-references ─────────────────────────────────────────────────────────
 // A \ref stamps every glyph of its printed text with the same document-local id
@@ -89,7 +90,7 @@ export function drawLinkUnderline(key: string, els: Iterable<SVGGraphicsElement>
     if (!hover.length) return;
     const lines: { svg: SVGSVGElement; base: number; left: number; right: number; em: number; colour: string }[] = [];
     for (const el of hover) {
-        const svg = el.ownerSVGElement, ctm = el.getScreenCTM(), sctm = svg?.getScreenCTM();
+        const svg = el.ownerSVGElement, ctm = screenCTM(el), sctm = screenCTM(svg);
         if (!svg || !ctm || !sctm) continue;
         const r = el.getBoundingClientRect();
         if (!r.width) continue;

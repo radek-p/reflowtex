@@ -13,6 +13,7 @@
 import { materializeSegment } from '../engine/layout/document.ts';
 import { updateDisplayOverflowCue } from '../engine/layout/display.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
+import { screenCTM } from '../runtime/screen-ctm.ts';
 
 export const NO_FADE_CLASS = 'latex-no-fade';
 
@@ -159,7 +160,7 @@ export function forgetFit(el: Element) {
 
 // The screen x of a point in an SVG element's own coordinates.
 function screenX(el: Element, x: number): number | null {
-    const ctm = (el as SVGGraphicsElement).getScreenCTM?.();
+    const ctm = screenCTM(el);
     return ctm ? new DOMPoint(x, 0).matrixTransform(ctm).x : null;
 }
 // An element's horizontal extent on screen. From its SVG attributes where it
