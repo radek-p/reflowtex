@@ -118,7 +118,7 @@ collapsed. While the filter has text, every kind with a match is expanded.
   shrunk to fit.
 - **From a glyph in the tree:** its details in the Boxes view have
   **In its font**, which opens its font's table with that glyph selected.
-- **Pictures.** Each TikZ drawing or included PDF page (SVG by now): a
+- **Pictures.** Each TikZ drawing, included PDF page or included PNG or JPEG (SVG by now): a
   preview, its box, viewBox and size. **Copy SVG** puts it on the clipboard
   as a standalone file.
 - **Streams.** Every `webstream` and footnote, with its kind, parameters,

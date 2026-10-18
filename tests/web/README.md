@@ -81,6 +81,7 @@ that `idle()` waits for it.
 | Reading options: corner button, panel, card, the page following theme, width and size | `reading.spec.ts` |
 | Companion: `InlineButton` fits its label on the baseline, `Popover` | `companion.spec.ts` |
 | Themes: the typeset ink follows the page's | `themes.spec.ts` |
+| Included PNG and JPEG: each its own image, at the size TeX gave it, kept through a re-break | `pictures.spec.ts` |
 | Hugo: subpath, references, a reference to another page, an example's controls | `hugo.spec.ts` |
 
 ## Regressions

@@ -161,6 +161,10 @@ Named preambles let blocks share macros/packages. Put them in
 `latex-preambles/<name>.tex` and reference one with `preamble="<name>"`; editing
 a preamble recompiles the blocks that use it.
 
+A block's figures (`\includegraphics` files) are recorded with it, each with
+a hash of its bytes: replacing a figure, under the same name, recompiles the
+blocks that show it.
+
 Named colour maps let blocks share a recolouring palette (see
 [src/viewer/README.md](../../src/viewer/README.md)'s Theming section for what
 they can express). Put them in `latex-color-maps/<name>.json` and reference one

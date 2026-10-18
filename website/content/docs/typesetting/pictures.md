@@ -16,6 +16,11 @@ A \texttt{nicematrix} environment is drawn with PGF as well \textendash{}
 its rules, blocks and dotted lines \textendash{} so the whole environment is
 captured as one picture, after a second \TeX{} run has given its cells'
 positions.
+
+An \verb|\includegraphics| of a PNG or JPEG file is drawn as that image,
+at the size \TeX{} gave it. The file goes into the page as it is, neither
+recompressed nor resized, so a large photograph makes a large page: scale
+it down before including it.
 {{< /latex >}}
 
 {{< latex file="04-tikz-picture.tex" show-source="true" />}}

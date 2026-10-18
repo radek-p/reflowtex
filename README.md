@@ -166,7 +166,7 @@ The build pipeline shells out to a real TeX toolchain:
 
 - **LuaTeX** (`lualatex`) – TeX Live 2023+
 - **Ghostscript** (`gs`) – normalises ICC-coloured included PDFs before SVG conversion
-- **dvisvgm** – converts captured TikZ pages and included PDFs to SVG
+- **dvisvgm** – converts captured TikZ pages and included PDFs to SVG (an included PNG or JPEG needs no tool)
 - **Node 22.18+** – the build is TypeScript, which Node runs straight from the
   sources; its packages (`package.json`) are installed into `node_modules/` by
   `npm ci`, which every `make` target (and `website/build.sh`) does on first

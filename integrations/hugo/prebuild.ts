@@ -17,7 +17,7 @@
 //
 // and this writes:
 //
-//     <site>/data/latex_blocks/<key>.json   {nodelist_b64, a11y_html, content_hash, toolchain}
+//     <site>/data/latex_blocks/<key>.json   {nodelist_b64, a11y_html, content_hash, toolchain, inputs}
 //     <site>/data/latex_schema.json         {schema_b64}
 //     <site>/data/latex_files.json          {"name.tex": key} for file refs and as="…"
 //     <site>/data/latex_color_maps.json     {name: <colour map>, …}
@@ -35,7 +35,7 @@ import { parseArgs } from 'node:util';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { basename, join, relative, resolve, sep } from 'node:path';
-import { Pipeline, contentKey, toolchainHash } from '../../src/pipeline/pipeline.ts';
+import { Pipeline, contentKey, toolchainHash, filesUnchanged } from '../../src/pipeline/pipeline.ts';
 import { readSerializerOutput } from '../../src/pipeline/nodes.ts';
 import { a11yLayerFromBytes } from '../../src/pipeline/a11y.ts';
 import { listBackends, formatBackends } from '../../src/pipeline/backend/registry.ts';
@@ -223,18 +223,20 @@ if (!blocks.size && !batches.size) { console.log('No {{< latex >}} blocks found.
 // ── Compiling ───────────────────────────────────────────────────────────────
 // Each block's data records the hash of its content and of the toolchain
 // that compiled it (the packages, serializer, template, encoder): a block is
-// up to date only when both match, so a new package version recompiles it.
+// up to date only when both match, so a new package version recompiles it –
+// and when the files it included (its figures, `inputs`: path → hash of the
+// bytes) are unchanged, so a redrawn figure recompiles the blocks showing it.
 const toolchain = toolchainHash(undefined, pipe.backend.id);
 // With it, the block's accessible layer (src/pipeline/a11y.ts): the shortcode
 // puts it after the block when the site asks (params.reflowtexA11y, a11y="…").
-const writeBlock = (key: string, bytes: Uint8Array, hash: string) =>
+const writeBlock = (key: string, bytes: Uint8Array, hash: string, inputs: Record<string, string> = pipe.inputs.get(key) ?? {}) =>
   writeFileSync(join(dataDir, `${key}.json`), JSON.stringify({ nodelist_b64: Buffer.from(bytes).toString('base64'),
-    a11y_html: a11yLayerFromBytes(bytes), content_hash: hash, toolchain }, null, 2));
+    a11y_html: a11yLayerFromBytes(bytes), content_hash: hash, toolchain, inputs }, null, 2));
 const storedHash = (key: string): string | undefined => {
   const f = join(dataDir, `${key}.json`);
   try {
     const d = existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null;
-    return d && d.toolchain === toolchain ? d.content_hash : undefined;
+    return d && d.toolchain === toolchain && filesUnchanged(d.inputs) ? d.content_hash : undefined;
   } catch { return undefined; }
 };
 // An up-to-date block needs no compilation, but its fonts are served all the
@@ -247,7 +249,7 @@ const current = (key: string) => {
   if (existsSync(join(buildRoot, key, 'output.json'))) pipe.useCached(key);
   const f = join(dataDir, `${key}.json`), d = JSON.parse(readFileSync(f, 'utf8'));
   const bytes = Buffer.from(d.nodelist_b64, 'base64');
-  if (d.a11y_html !== a11yLayerFromBytes(bytes)) writeBlock(key, bytes, d.content_hash);
+  if (d.a11y_html !== a11yLayerFromBytes(bytes)) writeBlock(key, bytes, d.content_hash, d.inputs ?? {});
 };
 
 const stale: { key: string; content: string; preamble: string; name: string; passes: number }[] = [];

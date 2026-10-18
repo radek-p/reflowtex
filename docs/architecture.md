@@ -116,6 +116,8 @@ is encoded:
   drops and renders as black. An exact white or legacy fill-less full-viewBox page
   rectangle is then removed wherever it occurs in the page group. Generated TikZ
   pages are deliberately exempt from both operations.
+  An included PNG or JPEG skips dvisvgm: it becomes one `<image>` holding its
+  bytes unchanged (a data: URI), the size of its box in TeX, and is not themed.
 
 Then `encode.ts` serialises the result to Protocol Buffers against
 `schema/latex.proto`, interning per-glyph metrics into a shared table (see

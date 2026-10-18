@@ -22,7 +22,7 @@ import { encodeDocument } from './encode.ts';
 import * as DM from './display-model.ts';
 import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from './transforms.ts';
 import { attachMathML, readMathmlFile, speaker } from './mathml.ts';
-import { convertPictures } from './pictures.ts';
+import { convertPictures, includedPictureFiles } from './pictures.ts';
 import { Fonts, glyphRequirements, drawnCodepoints } from './fonts/fonts.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
 import { protoText } from './schema.ts';
@@ -73,6 +73,25 @@ export function toolchainHash(src = SRC, backend = 'luatex'): string {
   };
   for (const d of ['extract', 'latex', 'schema', 'pipeline']) if (existsSync(join(src, d))) walk(join(src, d));
   return h.digest('hex').slice(0, 16);
+}
+
+/** The files a block read besides its source (its figures), each with a
+ *  16-hex hash of its bytes, by path. The content key is the block's text
+ *  alone, so an integration that skips an unchanged block records these
+ *  beside it and compiles it again when filesUnchanged says otherwise. */
+export function fileHashes(files: Iterable<string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of [...files].sort()) out[f] = createHash('sha256').update(readFileSync(f)).digest('hex').slice(0, 16);
+  return out;
+}
+
+/** Whether every file recorded by fileHashes is still there with the same
+ *  bytes (true when none were recorded). */
+export function filesUnchanged(recorded: Record<string, string> | undefined): boolean {
+  for (const [f, hash] of Object.entries(recorded ?? {})) {
+    if (!existsSync(f) || fileHashes([f])[f] !== hash) return false;
+  }
+  return true;
 }
 
 // ── The pipeline ────────────────────────────────────────────────────────────
@@ -127,6 +146,9 @@ export class Pipeline {
   /** every block compiled or declared current (useCached), by key: what the
    *  served fonts must cover */
   private readonly blocks = new Map<string, SerializerOutput>();
+  /** the files each block compiled here read besides its source, by key
+   *  (fileHashes): a batch's parts each have the whole batch's */
+  readonly inputs = new Map<string, Record<string, string>>();
 
   constructor(o: PipelineOptions) {
     this.buildRoot = resolve(o.buildRoot);
@@ -182,6 +204,7 @@ export class Pipeline {
       const bytes = encodeDocument(split[i]);
       writeFileSync(join(dir, 'nodelist.pb'), bytes);
       this.blocks.set(p.key, split[i]);
+      this.inputs.set(p.key, this.inputs.get(key) ?? {});
       out.set(p.key, bytes);
     });
     return out;
@@ -274,6 +297,7 @@ export class Pipeline {
       this.diagnostics.set(key, final.diagnostics);
 
       const data = final.data;
+      this.inputs.set(key, fileHashes(includedPictureFiles(data, final.dir).filter(f => existsSync(f))));
       await this.transform(data, final.dir, {
         block: label, docTag: key.replace(/[^0-9A-Za-z]/g, '').slice(0, 8), formulas: final.mathml, pictures: final.pictures,
       });

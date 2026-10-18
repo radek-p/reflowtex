@@ -520,8 +520,12 @@ end
 
 function Serializer.note_graphic(id, file, options)
     local resolved = kpse.find_file(file)
+    -- a name without an extension: graphicx tries these in this order
     if not resolved and not file:match("%.[^/]+$") then
-        resolved = kpse.find_file(file .. ".pdf")
+        for _, ext in ipairs({ ".pdf", ".png", ".jpg", ".jpeg" }) do
+            resolved = kpse.find_file(file .. ext)
+            if resolved then break end
+        end
     end
     picture_files[id] = {
         file = resolved or file,
