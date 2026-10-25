@@ -23,7 +23,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { forEachNode, type SerializerOutput } from '../nodes.ts';
 import { FontError } from '../errors.ts';
-import { readSfnt, writeSfnt, parseCmap, buildCmap, parseName, nameString, setNameString, buildName, numGlyphs, codepointsToGlyphs } from './sfnt.ts';
+import { type CmapSubtable, readSfnt, writeSfnt, parseCmap, buildCmap, parseName, nameString, setNameString, buildName, numGlyphs, codepointsToGlyphs } from './sfnt.ts';
 import { subsetFont } from './subset.ts';
 import { convertType1, kpsewhich, MODIFIED_TAG } from './type1.ts';
 
@@ -137,23 +137,31 @@ export class Fonts {
       for (const s of subs) for (const c of s.map.keys()) existing.add(c);
       const missing = [...want].filter(([c]) => !existing.has(c)).sort((a, b) => a[0] - b[0]);
       if (!missing.length) { this.served.set(filename, filename); log(`  font-patch: ${filename} already complete`); continue; }
-      const f12 = subs.find(s => s.format === 12 && s.platformID === 3 && s.encodingID === 10);
-      const nonBmp = missing.filter(([c]) => c >= 0x10000).length;
-      if (nonBmp && !f12) {
-        this.served.set(filename, filename);
-        log(`  font-patch: ${filename} has no format-12 cmap – cannot add ${nonBmp} non-BMP entries, skipping`);
-        continue;
-      }
+      // A non-BMP entry (a private-use rewrite: PUA_BASE + glyph index) needs
+      // a (3,10) format-12 subtable; a font without one (Latin Modern's and
+      // STIX Two's text faces) gets one, holding its Unicode map too, since a
+      // browser that finds it reads it instead of the format-4 one. Every
+      // entry goes into it; a BMP one into the format-4 subtable as well.
       const f4 = subs.find(s => s.format === 4);
+      let f12 = subs.find(s => s.format === 12 && s.platformID === 3 && s.encodingID === 10);
+      if (!f12 && missing.some(([c]) => c >= 0x10000)) {
+        const unicode = subs.find(s => s.platformID === 3 && s.encodingID === 1) ?? subs.find(s => s.platformID === 0) ?? f4;
+        const made = { platformID: 3, encodingID: 10, format: 12, language: 0, map: new Map(unicode?.shared.map ?? []),
+                       raw: new Uint8Array(0), dirty: true } as CmapSubtable;
+        made.shared = made;
+        f12 = made;
+        // encoding records stay sorted by platform, then encoding
+        const at = subs.findIndex(s => s.platformID > 3 || (s.platformID === 3 && s.encodingID > 10));
+        subs.splice(at < 0 ? subs.length : at, 0, made);
+      }
       const glyphs = numGlyphs(font);
       let added = 0;
       for (const [c, g] of missing) {
-        const table = c >= 0x10000 ? f12 : f4;
-        if (!table || g === null) continue;
+        if (g === null) continue;
         if (g >= glyphs) { log(`  font-patch: ${filename} glyph index ${g} out of range – skipping U+${c.toString(16).toUpperCase().padStart(5, '0')}`); continue; }
-        table.shared.map.set(c, g);
-        table.shared.dirty = true;
-        added++;
+        const tables = c >= 0x10000 ? [f12] : [f4, f12];
+        for (const table of tables) if (table) { table.shared.map.set(c, g); table.shared.dirty = true; }
+        if (tables.some(Boolean)) added++;
       }
       if (!added) { this.served.set(filename, filename); log(`  font-patch: ${filename} already complete`); continue; }
       font.tables.set('cmap', buildCmap(subs));
