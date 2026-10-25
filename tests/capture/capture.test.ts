@@ -321,7 +321,7 @@ test('a virtual font (ae: T1 over Computer Modern) draws its packets\' glyphs', 
     'cmr10:C cmr10:a cmr10:f cmr10:acute cmr10:e cmr10:comma cmr10:n cmr10:a cmr10:dieresis cmr10:dotlessi cmr10:v cmr10:e cmr10:period');
 });
 
-// newtx is not in the CI image (docker/test-packages.txt names what is): run where it is installed.
+// newtx is in the CI image (docker/test-packages.txt); elsewhere, run where it is installed.
 const NO_NEWTX = !kpsewhich('newtxmath.sty') && 'newtx is not installed';
 test('newtx maths (virtual fonts over Type 1 faces) draws the glyphs TeX set', { skip: NO_NEWTX }, async () => {
   const d = await capture('Let $\\alpha+\\sum_i x_i \\leq \\infty, a=12$.', '\\usepackage{newtxtext,newtxmath}');

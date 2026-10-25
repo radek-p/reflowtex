@@ -12,3 +12,10 @@
 nicematrix      # tests/render/cases/nicematrix.tex; the website's Pictures page
 pgfplots        # tests/render/cases/tikz-nested.tex; examples/demo/figures (the web tests' and the website's pages)
 transparent     # tests/capture/capture.test.ts (colours and opacity)
+newtx           # tests/capture/capture.test.ts (virtual fonts: newtx maths); with the next five, what newtxtext and newtxmath load
+txfonts         # newtxmath's symbols (txsyc)
+kastrup         # newtx (binhex.tex)
+xpatch          # newtx
+xkeyval         # newtx
+xstring         # newtx
+charter         # tests/unit/type1.test.ts (Bitstream Charter's Type 1 outlines)

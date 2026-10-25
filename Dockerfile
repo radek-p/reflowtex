@@ -129,12 +129,18 @@ RUN chmod +x /usr/local/bin/lualatex
 # tlmgr's exit status does not say whether every package arrived: each is
 # checked with tlmgr info, and the install retried. tlmgr updates itself first:
 # this layer is rebuilt long after the one above, and CTAN refuses a tlmgr that
-# has fallen behind it.
+# has fallen behind it. They come with their documentation and sources (the
+# image's TeX Live installs neither by default): that is where TeX Live keeps
+# a package's licence notice – Bitstream Charter's readme.charter, which its
+# licence asks to stay with every copy of the fonts, txfonts' COPYRIGHT – and
+# the source a generated file's licence asks to go along (kastrup's
+# binhex.dtx). So every copy of the image (CI pushes it to a registry:
+# CONTRIBUTING.md, "CI") carries them.
 COPY docker/test-packages.txt /opt/reflowtex/test-packages.txt
 RUN pkgs=$(sed -e 's/#.*//' /opt/reflowtex/test-packages.txt | tr -s ' \t' '\n' | grep -v '^$' || true); \
     [ -n "$pkgs" ] || exit 0; \
     for attempt in 1 2 3; do \
-      tlmgr update --self; tlmgr install $pkgs; \
+      tlmgr update --self; tlmgr install --with-doc --with-src $pkgs; \
       installed=$(tlmgr info --only-installed --data name); missing=; \
       for p in $pkgs; do echo "$installed" | grep -qx "$p" || missing="$missing $p"; done; \
       [ -z "$missing" ] && break; \
