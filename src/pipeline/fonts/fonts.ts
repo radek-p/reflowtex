@@ -28,6 +28,7 @@ import { subsetFont } from './subset.ts';
 import { convertType1, kpsewhich, MODIFIED_TAG } from './type1.ts';
 
 const hash8 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex').slice(0, 8);
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const splitExt = (f: string): [string, string] => { const m = /^(.*?)(\.[^.]*)?$/.exec(f)!; return [m[1], m[2] ?? '']; };
 
 /** Write via a temporary file and a rename, readable by others: a half-written
@@ -100,17 +101,33 @@ export class Fonts {
     return this.cmaps.get(filename)!;
   }
 
-  /** Add the missing cmap entries; fills `served`. BMP code points go into
-   *  the first format-4 subtable, others into the (3,10) format-12 one. */
+  /** Remove every renamed font file (an earlier build's patch, subset or
+   *  conversion) that `used` does not name: what a whole build calls once,
+   *  before patch(), so fonts the site no longer uses go. Converted faces the
+   *  blocks name are in `used`, hashed, and stay. */
+  prune(used: Iterable<string>): void {
+    if (!existsSync(this.outputDir)) return;
+    const keep = new Set(used);
+    for (const f of readdirSync(this.outputDir)) if (f.includes(`.${MODIFIED_TAG}-`) && !keep.has(f)) rmSync(join(this.outputDir, f));
+  }
+
+  /** Add the missing cmap entries; fills `served` for the fonts given. BMP
+   *  code points go into the first format-4 subtable, others into the (3,10)
+   *  format-12 one. The earlier renamed versions of the fonts patched go (each
+   *  is made again from its original); files of other fonts are left as they
+   *  are, so a caller may patch a few fonts at a time (the browser engine
+   *  does, as blocks bring new code points). */
   patch(requirements: Requirements, log: (s: string) => void = console.log): void {
     this.served = new Map();
     if (!requirements.size) return;
     this.provision(requirements.keys(), log);
-    // Renamed fonts of earlier builds go (the current set is made again below),
-    // except this build's converted faces: they are written while blocks
-    // compile and named, hashed, in the requirements.
-    const keep = new Set([...requirements.keys()].filter(n => n.includes(`.${MODIFIED_TAG}-`)));
-    for (const f of readdirSync(this.outputDir)) if (f.includes(`.${MODIFIED_TAG}-`) && !keep.has(f)) rmSync(join(this.outputDir, f));
+    const required = new Set(requirements.keys());
+    const files = readdirSync(this.outputDir);
+    for (const filename of required) {
+      const [stem, ext] = splitExt(filename);
+      const earlier = new RegExp(`^${escapeRe(stem)}(\\.${MODIFIED_TAG}-[0-9a-f]{8})+${escapeRe(ext)}$`);
+      for (const f of files) if (earlier.test(f) && !required.has(f)) rmSync(join(this.outputDir, f), { force: true });
+    }
     for (const [filename, want] of requirements) {
       const path = join(this.outputDir, filename);
       if (!existsSync(path)) { this.served.set(filename, filename); continue; }

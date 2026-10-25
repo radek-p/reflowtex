@@ -243,6 +243,7 @@ export class Pipeline {
     const docs = [...this.blocks.values()];
     const reqs = glyphRequirements(docs);
     const { drawn, slotFonts } = drawnCodepoints(docs);
+    this.fonts.prune(reqs.keys());
     this.fonts.patch(reqs, this.log);
     if (subset) await this.fonts.subset(drawn, slotFonts, this.log);
     // every code point the blocks reach a font by must be in the file served
