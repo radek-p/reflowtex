@@ -1,0 +1,13 @@
+% Virtual fonts: the ae package sets T1 text in Computer Modern through
+% virtual fonts, each accented letter an accent and a letter its packet puts
+% in place (an acute moved left over an e). Each glyph is drawn from the font
+% the packet names, where the packet puts it.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{ae}
+\begin{document}
+Café, naïve, façade, señor, Gödel, Dvořák, Ångström and Łukasiewicz: the
+accented letters of a T1 font are built here from an accent and a letter,
+moved into place by the virtual font, while plain letters are drawn as they
+are. «Œuvres complètes», thé à la crème, smørrebrød, Øresund, Straße.
+\end{document}

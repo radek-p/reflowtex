@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { basename, join, relative, resolve } from 'node:path';
-import { readSerializerOutput, writeSerializerOutput, type SerializerOutput } from './nodes.ts';
+import { forEachNode, readSerializerOutput, writeSerializerOutput, type SerializerOutput } from './nodes.ts';
 import { encodeDocument } from './encode.ts';
 import * as DM from './display-model.ts';
 import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from './transforms.ts';
@@ -25,6 +25,8 @@ import { attachMathML, readMathmlFile, speaker } from './mathml.ts';
 import { convertPictures, includedPictureFiles } from './pictures.ts';
 import { Fonts, glyphRequirements, drawnCodepoints } from './fonts/fonts.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
+import { kpsewhich } from './fonts/type1.ts';
+import { FontFiles, resolveVirtualFonts } from './fonts/vf.ts';
 import { protoText } from './schema.ts';
 import { BackendUnavailable, BuildError, MissingCapability } from './errors.ts';
 import { documentNeeds, supports, unmetNeeds, capabilityInfo } from './backend/capabilities.ts';
@@ -133,6 +135,8 @@ export interface CompileOptions {
 export class Pipeline {
   readonly buildRoot: string;
   readonly fonts: Fonts;
+  /** the TeX tree's virtual fonts and metrics (fonts/vf.ts) */
+  private readonly fontFiles = new FontFiles(name => { const p = kpsewhich(name); return p ? readFileSync(p) : null; });
   /** the capture backend: what it is and can do (backend.capabilities) */
   readonly backend: CaptureBackend;
   private readonly searchDirs: string[];
@@ -313,8 +317,9 @@ export class Pipeline {
    *  strings from what the capture recorded (first: it reads formula numbers
    *  and boxes the later passes may drop), forget unreferenced paragraphs,
    *  pictures to SVG (from the backend's picture source, else `dir`'s PDF),
-   *  strip what the wire format does not model, convert classic fonts (first:
-   *  it gives 'unknown' fonts real files, which the glyph addressing and
+   *  strip what the wire format does not model, resolve glyphs of virtual
+   *  fonts to the fonts their packets draw, convert classic fonts (first: it
+   *  gives 'unknown' fonts real files, which the glyph addressing and
    *  provisioning that follow then see), address glyphs. `formulas` is
    *  LaTeX's MathML as captured (default: read from `dir`). Changes `data`. */
   async transform(data: SerializerOutput, dir: string,
@@ -323,11 +328,12 @@ export class Pipeline {
     const nDropped = dropUnreferencedParagraphs(data);
     const nPictures = await convertPictures(data, dir, o.block, o.docTag, o.pictures);
     const nStripped = stripUnsupportedNodes(data);
+    const nVirtual = resolveVirtualFonts(data.fonts, visit => forEachNode(data, visit), this.fontFiles);
     const nLegacy = normaliseLegacyFontAddressing(data, this.fonts);
     const nRewritten = normaliseGlyphAddressing(data, this.fonts, this.log);
     const bits = [
       nDropped && `dropped ${nDropped} unreferenced paragraph(s)`, nStripped && `stripped ${nStripped} node(s)`,
-      nRewritten && `rewrote ${nRewritten} glyph(s) to PUA`, nLegacy && `converted legacy fonts, ${nLegacy} glyph(s) to PUA`,
+      nRewritten && `rewrote ${nRewritten} glyph(s) to PUA`, nVirtual && `${nVirtual} glyph(s) of virtual fonts resolved`, nLegacy && `converted legacy fonts, ${nLegacy} glyph(s) to PUA`,
       nPictures && `converted ${nPictures} picture(s)`, nMathml && `MathML for ${nMathml} formula(s)`,
     ].filter(Boolean);
     if (bits.length) this.log(`  ${o.block ?? basename(dir)}: ${bits.join(', ')}`);

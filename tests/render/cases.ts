@@ -96,6 +96,11 @@ export const cases: Record<string, CaseSettings> = {
   // after a display the browser counted interline glue twice (up to 4.8 pt
   // here). against_plain checks the compile itself. Worst attained 2026-10-25.
   'label-anchors': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.002 },
+  // ae's T1 text through virtual fonts, accented letters built from two
+  // glyphs: the lines' interword spacing drifts as in other 8-bit T1 text
+  // (the same paragraph in lmodern's T1 fonts reaches 0.21). Worst attained
+  // 2026-10-25.
+  'virtual-fonts': { tolerance: 0.082 },
   // A rule and a box set in vertical mode, and a paragraph holding only a
   // rule: kept as fixed displays (they used to be dropped, with 202 glyphs
   // after them out of place). Worst attained 2026-09-26.

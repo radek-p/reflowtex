@@ -288,6 +288,7 @@ test('Lean: the parts are marked, decl and url on the widget', async () => {
 // converted file.
 
 import opentype, { type Font } from 'opentype.js';
+import { kpsewhich } from '../../src/pipeline/fonts/type1.ts';
 /** [face, glyph name the served file draws] for each glyph of the paragraphs. */
 function drawnGlyphNames(d: Output): [string, string][] {
   const fonts = d.fonts as Record<string, { name: string; filename: string }>;
@@ -310,6 +311,23 @@ test('Latin Modern maths (lmodern) draws the glyphs TeX set', async () => {
   const maths = drawnGlyphNames(d).filter(([face]) => /^lm(mi|sy|ex)/.test(face));
   assert.deepEqual(maths, [['lmmi10', 'alpha'], ['lmex10', 'summationtext'], ['lmmi7', 'i'], ['lmmi10', 'x'],
                            ['lmmi7', 'i'], ['lmsy10', 'lessequal'], ['lmsy10', 'infinity']]);
+});
+
+// A virtual font (src/pipeline/fonts/vf.ts) has no outline: each glyph is
+// drawn from the fonts its packet names, an accented letter from its pieces.
+test('a virtual font (ae: T1 over Computer Modern) draws its packets\' glyphs', async () => {
+  const d = await capture('Caf\\\'e, na\\"ive.', '\\usepackage[T1]{fontenc}\n\\usepackage{ae}');
+  assert.deepEqual(drawnGlyphNames(d).map(([face, g]) => `${face}:${g}`).join(' '),
+    'cmr10:C cmr10:a cmr10:f cmr10:acute cmr10:e cmr10:comma cmr10:n cmr10:a cmr10:dieresis cmr10:dotlessi cmr10:v cmr10:e cmr10:period');
+});
+
+// newtx is not in the CI image (docker/test-packages.txt names what is): run where it is installed.
+const NO_NEWTX = !kpsewhich('newtxmath.sty') && 'newtx is not installed';
+test('newtx maths (virtual fonts over Type 1 faces) draws the glyphs TeX set', { skip: NO_NEWTX }, async () => {
+  const d = await capture('Let $\\alpha+\\sum_i x_i \\leq \\infty, a=12$.', '\\usepackage{newtxtext,newtxmath}');
+  const maths = drawnGlyphNames(d).filter(([face]) => !face.startsWith('TeXGyreTermesX')).map(([face, g]) => `${face}:${g}`);
+  assert.deepEqual(maths.join(' '), 'NewTXMI:u1D6FC txsys:plus txexs:summationtext.1 NewTXMI7:u1D456 NewTXMI:u1D465 NewTXMI7:u1D456 ' +
+    'txsys:lessequal txsys:infinity NewTXMI:comma NewTXMI:u1D44E txmiaX:equal ntx-Regular-tlf-ot1r:one ntx-Regular-tlf-ot1r:two');
 });
 
 // ── MathML ──────────────────────────────────────────────────────────────────
