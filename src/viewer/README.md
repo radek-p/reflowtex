@@ -169,6 +169,19 @@ defined it – taken from the compilation itself, not from scanning sources – 
 the viewer partial turns pages into URLs, which is the only step that needs to
 know about permalinks.
 
+## What a document cannot do
+
+A block's links and pictures come from its TeX source, which may be anyone's,
+so neither runs script in the page ([engine/safe.ts](src/engine/safe.ts)). A
+URL from `\href` or `\url` is a link only when it is relative, a fragment, or
+`http:`, `https:`, `mailto:`, `tel:` or `ftp:`; a `javascript:` or `data:`
+address leaves its text plain. A picture's SVG is parsed in an inert
+`<template>` and loses `<script>`, `<foreignObject>` (and `<iframe>`,
+`<embed>`, `<object>`), event-handler attributes, animations that set an
+address or a handler, and addresses of other schemes (a `data:` image stays)
+before it is inserted. The pipeline cleans a picture the same way where it
+makes it (`src/pipeline/pictures.ts`), so the page's own data is clean too.
+
 Style the three states with `--latex-link`, `--latex-link-hover` and
 `--latex-link-active`; give `.latex-anchor` a `scroll-margin-top` if your page
 has a sticky header.

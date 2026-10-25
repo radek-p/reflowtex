@@ -2,6 +2,7 @@
 
 import { svgEl } from '../engine/sink.ts';
 import { dispatchAction } from './actions.ts';
+import { safeUrl } from '../engine/safe.ts';
 import type { Link } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
 import { screenCTM } from '../runtime/screen-ctm.ts';
@@ -53,15 +54,18 @@ export function loadLinkMap(): void {
 // from. That is what makes a built site portable: the same files work served at
 // a domain root, served under a subpath, and opened straight off disk over
 // file://, without anything being rewritten between those cases.
+// A URL the document gave (\href, \url) is kept only when its scheme is one a
+// link may use (engine/safe.ts): a javascript: or data: address is no link at
+// all, and its text stays plain.
 export function linkHref(link: Link | undefined): string | null {
     if (!link) return null;
-    if (link.url) return link.url;
+    if (link.url) return safeUrl(link.url);
     const label = link.label;
     if (!label) return null;
     if (linkTargets.has(label) || pageLabels.has(label)) return '#' + label;
     const rel = linkMap[label];
     if (!rel) return null;
-    try { return new URL(rel, siteBase).href; } catch { return rel; }
+    try { return safeUrl(new URL(rel, siteBase).href); } catch { return safeUrl(rel); }
 }
 
 // Toggle a state class across every glyph of one reference. The group is found

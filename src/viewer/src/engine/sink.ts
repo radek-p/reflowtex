@@ -10,6 +10,7 @@ import { colorFill } from '../runtime/colour.ts';
 import { renderPiece } from '../host/inline.ts';
 import { applyMark, liveOn, registerGlyph } from '../host/marks.ts';
 import { registerSpace, selectedGlyph, selectionEdges } from '../host/selection.ts';
+import { droppedAttribute, droppedElement } from './safe.ts';
 import type { GlyphNode, TexNode, ViewerFont } from './model.ts';
 import type { Sink, SvgMatrix } from './render.ts';
 import type { LayoutCache, PaintStats } from './layout/types.ts';
@@ -32,6 +33,25 @@ export function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Recor
     const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
     for(const [k,v] of Object.entries(attrs)) el.setAttribute(k,String(v));
     return el;
+}
+
+// A picture's SVG markup into `g`: parsed in an inert <template> (nothing in
+// it loads or runs), cleaned there by safe.ts's rules – no script, no HTML
+// island, no event handler, no address of another scheme – and only then
+// moved into the page. The pipeline cleans the markup where it makes it too;
+// this keeps a page built elsewhere, or by an older pipeline, safe.
+export function insertPictureSvg(g: SVGGElement, markup: string): void {
+    const t = document.createElement('template');
+    t.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">${markup}</svg>`;
+    const clean = (el: Element) => {
+        if (droppedElement(el.localName, n => el.getAttribute(n))) { el.remove(); return; }
+        for (const a of [...el.attributes]) if (droppedAttribute(a.name, a.value, el.localName)) el.removeAttributeNode(a);
+        for (const c of [...el.children]) clean(c);
+    };
+    for (const top of [...t.content.children]) clean(top);
+    // what the parser put beside the <svg> (HTML it moved out of it) is dropped with the rest
+    const root = t.content.firstElementChild;
+    if (root?.localName === 'svg') g.append(...root.childNodes);
 }
 
 // renderNodes emits glyphs, spaces, and rules through a sink object. The sink
@@ -337,7 +357,7 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
                 // themed wholesale. The class marks that boundary for page CSS
                 // and for anyone inspecting the DOM.
                 el = svgEl('g', { class: 'latex-picture' });
-                if (pic) el.innerHTML = pic.svg;
+                if (pic) insertPictureSvg(el as SVGGElement, pic.svg);
                 // dvisvgm omits fill on black paths (SVG's initial fill is
                 // black), so the theme's default text colour is supplied here
                 // by inheritance rather than rewritten into every path.

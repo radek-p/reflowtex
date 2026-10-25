@@ -39,6 +39,7 @@ import { inflateSync, constants as zlibConstants } from 'node:zlib';
 import { forEachNode, type SerializerOutput } from './nodes.ts';
 import { PictureError } from './errors.ts';
 import type { PictureSource } from './backend/types.ts';
+import { cleanSvgMarkup } from '../viewer/src/engine/safe.ts';
 
 const run = promisify(execFile);
 
@@ -62,13 +63,14 @@ export const DVISVGM_OPTIMIZE = '--optimize=all,-collapse-groups';
 
 export interface Picture { svg: string; vb_w: number; vb_h: number }
 
-/** The markup inside dvisvgm's <svg>, ids prefixed and colours themed, with
- *  its viewBox size. */
+/** The markup inside dvisvgm's <svg>, cleaned of what could run in the page
+ *  (src/viewer/src/engine/safe.ts: a document's raw SVG specials reach it as
+ *  they are), ids prefixed and colours themed, with its viewBox size. */
 export function rewritePictureSvg(svg: string, prefix: string, stripPageBackground = false): Picture {
   const m = SVG_ROOT_RE.exec(svg);
   if (!m) throw new PictureError('dvisvgm output has no <svg viewBox=...> root');
   const vbW = Number(m[3]), vbH = Number(m[4]);
-  let inner = m[5];
+  let inner = cleanSvgMarkup(m[5]);
   // Figma exports an opaque white page rectangle (explicit white after the ICC
   // normalisation below; no fill at all from older or raw dvisvgm output). An
   // included PDF is artwork on the host page, so either form goes – but only
