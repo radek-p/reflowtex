@@ -30,45 +30,34 @@ import { dirname, join } from 'node:path';
 import * as mupdf from 'mupdf';
 import { dumpDom, type Dom } from './dom-dump.ts';
 import { rasterBand } from './raster.ts';
+import { Outline, filledRule, strokedRule, type Affine, type Pt } from './shapes.ts';
 
 const PT_PER_BP = 72.27 / 72;
-type Pt = [number, number];
 
 /** The strip's glyph origins (pt, y down; a ligature's text-only characters
  *  left out) and its rules as four corners each. */
 export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
   const page = mupdf.Document.openDocument(readFileSync(pdf), 'application/pdf').loadPage(0);
   const glyphs: Pt[] = [], rules: Pt[][] = [];
-  const mul = (m: number[], x: number, y: number): Pt => [(m[0] * x + m[2] * y + m[4]) * PT_PER_BP, (m[1] * x + m[3] * y + m[5]) * PT_PER_BP];
-  const points = (path: mupdf.Path) => {
-    const pts: [number, number][] = [];
-    path.walk({ moveTo: (x, y) => pts.push([x, y]), lineTo: (x, y) => pts.push([x, y]) });
-    return pts;
-  };
+  // the device's matrix (bp, y down) taken on to pt
+  const toPt = (m: mupdf.Matrix): Affine => m.map(v => v * PT_PER_BP) as Affine;
+  const outline = (path: mupdf.Path) => { const o = new Outline(); path.walk(o); return o; };
   const device = new mupdf.Device({
     fillText(text: mupdf.Text, ctm: mupdf.Matrix) {
-      text.walk({ showGlyph(_font: mupdf.Font, trm: mupdf.Matrix, gid: number) { if (gid >= 0) glyphs.push(mul(ctm as number[], trm[4], trm[5])); } });
+      const m = toPt(ctm);
+      text.walk({ showGlyph(_font: mupdf.Font, trm: mupdf.Matrix, gid: number) { if (gid >= 0) glyphs.push([m[0] * trm[4] + m[2] * trm[5] + m[4], m[1] * trm[4] + m[3] * trm[5] + m[5]]); } });
     },
-    // LuaTeX strokes a rule along its centre line, lw thick (butt caps; a
-    // square cap reaches lw/2 further), horizontal or vertical as the rule is
-    // wide or tall, and under \rotatebox through a rotating transform; a filled
-    // four-cornered path is taken as it stands.
+    // LuaTeX strokes a rule along its centre line, lw thick, under \rotatebox
+    // through a rotating transform; a picture's straight lines and
+    // four-cornered fills are the same shapes, and count as the viewer's do
+    // (shapes.ts).
     strokePath(path: mupdf.Path, stroke: mupdf.StrokeState, ctm: mupdf.Matrix) {
-      const pts = points(path);
-      if (pts.length !== 2) return;
-      let [[x0, y0], [x1, y1]] = pts;
-      const len = Math.hypot(x1 - x0, y1 - y0);
-      if (len === 0) return;
-      const ux = (x1 - x0) / len, uy = (y1 - y0) / len, hw = stroke.getLineWidth() / 2;
-      const cap = stroke.getLineCap() !== 0 ? hw : 0;
-      x0 -= ux * cap; y0 -= uy * cap; x1 += ux * cap; y1 += uy * cap;
-      const nx = -uy * hw, ny = ux * hw;
-      rules.push([[x0 + nx, y0 + ny], [x1 + nx, y1 + ny], [x1 - nx, y1 - ny], [x0 - nx, y0 - ny]].map(([x, y]) => mul(ctm as number[], x, y)));
+      const r = strokedRule(outline(path), stroke.getLineWidth(), stroke.getLineCap() !== 0, toPt(ctm));
+      if (r) rules.push(r);
     },
     fillPath(path: mupdf.Path, _evenOdd: boolean, ctm: mupdf.Matrix) {
-      let pts = points(path);
-      if (pts.length === 5 && pts[0][0] === pts[4][0] && pts[0][1] === pts[4][1]) pts = pts.slice(0, 4);
-      if (pts.length === 4) rules.push(pts.map(([x, y]) => mul(ctm as number[], x, y)));
+      const r = filledRule(outline(path), toPt(ctm));
+      if (r) rules.push(r);
     },
   });
   page.run(device, mupdf.Matrix.identity);
@@ -174,7 +163,9 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
   for (const t of [...off].sort((a, b) => b.max_abs_dx - a.max_abs_dx).slice(0, 25))
     log(`  y ${t.y.toFixed(2).padStart(9)}  start ${t.start_dx.toFixed(2)}  end ${t.end_dx.toFixed(2)}  slope ${t.slope_pt_per_100pt.toFixed(3)}/100pt  ${JSON.stringify(t.text)}`);
 
-  // rules: each viewer rect against the strip rule whose corners are nearest.
+  // rules: each viewer rect against the strip rule whose corners are nearest,
+  // of those no other rect has taken: a shape drawn twice on both sides
+  // (nicematrix strokes its vertical rules twice) pairs copy with copy.
   // `off` is the farthest any corner of either is from the other's nearest
   // corner (pt): position, size and angle in one number; dx/dy the move
   // between their centres (strip − viewer).
@@ -192,7 +183,7 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
     const ptp = Math.max(Math.max(...V.map(v => v[0])) - Math.min(...V.map(v => v[0])), Math.max(...V.map(v => v[1])) - Math.min(...V.map(v => v[1])));
     let bestD = Infinity, k = -1;
     for (let i = 0; i < centres.length; i++) {
-      if (Math.max(Math.abs(centres[i][0] - c[0]), Math.abs(centres[i][1] - c[1])) >= 2 + ptp / 2) continue;
+      if (drawn.has(i) || Math.max(Math.abs(centres[i][0] - c[0]), Math.abs(centres[i][1] - c[1])) >= 2 + ptp / 2) continue;
       const d = cornerDistance(V, rules[i]);
       if (d < bestD) { bestD = d; k = i; }
     }

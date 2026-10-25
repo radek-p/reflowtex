@@ -91,14 +91,18 @@ after the viewer.
 gives every glyph and rule in the strip with its origin; `dom-dump.ts` gives
 every glyph and rule the viewer drew in the same frame, through any
 transform (`\rotatebox`) – a picture's glyphs too (TikZ labels, drawn by
-dvisvgm as `<use>` of an outline; reported as ◊ in the font "picture"). Each viewer glyph is matched to the nearest strip
-glyph within `--window` (0.7pt). Reported: the vertical residual along the
-document (a drift is height lost or gained in stacking), per text line the
-offset at its start and the slope along it (a glue or expansion ratio
-different from TeX's), and the rules – each as its four corners, at any
-angle, matched to the strip rule whose corners are nearest, with TeX's
-rules the viewer did not draw. Whatever
-it reports is geometry, not rasterisation, so run it first.
+dvisvgm as `<use>` of an outline; reported as ◊ in the font "picture"). A
+rule is a stroke of one straight segment or a fill of one four-cornered
+shape with straight sides: TeX's rules, and in a picture its straight lines,
+fills and arrow tips, which the strip has from LuaTeX's PDF and the viewer
+draws as dvisvgm's paths. `shapes.ts` decides it for both sides alike. Each
+viewer glyph is matched to the nearest strip glyph within `--window`
+(0.7pt). Reported: the vertical residual along the document (a drift is
+height lost or gained in stacking), per text line the offset at its start
+and the slope along it (a glue or expansion ratio different from TeX's), and
+the rules – each as its four corners, at any angle, matched to the strip
+rule whose corners are nearest, with TeX's rules the viewer did not draw.
+Whatever it reports is geometry, not rasterisation, so run it first.
 
 **Pixels: `compare.ts`.** Both sides are drawn at `--ppp` pixels per TeX
 point in one frame – the column of `\hsize` with `--margin` of white either

@@ -11,10 +11,32 @@
 import { parseArgs } from 'node:util';
 import { writeFileSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { filledRule, strokedRule, svgOutline, type Affine, type Pt } from './shapes.ts';
 
 export interface DomGlyph { x: number; y: number; w: number; text: string; font: string; size: number }
-export interface DomRect { x: number; y: number; w: number; h: number; pts: [number, number][] }
+/** A rule the viewer drew: its four corners (`pts`, at any angle), and the box around them. */
+export interface DomRect { x: number; y: number; w: number; h: number; pts: Pt[] }
 export interface Dom { height: number; glyphs: DomGlyph[]; rects: DomRect[] }
+/** A drawn <rect> or <path>, as the page gives it: its path data, how it is
+ *  painted, and `m`, from its own coordinates to the strip's frame. */
+interface DomShape { d: string; fill: boolean; stroke: { width: number; capped: boolean } | null; m: Affine }
+
+/** The rules among the shapes: each filled or stroked shape that shapes.ts
+ *  takes for one, as the strip's are taken. */
+function rulesOf(shapes: DomShape[]): DomRect[] {
+  const rects: DomRect[] = [];
+  const add = (pts: Pt[] | null) => {
+    if (!pts) return;
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    rects.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), pts });
+  };
+  for (const s of shapes) {
+    const o = svgOutline(s.d);
+    if (s.fill) add(filledRule(o, s.m));
+    if (s.stroke) add(strokedRule(o, s.stroke.width, s.stroke.capped, s.m));
+  }
+  return rects;
+}
 
 /** `screenshot`: a PNG path for the page as dumped, in the same frame – the
  *  block and a margin either side, 2 px per pt, its top at the block's. */
@@ -64,13 +86,15 @@ export async function dumpDom(url: string, o: { hsize?: number; margin?: number;
       const root = document.querySelector('.latex-block')!;
       const blockTop = root.getBoundingClientRect().top + window.scrollY;
       const blockLeft = root.getBoundingClientRect().left + window.scrollX;
-      const glyphs: DomGlyph[] = [], rects: DomRect[] = [];
-      // A point in an element's own coordinates, in the strip's frame (pt):
-      // through the element's transform to the screen, so that what the viewer
-      // rotates (\rotatebox: a matrix() on a group) comes out rotated.
+      const glyphs: DomGlyph[] = [], shapes: DomShape[] = [];
+      // An element's own coordinates to the strip's frame (pt): through its
+      // transform to the screen, so that what the viewer rotates (\rotatebox:
+      // a matrix() on a group) comes out rotated.
+      const frame = new DOMMatrix().scale(0.5).translate(window.scrollX - blockLeft + marginPx, window.scrollY - blockTop);
+      const toFrame = (e: SVGGraphicsElement) => frame.multiply(e.getScreenCTM()!);
       const at = (m: DOMMatrix, x: number, y: number): [number, number] => {
         const p = new DOMPoint(x, y).matrixTransform(m);
-        return [(p.x + window.scrollX - blockLeft + marginPx) / 2, (p.y + window.scrollY - blockTop) / 2];
+        return [p.x, p.y];
       };
       for (const svg of root.querySelectorAll('svg')) {
         for (const t of svg.querySelectorAll('tspan')) {
@@ -80,40 +104,49 @@ export async function dumpDom(url: string, o: { hsize?: number; margin?: number;
           const ff = (t.getAttribute('font-family') || te.getAttribute('font-family') || '').split(',')[0].replace(/["']/g, '');
           const fs = parseFloat(t.getAttribute('font-size') || te.getAttribute('font-size') || '0');
           const bb = t.getBBox ? t.getBBox() : null;
-          const [gx, gy] = at(te.getScreenCTM()!, x, y);
+          const [gx, gy] = at(toFrame(te), x, y);
           glyphs.push({ x: gx, y: gy, w: bb ? bb.width / 2 : 0, text: t.textContent ?? '', font: ff, size: fs / 2 });
         }
+        // Only what is drawn: not the definitions a picture's markup keeps in
+        // <defs> (glyph outlines, and the same glyph at another size, a <use>
+        // of it scaled), nor a clip path or the like.
+        const unseen = (e: Element) => e.closest('defs, clipPath, mask, pattern, marker, symbol') !== null;
         // A picture's glyphs (TikZ labels, text in an included PDF): dvisvgm
         // draws each as a <use> of a glyph outline ("g1-4", prefixed per
         // picture), its origin at the use's x, y. They have no text; ◊ stands
         // for one, in the font "picture".
         for (const u of svg.querySelectorAll('.latex-picture use')) {
-          if (!/-g\d+-\d+$/.test(u.getAttribute('href') ?? u.getAttribute('xlink:href') ?? '')) continue;
+          if (unseen(u) || !/-g\d+-\d+$/.test(u.getAttribute('href') ?? u.getAttribute('xlink:href') ?? '')) continue;
           const x = parseFloat(u.getAttribute('x') ?? '0'), y = parseFloat(u.getAttribute('y') ?? '0');
-          const [gx, gy] = at((u as SVGGraphicsElement).getScreenCTM()!, x, y);
+          const [gx, gy] = at(toFrame(u as SVGGraphicsElement), x, y);
           glyphs.push({ x: gx, y: gy, w: 0, text: '◊', font: 'picture', size: 0 });
         }
-        // Drawn rules only: not a link's transparent hit area, nor the empty
-        // mark a \webaside leaves where it stood. Each is its four corners
-        // (`pts`, at any angle), and the box around them.
-        for (const e of svg.querySelectorAll('rect:not(.latex-link-hit):not(.latex-aside-mark)')) {
-          if (e.closest('.latex-missing-glyph')) continue;
-          const x = parseFloat(e.getAttribute('x')!), y = parseFloat(e.getAttribute('y')!);
-          const w = parseFloat(e.getAttribute('width')!), h = parseFloat(e.getAttribute('height')!);
-          if (!(w > 0) || !(h > 0)) continue;
-          const m = (e as SVGGraphicsElement).getScreenCTM()!;
-          const pts = [at(m, x, y), at(m, x + w, y), at(m, x + w, y + h), at(m, x, y + h)];
-          const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-          rects.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), pts });
+        // What may be a rule (shapes.ts decides): TeX's rules, drawn as
+        // <rect> – not a link's transparent hit area, nor the empty mark a
+        // \webaside leaves where it stood – and a picture's paths. Each as its
+        // path data, how it is painted, and the map from its own coordinates
+        // to the strip's frame.
+        for (const e of svg.querySelectorAll<SVGGraphicsElement>('rect:not(.latex-link-hit):not(.latex-aside-mark), .latex-picture path')) {
+          if (unseen(e) || e.closest('.latex-missing-glyph')) continue;
+          let d = e.getAttribute('d') ?? '';
+          if (e.tagName === 'rect') {
+            const x = parseFloat(e.getAttribute('x')!), y = parseFloat(e.getAttribute('y')!);
+            const w = parseFloat(e.getAttribute('width')!), h = parseFloat(e.getAttribute('height')!);
+            if (!(w > 0) || !(h > 0)) continue;
+            d = `M${x} ${y}H${x + w}V${y + h}H${x}Z`;
+          }
+          const cs = getComputedStyle(e), m = toFrame(e);
+          shapes.push({ d, fill: cs.fill !== 'none', stroke: cs.stroke === 'none' ? null : { width: parseFloat(cs.strokeWidth), capped: cs.strokeLinecap !== 'butt' },
+                        m: [m.a, m.b, m.c, m.d, m.e, m.f] });
         }
       }
-      return { height: root.getBoundingClientRect().height / 2, glyphs, rects };
+      return { height: root.getBoundingClientRect().height / 2, glyphs, shapes };
     }, [marginPx]);
     if (o.screenshot) {
       const r = await page.evaluate(() => { const b = document.querySelector('.latex-block')!.getBoundingClientRect(); return { x: b.left + window.scrollX, y: b.top + window.scrollY, h: b.height }; });
       await page.screenshot({ path: o.screenshot, fullPage: true, clip: { x: r.x - marginPx, y: r.y, width: colPx + 2 * marginPx, height: Math.ceil(r.h) } });
     }
-    return dom;
+    return { height: dom.height, glyphs: dom.glyphs, rects: rulesOf(dom.shapes) };
   } finally {
     await browser.close();
   }
