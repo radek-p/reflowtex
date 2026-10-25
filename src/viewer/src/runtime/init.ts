@@ -96,7 +96,7 @@ export async function initBlock(el: HTMLElement, of: BlockSource | null = null, 
     const params  = paramsFromEl(el);
     const natural = el.dataset.latexWidth === 'natural';
     let widthPt = natural ? NATURAL_PROBE_PT : el.dataset.latexWidth
-        ? parseInt(el.dataset.latexWidth!)
+        ? parseFloat(el.dataset.latexWidth!)
         : (el.clientWidth / ZOOM) || DEFAULT_WIDTH_PT;
     // bcs: Map(paraIdx → break candidates), built lazily. blockEl and relayout
     // are for the host API (block-hosts.ts): the block the layout's instances

@@ -19,20 +19,24 @@ export interface Dom { height: number; glyphs: DomGlyph[]; rects: DomRect[] }
 /** `screenshot`: a PNG path for the page as dumped, in the same frame – the
  *  block and a margin either side, 2 px per pt, its top at the block's. */
 export async function dumpDom(url: string, o: { hsize?: number; margin?: number; waitLog?: string; screenshot?: string } = {}): Promise<Dom> {
-  const colPx = Math.round((o.hsize ?? 345) * 2), marginPx = Math.round((o.margin ?? 36) * 2);
+  // The column is exactly \hsize, not the nearest whole pixel: the block is
+  // given its width in pt (data-latex-width), as its own pixel width would be
+  // rounded, and so would every space of a justified line.
+  const hsize = o.hsize ?? 345, colPx = hsize * 2, marginPx = (o.margin ?? 36) * 2;
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({ viewport: { width: colPx + 2 * marginPx, height: 1200 } });
+    const page = await browser.newPage({ viewport: { width: Math.ceil(colPx + 2 * marginPx), height: 1200 } });
     const logs: string[] = [];
     page.on('console', m => logs.push(m.text()));
     await page.goto(url);
     const t = Date.now();
     while (o.waitLog && Date.now() - t < 30000 && !logs.some(l => l.includes(o.waitLog!))) await page.waitForTimeout(100);
     await page.waitForTimeout(500);
-    await page.evaluate(([colPx, marginPx]) => {
+    await page.evaluate(([colPx, marginPx, hsize]) => {
       const w = window as unknown as { __setTheme?(t: string): void; __zoom?(z: number): void };
       if (w.__setTheme) w.__setTheme('light');
       if (w.__zoom) w.__zoom(0);
+      for (const b of document.querySelectorAll<HTMLElement>('#lt-content > .latex-block')) b.dataset.latexWidth = String(hsize);
       const css = document.createElement('style');
       css.textContent = `html, body { margin:0 !important; padding:0 !important }
         body > :not(#lt-content) { display:none !important }
@@ -41,7 +45,7 @@ export async function dumpDom(url: string, o: { hsize?: number; margin?: number;
         .latex-block { margin:0 !important; width:${colPx}px !important }`;
       document.head.appendChild(css);
       window.dispatchEvent(new Event('resize'));
-    }, [colPx, marginPx]);
+    }, [colPx, marginPx, hsize]);
     await page.waitForTimeout(1500);
     await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
     await page.waitForTimeout(500);

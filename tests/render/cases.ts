@@ -74,6 +74,11 @@ export const cases: Record<string, CaseSettings> = {
   'lists-headings': { tolerance: 0.009 },
   microtype: { tolerance: 0.014 },
   paragraph: { tolerance: 0.010 },
+  // The paragraph at widths that are no whole number of pixels (2 px per pt):
+  // a real paper's \hsize rarely is one. The column must be the exact width,
+  // not the nearest pixel, or every space of a justified line is off.
+  // Worst attained 2026-10-25: 0.011 (0.13 to 0.22 when the column was rounded).
+  'fractional-width': { file: 'tests/render/cases/paragraph.tex', widths: [0.37, -100.21, 84.83], tolerance: 0.011 },
   rules: { tolerance: 0.010, rule_tolerance: 0.004 },
   // A rule and a box set in vertical mode, and a paragraph holding only a
   // rule: kept as fixed displays (they used to be dropped, with 202 glyphs

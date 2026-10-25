@@ -55,7 +55,7 @@ viewport.
 
 | Attribute | Meaning |
 |---|---|
-| `data-latex-width` | layout width in pt (default: the element's own pixel width ÷ 2); `natural`: the width of its text set on one line, like an `\hbox`, which the viewer also gives the element as its CSS width – for a word in the page's own HTML |
+| `data-latex-width` | layout width in pt, fractions allowed (default: the element's own pixel width ÷ 2); `natural`: the width of its text set on one line, like an `\hbox`, which the viewer also gives the element as its CSS width – for a word in the page's own HTML |
 | `data-align` | `justify` (default) · `left` · `right` · `center` |
 | `data-latex-selection` | How selected text looks, on `<html>` or a block (the nearest wins): `native` (default), the browser's own highlight, glyph by glyph; `bands`, the viewer's, drawn as a mark's band is: one even rect per line (`rect.latex-selection`, coloured `var(--latex-selection-color, Highlight)`), spaces included, over marks and under the text; a selection that starts or ends in a word space (or at a glyph's far edge) reaches that edge, so a space can be selected, alone or with the words around it. The selection itself stays the browser's (copy, keyboard, `getSelection()`); only its look changes. [host/selection.ts](src/host/selection.ts) |
 | `data-latex-scope` | The scope its live texts are looked up in first (see Live text: scopes); `host.mount(el, { scope })` wins over it |

@@ -65,11 +65,13 @@ export function reflowBlock(el: HTMLElement, quick = false): boolean {
     // fires the observer once more.
     if (el.clientWidth === 0 && !el.dataset.latexWidth) return false;
     const newWidth = data.naturalPt || (el.dataset.latexWidth
-        ? parseInt(el.dataset.latexWidth!)
+        ? parseFloat(el.dataset.latexWidth!)
         : (el.clientWidth / ZOOM) || DEFAULT_WIDTH_PT);
     // Re-read alignment every time: a media query may have changed --latex-align.
     const newAlign = alignFromEl(el);
-    if (Math.abs(newWidth - data.lastWidth) < 0.5 && newAlign === data.lastAlign) return false;
+    // Any change of width lays the block out again: a pixel width moves in steps
+    // of 1/ZOOM pt, but data-latex-width may be any fraction of a point (\hsize).
+    if (Math.abs(newWidth - data.lastWidth) < 1e-3 && newAlign === data.lastAlign) return false;
     data.lastWidth = newWidth;
     data.lastAlign = newAlign;
     const params = { ...data.params, align: newAlign };
