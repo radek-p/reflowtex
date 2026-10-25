@@ -89,3 +89,18 @@ test('live text asks document.fonts.check nothing', async ({ openPage }) => {
   await idle(page);
   expect(await page.evaluate(() => (window as W).__checks)).toBe(0);
 });
+
+test('live text in a face that failed to load settles: measured once, the viewer goes idle', async ({ openPage }) => {
+  const page = await openPage('live', { init: `
+    document.addEventListener('reflowtex:host', e => { e.detail.host.fonts.provide('${FILE}', 'fonts/no-such-font.otf'); });` });
+  const r = await page.evaluate(async () => {
+    const w = window as W;
+    w.reflowtex.host.setText('apples', 'a few apples');
+    const idle = await Promise.race([w.reflowtex.inspect.idle().then(() => 'idle'), new Promise(r => setTimeout(() => r('still busy'), 5000))]);
+    return { idle, pending: w.reflowtex.inspect.pending() };
+  });
+  expect(r.idle, JSON.stringify(r.pending)).toBe('idle');
+  // what the page reported: the missing file, and the viewer's bar naming the font
+  expect(page.errors.some(e => /no-such-font\.otf/.test(e))).toBe(true);
+  page.errors.length = 0;
+});

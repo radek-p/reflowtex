@@ -11,7 +11,7 @@
 //
 //   registerFonts(fontsData) -> FontTable    a block's fonts: faces made (or shared), loaded
 //   provideFont(file, source) -> Promise      host.fonts.provide
-//   fontLoaded(file) · familyLoaded(family) · whenFamilyLoaded(family) · fontsReady() · faceRecords()
+//   fontLoaded(file) · familyLoaded(family) · familyLoading(family) · whenFamilyLoaded(family) · fontsReady() · faceRecords()
 
 import { ZOOM } from '../engine/core.ts';
 import { SCRIPT_URL, api } from './page.ts';
@@ -116,6 +116,11 @@ const loadedFace = (f: Face | undefined) => !!f && f.face.status === 'loaded';
 export const fontLoaded = (file: string): boolean => loadedFace(faces.get(familyOf(file)));
 /** Whether a family's face has loaded (a block's FontInfo.family). */
 export const familyLoaded = (family: string): boolean => loadedFace(faces.get(family));
+/** Whether a family's face is still on its way (made by the viewer, neither loaded nor failed): what to wait for. */
+export function familyLoading(family: string): boolean {
+    const st = faces.get(family)?.face.status;
+    return st === 'unloaded' || st === 'loading';
+}
 /** Settles once a family's face has loaded or failed (at once for one the viewer did not make). */
 export const whenFamilyLoaded = (family: string): Promise<void> => faces.get(family)?.settled ?? Promise.resolve();
 /** Settles once every face asked for so far, and every replacement on its way, has loaded or failed. */
