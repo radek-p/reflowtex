@@ -26,6 +26,7 @@ import { FontError } from '../errors.ts';
 import { type CmapSubtable, readSfnt, writeSfnt, parseCmap, buildCmap, parseName, nameString, setNameString, buildName, numGlyphs, codepointsToGlyphs } from './sfnt.ts';
 import { subsetFont } from './subset.ts';
 import { convertType1, kpsewhich, MODIFIED_TAG } from './type1.ts';
+import { PUA_BASE } from './addressing.ts';
 
 const hash8 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex').slice(0, 8);
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -116,8 +117,15 @@ export class Fonts {
    *  format-12 one. The earlier renamed versions of the fonts patched go (each
    *  is made again from its original); files of other fonts are left as they
    *  are, so a caller may patch a few fonts at a time (the browser engine
-   *  does, as blocks bring new code points). */
-  patch(requirements: Requirements, log: (s: string) => void = console.log): void {
+   *  does, as blocks bring new code points).
+   *
+   *  `whole`: a font that needs any entry gets every glyph's private-use one
+   *  (PUA_BASE + glyph index, the only code points addressing.ts adds), so
+   *  its patched file is the same whatever the blocks drew: one original
+   *  gives one patched file, one name, for every document and every round,
+   *  and it is never patched again for a later block. A font that needs
+   *  nothing stays the original. */
+  patch(requirements: Requirements, log: (s: string) => void = console.log, { whole = false }: { whole?: boolean } = {}): void {
     this.served = new Map();
     if (!requirements.size) return;
     this.provision(requirements.keys(), log);
@@ -135,8 +143,13 @@ export class Fonts {
       const subs = parseCmap(font.tables.get('cmap')!);
       const existing = new Set<number>();
       for (const s of subs) for (const c of s.map.keys()) existing.add(c);
-      const missing = [...want].filter(([c]) => !existing.has(c)).sort((a, b) => a[0] - b[0]);
+      let missing = [...want].filter(([c]) => !existing.has(c)).sort((a, b) => a[0] - b[0]);
       if (!missing.length) { this.served.set(filename, filename); log(`  font-patch: ${filename} already complete`); continue; }
+      if (whole) {
+        const all = new Map<number, number | null>(missing);
+        for (let g = 0, n = numGlyphs(font); g < n; g++) if (!existing.has(PUA_BASE + g)) all.set(PUA_BASE + g, g);
+        missing = [...all].sort((a, b) => a[0] - b[0]);
+      }
       // A non-BMP entry (a private-use rewrite: PUA_BASE + glyph index) needs
       // a (3,10) format-12 subtable; a font without one (Latin Modern's and
       // STIX Two's text faces) gets one, holding its Unicode map too, since a

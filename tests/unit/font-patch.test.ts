@@ -72,3 +72,24 @@ test('a private-use entry in a font without a format-12 cmap: one is made, with 
     assert.deepEqual(shape('A'), [before.get(0x41)]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('whole: a font patched for any glyph gets every glyph, the same file whatever the blocks drew', { skip: !have && 'Latin Modern OTF not installed' }, async () => {
+  const { readFileSync } = await import('node:fs');
+  const { readSfnt, codepointsToGlyphs, numGlyphs } = await import('../../src/pipeline/fonts/sfnt.ts');
+  const { PUA_BASE } = await import('../../src/pipeline/fonts/addressing.ts');
+  const dirs = [mkdtempSync(join(tmpdir(), 'rtx-font-patch-')), mkdtempSync(join(tmpdir(), 'rtx-font-patch-'))];
+  try {
+    const pua = (gs: number[]) => new Map(gs.map(g => [PUA_BASE + g, g] as [number, number | null]));
+    const a = new Fonts(dirs[0]!), b = new Fonts(dirs[1]!);
+    a.patch(new Map([[REGULAR, pua([300])], [ITALIC, new Map([[0x41, null]])]]), quiet, { whole: true });
+    b.patch(new Map([[REGULAR, pua([5, 700])]]), quiet, { whole: true });
+    const sa = a.served.get(REGULAR)!, sb = b.served.get(REGULAR)!;
+    assert.match(sa, /\.reflowtex-[0-9a-f]{8}\.otf$/);
+    assert.equal(sa, sb, 'one name for both documents');
+    assert.deepEqual(readFileSync(join(dirs[0]!, sa)), readFileSync(join(dirs[1]!, sb)), 'the same bytes');
+    const font = readSfnt(readFileSync(join(dirs[0]!, sa)));
+    const map = codepointsToGlyphs(font);
+    for (let g = 0; g < numGlyphs(font); g++) assert.equal(map.get(PUA_BASE + g), g, `glyph ${g} by its private-use code point`);
+    assert.equal(a.served.get(ITALIC), ITALIC, 'a font that needs nothing stays the original');
+  } finally { for (const d of dirs) rmSync(d, { recursive: true, force: true }); }
+});
