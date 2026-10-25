@@ -1,0 +1,28 @@
+% Captions under hyperref keep the space of the line its anchor leaves: after a display, and after a full-width box and a line end.
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\begin{document}
+A paragraph before the first figure, long enough to break onto a second line of
+the column, quickly.
+\begin{figure}[h]
+  \centering
+  \[ a = b + c \]
+  \caption{A caption after a display, long enough to need two lines of the
+    column, so that it is set as a paragraph and not centred.}
+\end{figure}
+A paragraph between the figures, long enough to break onto a second line of
+the column, quickly.
+\begin{figure}[h]\centering
+  \makebox[\textwidth]{\rule{3cm}{1cm}}
+  \caption{A caption after a full-width box and a line end.}
+\end{figure}
+A paragraph between the figures, long enough to break onto a second line of
+the column, quickly.
+\begin{figure}[h]\centering
+  \makebox[\textwidth]{\rule{3cm}{1cm}}%
+  \caption{A caption after a full-width box and no space.}
+\end{figure}
+A paragraph after the figures, long enough to break onto a second line of the
+column, quickly.
+\end{document}

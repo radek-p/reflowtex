@@ -101,6 +101,16 @@ export const cases: Record<string, CaseSettings> = {
   // (the same paragraph in lmodern's T1 fonts reaches 0.21). Worst attained
   // 2026-10-25.
   'virtual-fonts': { tolerance: 0.082 },
+  // Lines with nothing visible, as in real papers: a display followed by an
+  // empty box, a \write, a \medskip or a label at an item's end, blank lines
+  // in verbatim, a label left alone after a box as wide as the text. Each was
+  // dropped with its space (12 to 25.6 pt each, 134 pt by the end). One page,
+  // so against_plain too. Worst attained 2026-10-25.
+  'blank-lines': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.003 },
+  // The same under hyperref, whose \caption leaves its anchor alone on a line
+  // after a display (28.6 pt lost) or after a full-width box and a line end
+  // (12 pt): floats, so not against plain. Worst attained 2026-10-25.
+  'blank-lines-figures': { tolerance: 0.009, rule_tolerance: 0.002 },
   // A rule and a box set in vertical mode, and a paragraph holding only a
   // rule: kept as fixed displays (they used to be dropped, with 202 glyphs
   // after them out of place). Worst attained 2026-09-26.

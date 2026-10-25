@@ -322,6 +322,10 @@ export function displaySkipAdjust(L: SegmentLayout, prev: SegmentLayout | undefi
         const floor = it.display_after_min || 0;
         const below = Math.max(prev.displayFull ? it.display_below! : it.display_below_short!, floor);
         delta += (below - Math.max(it.display_used_below || 0, floor)) * SP_TO_PX;
+        // and the interline glue between the display and the line below,
+        // redone for that line at this width: display_interline_below is the
+        // glue TeX set there – across a blank line, which stays in the gap, the
+        // glue it would have set without one – and the gap holds the rest
         if (it.display_interline_below != null && L.firstMeta && L.firstAscent != null) {
             delta += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta) - it.display_interline_below * SP_TO_PX;
         }

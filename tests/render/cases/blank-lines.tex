@@ -1,0 +1,50 @@
+% Lines with nothing visible keep their space: a display followed by something that draws nothing, a \medskip or a label, blank lines in verbatim, and a label left alone on the line after a full-width box.
+\documentclass{article}
+\usepackage{amsmath}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+A paragraph that ends in a display and an empty box, which TeX sets as a line
+of its own:
+\[ a = b + c \]\mbox{}
+
+A paragraph after it, then a display and a write, which draws nothing either:
+\[ x^2 + y^2 = z^2 \]\write-1{}
+
+A paragraph after the write, with a descender to end on: quickly, gladly.
+Then an alignment, a medium skip and a blank line:
+\begin{align*}
+  H(x,y) &= H(x,y) - 0\\
+         &= -H(x,y) = 0.
+\end{align*}
+\medskip
+
+A paragraph after the skip, and a list whose last item ends in a labelled
+alignment:
+\begin{enumerate}
+  \item A first item, long enough to break onto a second line when the column
+        is narrow, quickly.
+  \item A second item, ending in a display
+  \begin{align*}
+    p &= q + r
+  \end{align*} \label{i:display}
+\end{enumerate}
+A paragraph after the list, then code with two empty lines in it:
+\begin{verbatim}
+DATE_RE = re.compile(
+    r"(?<=\D)[0-9]{4}"
+
+    "(" # day and month
+)
+
+TIME_RE = re.compile(
+\end{verbatim}
+A paragraph after the code. Then a box as wide as the text, a line end and a
+label, which TeX puts on a line of its own:
+
+\noindent\makebox[\textwidth]{\rule{3cm}{1cm}}
+\label{fw}
+
+A closing paragraph, its space set from the depth of the line before, and long
+enough to break onto a second line of the column.
+\end{document}

@@ -166,7 +166,7 @@ so a curve, a triangle or a stroked outline is a rule on neither.
 The strip and the page both come from the pipeline's compile, inside its
 template. If the template changed what TeX sets, both would be wrong
 together and the comparison would still pass. A case with
-`against_plain` (`label-anchors`) is also compiled as its author would
+`against_plain` (`label-anchors`, `blank-lines`) is also compiled as its author would
 compile it, with plain lualatex, into `build/<case>/plain/`, and the test
 `<case>@plain` checks every glyph of the strip at the case's own width
 against that PDF's, each relative to the first, within what the two

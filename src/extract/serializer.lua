@@ -1226,6 +1226,18 @@ local cur_leading = {}
 -- the display item the next below-display glue belongs to.
 local last_box = nil
 local last_display = nil
+-- The depth of the last line, display or box the flow stacked: what the
+-- interline glue below it is set from.
+local last_depth = 0
+
+-- TeX's interline glue between a depth above and a height below (§679):
+-- \baselineskip less the two, or \lineskip where that leaves less than
+-- \lineskiplimit. The viewer redoes it with the same rule.
+local function interline_glue(depth, height, leading)
+    local b = (leading.bskip or 0) - depth - height
+    if b >= (leading.lskiplimit or 0) then return b end
+    return leading.lskip or 0
+end
 
 -- ── Streams ───────────────────────────────────────────────────────────────
 -- Every item lands in exactly one content list: the main flow, a footnote's
@@ -1260,8 +1272,9 @@ local function stream_out(ctx, sid)
     return s.content
 end
 
+-- `blank`: a blank line stands in the gap (see walk_flow).
 local function reset_pending(pending)
-    pending.sp = 0; pending.explicit = 0; pending.parts = nil
+    pending.sp = 0; pending.explicit = 0; pending.parts = nil; pending.blank = nil
 end
 
 -- The vertical glue and kerns between two items, as TeX left them, for a
@@ -1322,13 +1335,14 @@ local function only_anchors(list)
     end
     return true
 end
--- `sp` is the full glue, `explicit` only the author's own; after a display the
--- full glue counts (it carries the display's below-skip). As everywhere, a gap
--- before anything at all is dropped. `parts` (note_part) are kept with it:
--- the explicit glue, or after a display all of it. A gap whose explicit glue
--- is all zero – article's \parskip, 0pt plus 1pt – is still an item, of
--- amount 0, so its glue is not lost to a tool that shows it.
-local function place_gap(ctx, next_sid, sp, explicit, parts)
+-- `sp` is the full glue, `explicit` only the author's own; after a display,
+-- or when `whole` says so (across a blank line), the full glue counts (it
+-- carries the display's below-skip). As everywhere, a gap before anything at
+-- all is dropped. `parts` (note_part) are kept with it: the explicit glue, or
+-- with the full glue all of it. A gap whose explicit glue is all zero –
+-- article's \parskip, 0pt plus 1pt – is still an item, of amount 0, so its
+-- glue is not lost to a tool that shows it.
+local function place_gap(ctx, next_sid, sp, explicit, parts, whole)
     local list = stream_out(ctx, common_stream(ctx, ctx.last_sid, next_sid))
     local pos = #list
     while pos > 0 do
@@ -1341,11 +1355,11 @@ local function place_gap(ctx, next_sid, sp, explicit, parts)
             break
         end
     end
-    local after_display = ctx.last_kind == "display"
-    local amount = after_display and sp or explicit
+    whole = whole or ctx.last_kind == "display"
+    local amount = whole and sp or explicit
     local glue = {}
     for _, g in ipairs(parts or {}) do
-        if after_display or (g.type == "glue" and (g.subtype == GLUE_USERSKIP or g.subtype == GLUE_PARSKIP)) then
+        if whole or (g.type == "glue" and (g.subtype == GLUE_USERSKIP or g.subtype == GLUE_PARSKIP)) then
             glue[#glue + 1] = g
         end
     end
@@ -1380,10 +1394,8 @@ local fixed_items = 0
 -- previous item's own.
 local HL_EQUATION_WRAP = 6
 local function emit_fixed(n, box, pending, ctx)
-    local gap = (pending.sp or 0) + ((last_box == "blank" and pending.blank_sp) or 0)
-    place_gap(ctx, stream_attr(n), gap, gap, pending.parts)
+    place_gap(ctx, stream_attr(n), pending.sp, pending.sp, pending.parts)
     reset_pending(pending)
-    pending.blank_sp = nil
     local out = stream_out(ctx, stream_attr(n))
     ctx.last_sid, ctx.last_kind = stream_attr(n), "display"
     out[#out + 1] = {
@@ -1404,7 +1416,7 @@ local function emit_fixed(n, box, pending, ctx)
                 depth = box.depth, shift = 0, glue_set = 0, glue_sign = 0, glue_order = 0,
                 children = { box } },
     }
-    last_display = out[#out]; last_box = "display"
+    last_display = out[#out]; last_box = "display"; last_depth = box.depth or 0
     pending.above_skip = nil; pending.interline = nil
     fixed_items = fixed_items + 1
 end
@@ -1470,42 +1482,56 @@ local function walk_flow(head, pending, ctx)
         elseif t == "hlist" and n.subtype == HL_LINE then
             local p = find_para(n)
             last_box = (p and has_visible_nodes(all_paragraphs[p].nodes)) and "line" or "blank"
-            -- A blank line (a paragraph with nothing visible) is not an item,
-            -- but the space down to it and its own height are real space. If
-            -- a display follows – the display opened that empty paragraph, as
-            -- \begin{equation} straight after \par does – they belong to the
-            -- gap above the display (below). Before anything else the blank
-            -- line's space is dropped with it, as ever.
-            if last_box == "blank" then
-                pending.blank_sp = (pending.blank_sp or 0) + (pending.sp or 0)
-                                   + (n.height or 0) + (n.depth or 0)
-            else
-                pending.blank_sp = nil
-            end
-            pending.interline = nil
             if p then
                 cur_band.indent = all_paragraphs[p].band_indent or all_paragraphs[p].indent
                 cur_band.width  = all_paragraphs[p].band_width or all_paragraphs[p].width
                 cur_leading = { bskip = all_paragraphs[p].baselineskip, lskip = all_paragraphs[p].lineskip,
                                 lskiplimit = all_paragraphs[p].lineskiplimit }
             end
-            if p and not seen_para[p] and has_visible_nodes(all_paragraphs[p].nodes) then
-                seen_para[p] = true
-                -- Abutting a display, keep TeX's full glue: above/belowdisplayskip
-                -- carries the display's spacing. Between text paragraphs keep only
-                -- explicit vspace: baselineskip leading is re-derived per line, but
-                -- a \vspace or a section's before/after skip must survive.
-                place_gap(ctx, stream_attr(n), pending.sp, pending.explicit, pending.parts)
-                local out = stream_out(ctx, stream_attr(n))
-                out[#out + 1] = { kind = "paragraph", para = p }
-                ctx.last_sid, ctx.last_kind = stream_attr(n), "paragraph"
+            if last_box == "blank" then
+                -- A blank line (a paragraph with nothing visible: an empty box,
+                -- a \write, a label's anchor, an empty line of verbatim, the
+                -- \vadjust of a \medskip after a display) is not an item, but
+                -- the space down to it, its height and depth, and whatever
+                -- follows it are real space: all of it stays in the gap, which
+                -- goes on to the next item, whatever that is.
+                pending.sp = (pending.sp or 0) + (n.height or 0) + (n.depth or 0)
+                pending.blank = true
+            else
+                if p and not seen_para[p] then
+                    seen_para[p] = true
+                    -- Abutting a display, keep TeX's full glue: above/belowdisplayskip
+                    -- carries the display's spacing. Between text paragraphs keep only
+                    -- explicit vspace: baselineskip leading is re-derived per line, but
+                    -- a \vspace or a section's before/after skip must survive.
+                    --
+                    -- The viewer redoes the interline glue between the item above
+                    -- and this line, from their depth and height at its width: the
+                    -- glue TeX set there, or across a blank line, the glue it would
+                    -- have set without one. Across a blank line the gap holds TeX's
+                    -- whole space, as after a display, and so that glue is taken out
+                    -- of it – after a display, it is the display's interline glue
+                    -- below, which the viewer takes out.
+                    local il = pending.blank and interline_glue(last_depth, n.height or 0, cur_leading)
+                               or pending.interline
+                    local sp = pending.sp or 0
+                    if ctx.last_kind == "display" then
+                        if last_display then last_display.display_interline_below = il end
+                    elseif pending.blank then
+                        sp = sp - il
+                    end
+                    place_gap(ctx, stream_attr(n), sp, pending.explicit, pending.parts, pending.blank)
+                    local out = stream_out(ctx, stream_attr(n))
+                    out[#out + 1] = { kind = "paragraph", para = p }
+                    ctx.last_sid, ctx.last_kind = stream_attr(n), "paragraph"
+                end
+                reset_pending(pending)
+                last_depth = n.depth or 0
             end
-            reset_pending(pending)
+            pending.interline = nil
         elseif t == "hlist" and (n.subtype == HL_EQUATION or n.subtype == HL_ALIGNMENT) then
-            local gap = (pending.sp or 0) + ((last_box == "blank" and pending.blank_sp) or 0)
-            place_gap(ctx, stream_attr(n), gap, gap, pending.parts)
+            place_gap(ctx, stream_attr(n), pending.sp, pending.sp, pending.parts)
             reset_pending(pending)
-            pending.blank_sp = nil
             local out = stream_out(ctx, stream_attr(n))
             ctx.last_sid, ctx.last_kind = stream_attr(n), "display"
             local note = display_notes[node.get_attribute(n, DISPLAY_ATTR) or -1]
@@ -1554,7 +1580,8 @@ local function walk_flow(head, pending, ctx)
                     children   = n.head and serialize_nodelist(n.head) or {},
                 },
             }
-            last_display = out[#out]; last_box = "display"; pending.above_skip = nil; pending.interline = nil
+            last_display = out[#out]; last_box = "display"; last_depth = n.depth or 0
+            pending.above_skip = nil; pending.interline = nil
         elseif t == "whatsit" and n.subtype == WH_DEST and n.named_id == 1 then
             -- a destination between paragraphs (a section's, a \bibitem's): an
             -- anchor point, like a \label's (see "Links and destinations")
@@ -1588,11 +1615,13 @@ local function walk_flow(head, pending, ctx)
             local fn_content = {}
             local saved_band = { indent = cur_band.indent, width = cur_band.width }
             local saved_last = last_box
+            local saved_depth = last_depth
             walk_flow(n.head, { sp = 0, explicit = 0 },
                       s and { out = s.content, base = aside }
                         or { out = fn_content, base = stream_attr(n) })
             cur_band = saved_band
             last_box = saved_last
+            last_depth = saved_depth
             if s then
                 s.attrs[#s.attrs + 1] = { key = "aside", value = "true" }
             else
@@ -1614,11 +1643,9 @@ local function walk_flow(head, pending, ctx)
                 last_display.display_used_below = (short and last_display.display_below_short or last_display.display_below) or n.width or 0
             elseif n.subtype == GLUE_BASELINESKIP or n.subtype == GLUE_LINESKIP then
                 -- the interline glue TeX put before a box: the display's own
-                -- when it comes next, the next line's after a display
+                -- when it comes next, the next line's after a display (see
+                -- the HL_LINE branch)
                 pending.interline = n.width or 0
-                if last_box == "display" and last_display and last_display.display_interline_below == nil then
-                    last_display.display_interline_below = n.width or 0
-                end
             end
             if n.subtype == GLUE_USERSKIP or n.subtype == GLUE_PARSKIP then
                 pending.explicit = (pending.explicit or 0) + (n.width or 0)
