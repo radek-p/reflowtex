@@ -11,7 +11,7 @@ import { basename, join } from 'node:path';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import opentype from 'opentype.js';
-import { convertOutline, convertType1, findOutline, kpsewhich, parseMapLines, PUA_BASE, readEncoding, setDocumentMapLines } from '../../src/pipeline/fonts/type1.ts';
+import { convertOutline, convertType1, findOutline, glyphOutline, kpsewhich, parseMapLines, parseType1, PUA_BASE, readEncoding, setDocumentMapLines } from '../../src/pipeline/fonts/type1.ts';
 
 /** The outline file and encoding `face` is converted with. */
 function outlineOf(face: string): { file: string; encoding: string[] | null } {
@@ -109,4 +109,17 @@ test('a face whose map encoding is missing is not converted (metric boxes, not o
   setDocumentMapLines(() => ['+docface LMMathItalic10-Regular "E ReEncodeFont" <no-such-encoding.enc <lmmi10.pfb']);
   try { assert.equal(findOutline('docface'), null); }
   finally { setDocumentMapLines(() => []); }
+});
+
+// Bitstream Charter (charter; mathdesign's Charter draws from it) closes each
+// subroutine with "noaccess put", each glyph with "noaccess def": two tokens.
+const NO_CHARTER = !kpsewhich('bchr8a.pfb') && 'Bitstream Charter is not installed';
+test('a Type 1 font whose entries close with two tokens: every subroutine and glyph read', { skip: NO_CHARTER }, () => {
+  const pfb = kpsewhich('bchr8a.pfb')!;
+  const font = parseType1(pfb);
+  assert.equal(font.subrs.length, 223);
+  assert.equal(font.chars.size, 229);
+  const a = glyphOutline(pfb, 'A');
+  assert.equal(a.width, 639);
+  assert.ok(a.commands.length > 4);
 });

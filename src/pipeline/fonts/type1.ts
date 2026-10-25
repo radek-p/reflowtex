@@ -166,17 +166,18 @@ function parsePrivate(p: Bytes): { subrs: Bytes[]; chars: Map<string, Bytes> } {
   const cs = (bytes: Bytes) => (lenIV < 0 ? bytes : decrypt(bytes, 4330, lenIV));
   const skipWs = (i: number) => { while (i < text.length && /\s/.test(text[i])) i++; return i; };
   const skipToken = (i: number) => { while (i < text.length && !/\s/.test(text[i])) i++; return i; };
-  // "<index or /name> <length> <RD token> <binary> <ND/NP token>", repeated
+  // "<index or /name> <length> <RD token> <binary> <closing>", repeated; the
+  // closing is one token (NP, ND, |, |-) or two (Bitstream's "noaccess put",
+  // "noaccess def")
   const entries = (re: RegExp, from: number, onEntry: (k: string, b: Bytes) => void) => {
-    let i = from;
-    for (;;) {
-      i = skipWs(i);
-      re.lastIndex = i;
-      const m = re.exec(text);
-      if (!m) return;
+    const at = (i: number) => { re.lastIndex = skipWs(i); return re.exec(text); };
+    let m = at(from);
+    while (m) {
       const start = re.lastIndex, len = Number(m[2]);
       onEntry(m[1], p.subarray(start, start + len));
-      i = skipToken(skipWs(start + len));
+      let i = start + len;
+      m = null;
+      for (let k = 0; k < 3 && !m; k++) { i = skipToken(skipWs(i)); m = at(i); }
     }
   };
   const subrs: Bytes[] = [];
