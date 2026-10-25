@@ -574,9 +574,22 @@ wide as TeX's tie. The narrow no-break space (U+202F), the figure space
 (U+2007), the word joiner (U+2060) and U+FEFF stay inside their word, at the
 browser's fixed advance, and do not break. The words keep the default's
 height and depth.
+
+A slot inside a box – an `\hbox`, maths' `\text{…}`, an equation's tag, a
+one-line caption – is replaced in the same way, and the box is packed
+again with its new contents, as TeX packs one: a box at its natural width
+grows or shrinks by the change, and so does every box around it, up to the
+line, which is then broken with its new width; a box set to a width (glue
+stretched or shrunk in it, as in `\hbox to`, a centred caption or a line of
+a `\parbox`, or a width that follows the measure) keeps it, and its glue
+takes the change. Heights and depths stay, so no baseline moves. An
+equation's tag is placed again from its new width, as at any measure. A
+widget (`\webwidget`) is replaced only in a paragraph's own line.
+
 Changes within one animation frame are applied together, and only the
-segments holding an affected paragraph are laid out and painted again. A text
-set before its block is initialised is applied when the block is.
+segments holding an affected paragraph or display are laid out and painted
+again. A text set before its block is initialised is applied when the block
+is.
 
 **Scopes.** Several documents on one page may use the same names (two
 papers each with `\label{thm:main}`). A host mounts each document's blocks

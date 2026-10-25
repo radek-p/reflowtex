@@ -302,6 +302,17 @@ export interface SlotParagraph {
     /** The nodes replaced by the last change, whose drawings go. */
     stale?: TexNode[] | null;
 }
+/** A display whose box holds a \webtext slot: its box as compiled, and what
+ *  the viewer made of it (host/slots). `item` is the display, or its wider
+ *  form (display_wide), of `owner`, the item in the content stream. */
+export interface SlotDisplay {
+    owner: ContentItem;
+    item: ContentItem;
+    orig: TexNode;
+    made: TexNode[];
+    key?: string;
+    stale?: TexNode[] | null;
+}
 
 export interface Doc {
     fonts: DocFont[];
@@ -319,6 +330,7 @@ export interface Doc {
     marks: Mark[];
     /** The viewer's (host/slots). */
     slotParas?: SlotParagraph[];
+    slotDisplays?: SlotDisplay[];
 }
 
 // ── Fonts, as the viewer holds them ────────────────────────────────────────

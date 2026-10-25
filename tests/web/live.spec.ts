@@ -130,3 +130,95 @@ test('no break at a no-break space, at any width; the spaces still break', async
     expect(line('to'), `${px} px: not broken at the space`).not.toBe(line('1'));
   }
 });
+
+// Live text inside boxes: a \webtext in an \hbox, in maths' \text, in an
+// equation's tag (placed by the display model) and in a one-line caption
+// (LaTeX's \@makecaption: a box set to the measure, centred by its fills).
+// The text the page gives is drawn there, the box around it grows with it
+// (or, set to a width, takes it into its glue), so nothing it holds or
+// follows it is drawn over, and the line still fits the measure.
+type Drawn = { slot: number; text: string; x: number; adv: number; y: number; seg: number };
+type BoxGeometry = { k: number; column: number; slotted: Drawn[]; others: Drawn[]; box: { x: number; adv: number } | null; dom: string };
+async function inBox(page: WebPage, name: string): Promise<BoxGeometry> {
+  return page.evaluate((name: string): BoxGeometry => {
+    const el = [...document.querySelectorAll('.latex-block[data-nodelist-b64]')]
+      .find(b => b.querySelector(`[data-slot="${name}"]`)) as HTMLElement;
+    const st = reflowtex.inspect.state(el);
+    // (every slot of the name: maths' \text sets its argument once per style)
+    const ids = new Set(st.doc.slots.flatMap((s: any, i: number) => s.name === name ? [i + 1] : []));
+    const holds = (n: any): boolean => ids.has(n.slot) || (n.children || []).some(holds);
+    const glyphs: Drawn[] = [];
+    let box: { x: number; adv: number } | null = null;
+    st.cache.layout.laid.forEach((_: any, i: number) => reflowtex.inspect.replay(el, i, {
+      node(n: any, x: number, y: number, adv: number) {
+        if (n.type === 'glyph') glyphs.push({ slot: n.slot || 0, text: n.text ?? String.fromCodePoint(n.char), x, adv, y, seg: i });
+        // the innermost box holding the slot (boxes are reported after what they hold)
+        else if (n.type === 'hlist' && !box && (n.children || []).some(holds)) box = { x, adv };
+      },
+    }));
+    const slotted = glyphs.filter(g => ids.has(g.slot));
+    const at = slotted[0];
+    return { k: reflowtex.inspect.spToPx, column: st.cache.layoutCtx.columnPx, slotted, box,
+             others: glyphs.filter(g => !ids.has(g.slot) && at && g.seg === at.seg && Math.abs(g.y - at.y) < 0.01),
+             dom: [...el.querySelectorAll(`[data-slot="${name}"]`)].map(t => t.textContent).join('') };
+  }, name);
+}
+
+for (const [name, text] of [['inbox', 'one, two and three'], ['inmath', 'one, two and three'],
+                            ['intag', '1.2.3 revised'], ['incap', 'considerably longer']]) {
+  test(`live text in a box: ${name}`, async ({ openPage }) => {
+    const page = await openPage('live-boxes');
+    const before = await inBox(page, name);
+    expect(before.box, 'no box holds the slot').not.toBeNull();
+    await page.evaluate(([n, t]) => reflowtex.host.setText(n, t), [name, text]);
+    await idle(page);
+    const after = await inBox(page, name);
+    const words = text.replaceAll(' ', '');
+    expect(after.dom, 'not drawn').toBe(words);
+    expect(after.slotted.map(g => g.text).join(''), 'not laid out').toBe(words);
+    // the box widened by what the text did (to within a pixel: the browser's
+    // words against TeX's glyphs), and holds every word
+    const width = (d: Drawn[]) => d[d.length - 1].x + d[d.length - 1].adv - d[0].x;
+    const grew = width(after.slotted) - width(before.slotted);
+    expect(grew, 'the text is no wider').toBeGreaterThan(10);
+    expect(Math.abs(after.box!.adv - before.box!.adv - grew), 'the box did not grow with it').toBeLessThan(1);
+    for (const g of after.slotted) {
+      expect(g.x, `${g.text}: left of its box`).toBeGreaterThanOrEqual(after.box!.x - 0.5);
+      expect(g.x + g.adv, `${g.text}: past its box`).toBeLessThanOrEqual(after.box!.x + after.box!.adv + 0.5);
+      // nothing else on its line drawn over it
+      for (const o of after.others)
+        expect(o.x + o.adv <= g.x + 0.3 || o.x >= g.x + g.adv - 0.3, `${o.text} over ${g.text}`).toBe(true);
+    }
+    // and the line fits the measure
+    for (const g of [...after.slotted, ...after.others]) {
+      expect(g.x, `${g.text}: past the left edge`).toBeGreaterThanOrEqual(-0.5);
+      expect(g.x + g.adv, `${g.text}: past the measure`).toBeLessThanOrEqual(after.column + 0.5);
+    }
+    // back to TeX's own
+    await page.evaluate(n => reflowtex.host.setText(n, null), name);
+    await idle(page);
+    const again = await inBox(page, name);
+    expect(again.dom).toBe(before.dom);
+    expect(Math.abs(again.box!.adv - before.box!.adv), 'not back to its width').toBeLessThan(0.01);
+  });
+}
+
+test('a box grown by live text: its paragraph broken again at a narrow width', async ({ openPage }) => {
+  const page = await openPage('live-boxes');
+  await page.evaluate(() => reflowtex.host.setText('inbox', 'one, two and three'));
+  const block = page.locator('.latex-block[data-nodelist-b64]:has([data-slot="inbox"])');
+  await block.evaluate((b: HTMLElement) => { b.style.width = '240px'; });
+  await idle(page);
+  const g = await inBox(page, 'inbox');
+  expect(g.dom).toBe('one,twoandthree');
+  for (const o of g.others) for (const s of g.slotted)
+    expect(o.x + o.adv <= s.x + 0.3 || o.x >= s.x + s.adv - 0.3, `${o.text} over ${s.text}`).toBe(true);
+  const all = await page.evaluate(() => {
+    const el = document.querySelector('.latex-block[data-nodelist-b64]:has([data-slot="inbox"])') as HTMLElement;
+    const st = reflowtex.inspect.state(el), out: number[] = [];
+    st.cache.layout.laid.forEach((_: any, i: number) => reflowtex.inspect.replay(el, i, {
+      node(n: any, x: number, _y: number, adv: number) { if (n.type === 'glyph') out.push(x + adv); } }));
+    return { right: Math.max(...out), column: st.cache.layoutCtx.columnPx };
+  });
+  expect(all.right, 'a line past the measure').toBeLessThanOrEqual(all.column + 0.5);
+});

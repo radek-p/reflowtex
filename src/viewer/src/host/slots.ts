@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { SP_TO_PX, gD, gH, useGlyphMetrics } from '../engine/core.ts';
+import { SP_TO_PX, gD, gH, sumWidthSp, useGlyphMetrics } from '../engine/core.ts';
+import { displayGapKinds } from '../engine/layout/display.ts';
+import { paraEval } from '../engine/layout/text.ts';
+import { resizeBox } from '../engine/repack.ts';
 import { widgetNodes } from './widgets.ts';
 import { blockData } from '../runtime/blocks.ts';
 import { api } from '../runtime/page.ts';
@@ -12,20 +15,27 @@ import { frame, track } from '../runtime/pending.ts';
 import { layoutBlock, slicedFor, startSlices } from '../runtime/slices.ts';
 import { familyLoaded, whenFamilyLoaded } from '../runtime/fonts.ts';
 import type { BlockData, BlockSource } from '../runtime/block-data.ts';
-import type { Doc, FontTable, GlueNode, GlyphNode, Slot, TexNode, ViewerFont } from '../engine/model.ts';
+import type { BoxNode, ContentItem, Doc, FontTable, GlueNode, GlyphNode, Slot, TexNode, ViewerFont } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
 
 // ── Slots (\webtext) ──────────────────────────────────────────────────────────
 // reflowtex.sty's \webtext{name}{default} leaves a run of glyphs and spaces in a
-// paragraph, each carrying the slot's id (Node.slot → Document.slots). Until a
-// page gives the name a text, TeX's typesetting of the default is shown as is.
-// Once it does – reflowtex.setText(name, text) – the run is replaced by the
-// text set the way a browser sets it: split at breakable white space, each
-// word one glyph-like node measured by the browser in the slot's font (no
-// kerning, ligatures or expansion between words, which the browser's own
-// shaping handles within them), and between words the interword glue of that
-// font as TeX recorded it. The paragraph then re-breaks around the new text,
-// and only the segments holding it are laid out and painted again.
+// paragraph, or in a box (an \hbox, maths' \text, an equation's tag, a
+// one-line caption), each carrying the slot's id (Node.slot → Document.slots).
+// Until a page gives the name a text, TeX's typesetting of the default is
+// shown as is. Once it does – reflowtex.setText(name, text) – the run is
+// replaced by the text set the way a browser sets it: split at breakable
+// white space, each word one glyph-like node measured by the browser in the
+// slot's font (no kerning, ligatures or expansion between words, which the
+// browser's own shaping handles within them), and between words the
+// interword glue of that font as TeX recorded it. A box holding the run is
+// packed again with it (engine/repack.ts: at its natural width it grows or
+// shrinks, and so does each box around it; set to a width, its glue takes
+// the change), so nothing in or after it is drawn over and its baseline
+// stays. The paragraph then re-breaks around the new text, and only the
+// segments holding it are laid out and painted again. (An equation's tag
+// grows like any box; the display model places it again from its width:
+// layout/display.ts, placeEquationNumber.)
 export const slotValues = new Map<string, string>();          // name → string (absent: the default)
 export const slotBlocks = new Set<Element>();          // blocks whose document has slots
 export let slotMeasure: CanvasRenderingContext2D | null = null;                // a canvas context, made on first use
@@ -95,56 +105,112 @@ export function slotNodes(fontInfo: FontTable, slot: Slot, id: number, run: TexN
     return out;
 }
 
-// Rebuild the node list of every paragraph holding a slot from its original
-// list, substituting the runs whose name has a text. Returns the indices of
-// the paragraphs whose list changed.
-export function applySlots(fontInfo: FontTable, doc: Doc): Set<number> {
+// A node list with its slot runs substituted, and the runs in the boxes it
+// holds, each box packed again (resizeBox): null when nothing in it has a
+// text; else the new list and how much wider it came out (sp). The nodes
+// made go into `made`. A widget is a piece of a paragraph's own line, broken
+// like a word, so only `top`, the paragraph's list, gets one.
+function substitute(fontInfo: FontTable, doc: Doc, list: TexNode[], made: TexNode[], top: boolean): { nodes: TexNode[]; delta: number } | null {
     const slots = doc.slots || [];
-    if (!doc.slotParas) {
-        doc.slotParas = [];
-        (doc.paragraphs || []).forEach((para, i) => {
-            if ((para.nodes || []).some(n => n.slot)) doc.slotParas!.push({ index: i + 1, para, orig: para.nodes, made: [] });
-        });
-    }
-    useGlyphMetrics(doc.glyph_metrics);
-    const changed = new Set<number>();
-    for (const sp of doc.slotParas) {
-        const orig = sp.orig, out: TexNode[] = [], made: TexNode[] = [];
-        for (let i = 0; i < orig.length; i++) {
-            const id = orig[i].slot, slot = id && slots[id - 1];
-            const isWidget = slot && slot.kind === 'widget';
-            const text = slot && !isWidget ? textOf(doc, id!, slot) : undefined;
-            if (!slot || (!isWidget && text === undefined)) { out.push(orig[i]); continue; }
+    let out: TexNode[] | null = null, delta = 0;
+    for (let i = 0; i < list.length; i++) {
+        const n = list[i];
+        const id = n.slot, slot = id && slots[id - 1];
+        const isWidget = slot && slot.kind === 'widget';
+        const text = slot && !isWidget ? textOf(doc, id!, slot) : undefined;
+        if (slot && (isWidget ? top : text !== undefined)) {
             // The run: from here to the last node of this slot (a disc or a
             // font kern between its glyphs carries no id of its own).
             let j = i;
-            for (let k = i + 1; k < orig.length; k++) if (orig[k].slot === id) j = k;
-            const run = orig.slice(i, j + 1);
-            const nodes = isWidget ? widgetNodes(fontInfo, slot, id!, run, orig.slice(0, i), orig.slice(j + 1), doc)
+            for (let k = i + 1; k < list.length; k++) if (list[k].slot === id) j = k;
+            const run = list.slice(i, j + 1);
+            const nodes = isWidget ? widgetNodes(fontInfo, slot, id!, run, list.slice(0, i), list.slice(j + 1), doc)
                                    : slotNodes(fontInfo, slot, id!, run, text!);
-            if (!nodes) { out.push(orig[i]); continue; }
-            out.push(...nodes); made.push(...nodes);
-            i = j;
+            if (nodes) {
+                (out ||= list.slice(0, i)).push(...nodes); made.push(...nodes);
+                delta += sumWidthSp(nodes) - sumWidthSp(run);
+                i = j;
+                continue;
+            }
+        } else if ((n.type === 'hlist' || n.type === 'vlist' || n.type === 'transform') && n.children.length) {
+            const inner = substitute(fontInfo, doc, n.children, made, false);
+            if (inner) {
+                // (a transform only draws its children: it is as wide as they are)
+                const box = n.type === 'transform' ? { ...n, children: inner.nodes } : resizeBox(n, inner.nodes, inner.delta);
+                (out ||= list.slice(0, i)).push(box);
+                delta += box.type === 'transform' ? inner.delta : box.width - (n as BoxNode).width;
+                continue;
+            }
         }
-        // What was substituted, with its measured widths: a text measured
-        // again once its font has loaded counts as a change.
-        const key = made.map(n => n.text !== undefined ? n.text + '\u0002' + n.width
-                                : n.type === 'wdisc' || n.type === 'widget' ? 'w' + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace![0].version, n.width ?? n.replace![0].width, n.options && n.options.map(o => [o.pre[0].width, o.post[0].width])])
-                                : n.type === 'disc' && n.slot ? 'd' + JSON.stringify([n.slot, n.penalty, n.pre.map(x => x.width), n.post.map(x => x.width), n.replace.map(x => x.width)])
-                                : n.type === 'penalty' ? '~'
-                                : ' ').join('\u0001');
-        if (key === sp.key && sp.made.length === made.length) continue;
-        sp.key = key;
-        sp.stale = sp.made; sp.made = made;
-        sp.para.nodes = made.length ? out : orig;
-        changed.add(sp.index);
+        if (out) out.push(n);
     }
-    return changed;
+    return out ? { nodes: out, delta } : null;
 }
 
-// Forget the layouts of the segments holding those paragraphs (in the nested
-// layouts of streams too), and the drawn elements of the words replaced.
-export function invalidateParagraphs(cache: LayoutCache | null | undefined, changed: Set<number>, stale: TexNode[]): void {
+const holdsSlot = (ns: TexNode[] | undefined): boolean =>
+    !!ns && ns.some(n => n.slot || holdsSlot(n.children) || holdsSlot(n.replace) || holdsSlot(n.pre) || holdsSlot(n.post));
+
+// What was substituted, with its measured widths, as a key: a text measured
+// again once its font has loaded counts as a change. False: the same as
+// last time (the holder's key and list are then left as they are).
+function remember(holder: { key?: string; made: TexNode[]; stale?: TexNode[] | null }, made: TexNode[]): boolean {
+    const key = made.map(n => n.text !== undefined ? n.text + '\u0002' + n.width
+                        : n.type === 'wdisc' || n.type === 'widget' ? 'w' + JSON.stringify([n.slot, n.version ?? (n.run && n.run.version) ?? n.replace![0].version, n.width ?? n.replace![0].width, n.options && n.options.map(o => [o.pre[0].width, o.post[0].width])])
+                        : n.type === 'disc' && n.slot ? 'd' + JSON.stringify([n.slot, n.penalty, n.pre.map(x => x.width), n.post.map(x => x.width), n.replace.map(x => x.width)])
+                        : n.type === 'penalty' ? '~'
+                        : ' ').join('\u0001');
+    if (key === holder.key && holder.made.length === made.length) return false;
+    holder.key = key;
+    holder.stale = holder.made; holder.made = made;
+    return true;
+}
+
+/** What applySlots changed: the paragraphs (by index) and the display items
+ *  (as in the content stream) whose nodes are new. */
+export interface SlotChanges { paras: Set<number>; displays: Set<ContentItem> }
+
+// Rebuild the node list of every paragraph holding a slot, and the box of
+// every display holding one, from the original, substituting the runs whose
+// name has a text.
+export function applySlots(fontInfo: FontTable, doc: Doc): SlotChanges {
+    if (!doc.slotParas) {
+        doc.slotParas = [];
+        (doc.paragraphs || []).forEach((para, i) => {
+            if (holdsSlot(para.nodes)) doc.slotParas!.push({ index: i + 1, para, orig: para.nodes, made: [] });
+        });
+        // (a stream's content is laid out from the same paragraphs, but its
+        // displays are its own; a display's wider form is a box of its own)
+        doc.slotDisplays = [];
+        for (const items of [doc.content || [], ...(doc.streams || []).map(s => s.content || [])])
+            for (const owner of items) for (const item of [owner, owner.display_wide])
+                if (item && item.box && holdsSlot([item.box])) doc.slotDisplays.push({ owner, item, orig: item.box, made: [] });
+    }
+    useGlyphMetrics(doc.glyph_metrics);
+    const changes: SlotChanges = { paras: new Set(), displays: new Set() };
+    for (const sp of doc.slotParas) {
+        const made: TexNode[] = [];
+        const r = substitute(fontInfo, doc, sp.orig, made, true);
+        if (!remember(sp, made)) continue;
+        sp.para.nodes = r && made.length ? r.nodes : sp.orig;
+        paraEval.delete(sp.para);            // its evaluation at a measure (boxes with rates)
+        changes.paras.add(sp.index);
+    }
+    for (const sd of doc.slotDisplays || []) {
+        const made: TexNode[] = [];
+        const r = substitute(fontInfo, doc, [sd.orig], made, false);
+        if (!remember(sd, made)) continue;
+        sd.item.box = r && made.length ? r.nodes[0] : sd.orig;
+        displayGapKinds.delete(sd.item);     // its gaps, classified by where the ink is
+        changes.displays.add(sd.owner);
+    }
+    return changes;
+}
+
+// Forget the layouts of the segments holding those paragraphs and displays
+// (in the nested layouts of streams too), and the drawn elements of the
+// words replaced.
+export function invalidateParagraphs(cache: LayoutCache | null | undefined, changed: Set<number>, stale: TexNode[],
+                                     displays: Set<ContentItem> = new Set()): void {
     if (!cache || !cache.dom || !cache.layoutCtx) return;
     for (const i of changed) cache.bcs && cache.bcs.delete(i);
     // A replaced widget piece is gone for good: its drawing ends.
@@ -153,8 +219,9 @@ export function invalidateParagraphs(cache: LayoutCache | null | undefined, chan
     cache.layoutCtx.segs.forEach((seg, i) => {
         const s = dom.segs[i];
         if (!s) return;
-        if (s.sub) invalidateParagraphs(s.sub, changed, stale);
-        if (seg.kind === 'text' && seg.items.some(it => changed.has(it.index))) {
+        if (s.sub) invalidateParagraphs(s.sub, changed, stale, displays);
+        if ((seg.kind === 'text' && seg.items.some(it => changed.has(it.index)))
+            || (seg.kind === 'display' && seg.rows.some(r => displays.has(r.item)))) {
             s.hc = null;
             if (s.painted) s.dirty = true;
         }
@@ -164,15 +231,16 @@ export function invalidateParagraphs(cache: LayoutCache | null | undefined, chan
 export function refreshSlots(el: Element): void {
     const data = blockData.get(el);
     if (!data || !data.cache.dom) return;
-    const changed = applySlots(data.fontInfo, data.doc);
-    if (!changed.size) return;
+    const { paras: changed, displays } = applySlots(data.fontInfo, data.doc);
+    if (!changed.size && !displays.size) return;
     // (a widget's drawn parts sit inside its wdisc: the whole and each split's two)
     const parts = (n: TexNode): TexNode[] => n.type === 'wdisc'
         ? [...n.replace, ...n.options.flatMap(o => [...o.pre, ...o.post])]
         : n.run ? [...n.run.merged.values()] : [n];
-    const stale = data.doc.slotParas!.flatMap(sp => (sp.stale || []).flatMap(parts));
-    data.doc.slotParas!.forEach(sp => { sp.stale = null; });
-    invalidateParagraphs(data.cache, changed, stale);
+    const holders = [...data.doc.slotParas!, ...data.doc.slotDisplays!];
+    const stale = holders.flatMap(h => (h.stale || []).flatMap(parts));
+    holders.forEach(h => { h.stale = null; });
+    invalidateParagraphs(data.cache, changed, stale, displays);
     const params = { ...data.params, align: data.lastAlign };
     layoutBlock(data, data.lastWidth, params);
     paintVisibleNow(data.fontInfo, data.cache);
