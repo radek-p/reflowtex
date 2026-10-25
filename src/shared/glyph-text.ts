@@ -24,6 +24,11 @@ export const isPrivateUse = (cp: number): boolean => (cp >= 0xE000 && cp <= 0xF8
  *  would search for: the rule every producer of a classic face shares. */
 export const slotCode = (slot: number): number => SLOT_PUA + slot;
 
+/** The code of a slot of a classic font that names none of its glyphs (no
+ *  glyph names to go by: one drawn as boxes): printable ASCII as itself – what
+ *  a PDF of the font copies it as – else slotCode. */
+export const classicSlotCode = (slot: number): number => (slot >= 0x21 && slot <= 0x7E ? slot : slotCode(slot));
+
 /** A glyph's text: its character; a ligature its letters (ﬁ: fi); a
  *  private-use code nothing – it stands for no character. */
 export function glyphText(cp: number): string {

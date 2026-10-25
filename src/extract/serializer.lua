@@ -71,7 +71,14 @@ local used_fonts = {}
 
 local function note_font(font_id)
     if used_fonts[font_id] then return end
+    -- font.getfont has no table for a font LuaTeX keeps none of (one a
+    -- package defined from Lua, font.define): it is rebuilt from the
+    -- engine's own, so no glyph's font is missing from the table.
     local f = font.getfont(font_id)
+    if not f and font.getcopy then
+        local ok, copy = pcall(font.getcopy, font_id)
+        if ok and type(copy) == "table" then f = copy end
+    end
     if not f then return end
     -- The file it was loaded from, by its name alone; none for a classic
     -- font, which TeX loads from its metrics (TFM) and the pipeline finds a

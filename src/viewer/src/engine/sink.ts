@@ -23,7 +23,7 @@ export interface ElementRun extends Run { el: SVGElement }
 /** The painter's sink: renderNodes' calls, and what paintSegment asks of it. */
 export interface PaintSink extends Sink {
     beginLine(textEl: SVGTextElement, auxEl: SVGGElement): void;
-    missing(n: TexNode, x: number, y: number): void;
+    boxes(n: TexNode, x: number, y: number): void;
     takeLinkRuns(): ElementRun[];
     takeMarkRuns(): [number | string, ElementRun][];
     takeSelectionRun(): Run | null;
@@ -76,6 +76,10 @@ export function insertPictureSvg(g: SVGGElement, markup: string): void {
 // whole line spacing: bands that met, and sat loose around the letters.)
 // Lines 1.2 em apart keep a gap of 0.2 em between their bands.
 export const BAND_MIN = { up: 0.75, down: 0.25 };
+
+/** A glyph of a font with no face: the boxes drawn for it (boxes()), by its
+ *  node – byNode has its text carrier. */
+const boxesOf = new WeakMap<TexNode, SVGGElement>();
 
 export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Element>, stats: PaintStats, cache: LayoutCache): PaintSink {
     let textParent: SVGElement | null = null, auxParent: SVGElement | null = null;
@@ -158,12 +162,14 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
         },
         glyph(n: GlyphNode, x: number, y: number, fi: ViewerFont | undefined) {
             const face: ViewerFace = fi?.face ?? { kind: 'text', family: 'serif' };
-            let family: string;
+            let family: string, carrier = false;
             switch (face.kind) {
                 case 'text': family = face.family; break;
-                // A font with no face: draw the glyph's metric boxes instead of
-                // an unshapeable character (see missing()).
-                case 'boxes': this.missing(n, x, y); return;
+                // A font with no face: the glyph is drawn as the boxes TeX gave
+                // it (boxes()), under a text carrier – its character, as any
+                // glyph's, in a stand-in face, transparent – so that it is
+                // selected, copied, found, linked and read as text all the same.
+                case 'boxes': family = 'serif'; carrier = true; break;
                 default: family = unreachable(face, 'font face');
             }
             let el = byNode.get(n), isNew = !el;
@@ -179,8 +185,10 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
                 if (read !== drawn) el.dataset.text = read;
                 // Inline style so it wins over the page's `fill: currentColor`
                 // rule; uncoloured glyphs keep currentColor (dark-mode aware).
-                // Coloured ones go through the theme substitution maps.
-                if (n.color) el.style.fill = colorFill(n.color);
+                // Coloured ones go through the theme substitution maps. A
+                // carrier is never seen: important, as over a link's colour.
+                if (carrier) el.style.setProperty('fill', 'transparent', 'important');
+                else if (n.color) el.style.fill = colorFill(n.color);
                 // a broken word's hyphen: copied without it ('keep': with it), the word joined
                 if (BREAK_NODES.has(n)) el.dataset.break = BREAK_NODES.get(n) === 'keep' ? 'keep' : '';
                 if (n.stream)     registerStreamSource(el, n.stream, cache);
@@ -202,6 +210,7 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
             else if (el.dataset.rtxMarks !== undefined) delete el.dataset.rtxMarks;
             place(textParent!, lastTspan, el, isNew);
             used.add(el); lastTspan = el;
+            if (carrier) this.boxes(n, x, y);
             // The extent of each reference on this line, for its hit area
             // (see paintLinkHits). Not inside a transform: that has its own
             // coordinates.
@@ -244,11 +253,12 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
             selRun = null;
             return r && toLine(r);
         },
-        // A glyph whose font could not be loaded: draw its TeX metric boxes – the
-        // advance width by the height above the baseline, and by the depth below –
-        // as two outlined rects, so the missing ink's place and size are visible.
-        missing(n: TexNode, x: number, y: number) {
-            let el = byNode.get(n), isNew = !el;
+        // A glyph of a font with no face: its TeX metric boxes – the advance
+        // width by the height above the baseline, and by the depth below – as
+        // two outlined rects, so the missing ink's place and size are visible.
+        // (Its text is the carrier glyph() drew.)
+        boxes(n: TexNode, x: number, y: number) {
+            let el = boxesOf.get(n), isNew = !el;
             const w = gW(n) * SP_TO_PX;
             const h = gH(n) * SP_TO_PX;                 // above the baseline
             const d = gD(n) * SP_TO_PX;                 // below the baseline
@@ -265,7 +275,7 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
                     r.style.opacity = '0.55';
                     el.appendChild(r);
                 }
-                byNode.set(n, el); stats.created++;
+                boxesOf.set(n, el); stats.created++;
             } else {
                 const rects = el.children;
                 boxes.forEach(([bx, by, bw, bh], i) => {

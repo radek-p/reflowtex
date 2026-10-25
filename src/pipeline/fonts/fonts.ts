@@ -15,7 +15,10 @@
 //    the blocks draw: it is this site's own file. An unmodified font is served
 //    whole, the same file on every site, which a browser caches once;
 //  * verify – every code point a block reaches a font by must be in the file
-//    served for it, or the page would silently draw blanks.
+//    served for it, or the page would silently draw blanks. A font with no
+//    face at all (no producer could give it one: addressing.ts) is not
+//    refused: its glyphs are drawn as boxes of the size TeX gave them, with
+//    their text, and the build says so – this is the one place that decides.
 //
 // Which of these a font goes through is its face's kind (src/shared/font-face.ts),
 // recorded on the font by addressing.ts; a file's name says nothing of it.
@@ -264,8 +267,9 @@ export class Fonts {
   }
 
   /** Fail if any code point a block reaches a font by is missing from the
-   *  file served for it, or a font has no face to draw it with. */
-  verify(needs: FontNeeds): void {
+   *  file served for it. Returns the warnings: a font drawn as boxes, by its
+   *  TeX name and why. */
+  verify(needs: FontNeeds): string[] {
     const problems: string[] = [];
     for (const [filename, n] of needs.files) {
       const want = [...n.reached.keys()];
@@ -281,8 +285,9 @@ export class Fonts {
           (missing.length > 5 ? ` … (+${missing.length - 5})` : ''));
       }
     }
-    for (const [name, b] of needs.boxes) if (b.glyphs) problems.push(`${name}: no face to draw it with (${b.reason})`);
     if (problems.length) throw new FontError(`served fonts cannot draw every glyph the blocks reference – the page would render blanks:\n  ${problems.join('\n  ')}`);
+    return [...needs.boxes].filter(([, b]) => b.glyphs).map(([name, b]) =>
+      `font ${name} has no face (${b.reason}): its ${b.glyphs} glyph${b.glyphs === 1 ? '' : 's'} are drawn as boxes of the size TeX gave them, as text all the same`);
   }
 }
 

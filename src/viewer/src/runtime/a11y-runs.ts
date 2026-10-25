@@ -86,7 +86,7 @@ export function runsOf(data: BlockData, i: number, a: number, b: number): LayerR
         // past the line's text)
         const pos = new Map<TexNode, { x: number; w: number }>(), ink: { x: number; x1: number; top: number; bottom: number }[] = [];
         const metrics = data.cache.metrics || [];
-        const sink = { glyph: noop, missing: noop, space: noop, rule: noop, picture: noop,
+        const sink = { glyph: noop, space: noop, rule: noop, picture: noop,
                        beginTransform: noop, endTransform: noop, node: (n: TexNode, x: number, y: number, w: number) => {
                            pos.set(n, { x, w });
                            if (n.type === 'glyph') {
@@ -225,7 +225,7 @@ export function inkOf(data: BlockData, i: number): { x0: number; x1: number; y0:
     useGlyphMetrics(data.cache.metrics);
     const noop = () => {};
     let x0 = Infinity, x1 = -Infinity;
-    const sink = { glyph: noop, missing: noop, space: noop, rule: noop, picture: noop, beginTransform: noop, endTransform: noop,
+    const sink = { glyph: noop, space: noop, rule: noop, picture: noop, beginTransform: noop, endTransform: noop,
                    node: (n: TexNode, x: number, y: number, w: number) => { if (n.type === 'glyph' || n.type === 'rule') { x0 = Math.min(x0, x); x1 = Math.max(x1, x + w); } } };
     for (let j = 0; j < L.lines.length; j++) {
         const { ratio, er, x0: lx, fillRatio, fillOrder } = L.lrp[j];

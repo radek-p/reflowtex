@@ -97,6 +97,9 @@ export async function dumpDom(url: string, o: { hsize?: number; margin?: number;
         return [p.x, p.y];
       };
       for (const svg of root.querySelectorAll('svg')) {
+        // Every glyph is a tspan at its origin: a glyph of a font with no face
+        // too, whose tspan is the transparent text carrier over its boxes
+        // (the strip has the glyph TeX drew). The boxes are not rules (below).
         for (const t of svg.querySelectorAll('tspan')) {
           const x = parseFloat(t.getAttribute('x')!), y = parseFloat(t.getAttribute('y')!);
           if (isNaN(x) || isNaN(y)) continue;

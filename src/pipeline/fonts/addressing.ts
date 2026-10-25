@@ -4,7 +4,7 @@
 // served, maps to exactly that glyph. Two passes make it so.
 import { forEachNode, fontFile, type SerializerOutput } from '../nodes.ts';
 import { unreachable } from '../../shared/unreachable.ts';
-import { GLYPH_INDEX_PUA, isPrivateUse } from '../../shared/glyph-text.ts';
+import { GLYPH_INDEX_PUA, classicSlotCode, isPrivateUse } from '../../shared/glyph-text.ts';
 import type { Fonts } from './fonts.ts';
 
 /** A font's per-character protrusion and expansion codes are keyed by the
@@ -29,6 +29,9 @@ function remapFontCodes(data: SerializerOutput, remap: Map<string, Map<number, S
 }
 
 const COMBINING = /^\p{M}$/u;
+
+/** A classic font's 256 slots, as a font drawn as boxes is addressed. */
+const BOXES_ADDRESSING = new Map(Array.from({ length: 256 }, (_, slot) => [slot, classicSlotCode(slot)]));
 
 /** Rewrite a glyph to GLYPH_INDEX_PUA + its glyph index (plane 16, clear of
  *  LuaTeX's own plane-15 assignments) whenever drawing it by its
@@ -69,15 +72,21 @@ export function normaliseGlyphAddressing(data: SerializerOutput, fonts: Fonts, l
 /** Classic 8-bit fonts (captured with no file: ClassicFace): give each its
  *  face – its Type 1 outlines converted to a served OTF (type1.ts), its
  *  glyphs' slot numbers rewritten to the code points the converted font
- *  maps – or, with no convertible outline, boxes, saying why. Returns the
- *  rewrites. */
+ *  maps – or, with no convertible outline, boxes, saying why. A font drawn
+ *  as boxes keeps its glyphs as text (the viewer draws a transparent
+ *  character over each box), by classicSlotCode; fonts.ts's verify warns of
+ *  it. Returns the rewrites. */
 export function normaliseLegacyFontAddressing(data: SerializerOutput, fonts: Fonts): number {
   const rewrite = new Map<string, Map<number, number>>();       // font id → slot → code point
   for (const [fid, info] of data.fonts) {
     switch (info.face.kind) {
       case 'tfm': {
         const res = fonts.legacyOtf(info.name);
-        if ('reason' in res) { info.face = { kind: 'boxes', reason: res.reason }; continue; }
+        if ('reason' in res) {
+          info.face = { kind: 'boxes', reason: res.reason };
+          rewrite.set(fid, BOXES_ADDRESSING);
+          continue;
+        }
         info.face = res.face;                                    // so the encoder and viewer fetch the OTF
         rewrite.set(fid, res.addressing);
         continue;

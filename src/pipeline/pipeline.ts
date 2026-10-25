@@ -249,7 +249,7 @@ export class Pipeline {
     this.fonts.patch(needs.files, this.log);
     if (subset) await this.fonts.subset(needs.files, this.log);
     // every code point the blocks reach a font by must be in the file served
-    this.fonts.verify(needs);
+    for (const w of this.fonts.verify(needs)) this.log(`  fonts: warning: ${w}`);
   }
 
   /** original font file → served file, after finishFonts(). The viewer loads

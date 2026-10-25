@@ -95,7 +95,12 @@ dvisvgm as `<use>` of an outline; reported as ◊ in the font "picture"). A
 rule is a stroke of one straight segment or a fill of one four-cornered
 shape with straight sides: TeX's rules, and in a picture its straight lines,
 fills and arrow tips, which the strip has from LuaTeX's PDF and the viewer
-draws as dvisvgm's paths. `shapes.ts` decides it for both sides alike. Each
+draws as dvisvgm's paths. `shapes.ts` decides it for both sides alike. A
+glyph of a font the pipeline could give no face is a glyph on both sides
+too: the viewer draws it as boxes of TeX's size under a transparent text
+carrier – a `<tspan>` at the glyph's origin, which is what is counted – and
+the strip has the glyph TeX drew (a bitmap from the font's METAFONT source,
+when there is one); its boxes are not rules. Each
 viewer glyph is matched to the nearest strip glyph within `--window`
 (0.7pt). Reported: the vertical residual along the document (a drift is
 height lost or gained in stacking), per text line the offset at its start

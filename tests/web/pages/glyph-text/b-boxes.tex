@@ -1,0 +1,12 @@
+% A font no producer can give a face: defined in Lua, with metrics and
+% nothing to draw (no file, no outline, no METAFONT source).
+\directlua{
+  local chars = {}
+  for c = 33, 126 do chars[c] = { width = 400000, height = 450000, depth = 80000, commands = { { "right", 0 } } } end
+  local id = font.define({ name = "rtxnoface10", fullname = "rtxnoface10", type = "virtual", size = 655360,
+    characters = chars, fonts = { { id = font.current() } }, parameters = { slant = 0, space = 220000, space_stretch = 110000,
+    space_shrink = 70000, x_height = 300000, quad = 655360, extra_space = 0 } })
+  tex.definefont("rtxnoface", id)
+}
+Before the font, {\rtxnoface Boxed words, findable} and after it again,
+in a paragraph long enough to go on to a second line in a narrow column.

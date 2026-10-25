@@ -125,7 +125,7 @@ export function replaySegment(fontInfo: BlockData['fontInfo'], cache: LayoutCach
     if (!L || L.deferred || !L.lines || !L.lrp) return false;
     useGlyphMetrics(cache.metrics);
     const noop = () => {};
-    const s = { glyph: noop, missing: noop, space: noop, rule: noop, picture: noop,
+    const s = { glyph: noop, space: noop, rule: noop, picture: noop,
                 beginTransform: noop, endTransform: noop,
                 node: sink.node, vnode: sink.vnode };
     for (let j = 0; j < L.lines.length; j++) {

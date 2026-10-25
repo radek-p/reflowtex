@@ -13,7 +13,7 @@ import { encodeDocument, SchemaMismatch } from '../../src/pipeline/encode.ts';
 import { messageType, schema } from '../../src/pipeline/schema.ts';
 import { Fonts, fontNeeds } from '../../src/pipeline/fonts/fonts.ts';
 import { normaliseLegacyFontAddressing } from '../../src/pipeline/fonts/addressing.ts';
-import { FontError } from '../../src/pipeline/errors.ts';
+import { slotCode } from '../../src/shared/glyph-text.ts';
 
 const doc = (fonts: Record<string, unknown>, nodes: Record<string, unknown>[] = []): SerializerOutput =>
   readSerializerOutput(JSON.stringify({ fonts, paragraphs: [{ nodes }], content: [{ kind: 'paragraph', para: 1 }], streams: [] }));
@@ -54,18 +54,23 @@ test("the serializer's fonts: a file is an OpenType face, none a classic font ye
   assert.deepEqual(readSerializerOutput(writeSerializerOutput(d)).fonts, d.fonts);
 });
 
-test('a classic font with no outline is given boxes, with the reason, and the build refuses it by name', () => {
+test('a classic font with no outline is given boxes, with the reason, its glyphs kept as text, and the build warns of it by name', () => {
   const dir = mkdtempSync(join(tmpdir(), 'rtx-fonts-'));
   try {
-    const d = doc({ 7: { name: 'rtxnoface10', size_sp: 655360 } }, [{ type: 'glyph', font: 7, char: 65, width: 1, height: 1, depth: 0 }]);
+    const glyph = (char: number) => ({ type: 'glyph', font: 7, char, width: 1, height: 1, depth: 0 });
+    const d = doc({ 7: { name: 'rtxnoface10', size_sp: 655360 } }, [glyph(65), glyph(0x0B), glyph(0x20)]);
     normaliseLegacyFontAddressing(d, new Fonts(dir));
     const face = d.fonts.get('7')!.face;
     assert.equal(face.kind, 'boxes');
     assert.match(face.kind === 'boxes' ? face.reason : '', /rtxnoface10/);
     const fonts = new Fonts(dir);
     const needs = fontNeeds([d]);
-    assert.deepEqual([...needs.boxes], [['rtxnoface10', { reason: face.kind === 'boxes' ? face.reason : '', glyphs: 1 }]]);
-    assert.throws(() => fonts.verify(needs), (e: Error) => e instanceof FontError && /rtxnoface10: no face/.test(e.message));
+    // printable ASCII as itself, else a private-use code, which says nothing
+    assert.deepEqual(d.paragraphs[0].nodes.map(n => n.char), [65, slotCode(0x0B), slotCode(0x20)]);
+    assert.deepEqual([...needs.boxes], [['rtxnoface10', { reason: face.kind === 'boxes' ? face.reason : '', glyphs: 3 }]]);
+    const warnings = fonts.verify(needs);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /^font rtxnoface10 has no face \(no Type 1 outline of rtxnoface10 .*\): its 3 glyphs are drawn as boxes/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
