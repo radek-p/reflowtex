@@ -17,6 +17,7 @@ import { familyLoading, whenFamilyLoaded } from '../runtime/fonts.ts';
 import type { BlockData, BlockSource } from '../runtime/block-data.ts';
 import type { BoxNode, ContentItem, Doc, FontTable, GlueNode, GlyphNode, Slot, TexNode, ViewerFont } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
 
 // ── Slots (\webtext) ──────────────────────────────────────────────────────────
 // reflowtex.sty's \webtext{name}{default} leaves a run of glyphs and spaces in a
@@ -48,10 +49,11 @@ const scopeBlocks = new Map<string, Set<Element>>();                // scope →
 const ALL: unique symbol = Symbol('every block');
 let dirtyScopes: Set<string> | typeof ALL | null = null;                       // scopes changed since the last frame; ALL: every block
 
-// The width of `text` in font `fi`, in sp, as the browser draws it.
-export function measureSlotText(fi: ViewerFont, text: string): number {
+// The width of `text` in the CSS family `family` at font `fi`'s size, in sp,
+// as the browser draws it.
+export function measureSlotText(fi: ViewerFont, family: string, text: string): number {
     slotMeasure = slotMeasure || document.createElement('canvas').getContext('2d')!;
-    slotMeasure.font = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
+    slotMeasure.font = `${fi.size_px}px ${JSON.stringify(family)}`;
     return Math.round(slotMeasure.measureText(text).width / SP_TO_PX);
 }
 
@@ -78,15 +80,21 @@ export function slotNodes(fontInfo: FontTable, slot: Slot, id: number, run: TexN
     const t = glyphs[0];
     if (!t) return run;                // nothing to take the font from: keep the default
     const fi = fontInfo[String(t.font)];
-    if (!fi || fi.unresolved) return run;
+    if (!fi) return run;
+    let family: string;
+    switch (fi.face.kind) {
+        case 'text': family = fi.face.family; break;
+        case 'boxes': return run;            // no face to set the text in: keep TeX's
+        default: family = unreachable(fi.face, 'font face');
+    }
     const height = Math.max(...glyphs.map(gH)), depth = Math.max(...glyphs.map(gD));
     // Measured again once the face has loaded, if it had not yet (the
     // viewer's own record of its faces: document.fonts.check costs a few ms
     // a call, for every slot of every block on each change of a text).
     // Only a face on its way is waited for: one that failed (or a family the
     // viewer made no face for) is measured as it is, once.
-    if (familyLoading(fi.family)) {
-        track('slot face', whenFamilyLoaded(fi.family)).then(() => scheduleSlots(), () => {});
+    if (familyLoading(family)) {
+        track('slot face', whenFamilyLoaded(family)).then(() => scheduleSlots(), () => {});
     }
     const out: TexNode[] = [];
     const glue = (): GlueNode => ({ type: 'glue', subtype: 13, width: slot.space || 0,
@@ -101,7 +109,7 @@ export function slotNodes(fontInfo: FontTable, slot: Slot, id: number, run: TexN
             out.push(glue());
         } else {
             out.push({ type: 'glyph', text: part, font: t.font, color: t.color, slot: id,
-                       width: measureSlotText(fi, part), height, depth });
+                       width: measureSlotText(fi, family, part), height, depth });
         }
     }
     return out;

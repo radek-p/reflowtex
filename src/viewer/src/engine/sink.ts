@@ -11,7 +11,8 @@ import { renderPiece } from '../host/inline.ts';
 import { applyMark, liveOn, registerGlyph } from '../host/marks.ts';
 import { registerSpace, selectedGlyph, selectionEdges } from '../host/selection.ts';
 import { droppedAttribute, droppedElement } from './safe.ts';
-import type { GlyphNode, TexNode, ViewerFont } from './model.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
+import type { GlyphNode, TexNode, ViewerFace, ViewerFont } from './model.ts';
 import type { Sink, SvgMatrix } from './render.ts';
 import type { LayoutCache, PaintStats } from './layout/types.ts';
 
@@ -155,12 +156,18 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
             lastTspan = s.lastTspan; lastRect = s.lastRect;
         },
         glyph(n: GlyphNode, x: number, y: number, fi: ViewerFont | undefined) {
-            // No loadable font for this glyph → draw its metric boxes instead of
-            // an unshapeable character (see missing()).
-            if (fi?.unresolved) { this.missing(n, x, y); return; }
+            const face: ViewerFace = fi?.face ?? { kind: 'text', family: 'serif' };
+            let family: string;
+            switch (face.kind) {
+                case 'text': family = face.family; break;
+                // A font with no face: draw the glyph's metric boxes instead of
+                // an unshapeable character (see missing()).
+                case 'boxes': this.missing(n, x, y); return;
+                default: family = unreachable(face, 'font face');
+            }
             let el = byNode.get(n), isNew = !el;
             if (!el) {
-                el = svgEl('tspan', {x, y, 'font-family': fi?.family ?? 'serif', 'font-size': fi?.size_px ?? 12});
+                el = svgEl('tspan', {x, y, 'font-family': family, 'font-size': fi?.size_px ?? 12});
                 // A \webtext slot's word (see Slots) is a whole word, as text.
                 el.textContent = n.text !== undefined ? n.text : String.fromCodePoint(n.char!);
                 // Inline style so it wins over the page's `fill: currentColor`

@@ -47,6 +47,9 @@ not appended to the pageless main stream.
 
 ```jsonc
 {
+  // "filename" only for a font loaded from a file (OpenType); a classic font,
+  // loaded from its TFM, has none, and the pipeline gives it its face
+  // (src/shared/font-face.ts)
   "fonts": { "<id>": { "name", "size_sp", "filename" }, … },
   "paragraphs": [ { "nodes": [ …node tree… ] }, … ],
   // The document-order content stream. Each item is one of:

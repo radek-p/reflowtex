@@ -23,7 +23,7 @@ import * as DM from './display-model.ts';
 import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from './transforms.ts';
 import { attachMathML, readMathmlFile, speaker } from './mathml.ts';
 import { convertPictures, includedPictureFiles } from './pictures.ts';
-import { Fonts, glyphRequirements, drawnCodepoints } from './fonts/fonts.ts';
+import { Fonts, fontNeeds } from './fonts/fonts.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
 import { kpsewhich } from './fonts/type1.ts';
 import { FontFiles, compositeTexts, resolveVirtualFonts } from './fonts/vf.ts';
@@ -244,19 +244,12 @@ export class Pipeline {
   /** Patch, subset and verify the served fonts for every block compiled or
    *  declared current. Call once, after all blocks. */
   async finishFonts({ subset = true } = {}): Promise<void> {
-    const docs = [...this.blocks.values()];
-    const reqs = glyphRequirements(docs);
-    const { drawn, slotFonts } = drawnCodepoints(docs);
-    this.fonts.prune(reqs.keys());
-    this.fonts.patch(reqs, this.log);
-    if (subset) await this.fonts.subset(drawn, slotFonts, this.log);
+    const needs = fontNeeds(this.blocks.values());
+    this.fonts.prune(needs.files.keys());
+    this.fonts.patch(needs.files, this.log);
+    if (subset) await this.fonts.subset(needs.files, this.log);
     // every code point the blocks reach a font by must be in the file served
-    for (const [file, cps] of drawn) {
-      const r = reqs.get(file) ?? new Map<number, number | null>();
-      for (const c of cps) if (!r.has(c)) r.set(c, null);
-      reqs.set(file, r);
-    }
-    this.fonts.verify(new Map([...reqs].map(([f, m]) => [f, m.keys()])));
+    this.fonts.verify(needs);
   }
 
   /** original font file → served file, after finishFonts(). The viewer loads
@@ -318,8 +311,8 @@ export class Pipeline {
    *  and boxes the later passes may drop), forget unreferenced paragraphs,
    *  pictures to SVG (from the backend's picture source, else `dir`'s PDF),
    *  strip what the wire format does not model, resolve glyphs of virtual
-   *  fonts to the fonts their packets draw, convert classic fonts (first: it
-   *  gives 'unknown' fonts real files, which the glyph addressing and
+   *  fonts to the fonts their packets draw, give classic fonts their faces
+   *  (first: a converted face is a real file, which the glyph addressing and
    *  provisioning that follow then see), the text of a virtual font's
    *  accented letters (its pieces are in Unicode now, and an accent not yet
    *  moved to the private-use area), address glyphs. `formulas` is

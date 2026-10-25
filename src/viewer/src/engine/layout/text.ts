@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { buildBreakCandidates, kpBreak } from '../breaker.ts';
-import { SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
+import { HL_ALIGNMENT, SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
 import { mergeWidgetRuns } from '../../host/widgets.ts';
 import type { BoxNode, ContentItem, Doc, FontTable, Paragraph, TexNode } from '../model.ts';
@@ -44,8 +44,6 @@ export function contentStream(doc: Doc): ContentItem[] {
 //
 // Segmentation depends solely on the content stream, never on width, so the
 // segment list is stable across reflows and every element stays reusable.
-export const HL_ALIGNMENT = 4;   // hlist subtype: one row of an alignment
-export const HL_EQUATION  = 6;   // hlist subtype: a display that is not an alignment
 
 // Anchor markers that ended up *inside* what was typeset – a \label written
 // mid-sentence, or one amsmath replayed into a display's own box. Their exact

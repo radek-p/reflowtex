@@ -196,11 +196,30 @@ message Picture {
   optional double vb_h = 3;
 }
 
+// How a font's glyphs are drawn (src/shared/font-face.ts, TexFontFace), decided
+// by the pipeline once per font: from the OpenType file TeX loaded, from a
+// classic font's Type 1 outlines converted to OpenType, as the fonts a
+// virtual font's packets name (none from the virtual font itself), or – with
+// no outline any producer could give – as boxes of the size TeX gave each
+// glyph.
+enum FontKind {
+  opentype = 0;
+  type1    = 1;
+  boxes    = 2;
+  virtual  = 3;
+}
+
 message FontInfo {
   optional uint32 id       = 1;
-  optional string name     = 2;
+  optional string name     = 2;   // TeX's name for the font
   optional uint32 size_sp  = 3;
+  optional FontKind kind   = 10;
+  // opentype, type1: the file the browser loads it from, by its original name
+  // (the page's font map gives the file served for it)
   optional string filename = 4;
+  // boxes: why no face could be given it, for the build's warning and the
+  // inspector
+  optional string reason   = 11;
 
   // Microtypography as TeX had it while typesetting – what microtype (or a
   // preamble using \lpcode, \rpcode and \expandglyphsinfont directly) set on

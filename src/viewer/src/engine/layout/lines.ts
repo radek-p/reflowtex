@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { SP_TO_PX, gD, gH, gW, glyphExpandScale, kernExpandScale } from '../core.ts';
+import { RUNNING_RULE, SP_TO_PX, gD, gH, gW, glyphExpandScale, kernExpandScale, sumWidthSp } from '../core.ts';
+import { unreachable } from '../../../../shared/unreachable.ts';
 import type { FontTable, TexNode } from '../model.ts';
 import type { InkItem, LineMeta } from './types.ts';
 
@@ -31,6 +32,20 @@ export function lineProfile(fontInfo: FontTable, nodes: TexNode[], xStart: numbe
                     items.push({x1:x,x2:x+w,h:Math.max(0,(n.height??0)*SP_TO_PX-shift),d:Math.max(0,(n.depth??0)*SP_TO_PX+shift)});
                     x+=w; break;
                 }
+                // A \vrule set in the line (a \strut is one): its height and
+                // depth are ink as a box's are; a running one's run to the
+                // line's own, and add nothing.
+                case 'rule':{
+                    const w=(n.width===RUNNING_RULE?0:n.width)*SP_TO_PX;
+                    items.push({x1:x,x2:x+w,h:n.height===RUNNING_RULE?0:Math.max(0,n.height*SP_TO_PX),d:n.depth===RUNNING_RULE?0:Math.max(0,n.depth*SP_TO_PX)});
+                    x+=w; break;
+                }
+                // \rotatebox's matrix: TeX sized the enclosing box to the
+                // turned content, so the ink is that box's; its children
+                // advance the pen as they did before they were grouped.
+                case 'transform': x+=sumWidthSp(n.children)*SP_TO_PX; break;
+                case 'penalty': case 'local_par': break;
+                default: unreachable(n, 'node');
             }
         }
         return x;

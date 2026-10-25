@@ -111,7 +111,8 @@ function conformance(id: string, backend: CaptureBackend): void {
     const kinds = new Set(data.content.map(i => i.kind));
     assert.ok(kinds.has('paragraph'), [...kinds].join());
     for (const g of glyphs(data)) assert.ok(data.fonts.has(String(g.font)), `glyph font ${g.font} is in the font table`);
-    for (const [fid, f] of data.fonts) assert.ok(f.filename, `font ${fid} (${f.name}) names its file`);
+    // the fixture's fonts all have outlines: none is drawn as boxes
+    for (const [fid, f] of data.fonts) assert.ok(f.face.kind === 'opentype' || f.face.kind === 'type1', `font ${fid} (${f.name}) has a face: ${JSON.stringify(f.face)}`);
     assert.ok(Number(data.source_width) > 0, 'reports its width');
   });
 
@@ -169,7 +170,7 @@ function conformance(id: string, backend: CaptureBackend): void {
 
   test('opentypeFonts: glyphs from an OpenType file', { skip: skip('opentypeFonts') }, async () => {
     const { data } = await build('opentype');
-    const files = [...data.fonts.values()].map(f => f.filename);
+    const files = [...data.fonts.values()].map(f => (f.face.kind === 'opentype' ? f.face.file : ''));
     assert.ok(files.some(f => /lmroman10-regular\.otf$/i.test(f)), files.join());
     assert.ok(paragraphText(data)[0].startsWith('OpenType text'));
   });
@@ -179,6 +180,7 @@ function conformance(id: string, backend: CaptureBackend): void {
     const names = [...data.fonts.values()].map(f => f.name);
     assert.ok(names.some(n => /^ec/.test(n)), `a T1 (EC) font: ${names}`);
     assert.ok(names.some(n => /^cmr/.test(n)), `an OT1 (CM) font: ${names}`);
+    for (const f of data.fonts.values()) if (/^(ec|cm)/.test(f.name)) assert.equal(f.face.kind, 'type1', `${f.name} served from its Type 1 outlines`);
     assert.match(paragraphText(data)[0], /caf/);
   });
 

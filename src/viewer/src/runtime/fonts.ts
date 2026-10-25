@@ -16,7 +16,9 @@
 import { ZOOM } from '../engine/core.ts';
 import { SCRIPT_URL, api } from './page.ts';
 import { scheduleFontRepaint } from './blocks.ts';
-import type { DocFont, FontTable } from '../engine/model.ts';
+import { faceFromWire } from '../../../shared/font-face.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
+import type { DocFont, FontTable, ViewerFace } from '../engine/model.ts';
 
 // fontInfo is intentionally NOT global – font IDs are per-compilation and collide
 // across blocks (e.g. both block 1 and block 2 may use ID 54 for different files).
@@ -137,35 +139,45 @@ export function faceRecords(): { file: string; family: string; status: FontFaceL
 export async function registerFonts(fontsData: Record<string, DocFont>): Promise<FontTable> {
     const fontInfo: FontTable = {};
     const fileToFamily: Record<string, string> = {};
-    for (const f of Object.values(fontsData)) {
-        const file = f.filename!;
-        if (fileToFamily[file]) continue;
-        // A font the serializer could not resolve to an OTF file (filename
-        // 'unknown' – e.g. a Type1 math font with no OpenType form) has nothing to
-        // fetch. Map it to a system serif so its glyphs fall back, rather than
-        // making a face that is guaranteed to fail.
-        if (!file || file === 'unknown') { fileToFamily[file] = 'serif'; continue; }
-        // The family is keyed off the font's *original* name (its stable identity
-        // across blocks); the file it is fetched from comes from the font map,
-        // which for a modified font is a renamed, content-hashed file (the map is
-        // empty on pages that don't ship it, so it falls back to the name as-is).
-        const family = familyOf(file);
-        ensureFace(file, family);
-        registeredFontFaces.add(file);
-        fileToFamily[file] = family;
-    }
+    /** each file's font, by its own name: cmr12, not the served cmr12.reflowtex-dfb1fe6f.otf */
+    const fileToName: Record<string, string> = {};
+    // The face each font is drawn with (src/shared/font-face.ts), as the
+    // pipeline decided it: from a file – its FontFace made once (ensureFace),
+    // under a family keyed off the file's *original* name (its stable
+    // identity across blocks), fetched from the file the font map gives (for
+    // a modified font a renamed, content-hashed file; the map is empty on
+    // pages that don't ship it, so it falls back to the name as-is) – or
+    // none, its glyphs drawn as boxes.
+    const faceOf = (f: DocFont): ViewerFace => {
+        const face = faceFromWire(f);
+        switch (face.kind) {
+            case 'opentype': case 'type1': {
+                const file = face.file;
+                if (!fileToFamily[file]) {
+                    const family = familyOf(file);
+                    ensureFace(file, family);
+                    registeredFontFaces.add(file);
+                    fileToFamily[file] = family;
+                    fileToName[file] = face.kind === 'type1' ? (f.name || family) : file.replace(/\.[^.]*$/, '');
+                }
+                return { kind: 'text', family: fileToFamily[file] };
+            }
+            case 'boxes': return { kind: 'boxes', reason: face.reason };
+            // its glyphs are drawn in the fonts its packets name: none is in it
+            case 'virtual': return { kind: 'boxes', reason: 'a virtual font, drawn in the fonts it names' };
+            default: return unreachable(face, 'font face');
+        }
+    };
 
     // No font-feature-settings are applied: glyphs that are not the cmap
     // default for their codepoint (script-size variants, accents, …) are
-    // rewritten to dedicated PUA codepoints by prebuild.py, so every glyph
-    // renders identically in every browser without relying on GSUB features.
+    // rewritten to dedicated PUA codepoints by the pipeline (addressing.ts),
+    // so every glyph renders identically in every browser without relying on
+    // GSUB features.
     for (const [idStr, f] of Object.entries(fontsData)) {
         fontInfo[idStr] = {
-            family:  fileToFamily[f.filename!]!,
+            face:    faceOf(f),
             size_px: (f.size_sp / 65536) * ZOOM,
-            // A font with no OTF to load: its glyphs are drawn as metric boxes
-            // (see the sink's glyph handler) so the missing ink is visible.
-            unresolved: !f.filename || f.filename === 'unknown',
             // Microtypography as TeX had it (FontInfo in latex.proto): the
             // quad protrusion is relative to, \expandglyphsinfont's three
             // arguments (null = the font does not expand), and per-character
@@ -181,7 +193,7 @@ export async function registerFonts(fontsData: Record<string, DocFont>): Promise
         };
     }
 
-    const families = [...new Set(Object.values(fileToFamily))].filter(fam => fam !== 'serif');
+    const families = [...new Set(Object.values(fileToFamily))];
 
     // A face that still has to be fetched (cold cache) can first paint as a
     // fallback, and SVG <text> – notably in Firefox – does not always re-rasterise
@@ -191,14 +203,11 @@ export async function registerFonts(fontsData: Record<string, DocFont>): Promise
     if (families.some(fam => !familyLoaded(fam))) fontsPending = true;
 
     // A font that fails to load (a missing file, a network blip) must not
-    // reject and blank the whole block – its glyphs fall back (or are drawn as
-    // metric boxes; see the sink). 'serif' is a system family and needs no
-    // loading. Tell the reader about a failed one, once per page.
+    // reject and blank the whole block – its glyphs fall back. Tell the
+    // reader about a failed one, once per page, by the font's own name.
     await Promise.all(families.map(fam => whenFamilyLoaded(fam)));
     const failed = families.filter(fam => faces.get(fam)?.face.status === 'error')
-        .map(fam => Object.keys(fileToFamily).find(k => fileToFamily[k] === fam) ?? fam)
-        // by the font's own name: cmr12, not the served cmr12.reflowtex-dfb1fe6f.otf
-        .map(file => file.replace(/\.otf$/i, '').replace(/\.reflowtex-[0-9a-f]+$/, ''));
+        .map(fam => { const file = Object.keys(fileToFamily).find(k => fileToFamily[k] === fam); return file ? fileToName[file] : fam; });
     if (failed.length) reportFontFailure(failed);
     return fontInfo;
 }
@@ -253,7 +262,7 @@ export function reportFontFailure(names: string[]): void {
 }
 
 // Optional: {original filename → served filename} written into the page as a JSON
-// island (prebuild.py / build.py). Lets a modified font be fetched from its
+// island (the integrations: prebuild.ts, build.ts). Lets a modified font be fetched from its
 // renamed, content-hashed file while blocks still refer to it by its original
 // name. Absent → registerFonts falls back to the original name.
 export function loadFontMap(): void {

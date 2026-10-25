@@ -89,6 +89,12 @@ export const cases: Record<string, CaseSettings> = {
   // Worst attained 2026-10-25: 0.011 (0.13 to 0.22 when the column was rounded).
   'fractional-width': { file: 'tests/render/cases/paragraph.tex', widths: [0.37, -100.21, 84.83], tolerance: 0.011 },
   rules: { tolerance: 0.010, rule_tolerance: 0.004 },
+  // Rules set straight into a paragraph (a bare \vrule, not \rule's box):
+  // the breaker took their width for 0, a tall one's height and depth never
+  // reached the line spacing, and one with a running height or depth was
+  // drawn without it. Worst attained 2026-10-25 (until then, 372 of the
+  // browser's glyphs had none of TeX's within 0.7 pt).
+  'inline-rules': { tolerance: 0.010, rule_tolerance: 0.001 },
   // A \label in vertical mode – after \begin{theorem}, \section and \item, and
   // a theorem straight after a display – as in real papers: its anchor used to
   // take interline glue and reset \prevdepth, so the pipeline's own compile set

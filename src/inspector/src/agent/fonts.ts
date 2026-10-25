@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { I } from './context.ts';
-import { census, fileOf, fontKeyOf } from './census.ts';
+import { census, familyOf, fileOf, fontKeyOf } from './census.ts';
+import { faceFromWire } from '../../../shared/font-face.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
 import type { FontGlyphs, FontOrigin, GlyphCell } from '../protocol.ts';
 import type { DocFont } from '../../../viewer/src/engine/model.ts';
 import type { BlockData } from '../../../viewer/src/runtime/block-data.ts';
@@ -10,19 +12,24 @@ import type { BlockData } from '../../../viewer/src/runtime/block-data.ts';
  *  advance of each glyph, the code points that map to it, and its name. */
 interface ParsedFont { upem: number; numGlyphs: number; adv: number[]; cps: number[][]; names: (string | null)[] | null }
 
-// How the pipeline served a font (see src/pipeline/fonts/fonts.ts): 'converted', a
-// classic Type 1 font it rebuilt as OpenType (the document names the new file,
-// NAME.reflowtex-HASH.otf); 'patched', an OpenType font whose cmap it extended
-// with code points LuaTeX used – private-use ones among them – and serves
-// renamed (only the page's font map, and so the @font-face rule, says so);
-// 'original', served as it is; null with no file.
-const MODIFIED_FILE = /\.reflowtex-[0-9a-f]{8}\.otf$/i;
+// How the pipeline served a font (its face, src/shared/font-face.ts):
+// 'converted', a classic Type 1 font it rebuilt as OpenType; 'patched', an
+// OpenType font whose cmap it extended with code points LuaTeX used –
+// private-use ones among them – and serves under another name (only the
+// page's font map, and so the @font-face rule, says so); 'original', served as
+// it is; null with no face.
 export const isPUA = (cp: number): boolean => (cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000;
-export function fontOrigin(file: string | null, family: string | null | undefined): FontOrigin {
-    if (!file) return null;
-    if (MODIFIED_FILE.test(file)) return 'converted';
-    const url = family && fontUrl(family);
-    return url && MODIFIED_FILE.test(decodeURIComponent(new URL(url).pathname)) ? 'patched' : 'original';
+export function fontOrigin(f: DocFont, family: string | null): FontOrigin {
+    const face = faceFromWire(f);
+    switch (face.kind) {
+        case 'type1': return 'converted';
+        case 'opentype': {
+            const url = family && fontUrl(family);
+            return url && decodeURIComponent(new URL(url).pathname).split('/').pop() !== face.file ? 'patched' : 'original';
+        }
+        case 'virtual': case 'boxes': return null;
+        default: return unreachable(face, 'font face');
+    }
 }
 // ── Font files ─────────────────────────────────────────────────────────────────
 // A font's glyphs, read from the file the page loaded it from (the viewer's
@@ -164,8 +171,8 @@ export async function fontGlyphs(fontKey: string): Promise<FontGlyphs | null> {
         if (st) for (const f of st.doc.fonts || []) if (fontKeyOf(f) === fontKey) inst.push({ st, f });
     }
     if (!inst.length) return null;
-    const family = inst[0].st.fontInfo[inst[0].f.id!] && inst[0].st.fontInfo[inst[0].f.id!].family;
-    const file = fileOf(inst[0].f);
+    const family = familyOf(inst[0].st.fontInfo[inst[0].f.id!]);
+    const face0 = faceFromWire(inst[0].f), file = fileOf(inst[0].f);
     // what the documents use: per character, its count, sizes, metrics, codes
     const used = new Map<number, { count: number; tex: [number, number, number, number][]; codes: GlyphCell['codes'] }>();
     for (const { st, f } of inst) {
@@ -194,10 +201,18 @@ export async function fontGlyphs(fontKey: string): Promise<FontGlyphs | null> {
                  tex: u.length ? u[0].tex : null, codes: u.length ? u[0].codes : null };
     };
     let font: ParsedFont | null = null;
-    if (!file) out.error = 'no font file: TeX named a font the pipeline could not turn into OpenType, so the viewer draws its glyphs as boxes';
+    const noFile = ((): string | null => {
+        switch (face0.kind) {
+            case 'opentype': case 'type1': return null;
+            case 'boxes': return `no font file (${face0.reason}), so the viewer draws its glyphs as boxes`;
+            case 'virtual': return 'a virtual font: its glyphs are drawn in the fonts its packets name';
+            default: return unreachable(face0, 'font face');
+        }
+    })();
+    if (noFile) out.error = noFile;
     else if (!out.url) out.error = 'no @font-face rule for it on this page';
     else try { font = await loadFontFile(out.url); } catch (e) { out.error = `could not read ${out.url}: ${(e as Error).message || e}`; }
-    out.origin = fontOrigin(file, family);
+    out.origin = fontOrigin(inst[0].f, family);
     out.puaUsed = [...used.keys()].filter(isPUA).length;
     if (font) {
         out.upem = font.upem; out.numGlyphs = font.numGlyphs;

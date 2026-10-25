@@ -7,12 +7,12 @@ import { geometry } from './geometry.ts';
 import { kb, pt } from './format.ts';
 import { screenRectOf } from './rects.ts';
 import { textOfNodes } from './text.ts';
-import { blockLabel, blocksLabel, census, citeEntries, clip, fileOf, fontKeyIn, fontKeyOf } from './census.ts';
+import { blockLabel, blocksLabel, census, citeEntries, clip, familyOf, fileOf, fontKeyIn, fontKeyOf } from './census.ts';
 import { scrollIntoViewIfNeeded, viewBottom } from './overlay.ts';
 import { fontOrigin, isPUA } from './fonts.ts';
 import { blockOf, nodeOf } from './ids.ts';
 import type { DetailRow, Resource, ResourceRow, Resources } from '../protocol.ts';
-import type { Doc, Mark, Stream, TexNode } from '../../../viewer/src/engine/model.ts';
+import type { Doc, DocFont, Mark, Stream, TexNode } from '../../../viewer/src/engine/model.ts';
 import type { LayoutCache } from '../../../viewer/src/engine/layout/types.ts';
 import type { Instance } from '../../../viewer/src/host/types.ts';
 
@@ -72,7 +72,7 @@ function markCounts(doc: Doc): Map<number, number> {
 const markLabel = (m: Mark): string => [m.id ? `#${m.id}` : '', ...(m.classes || '').split(/\s+/).filter(Boolean).map(c => `.${c}`)].join(' ') || '(empty)';
 
 export function resources(): Resources {
-    interface FontUse { key: string; cat: string; file: string | null; family: string | null; names: Set<string | undefined>;
+    interface FontUse { key: string; cat: string; font: DocFont; file: string | null; family: string | null; names: Set<string | undefined>;
                         sizes: Set<number>; blocks: Set<number>; chars: Set<number>; uses: number }
     interface CiteUse { key: string; cat: string; num: number; uses: number; targets: number; blocks: Set<number> }
     const fonts = new Map<string, FontUse>(), pictures: ResourceRow[] = [], streams: ResourceRow[] = [], links: ResourceRow[] = [];
@@ -86,7 +86,7 @@ export function resources(): Resources {
         for (const f of doc.fonts || []) {
             const key = 'font:' + fontKeyOf(f);
             let r = fonts.get(key);
-            if (!r) fonts.set(key, r = { key, cat: 'font', file: fileOf(f), family: st.fontInfo && st.fontInfo[f.id!] ? st.fontInfo[f.id!].family : null,
+            if (!r) fonts.set(key, r = { key, cat: 'font', font: f, file: fileOf(f), family: familyOf(st.fontInfo && st.fontInfo[f.id!]),
                                           names: new Set(), sizes: new Set(), blocks: new Set(), chars: new Set(), uses: 0 });
             r.names.add(f.name); r.sizes.add(f.size_sp); r.blocks.add(bi + 1);
             for (const [ch, u] of c.glyphs.get(f.id!) || []) { r.chars.add(ch); r.uses += u.count; }
@@ -140,13 +140,13 @@ export function resources(): Resources {
     const range = (set: Set<number>) => blocksLabel([...set]);
     const fontName = (r: FontUse) => (r.file ? r.file.replace(/\.otf$/i, '') : [...r.names][0]) || '';
     const fontRows = [...fonts.values()].sort((a, b) => fontName(a).localeCompare(fontName(b), 'en', { numeric: true, sensitivity: 'base' })).map(r => {
-        const origin = fontOrigin(r.file, r.family), pua = [...r.chars].filter(isPUA).length;
+        const origin = fontOrigin(r.font, r.family), pua = [...r.chars].filter(isPUA).length;
         return { key: r.key, cat: 'font', origin, label: r.file ? r.file.replace(/\.otf$/i, '') : [...r.names][0]!,
             note: (origin === 'converted' ? 'converted from Type 1 · ' : origin === 'patched' ? 'cmap patched · ' : '')
                   + `${[...r.sizes].sort((a, b) => a - b).map(pt).join(', ')} · ${r.chars.size} character${r.chars.size === 1 ? '' : 's'}`
                   + (origin && origin !== 'original' ? ` (${pua} private-use)` : '')
                   + `, ${r.uses} glyph${r.uses === 1 ? '' : 's'} · ${range(r.blocks)}` + (r.file ? '' : ' · no font file'),
-            family: r.family, unresolved: !r.file, uses: r.uses };
+            family: r.family, uses: r.uses };
     });
     return {
         // the fonts served as they are, and those the pipeline changed

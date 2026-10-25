@@ -9,31 +9,34 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Fonts } from '../../src/pipeline/fonts/fonts.ts';
+import { Fonts, type FileNeeds } from '../../src/pipeline/fonts/fonts.ts';
 import { kpsewhich } from '../../src/pipeline/fonts/type1.ts';
 
 const REGULAR = 'lmroman10-regular.otf', ITALIC = 'lmroman10-italic.otf';
 const have = !!kpsewhich(REGULAR) && !!kpsewhich(ITALIC);
 const quiet = () => {};
 const req = (file: string, glyphs: number[]) => new Map([[file, new Map(glyphs.map(g => [0xE100 + g, g] as [number, number]))]]);
+/** What the blocks need of OpenType files: code point → glyph index, by file. */
+const files = (m: Map<string, Map<number, number | null>>): Map<string, FileNeeds> =>
+  new Map([...m].map(([file, reached]) => [file, { name: file, face: { kind: 'opentype', file }, reached, slot: false }]));
 const renamed = (dir: string, stem: string) => readdirSync(dir).filter(f => f.startsWith(`${stem}.reflowtex-`)).sort();
 
 test('patching one font leaves the renamed files of fonts patched before', { skip: !have && 'Latin Modern OTF not installed' }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'rtx-font-patch-'));
   try {
     const a = new Fonts(dir);
-    a.patch(req(REGULAR, [5, 6]), quiet);
+    a.patch(files(req(REGULAR, [5, 6])), quiet);
     const regular = a.served.get(REGULAR)!;
     assert.match(regular, /^lmroman10-regular\.reflowtex-[0-9a-f]{8}\.otf$/);
 
     const b = new Fonts(dir);
-    b.patch(req(ITALIC, [5]), quiet);
+    b.patch(files(req(ITALIC, [5])), quiet);
     assert.deepEqual(renamed(dir, 'lmroman10-regular'), [regular], 'the regular face patched before is still there');
     assert.equal(renamed(dir, 'lmroman10-italic').length, 1);
 
     // the regular face again, with one more glyph: its earlier version goes, the italic stays
     const c = new Fonts(dir);
-    c.patch(req(REGULAR, [5, 6, 7]), quiet);
+    c.patch(files(req(REGULAR, [5, 6, 7])), quiet);
     const again = c.served.get(REGULAR)!;
     assert.notEqual(again, regular);
     assert.deepEqual(renamed(dir, 'lmroman10-regular'), [again]);
@@ -54,7 +57,7 @@ test('a private-use entry in a font without a format-12 cmap: one is made, with 
   try {
     const before = codepointsToGlyphs(readSfnt(readFileSync(kpsewhich(REGULAR)!)));
     const f = new Fonts(dir);
-    f.patch(new Map([[REGULAR, new Map([[PUA_BASE + 300, 300]])]]), quiet);
+    f.patch(files(new Map([[REGULAR, new Map([[PUA_BASE + 300, 300]])]])), quiet);
     const served = f.served.get(REGULAR)!;
     assert.match(served, /\.reflowtex-[0-9a-f]{8}\.otf$/, 'patched (was: skipped, the glyph drawn blank)');
     const font = readSfnt(readFileSync(join(dir, served)));
@@ -81,8 +84,8 @@ test('whole: a font patched for any glyph gets every glyph, the same file whatev
   try {
     const pua = (gs: number[]) => new Map(gs.map(g => [PUA_BASE + g, g] as [number, number | null]));
     const a = new Fonts(dirs[0]!), b = new Fonts(dirs[1]!);
-    a.patch(new Map([[REGULAR, pua([300])], [ITALIC, new Map([[0x41, null]])]]), quiet, { whole: true });
-    b.patch(new Map([[REGULAR, pua([5, 700])]]), quiet, { whole: true });
+    a.patch(files(new Map([[REGULAR, pua([300])], [ITALIC, new Map([[0x41, null]])]])), quiet, { whole: true });
+    b.patch(files(new Map([[REGULAR, pua([5, 700])]])), quiet, { whole: true });
     const sa = a.served.get(REGULAR)!, sb = b.served.get(REGULAR)!;
     assert.match(sa, /\.reflowtex-[0-9a-f]{8}\.otf$/);
     assert.equal(sa, sb, 'one name for both documents');

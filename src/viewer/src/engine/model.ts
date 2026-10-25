@@ -7,6 +7,7 @@
 // nothing here is emitted into the bundle.
 
 import type { InlineEnv, Instance, KindDef } from '../host/types.ts';
+import type { FontKind } from '../../../shared/font-face.ts';
 
 // ── Nodes ──────────────────────────────────────────────────────────────────
 
@@ -207,12 +208,15 @@ export interface GlyphMetrics { width: number; height: number; depth: number }
 /** One character's protrusion and expansion codes (thousandths). */
 export interface CharCodes { char?: number; lp?: number; rp?: number; ef?: number }
 
-/** A font as the document records it (FontInfo in latex.proto). */
+/** A font as the document records it (FontInfo in latex.proto). Its face is
+ *  kind, filename and reason (src/shared/font-face.ts, faceFromWire). */
 export interface DocFont {
     id?: number;
     name?: string;
     size_sp: number;
+    kind?: FontKind;
     filename?: string;
+    reason?: string;
     quad?: number;
     expand_stretch?: number;
     expand_shrink?: number;
@@ -341,13 +345,17 @@ export interface Doc {
 /** \expandglyphsinfont's three arguments (thousandths). */
 export interface Expansion { stretch: number; shrink: number; step: number }
 
+/** How the viewer draws a font's glyphs: as text, in the CSS family its face
+ *  is registered under, or – a font with no face – as boxes of the size TeX
+ *  gave each glyph (`reason`: why it has none). */
+export type ViewerFace =
+    | { kind: 'text'; family: string }
+    | { kind: 'boxes'; reason: string };
+
 /** A block's font, by its id in the document (runtime/fonts.registerFonts). */
 export interface ViewerFont {
-    /** The CSS family its face is registered under ('serif' for none). */
-    family: string;
+    face: ViewerFace;
     size_px: number;
-    /** No OTF to load: its glyphs are drawn as metric boxes. */
-    unresolved: boolean;
     quad: number;
     expand: Expansion | null;
     codes: Map<number | undefined, CharCodes>;

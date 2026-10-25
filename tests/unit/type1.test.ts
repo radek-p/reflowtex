@@ -75,7 +75,7 @@ test('a face named after no outline file takes the map\'s outline and encoding',
 function convertedNames(face: string, slots: number[]): (string | null)[] {
   const out = mkdtempSync(join(tmpdir(), 'reflowtex-type1-'));
   const res = convertType1(face, out);
-  assert.ok(res, `${face} converts`);
+  assert.ok('served' in res, `${face} converts`);
   const buf = readFileSync(join(out, res.served));
   const font = opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
   return slots.map(s => {

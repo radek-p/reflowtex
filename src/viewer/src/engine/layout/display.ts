@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    RUNNING_RULE, SP_TO_PX, ZOOM, gD, gH, gW, glyphExpandScale, kernExpandScale, nodeWidthSp,
+    HL_ALIGNMENT, HL_EQUATION, RUNNING_RULE, SP_TO_PX, ZOOM, gD, gH, gW, glyphExpandScale, kernExpandScale, nodeWidthSp,
 } from '../core.ts';
 import { texInterlineGlue } from './lines.ts';
-import { HL_ALIGNMENT, HL_EQUATION } from './text.ts';
+import { unreachable } from '../../../../shared/unreachable.ts';
 import { affineMul, affineOf, renderNodes, type Affine } from '../render.ts';
 import type { AffineField, BoxNode, ChildList, ContentItem, FontTable, TexNode } from '../model.ts';
 import type {
@@ -245,7 +245,14 @@ export function preDisplaySizeSp(fontInfo: FontTable, lines: Line[], lrp: LinePl
                     x += n.kern * ((n.subtype || 0) === 0 ? kernExpandScale(fontInfo, ns[i-1], ns[i+1], L.er) : 1) * SP_TO_PX;
                     break;
                 case 'math': x += (n.surround || 0) * SP_TO_PX; mathOn = n.subtype === 0; break;
-                case 'disc': walk(n.replace || [], false); break;
+                case 'disc': case 'wdisc': walk(n.replace || [], false); break;
+                // A \webwidget's part: a box in the line, as the page drew it.
+                case 'widget': x += n.width * SP_TO_PX; found(); break;
+                // \rotatebox's matrix only groups what TeX had in the line,
+                // which counts as it did there.
+                case 'transform': walk(n.children, glueSet); break;
+                case 'penalty': case 'local_par': break;
+                default: unreachable(n, 'node');
             }
         }
     };

@@ -3,6 +3,7 @@
 import {
     BREAK_NODES, breakKind, LEFT_PROTRUSION, RIGHT_PROTRUSION, expandableSp, gW, nodeWidthSp, sumWidthSp,
 } from './core.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
 import type { Expansion, FontTable, Paragraph, TexNode, ViewerFont } from './model.ts';
 import type { Line } from './layout/types.ts';
 import type { Params } from '../runtime/params.ts';
@@ -50,7 +51,10 @@ export function protSkipable(n: TexNode): boolean {
         case 'kern':    return !n.kern || (n.subtype || 0) === 0;
         case 'math':    return !n.surround;
         case 'disc':    return !(n.pre || []).length && !(n.post || []).length && !(n.replace || []).length;
-        default:        return false;
+        case 'glyph': case 'rule': case 'hlist': case 'vlist': case 'picture': case 'transform':
+        case 'widget': case 'wdisc':
+            return false;
+        default:        return unreachable(n, 'node');
     }
 }
 // The character at the right edge of nodes[0..idx), as LuaTeX's

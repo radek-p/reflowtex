@@ -8,6 +8,7 @@ import { DIMENSIONLESS, GLUE_SUB, KERN_SUB, ORDER, affineFields, badnessOf, chil
 import { gapBefore, gapDetails, gapInfo, gapSummary, partSummary } from './vspace.ts';
 import { displayBand, screenRectOf } from './rects.ts';
 import { fontKeyIn } from './census.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
 import type { NodeEntry } from './ids.ts';
 import type { DetailRow, Details, Row } from '../protocol.ts';
 import type { DisplaySegment, LayoutCache, StreamSegment, TextSegment } from '../../../viewer/src/engine/layout/types.ts';
@@ -134,7 +135,8 @@ export function summary(id: number): Row {
             case 'picture': out.label = 'picture'; out.note = `${pt(n.width || 0)} × ${pt(n.height || 0)} + ${pt(n.depth || 0)}`; break;
             case 'widget': out.label = 'widget'; out.note = n.inline ? (n.inline.instance.attrs.name || n.inline.instance.kind) : ''; break;
             case 'transform': out.label = 'transform'; out.note = `[${[n.m_a ?? 1, n.m_b ?? 0, n.m_c ?? 0, n.m_d ?? 1].map(v => +(+v).toFixed(3)).join(' ')}]`; break;
-            default: out.label = n.type || 'node';
+            case 'local_par': out.label = 'local_par'; break;
+            default: unreachable(n, 'node');
         }
         out.drawn = sw != null;
         if (affineFields(n).length) out.affine = affineFields(n);   // width-dependent: marked in a panel

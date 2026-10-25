@@ -290,19 +290,22 @@ test('Lean: the parts are marked, decl and url on the widget', async () => {
 
 import opentype, { type Font } from 'opentype.js';
 import { kpsewhich } from '../../src/pipeline/fonts/type1.ts';
+import { faceFile, type TexFontFace } from '../../src/shared/font-face.ts';
 /** [face, glyph name the served file draws] for each glyph of the paragraphs. */
 function drawnGlyphNames(d: Output): [string, string][] {
-  const fonts = d.fonts as Record<string, { name: string; filename: string }>;
+  const fonts = d.fonts as Record<string, { name: string; face: TexFontFace }>;
   const parsed = new Map<string, Font>();
   const out: [string, string][] = [];
   for (const n of walk(d.paragraphs.flatMap(p => p.nodes))) {
     if (n.type !== 'glyph') continue;
     const f = fonts[String(n.font)];
-    if (!parsed.has(f.filename)) {
-      const buf = readFileSync(join(root, 'fonts', f.filename));
-      parsed.set(f.filename, opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)));
+    const file = faceFile(f.face);
+    assert.ok(file, `${f.name} is drawn from a file: ${JSON.stringify(f.face)}`);
+    if (!parsed.has(file)) {
+      const buf = readFileSync(join(root, 'fonts', file));
+      parsed.set(file, opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)));
     }
-    out.push([f.name, parsed.get(f.filename)!.charToGlyph(String.fromCodePoint(n.char!)).name ?? '']);
+    out.push([f.name, parsed.get(file)!.charToGlyph(String.fromCodePoint(n.char!)).name ?? '']);
   }
   return out;
 }

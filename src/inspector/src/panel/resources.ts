@@ -131,7 +131,7 @@ let scrollTo: string | null = null;
 
 function ResRow({ r, sel }: { r: ResourceRow; sel: string | null }) {
     return html`<div class=${`row rrow c-${r.cat}${r.key === sel ? ' sel' : ''}`} role="option" data-key=${r.key}>
-        ${r.cat === 'font' && r.family && !r.unresolved && html`<span class="sample" aria-hidden="true" style=${`font-family:'${r.family}'`}>Ag</span>`}
+        ${r.cat === 'font' && r.family && html`<span class="sample" aria-hidden="true" style=${`font-family:'${r.family}'`}>Ag</span>`}
         <span class="label">${r.label}</span><span class="note">${r.note}</span>
     </div>`;
 }

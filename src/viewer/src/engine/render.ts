@@ -7,6 +7,7 @@
 import {
     RUNNING_RULE, SP_TO_PX, gW, glyphExpandScale, hlistGlueRatio, kernExpandScale, setGlue, vlistGlueRatio,
 } from './core.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
 import type {
     BoxNode, FontTable, GlueNode, GlyphNode, PictureNode, RuleNode, TexNode, TransformNode, ViewerFont, WidgetNode,
 } from './model.ts';
@@ -253,6 +254,8 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
                 // shift is vertical (downward); renderVlistBody stacks its contents.
                 renderVlistBody(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX);
                 x+=n.width*SP_TO_PX; break;
+            case 'penalty': case 'local_par': break;
+            default: unreachable(n, 'node');
         }
         // Inspection (api.inspect.replay): every node's pen position and advance.
         if(sink.node) sink.node(n, x0, baselineY, x-x0);

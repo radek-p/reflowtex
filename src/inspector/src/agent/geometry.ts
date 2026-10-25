@@ -2,6 +2,7 @@
 
 import { I, RUNNING, SP } from './context.ts';
 import { segParts } from './resolve.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
 import type { GlyphMetrics, TexNode } from '../../../viewer/src/engine/model.ts';
 import type { Line, SegmentLayout } from '../../../viewer/src/engine/layout/types.ts';
 import { screenCTM } from '../../../viewer/src/runtime/screen-ctm.ts';
@@ -86,8 +87,10 @@ export function extentOf(g: Geometry, n: TexNode): { h: number; d: number } | nu
             return { h: (n.height || 0) * k, d: (n.depth || 0) * k };
         case 'picture': case 'widget':
             return { h: (n.height || 0) * k, d: (n.depth || 0) * k };
+        case 'glue': case 'kern': case 'penalty': case 'math': case 'disc': case 'wdisc': case 'transform': case 'local_par':
+            return null;
+        default: return unreachable(n, 'node');
     }
-    return null;
 }
 // A node's rectangle in svg units, or null if it was not drawn on this layout.
 // (A line, given as itself, has its own.)

@@ -260,9 +260,9 @@ function clearRates(root: TexNode): void {
 }
 
 /** Font ids of `other`'s compilation → ids in `first`'s table, matched by
- *  file, name and size; a font only `other` loaded is added to `first`. */
+ *  face, name and size; a font only `other` loaded is added to `first`. */
 function fontRemap(first: SerializerOutput, other: SerializerOutput): Map<string, string> {
-  const key = (f: FontInfo) => JSON.stringify([f.filename, f.name, f.size_sp]);
+  const key = (f: FontInfo) => JSON.stringify([f.face, f.name, f.size_sp]);
   const byKey = new Map([...first.fonts].map(([id, f]) => [key(f), id] as const));
   const remap = new Map<string, string>();
   for (const [id, f] of other.fonts) {

@@ -19,10 +19,13 @@
 //    accents (ae's é: an acute and an e) that letter as its text, so it is
 //    read, searched and found as one.
 // The fonts the pieces are in join the font table, an entry per face and
-// size, its file 'unknown': the classic-font conversion that follows gives
-// it its outline. Pure (files in through `readFile`), so the editor's
-// converter runs the same code.
+// size, a classic font yet to be given its face (ClassicFace): the
+// classic-font conversion that follows gives it its outline. The virtual
+// face's own entry is then a VirtualFace: no glyph is drawn from it. Pure
+// (files in through `readFile`), so the editor's converter runs the same
+// code.
 import { readTfm, texScale, type Tfm } from './tfm.ts';
+import type { FontInfo } from '../nodes.ts';
 
 export interface LocalFont { name: string; /** fix_word: its size in units of the virtual font's */ scale: number }
 export interface VirtualFont { fonts: Map<number, LocalFont>; first: number | null; packets: Map<number, Uint8Array> }
@@ -145,7 +148,7 @@ export class FontFiles {
 }
 
 type Node = { type: string; [field: string]: unknown };
-type FontEntry = { name: string; size_sp: number; filename?: string | null; [field: string]: unknown };
+type FontEntry = FontInfo;
 type Code = { char: number; [field: string]: unknown };
 
 /** The fields of a glyph that are its place and shape, not its attributes. */
@@ -158,7 +161,7 @@ const GLYPH_OWN = new Set(['type', 'char', 'font', 'gindex', 'width', 'height', 
 export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit: (n: Node) => void) => void,
                                     files: FontFiles): number {
   const virtual = new Map<string, FontEntry>();
-  for (const [id, f] of fonts) if ((!f.filename || f.filename === 'unknown') && files.vf(f.name)) virtual.set(id, f);
+  for (const [id, f] of fonts) if (f.face.kind === 'tfm' && files.vf(f.name)) virtual.set(id, f);
   if (!virtual.size) return 0;
   let next = Math.max(0, ...[...fonts.keys()].map(Number).filter(Number.isFinite)) + 1;
   const ids = new Map<string, string>();
@@ -167,10 +170,10 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
     const key = `${name}@${size}`;
     let id = ids.get(key);
     if (id) return id;
-    id = [...fonts].find(([, f]) => f.name === name && f.size_sp === size && (!f.filename || f.filename === 'unknown'))?.[0];
+    id = [...fonts].find(([, f]) => f.name === name && f.size_sp === size && f.face.kind === 'tfm')?.[0];
     if (!id) {
       id = String(next++);
-      const entry: FontEntry = { name, size_sp: size, filename: 'unknown', quad: files.tfm(name)?.param(6, size) ?? 0 };
+      const entry: FontEntry = { name, size_sp: size, face: { kind: 'tfm' }, quad: files.tfm(name)?.param(6, size) ?? 0 };
       // the virtual face's expansion is its pieces' (as an expanded copy of it would be drawn)
       for (const k of ['expand_stretch', 'expand_shrink', 'expand_step']) if (from[k] !== undefined) entry[k] = from[k];
       fonts.set(id, entry);
@@ -214,6 +217,8 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
     for (const k of Object.keys(n)) if (k !== 'width' && k !== 'height' && k !== 'depth') delete n[k];
     Object.assign(n, hbox(n.width as number, n.height as number, n.depth as number, children, 0), { virtual_char: virtualChar });
   });
+  // each virtual face is drawn from the fonts its packets name, not itself
+  for (const f of virtual.values()) f.face = { kind: 'virtual' };
   return replaced;
 }
 

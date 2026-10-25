@@ -3,18 +3,30 @@
 // (src/schema/latex.proto). Descriptor-driven: a key is encoded when the
 // schema has a field of that name, so the .proto stays the single source of
 // truth for what the wire format carries; proto2 presence is kept by setting
-// only the keys the data has.
+// only the keys the data has. A key the schema has no field for is an error,
+// unless it is one the pipeline keeps for itself (PIPELINE_ONLY): data the
+// wire format cannot carry is never dropped without a word.
 import protobuf from 'protobufjs';
 import { messageType } from './schema.ts';
 import { walkNodes, contentItems, type SerializerOutput, type TexNode } from './nodes.ts';
+import { faceToWire } from '../shared/font-face.ts';
 import { SchemaMismatch } from './errors.ts';
 
 export { SchemaMismatch };
 
 /** Omitted when 0: the renderer treats absent and 0 alike for these. */
 const OMIT_IF_ZERO = new Set(['stretch_order', 'shrink_order', 'subtype', 'shift', 'glue_sign', 'glue_order']);
-/** Carried by the pipeline, not by the wire format. */
-const NOT_ENCODED = new Set(['file', 'gindex']);
+/** Carried by the pipeline, not by the wire format, by message: what the
+ *  capture and the passes record for their own use. A node's glyph index
+ *  (font provisioning), a picture's source (file, page, generated: the
+ *  conversion to SVG), a glyph's source position (src: an editor's, from a
+ *  backend that records it); a paragraph's place in the capture (index) and
+ *  its band (a display inside it takes it). */
+const PIPELINE_ONLY: Record<string, ReadonlySet<string>> = {
+  Node: new Set(['gindex', 'file', 'page', 'generated', 'src']),
+  Paragraph: new Set(['index', 'band_indent', 'band_width']),
+};
+const NONE: ReadonlySet<string> = new Set();
 
 // ── Glyph metrics ───────────────────────────────────────────────────────────
 // A glyph's width/height/depth are interned into Document.glyph_metrics (the
@@ -62,17 +74,19 @@ export function texToText(s: string): string {
 }
 
 // Keep the keys the message type has, minus the rules above; recurse into
-// message fields. Enum names are checked here: fromObject would ignore an
+// message fields. A key it has no field for is refused, but for the
+// pipeline's own. Enum names are checked here: fromObject would ignore an
 // unknown one, and a node type the schema lacks means the transforms did not
 // run (or the schema is behind the serializer).
 function prune(type: protobuf.Type, d: Record<string, unknown>, metrics: Map<TexNode, number>, path: string): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const glyph = type.name === 'Node' && d.type === 'glyph';
+  const own = PIPELINE_ONLY[type.name] ?? NONE;
   for (const [k, v] of Object.entries(d)) {
-    if (v === null || v === undefined || NOT_ENCODED.has(k)) continue;
+    if (v === null || v === undefined || own.has(k)) continue;
     if (glyph && (k === 'width' || k === 'height' || k === 'depth')) continue;
     const f = type.fields[k];
-    if (!f) continue;
+    if (!f) throw new SchemaMismatch(`${path}.${k}: latex.proto's ${type.name} has no field ${k}, so the page would not get it`);
     if (OMIT_IF_ZERO.has(k) && v === 0) continue;
     f.resolve();
     const rt = f.resolvedType;
@@ -94,9 +108,9 @@ export function documentObject(data: SerializerOutput): Record<string, unknown> 
   const { table, index } = internGlyphMetrics(data);
   const doc: Record<string, unknown> = {
     fonts: [...data.fonts].map(([id, f]) => {
-      const e: Record<string, unknown> = { id: Number(id), name: f.name, size_sp: f.size_sp, filename: f.filename };
-      for (const key of ['quad', 'expand_stretch', 'expand_shrink', 'expand_step', 'codes']) if (key in f) e[key] = f[key];
-      return e;
+      const { face, ...rest } = f;
+      if (face.kind === 'tfm') throw new SchemaMismatch(`font ${f.name} has no face: the classic fonts were not given theirs (the transforms did not run)`);
+      return { ...rest, id: Number(id), ...faceToWire(face) };
     }),
     paragraphs: data.paragraphs,
     content: data.content,

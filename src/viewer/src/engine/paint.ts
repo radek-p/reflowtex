@@ -3,7 +3,7 @@
 // through the reconciling sink), with the hit areas of its references and the
 // bands of its marks and of the selection.
 
-import { useGlyphMetrics } from './core.ts';
+import { SP_TO_PX, useGlyphMetrics } from './core.ts';
 import { renderNodes } from './render.ts';
 import { reconcileSink, svgEl } from './sink.ts';
 import { updateDisplayOverflowCue } from './layout/display.ts';
@@ -64,8 +64,13 @@ export function paintSegment(fontInfo: FontTable, cache: LayoutCache, i: number)
         sink.beginLine(s.pairs[j].text, s.pairs[j].g);
         // On a fill line finite glue is already at natural width (ratio 0), so the
         // single ratio slot carries the fill ratio and fillOrder selects the fill.
+        // A rule's running height and depth are the line's: TeX's line is a box
+        // packed from its contents' ink, which is the line's profile.
+        const ink = L.profiles?.[j] ?? [];
+        const lineH = ink.reduce((m, it) => Math.max(m, it.h), 0) / SP_TO_PX;
+        const lineD = ink.reduce((m, it) => Math.max(m, it.d), 0) / SP_TO_PX;
         renderNodes(fontInfo, sink, L.lines[j].nodes, x0, L.baselineYs![j],
-                    fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+                    fillOrder ? fillRatio : ratio, er, fillOrder || 0, lineH, lineD);
         linkRuns.push(...sink.takeLinkRuns());
         markRuns.push(...sink.takeMarkRuns());
         const sel = sink.takeSelectionRun();

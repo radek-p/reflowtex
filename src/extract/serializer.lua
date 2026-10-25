@@ -73,8 +73,10 @@ local function note_font(font_id)
     if used_fonts[font_id] then return end
     local f = font.getfont(font_id)
     if not f then return end
-    -- Extract just the filename from the full path.
-    local filename = (f.filename or ""):match("([^/]+)$") or "unknown"
+    -- The file it was loaded from, by its name alone; none for a classic
+    -- font, which TeX loads from its metrics (TFM) and the pipeline finds a
+    -- face for (src/pipeline/fonts).
+    local filename = (f.filename or ""):match("([^/]+)$")
     used_fonts[font_id] = {
         name     = f.fullname or f.name or "unknown",
         size_sp  = f.size or 0,

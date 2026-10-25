@@ -4,7 +4,9 @@
 // anchors and slots; and labels for the blocks they are in.
 
 import { I } from './context.ts';
-import type { ContentItem, Doc, DocFont, GlyphMetrics, TexNode } from '../../../viewer/src/engine/model.ts';
+import { faceFile, faceFromWire } from '../../../shared/font-face.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
+import type { ContentItem, Doc, DocFont, GlyphMetrics, TexNode, ViewerFont } from '../../../viewer/src/engine/model.ts';
 
 /** How often a thing is used, and what its first use says. */
 export interface Use { count: number; metrics?: GlyphMetrics | TexNode; box?: TexNode; where?: 'box' | 'point' }
@@ -60,7 +62,16 @@ export function census(doc: Doc): Census {
     return c;
 }
 // A font's identity across blocks: its file, or (with no file to load) its TeX name.
-export const fileOf = (f: DocFont): string | null => (f.filename && f.filename !== 'unknown' ? f.filename : null);
+export const fileOf = (f: DocFont): string | null => faceFile(faceFromWire(f));
+/** The CSS family the viewer draws a font's glyphs in; null for a font drawn as boxes. */
+export function familyOf(fi: ViewerFont | undefined): string | null {
+    if (!fi) return null;
+    switch (fi.face.kind) {
+        case 'text': return fi.face.family;
+        case 'boxes': return null;
+        default: return unreachable(fi.face, 'font face');
+    }
+}
 export const fontKeyOf = (f: DocFont): string => fileOf(f) || `tex ${f.name}`;
 const fontKeysMemo = new WeakMap<Doc, Map<number | undefined, string>>();
 export function fontKeyIn(doc: Doc, id: number): string | undefined {

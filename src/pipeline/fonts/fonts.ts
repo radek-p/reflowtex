@@ -17,12 +17,16 @@
 //  * verify – every code point a block reaches a font by must be in the file
 //    served for it, or the page would silently draw blanks.
 //
+// Which of these a font goes through is its face's kind (src/shared/font-face.ts),
+// recorded on the font by addressing.ts; a file's name says nothing of it.
 // All output is byte-reproducible, so an unchanged font keeps its hash.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { forEachNode, type SerializerOutput } from '../nodes.ts';
+import { forEachNode, type PipelineFace, type SerializerOutput } from '../nodes.ts';
 import { FontError } from '../errors.ts';
+import { type FileFace } from '../../shared/font-face.ts';
+import { unreachable } from '../../shared/unreachable.ts';
 import { type CmapSubtable, readSfnt, writeSfnt, parseCmap, buildCmap, parseName, nameString, setNameString, buildName, numGlyphs, codepointsToGlyphs } from './sfnt.ts';
 import { subsetFont } from './subset.ts';
 import { convertType1, kpsewhich, MODIFIED_TAG } from './type1.ts';
@@ -31,6 +35,7 @@ import { PUA_BASE } from './addressing.ts';
 const hash8 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex').slice(0, 8);
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const splitExt = (f: string): [string, string] => { const m = /^(.*?)(\.[^.]*)?$/.exec(f)!; return [m[1], m[2] ?? '']; };
+const hex = (c: number) => `U+${c.toString(16).toUpperCase().padStart(5, '0')}`;
 
 /** Write via a temporary file and a rename, readable by others: a half-written
  *  font is never visible, and the files are served by another user. */
@@ -41,7 +46,17 @@ function writeAtomic(dst: string, bytes: Uint8Array): void {
   renameSync(tmp, dst);
 }
 
-export type Requirements = Map<string, Map<number, number | null>>;
+/** A face made for a classic font, and its glyphs' slot → code point. */
+export interface ProducedFace { face: FileFace; addressing: Map<number, number> }
+
+/** What the blocks need of one font file (by its original name): its face,
+ *  the TeX name it stands for, every code point a block reaches it by with
+ *  the glyph index LuaTeX set (null: not known), and whether a \webtext slot
+ *  sets text in it (a page may then set any text: it is kept whole). */
+export interface FileNeeds { name: string; face: FileFace; reached: Map<number, number | null>; slot: boolean }
+/** What the blocks need of the served fonts: the files, and the fonts with
+ *  no face (by TeX name: why, and how many glyphs the blocks set in it). */
+export interface FontNeeds { files: Map<string, FileNeeds>; boxes: Map<string, { reason: string; glyphs: number }> }
 
 export class Fonts {
   readonly outputDir: string;
@@ -49,47 +64,64 @@ export class Fonts {
   /** original file name → served file name, after patch() and subset() */
   served = new Map<string, string>();
   private cmaps = new Map<string, Map<number, number> | null>();
-  private converted = new Map<string, { served: string; addressing: Map<number, number> } | null>();
+  private converted = new Map<string, ProducedFace | { reason: string }>();
 
   constructor(outputDir: string, localDir: string | null = null) {
     this.outputDir = outputDir;
     this.localDir = localDir;
   }
 
-  /** Make sure every named font file is in the output directory. */
-  provision(filenames: Iterable<string>, log: (s: string) => void = console.log): void {
+  /** Make sure the file of every font named is in the output directory. */
+  provision(fonts: Iterable<{ name: string; face: PipelineFace }>, log: (s: string) => void = console.log): void {
     mkdirSync(this.outputDir, { recursive: true });
-    for (const name of [...filenames].sort()) {
-      if (!name || name === 'unknown') continue;
-      const dst = join(this.outputDir, name);
+    const byFile = new Map<string, { name: string; face: FileFace }>();
+    for (const f of fonts) {
+      switch (f.face.kind) {
+        case 'opentype': case 'type1': byFile.set(f.face.file, { name: f.name, face: f.face }); break;
+        case 'virtual': case 'boxes': break;
+        case 'tfm': throw new FontError(`font ${f.name} has no face yet: the classic fonts were not given theirs (normaliseLegacyFontAddressing)`);
+        default: unreachable(f.face, 'font face');
+      }
+    }
+    for (const file of [...byFile.keys()].sort()) {
+      const { name, face } = byFile.get(file)!;
+      const dst = join(this.outputDir, file);
       if (existsSync(dst)) continue;
-      if (this.localDir && existsSync(join(this.localDir, name))) {
-        writeAtomic(dst, readFileSync(join(this.localDir, name)));
-        log(`  font-provision: ${name} ← ${join(this.localDir, name)}`);
+      if (this.localDir && existsSync(join(this.localDir, file))) {
+        writeAtomic(dst, readFileSync(join(this.localDir, file)));
+        log(`  font-provision: ${file} ← ${join(this.localDir, file)}`);
         continue;
       }
-      // A converted face named by blocks restored from a cache: convert it
-      // again. The conversion is reproducible, so the same TeX installation
-      // gives the same name; a different name means it changed under the
-      // cached blocks.
-      const m = new RegExp(`^(.+)\\.${MODIFIED_TAG}-[0-9a-f]{8}\\.otf$`).exec(name);
-      if (m) {
-        const got = this.legacyOtf(m[1]);
-        if (got?.served === name) { log(`  font-provision: ${name} ← converted again from ${m[1]}.pfb`); continue; }
-        throw new FontError(`font ${name} is referenced by compiled blocks, but converting ${m[1]} now gives ` +
-          `${got?.served ?? 'nothing'}; the TeX installation changed – rebuild with --force`);
+      switch (face.kind) {
+        case 'type1': {
+          // A converted face named by blocks restored from a cache: convert it
+          // again. The conversion is reproducible, so the same TeX installation
+          // gives the same name; a different name means it changed under the
+          // cached blocks.
+          const got = this.legacyOtf(name);
+          if ('face' in got && got.face.file === file) { log(`  font-provision: ${file} ← converted again from ${name}`); continue; }
+          throw new FontError(`font ${file} is referenced by compiled blocks, but converting ${name} now gives ` +
+            `${'face' in got ? got.face.file : `nothing (${got.reason})`}; the TeX installation changed – rebuild with --force`);
+        }
+        case 'opentype': {
+          const src = kpsewhich(file);
+          if (!src) { log(`  font-provision: WARNING – ${file} not found via kpsewhich; the browser will fall back to a system font`); continue; }
+          writeAtomic(dst, readFileSync(src));
+          log(`  font-provision: ${file} ← ${src}`);
+          continue;
+        }
+        default: unreachable(face, 'font face');
       }
-      const src = kpsewhich(name);
-      if (!src) { log(`  font-provision: WARNING – ${name} not found via kpsewhich; the browser will fall back to a system font`); continue; }
-      writeAtomic(dst, readFileSync(src));
-      log(`  font-provision: ${name} ← ${src}`);
     }
   }
 
-  /** A classic Type 1 face (by TeX name) converted to a served OTF, with its
-   *  slot → code point addressing; null when it has no convertible outline. */
-  legacyOtf(name: string): { served: string; addressing: Map<number, number> } | null {
-    if (!this.converted.has(name)) this.converted.set(name, convertType1(name, this.outputDir));
+  /** A classic face (by TeX name) converted to a served OTF, with its slot →
+   *  code point addressing; or why it has none. */
+  legacyOtf(name: string): ProducedFace | { reason: string } {
+    if (!this.converted.has(name)) {
+      const r = convertType1(name, this.outputDir);
+      this.converted.set(name, 'reason' in r ? r : { face: { kind: 'type1', file: r.served }, addressing: r.addressing });
+    }
     return this.converted.get(name)!;
   }
 
@@ -125,25 +157,25 @@ export class Fonts {
    *  gives one patched file, one name, for every document and every round,
    *  and it is never patched again for a later block. A font that needs
    *  nothing stays the original. */
-  patch(requirements: Requirements, log: (s: string) => void = console.log, { whole = false }: { whole?: boolean } = {}): void {
+  patch(files: Map<string, FileNeeds>, log: (s: string) => void = console.log, { whole = false }: { whole?: boolean } = {}): void {
     this.served = new Map();
-    if (!requirements.size) return;
-    this.provision(requirements.keys(), log);
-    const required = new Set(requirements.keys());
-    const files = readdirSync(this.outputDir);
+    if (!files.size) return;
+    this.provision(files.values(), log);
+    const required = new Set(files.keys());
+    const present = readdirSync(this.outputDir);
     for (const filename of required) {
       const [stem, ext] = splitExt(filename);
       const earlier = new RegExp(`^${escapeRe(stem)}(\\.${MODIFIED_TAG}-[0-9a-f]{8})+${escapeRe(ext)}$`);
-      for (const f of files) if (earlier.test(f) && !required.has(f)) rmSync(join(this.outputDir, f), { force: true });
+      for (const f of present) if (earlier.test(f) && !required.has(f)) rmSync(join(this.outputDir, f), { force: true });
     }
-    for (const [filename, want] of requirements) {
+    for (const [filename, needs] of files) {
       const path = join(this.outputDir, filename);
       if (!existsSync(path)) { this.served.set(filename, filename); continue; }
       const font = readSfnt(readFileSync(path));
       const subs = parseCmap(font.tables.get('cmap')!);
       const existing = new Set<number>();
       for (const s of subs) for (const c of s.map.keys()) existing.add(c);
-      let missing = [...want].filter(([c]) => !existing.has(c)).sort((a, b) => a[0] - b[0]);
+      let missing = [...needs.reached].filter(([c, g]) => g !== null && !existing.has(c)).sort((a, b) => a[0] - b[0]);
       if (!missing.length) { this.served.set(filename, filename); log(`  font-patch: ${filename} already complete`); continue; }
       if (whole) {
         const all = new Map<number, number | null>(missing);
@@ -171,7 +203,7 @@ export class Fonts {
       let added = 0;
       for (const [c, g] of missing) {
         if (g === null) continue;
-        if (g >= glyphs) { log(`  font-patch: ${filename} glyph index ${g} out of range – skipping U+${c.toString(16).toUpperCase().padStart(5, '0')}`); continue; }
+        if (g >= glyphs) { log(`  font-patch: ${filename} glyph index ${g} out of range – skipping ${hex(c)}`); continue; }
         const tables = c >= 0x10000 ? [f12] : [f4, f12];
         for (const table of tables) if (table) { table.shared.map.set(c, g); table.shared.dirty = true; }
         if (tables.some(Boolean)) added++;
@@ -198,20 +230,26 @@ export class Fonts {
     }
   }
 
-  /** Cut every font this pipeline wrote (renamed) down to the code points the
-   *  blocks draw; `whole` names fonts to leave whole all the same – those a
-   *  \webtext slot sets text in, where a page may set any text. */
-  async subset(drawn: Map<string, Set<number>>, whole: Set<string> = new Set(), log: (s: string) => void = console.log): Promise<void> {
+  /** Cut every font this pipeline wrote – a converted face, a patched one –
+   *  down to the code points the blocks draw; but for those a \webtext slot
+   *  sets text in, where a page may set any text. */
+  async subset(files: Map<string, FileNeeds>, log: (s: string) => void = console.log): Promise<void> {
     const tagged = new RegExp(`(\\.${MODIFIED_TAG}-[0-9a-f]{8})+$`);
-    for (const filename of [...drawn.keys()].sort()) {
-      const cps = drawn.get(filename)!;
+    for (const filename of [...files.keys()].sort()) {
+      const needs = files.get(filename)!;
       const served = this.served.get(filename) ?? filename;
-      if (!served.includes(`.${MODIFIED_TAG}-`) || !cps.size) continue;
-      if (whole.has(filename)) { log(`  font-subset: ${served} kept whole (a \\webtext slot sets text in it)`); continue; }
+      let written: boolean;
+      switch (needs.face.kind) {
+        case 'type1': written = true; break;
+        case 'opentype': written = served !== filename; break;       // patched
+        default: written = unreachable(needs.face, 'font face');
+      }
+      if (!written || !needs.reached.size) continue;
+      if (needs.slot) { log(`  font-subset: ${served} kept whole (a \\webtext slot sets text in it)`); continue; }
       const src = join(this.outputDir, served);
       if (!existsSync(src)) continue;
       const before = readFileSync(src);
-      const bytes = await subsetFont(before, cps);
+      const bytes = await subsetFont(before, new Set(needs.reached.keys()));
       if (!bytes) throw new FontError(`HarfBuzz could not subset ${served}`);
       const [stem, ext] = splitExt(served);
       const name = `${stem.replace(tagged, '')}.${MODIFIED_TAG}-${hash8(bytes)}${ext}`;
@@ -226,11 +264,11 @@ export class Fonts {
   }
 
   /** Fail if any code point a block reaches a font by is missing from the
-   *  file served for it. */
-  verify(requirements: Map<string, Iterable<number>>): void {
+   *  file served for it, or a font has no face to draw it with. */
+  verify(needs: FontNeeds): void {
     const problems: string[] = [];
-    for (const [filename, cps] of requirements) {
-      const want = [...cps];
+    for (const [filename, n] of needs.files) {
+      const want = [...n.reached.keys()];
       if (!want.length) continue;
       const served = this.served.get(filename) ?? filename;
       const path = join(this.outputDir, served);
@@ -238,47 +276,54 @@ export class Fonts {
       const have = codepointsToGlyphs(readSfnt(readFileSync(path)));
       const missing = want.filter(c => !have.has(c)).sort((a, b) => a - b);
       if (missing.length) {
-        const sample = missing.slice(0, 5).map(c => `U+${c.toString(16).toUpperCase().padStart(5, '0')}`).join(', ');
+        const sample = missing.slice(0, 5).map(hex).join(', ');
         problems.push(`${filename} (served as ${served}): ${missing.length} referenced codepoint(s) missing from its cmap: ${sample}` +
           (missing.length > 5 ? ` … (+${missing.length - 5})` : ''));
       }
     }
+    for (const [name, b] of needs.boxes) if (b.glyphs) problems.push(`${name}: no face to draw it with (${b.reason})`);
     if (problems.length) throw new FontError(`served fonts cannot draw every glyph the blocks reference – the page would render blanks:\n  ${problems.join('\n  ')}`);
   }
 }
 
 // ── What the blocks need ────────────────────────────────────────────────────
 
-/** file name → {code point → glyph index}: every glyph LuaTeX set, by the
- *  code point it is reached by – what every served font must address. */
-export function glyphRequirements(docs: Iterable<SerializerOutput>): Requirements {
-  const reqs: Requirements = new Map();
+/** Every glyph LuaTeX set, by the font file it is drawn from and the code
+ *  point it is reached by – what every served font must address – and the
+ *  fonts that have no file to draw from. */
+export function fontNeeds(docs: Iterable<SerializerOutput>): FontNeeds {
+  const files = new Map<string, FileNeeds>(), boxes: FontNeeds['boxes'] = new Map();
   for (const d of docs) {
-    const files = new Map([...d.fonts].map(([id, f]) => [id, f.filename]));
-    for (const f of files.values()) if (!reqs.has(f)) reqs.set(f, new Map());
-    forEachNode(d, n => {
-      if (n.type !== 'glyph') return;
-      const f = files.get(String(n.font ?? ''));
-      if (f && n.char !== undefined && n.gindex !== undefined && n.gindex !== null) reqs.get(f)!.set(n.char, n.gindex as number);
-    });
-  }
-  return reqs;
-}
-
-/** The code points the viewer draws from each font, and the fonts a \webtext
- *  slot sets text in. */
-export function drawnCodepoints(docs: Iterable<SerializerOutput>): { drawn: Map<string, Set<number>>; slotFonts: Set<string> } {
-  const drawn = new Map<string, Set<number>>(), slotFonts = new Set<string>();
-  for (const d of docs) {
-    const files = new Map([...d.fonts].map(([id, f]) => [Number(id), f.filename]));
+    const byId = new Map<string, FileNeeds>(), boxed = new Map<string, { reason: string; glyphs: number }>();
+    for (const [id, f] of d.fonts) {
+      switch (f.face.kind) {
+        case 'opentype': case 'type1': {
+          const file = f.face.file;
+          if (!files.has(file)) files.set(file, { name: f.name, face: f.face, reached: new Map(), slot: false });
+          byId.set(id, files.get(file)!);
+          break;
+        }
+        case 'boxes': case 'virtual':
+          // (a virtual font's glyphs are all drawn from the fonts it names
+          // (vf.ts): one that is not would be boxes)
+          if (!boxes.has(f.name)) boxes.set(f.name, { reason: f.face.kind === 'boxes' ? f.face.reason : 'a virtual font whose glyph was not resolved', glyphs: 0 });
+          boxed.set(id, boxes.get(f.name)!);
+          break;
+        case 'tfm': throw new FontError(`font ${f.name} has no face: the classic fonts were not given theirs (normaliseLegacyFontAddressing)`);
+        default: unreachable(f.face, 'font face');
+      }
+    }
     forEachNode(d, n => {
       if (n.type !== 'glyph' || n.font === undefined || n.font === null) return;
-      const f = files.get(Number(n.font));
-      if (!f) return;
-      if (!drawn.has(f)) drawn.set(f, new Set());
-      drawn.get(f)!.add(n.char ?? 0);
-      if (n.slot) slotFonts.add(f);
+      const box = boxed.get(String(n.font));
+      if (box) box.glyphs++;
+      const needs = byId.get(String(n.font));
+      if (!needs) return;
+      const cp = n.char ?? 0, gi = n.gindex as number | null | undefined;
+      if (gi !== undefined && gi !== null) needs.reached.set(cp, gi);
+      else if (!needs.reached.has(cp)) needs.reached.set(cp, null);
+      if (n.slot) needs.slot = true;
     });
   }
-  return { drawn, slotFonts };
+  return { files, boxes };
 }

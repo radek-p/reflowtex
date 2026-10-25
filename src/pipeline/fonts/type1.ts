@@ -478,18 +478,14 @@ export function convertOutline(pfb: string, name: string, encoding: string[] | n
 export const MODIFIED_TAG = 'reflowtex';
 
 /** Convert face `name` into `outDir` as NAME.reflowtex-HASH.otf. Returns the
- *  served file name and slot → code point, or null when it cannot be
- *  converted (no Type 1 outline – a bitmap-only face – or one that does not
- *  parse): the caller then keeps drawing metric boxes for it. */
-export function convertType1(name: string, outDir: string): { served: string; addressing: Map<number, number> } | null {
+ *  served file name and slot → code point, or why it cannot be converted (no
+ *  Type 1 outline – a bitmap-only face – or one that does not parse). */
+export function convertType1(name: string, outDir: string): { served: string; addressing: Map<number, number> } | { reason: string } {
   const found = findOutline(name);
-  if (!found) return null;
+  if (!found) return { reason: `no Type 1 outline of ${name} in the TeX installation` };
   let result: ReturnType<typeof convertOutline>;
   try { result = convertOutline(found[0], name, found[1]); }
-  catch (e) {
-    console.log(`  t1-convert: ${name} skipped (${(e as Error).message}) – keeps metric boxes`);
-    return null;
-  }
+  catch (e) { return { reason: `its Type 1 outline ${found[0]} does not convert (${(e as Error).message})` }; }
   const served = `${name}.${MODIFIED_TAG}-${createHash('sha256').update(result.bytes).digest('hex').slice(0, 8)}.otf`;
   mkdirSync(outDir, { recursive: true });
   const tmp = join(outDir, `.${name}.building.otf`);

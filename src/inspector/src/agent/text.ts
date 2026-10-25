@@ -8,6 +8,7 @@ import { GLUE_SUB, KERN_SUB, ORDER, affineFields, badnessOf } from './format.ts'
 import { gapInfo } from './vspace.ts';
 import { children, summary } from './describe.ts';
 import type { Pen } from './geometry.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
 import type { TexNode } from '../../../viewer/src/engine/model.ts';
 
 type Attr = [string, string | number | null | undefined];
@@ -97,7 +98,9 @@ export function xmlNode(n: TexNode, at: Map<TexNode, Pen> | null | undefined, in
             out.push(`${ind}</${tag}>`);
             return;
         }
-        default: out.push(`${ind}<${n.type || 'node'}/>`);
+        case 'glyph': out.push(`${ind}<t${attrs([['f', n.font], ['color', n.color]])}>${esc(glyphText(n))}</t>`); return;
+        case 'local_par': out.push(`${ind}<local_par/>`); return;
+        default: unreachable(n, 'node');
     }
 }
 // The same fragment as plain text: its characters, a space for a glue

@@ -1,0 +1,17 @@
+% Rules set straight into a paragraph, not in a box: a bare \vrule's width is part of its line, and a tall one opens the line spacing as TeX opens it.
+\documentclass{article}
+\begin{document}
+A paragraph whose own list holds rules, as a plain \verb|\vrule| in running
+text leaves them: a bar three points wide \vrule width 3pt height 1ex\relax{}
+here, another one \vrule width 5pt height 0.5ex depth 0.5ex\relax{} there, and
+a third \vrule width 2pt\relax{} that runs to the height of its line. Each
+takes its width on the line, so the words after it move along by as much,
+and the line breaks where TeX breaks it, at every width.
+
+A tall rule \vrule width 0.4pt height 18pt depth 7pt\relax{} reaches above
+and below its line, so TeX sets that line further from the one before and
+the one after it than the others, which keep their baseline skip. The
+words around it go on long enough for the rule to land on another line at
+each width the test tries, and a second one \vrule width 1pt height 15pt
+depth 1pt\relax{} later on does the same, a few lines further down.
+\end{document}

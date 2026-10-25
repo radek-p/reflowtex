@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { unreachable } from '../../../shared/unreachable.ts';
 import type { BoxNode, FontTable, GlyphMetrics, GlueNode, TexNode, ViewerFont } from './model.ts';
 
 // ── Fixed rendering constants ─────────────────────────────────────────────────
@@ -16,6 +17,8 @@ export const BREAK_NODES = new WeakMap<TexNode, 'drop' | 'keep'>();
 const AUTOMATIC_DISC = 2;           // LuaTeX's discretionary for a typed "-"
 export const breakKind = (disc: TexNode | undefined): 'drop' | 'keep' => ((disc && disc.subtype) === AUTOMATIC_DISC ? 'keep' : 'drop');
 export const RUNNING_RULE = -1073741824;
+export const HL_ALIGNMENT = 4;   // hlist subtype: one row of an alignment
+export const HL_EQUATION  = 6;   // hlist subtype: a display that is not an alignment
 
 // ── KP algorithm defaults (overridable per-block via data attributes) ─────────
 
@@ -132,7 +135,11 @@ export function nodeWidthSp(n: TexNode): number {
         case 'transform':           return sumWidthSp(n.children);
         case 'hlist': case 'vlist': return n.width;
         case 'math':                return n.surround;
-        default:                    return 0;
+        // A rule in a line is a \vrule: its width is set (a running one's
+        // is none), its height and depth run to the line's.
+        case 'rule':                return n.width === RUNNING_RULE ? 0 : n.width;
+        case 'penalty': case 'local_par': return 0;
+        default:                    return unreachable(n, 'node');
     }
 }
 

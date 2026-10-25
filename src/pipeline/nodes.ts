@@ -6,6 +6,8 @@
 // boxes of content items, a display's wide form included – and the reading
 // and writing of output.json.
 import { walk, filterTree, type TreeNode } from '../shared/tree.ts';
+import { FONT_KINDS, faceFile, type TexFontFace, type FontKind } from '../shared/font-face.ts';
+import { unreachable } from '../shared/unreachable.ts';
 
 /** A node of TeX's finished node list, as serializer.lua writes it. */
 export interface TexNode extends TreeNode {
@@ -47,11 +49,41 @@ export interface Stream {
   [field: string]: unknown;
 }
 
+/** A classic font as captured: TeX loaded it from its metrics (TFM) alone,
+ *  and the pipeline has yet to give it a face (fonts/addressing.ts,
+ *  normaliseLegacyFontAddressing). Never encoded: every font on the wire has
+ *  a TexFontFace. */
+export interface ClassicFace { kind: 'tfm' }
+/** A font's face in the pipeline: decided (TexFontFace), or not yet. */
+export type PipelineFace = TexFontFace | ClassicFace;
+
 export interface FontInfo {
+  /** TeX's name for the font (a classic font's is its TFM's: cmr10) */
   name: string;
   size_sp: number;
-  filename: string;
+  face: PipelineFace;
   [field: string]: unknown;
+}
+
+/** The face of a font as the serializer writes it – a file name for a font
+ *  loaded from one, none for a classic font – or as the pipeline wrote it
+ *  back into output.json (`face`). */
+function capturedFace(raw: Record<string, unknown>): PipelineFace {
+  const face = raw.face as { kind?: unknown } | undefined;
+  if (face && typeof face === 'object') {
+    if (face.kind === 'tfm' || FONT_KINDS.includes(face.kind as FontKind)) return face as PipelineFace;
+    throw new Error(`output.json: a font face of no known kind: ${JSON.stringify(face)}`);
+  }
+  return typeof raw.filename === 'string' && raw.filename ? { kind: 'opentype', file: raw.filename } : { kind: 'tfm' };
+}
+
+/** The file a font is drawn from, or null: none yet, or none at all. */
+export function fontFile(face: PipelineFace): string | null {
+  switch (face.kind) {
+    case 'tfm': return null;
+    case 'opentype': case 'type1': case 'virtual': case 'boxes': return faceFile(face);
+    default: return unreachable(face, 'font face');
+  }
 }
 
 /** output.json. `fonts` is keyed by LuaTeX font id; the order of the map is
@@ -77,6 +109,10 @@ export function readSerializerOutput(text: string): SerializerOutput {
     return key === 'fonts' ? new Map(entries) : Object.fromEntries(entries);
   });
   if (!(data.fonts instanceof Map)) data.fonts = new Map();
+  for (const [id, raw] of data.fonts as Map<string, Record<string, unknown>>) {
+    const { filename: _, ...rest } = raw;
+    data.fonts.set(id, { ...rest, face: capturedFace(raw) } as FontInfo);
+  }
   data.paragraphs ??= [];
   data.content ??= [];
   data.streams ??= [];

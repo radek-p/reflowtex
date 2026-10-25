@@ -59,8 +59,8 @@ export interface ResourceRow {
     note: string;
     /** A font: how the pipeline served it. */
     origin?: FontOrigin;
+    /** A font: the CSS family its glyphs are drawn in; null for one drawn as boxes. */
     family?: string | null;
-    unresolved?: boolean;
     uses?: number;
 }
 export type FontOrigin = 'converted' | 'patched' | 'original' | null;

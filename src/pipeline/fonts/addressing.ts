@@ -2,7 +2,8 @@
 // How the browser reaches each glyph LuaTeX set. The viewer draws a glyph as
 // SVG text by code point, so every glyph needs a code point that, in the file
 // served, maps to exactly that glyph. Two passes make it so.
-import { forEachNode, type SerializerOutput } from '../nodes.ts';
+import { forEachNode, fontFile, type SerializerOutput } from '../nodes.ts';
+import { unreachable } from '../../shared/unreachable.ts';
 import type { Fonts } from './fonts.ts';
 
 /** Private-use base for rewritten glyphs (plane 16, clear of LuaTeX's own
@@ -43,8 +44,8 @@ const COMBINING = /^\p{M}$/u;
  *     variants).
  *  The font patcher adds the matching cmap entries. Returns the rewrites. */
 export function normaliseGlyphAddressing(data: SerializerOutput, fonts: Fonts, log?: (s: string) => void): number {
-  const files = new Map([...data.fonts].map(([id, f]) => [id, f.filename]));
-  fonts.provision(new Set(files.values()), log);
+  const files = new Map([...data.fonts].map(([id, f]) => [id, fontFile(f.face)]));
+  fonts.provision(data.fonts.values(), log);
   let rewritten = 0;
   const remap = new Map<string, Map<number, Set<number>>>();
   forEachNode(data, n => {
@@ -52,7 +53,8 @@ export function normaliseGlyphAddressing(data: SerializerOutput, fonts: Fonts, l
     const cp = n.char, gi = n.gindex as number | undefined | null;
     if (cp === undefined || gi === undefined || gi === null) return;
     const fid = String(n.font ?? '');
-    const lookup = fonts.cmapLookup(files.get(fid) ?? '');
+    const file = files.get(fid);
+    const lookup = file ? fonts.cmapLookup(file) : null;
     const needsPua = cp < PUA_BASE && (
       (cp < 0xF0000 && COMBINING.test(String.fromCodePoint(cp))) ||
       (lookup !== null && lookup.get(cp) !== gi));
@@ -66,18 +68,25 @@ export function normaliseGlyphAddressing(data: SerializerOutput, fonts: Fonts, l
   return rewritten;
 }
 
-/** Classic 8-bit fonts (serializer filename 'unknown'): convert each to a
- *  served OTF (type1.ts) and rewrite its glyphs' slot numbers to the code
- *  points the converted font maps. A font with no convertible outline stays
- *  'unknown', and the viewer draws metric boxes. Returns the rewrites. */
+/** Classic 8-bit fonts (captured with no file: ClassicFace): give each its
+ *  face – its Type 1 outlines converted to a served OTF (type1.ts), its
+ *  glyphs' slot numbers rewritten to the code points the converted font
+ *  maps – or, with no convertible outline, boxes, saying why. Returns the
+ *  rewrites. */
 export function normaliseLegacyFontAddressing(data: SerializerOutput, fonts: Fonts): number {
   const rewrite = new Map<string, Map<number, number>>();       // font id → slot → code point
   for (const [fid, info] of data.fonts) {
-    if (info.filename !== undefined && info.filename !== null && info.filename !== 'unknown') continue;
-    const res = fonts.legacyOtf(info.name);
-    if (!res) continue;
-    info.filename = res.served;                                // so the encoder and viewer fetch the OTF
-    rewrite.set(fid, res.addressing);
+    switch (info.face.kind) {
+      case 'tfm': {
+        const res = fonts.legacyOtf(info.name);
+        if ('reason' in res) { info.face = { kind: 'boxes', reason: res.reason }; continue; }
+        info.face = res.face;                                    // so the encoder and viewer fetch the OTF
+        rewrite.set(fid, res.addressing);
+        continue;
+      }
+      case 'opentype': case 'type1': case 'virtual': case 'boxes': continue;
+      default: unreachable(info.face, 'font face');
+    }
   }
   if (!rewrite.size) return 0;
   let rewritten = 0;

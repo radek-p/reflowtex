@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { FontFiles, compositeText, compositeTexts, readVf, resolveVirtualFonts } from '../../src/pipeline/fonts/vf.ts';
 import { readTfm, texScale } from '../../src/pipeline/fonts/tfm.ts';
 import { kpsewhich } from '../../src/pipeline/fonts/type1.ts';
+import type { FontInfo } from '../../src/pipeline/nodes.ts';
 
 const EM = 2 ** 20;                                       // a fix_word of 1.0: the virtual font's size
 const TENTH = 104858, FIFTH = 209715, RULE_H = 41943;           // 0.1, 0.2 and 0.04 of it, as fix_words
@@ -46,9 +47,9 @@ const w = (t: typeof cmr, c: number) => t.char(c, SIZE)!.width;
 
 type N = { type: string; [k: string]: unknown };
 function resolve(chars: number[]) {
-  const fonts = new Map<string, { name: string; size_sp: number; filename: string; [k: string]: unknown }>([
-    ['3', { name: 'testvf', size_sp: SIZE, filename: 'unknown', codes: [{ char: 65, lp: 50, rp: 0, ef: 1000 }] }],
-    ['4', { name: 'cmr10', size_sp: SIZE, filename: 'unknown' }],
+  const fonts = new Map<string, FontInfo>([
+    ['3', { name: 'testvf', size_sp: SIZE, face: { kind: 'tfm' }, codes: [{ char: 65, lp: 50, rp: 0, ef: 1000 }] }],
+    ['4', { name: 'cmr10', size_sp: SIZE, face: { kind: 'tfm' } }],
   ]);
   const nodes: N[] = chars.map(c => ({ type: 'glyph', char: c, font: 3, width: 300000, height: 400000, depth: 1000, color: '#c2410c', link: 2 }));
   const each = (visit: (n: N) => void) => { const go = (ns: N[]) => { for (const n of ns) { visit(n); go((n.children as N[]) ?? []); } }; go(nodes); };
@@ -76,7 +77,8 @@ test('several characters in two fonts and a rule, each where the packet sets it'
   const { nodes, fonts } = resolve([67]);
   const kids = nodes[0].children as N[];
   assert.deepEqual(kids.map(k => [k.type, k.char ?? null, k.font ?? null]), [['glyph', 97, 4], ['glyph', 11, 5], ['rule', null, null]]);
-  assert.deepEqual(fonts.get('5'), { name: 'cmmi10', size_sp: SIZE, filename: 'unknown', quad: cmmi.param(6, SIZE) });
+  assert.deepEqual(fonts.get('5'), { name: 'cmmi10', size_sp: SIZE, face: { kind: 'tfm' }, quad: cmmi.param(6, SIZE) });
+  assert.deepEqual(fonts.get('3')!.face, { kind: 'virtual' }, 'the virtual face: none of its glyphs is drawn from it');
   assert.equal(kids[1].width, w(cmmi, 11));
   assert.deepEqual(kids[2], { type: 'rule', width: texScale(EM / 2, SIZE), height: texScale(RULE_H, SIZE), depth: 0 });
 });
@@ -98,7 +100,7 @@ test('push and pop: an accent placed over the letter that follows', { skip: NO_C
 });
 
 test('a face that is not virtual is left alone', () => {
-  const fonts = new Map([['1', { name: 'cmr10', size_sp: SIZE, filename: 'unknown' }]]);
+  const fonts = new Map<string, FontInfo>([['1', { name: 'cmr10', size_sp: SIZE, face: { kind: 'tfm' } }]]);
   const nodes: N[] = [{ type: 'glyph', char: 65, font: 1 }];
   assert.equal(resolveVirtualFonts(fonts, visit => nodes.forEach(visit), files), 0);
   assert.deepEqual(nodes, [{ type: 'glyph', char: 65, font: 1 }]);
