@@ -156,6 +156,19 @@ built from a run of its own, `build/<case>/site-run/`. TikZ strokes
 straight lines as TeX strokes rules, and the browser draws them as paths:
 the case's `rules_missing` counts them.
 
+## Against plain LaTeX
+
+The strip and the page both come from the pipeline's compile, inside its
+template. If the template changed what TeX sets, both would be wrong
+together and the comparison would still pass. A case with
+`against_plain` (`label-anchors`) is also compiled as its author would
+compile it, with plain lualatex, into `build/<case>/plain/`, and the test
+`<case>@plain` checks every glyph of the strip at the case's own width
+against that PDF's, each relative to the first, within what the two
+PDFs can tell apart (`PLAIN_TOLERANCE` in `render.ts`). On one page TeX sets every line as on the galley, so such a
+case fits on one page and has nothing the page adds or the strip leaves
+out: `\pagestyle{empty}`, no footnotes or floats.
+
 ## Known failures and tolerances
 
 A case that fails for a reason not yet fixed gets `known: '…'` in

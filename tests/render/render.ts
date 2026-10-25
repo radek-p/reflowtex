@@ -10,18 +10,24 @@
 //  3. vector-compare.ts opens the page in Chromium with its column pinned to
 //     the PDF's width and matches each glyph the viewer drew with the PDF's.
 //
+// A case with `against_plain` is also compiled as its author would compile it,
+// with plain lualatex, and the strip at its own width is checked against that
+// PDF (againstPlain): the pipeline's compile must typeset the document as
+// LaTeX does, or the browser would be measured against the wrong reference.
+//
 // A case with `tex_pictures` has its PDFs drawn with TeX's own TikZ pictures,
 // and its page built from a run of its own (build/<case>/site-run/), made as
 // the pipeline makes it: pictures captured.
 //
 // Builds go to tests/render/build/<case>/ (ignored by git).
-import { appendFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
-import { join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pageless } from '../../tools/pageless-pdf/pageless.ts';
 import { siteFromRun } from '../../tools/pageless-pdf/site-from-run.ts';
-import { vectorCompare } from '../../tools/pageless-pdf/vector-compare.ts';
+import { traceStrip, vectorCompare } from '../../tools/pageless-pdf/vector-compare.ts';
+import { runLuaLatex } from '../../src/pipeline/lualatex.ts';
 import { serveDirectory } from '../../tools/lib/static-server.ts';
 import { cases as settings, defaults, type CaseSettings } from './cases.ts';
 
@@ -98,6 +104,46 @@ export async function compare(c: Case, extra: number, urlRoot: string): Promise<
   const page = relative(BUILD, dir).split(sep).join('/');
   const v = await vectorCompare(strip, `${urlRoot}/${page}/index.html`, { out: join(strip, 'vector'), lineTol: c.tolerance, images: true, log: logTo(join(strip, 'compare.log')) }) as unknown as Vector;
   return { v, page };
+}
+
+/** How far (pt) a glyph of the strip may be from plain lualatex's: what the two
+ *  PDFs can tell apart. Down, positions are written to a thousandth of a bp
+ *  or finer; across, a glyph in a line is placed to a thousandth of an em (0.01 pt
+ *  in 10 pt type), from a margin that differs between the two. */
+export const PLAIN_TOLERANCE = { across: 0.025, down: 0.002 };
+
+export interface PlainCheck {
+  /** glyphs in the strip, and on plain lualatex's page */
+  glyphs: { strip: number; plain: number };
+  /** the largest offsets (pt), and the first glyph past PLAIN_TOLERANCE */
+  worst: { across: number; down: number }; first?: { index: number; x: number; y: number; dx: number; dy: number };
+}
+
+/** The strip at the case's own width against plain lualatex's PDF of the same
+ *  document (build/<case>/plain/input.pdf), glyph by glyph in the order TeX
+ *  shipped them, each relative to the first: where the page has a glyph, the
+ *  strip must have it at the same distance from the first one. On one page TeX
+ *  sets every line as on the galley, so the document must fit on one, with
+ *  nothing the page adds or the strip leaves out – no page number
+ *  (\pagestyle{empty}), footnotes or floats. */
+export async function againstPlain(c: Case): Promise<PlainCheck> {
+  await site(c);
+  const strip = c.tex_pictures ? await pagelessRun(c, 0) : buildDir(c, 0);
+  const out = join(BUILD, c.name, 'plain');
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  copyFileSync(c.file, join(out, 'input.tex'));
+  await runLuaLatex(out, { texinputs: [dirname(c.file)], passes: c.passes, expect: 'input.pdf', block: c.name });
+  const s = traceStrip(join(strip, 'pageless.pdf')).glyphs, p = traceStrip(join(out, 'input.pdf')).glyphs;
+  const r: PlainCheck = { glyphs: { strip: s.length, plain: p.length }, worst: { across: 0, down: 0 } };
+  for (let i = 0; i < Math.min(s.length, p.length); i++) {
+    const dx = (s[i][0] - s[0][0]) - (p[i][0] - p[0][0]), dy = (s[i][1] - s[0][1]) - (p[i][1] - p[0][1]);
+    r.worst.across = Math.max(r.worst.across, Math.abs(dx));
+    r.worst.down = Math.max(r.worst.down, Math.abs(dy));
+    if ((Math.abs(dx) > PLAIN_TOLERANCE.across || Math.abs(dy) > PLAIN_TOLERANCE.down) && !r.first)
+      r.first = { index: i, x: s[i][0], y: s[i][1], dx, dy };
+  }
+  return r;
 }
 
 /** build/ over HTTP on a free port, for the run. */

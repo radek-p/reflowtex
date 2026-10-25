@@ -33,8 +33,10 @@ document's own width; `--width-extra` widens `\textwidth` through the
 template's width hook.
 
 `pageless_pdf.lua` first drops what a paged run's output routine would have
-removed – LaTeX's empty float marker boxes with their interline glue, and
-the `\topskip` the page builder adds after each – and trims the galley to
+removed – the empty box LaTeX puts before each request to its output routine
+(a float's marker, `\clearpage`'s), known by the penalty below −10000 after
+it, with its interline glue and the `\topskip` the page builder adds after
+it; any other empty box stays, with its glue – and trims the galley to
 its first and last non-empty box. It ships the rest at the end of the run as
 consecutive pages of at most 16000pt (just under `\maxdimen`), cut only
 *inside* a top-level glue or kern: the glue's width is split between the end

@@ -494,11 +494,29 @@
 % An empty, zero-sized box. A box rather than a kern or a whatsit so it survives
 % as an ordinary list item the serializer can find by attribute, and zero-sized
 % so it can neither show anything nor shift anything around it.
+%
+% Being zero-sized is not enough on a vertical list: TeX puts interline glue
+% above every box there, from the depth of the line before, and the box then
+% sets \prevdepth to its own depth, 0, so the next line's glue is computed as
+% if nothing stood above it. A \label straight after \begin{theorem}, \item or
+% \section would move every line after it. So in vertical mode the box goes in
+% with no interline glue and \prevdepth put back: the next line is set exactly
+% as without it.
 \newbox\reflowtexAnchorBox
-\def\reflowtex@anchorbox{%
+\def\reflowtex@anchorbox@{%
   \setbox\reflowtexAnchorBox=\hbox{}%
   \wd\reflowtexAnchorBox=0pt \ht\reflowtexAnchorBox=0pt \dp\reflowtexAnchorBox=0pt
   \box\reflowtexAnchorBox}
+\def\reflowtex@anchorbox{%
+  \ifvmode
+    \begingroup
+      \dimen@=\prevdepth \nointerlineskip
+      \reflowtex@anchorbox@
+      \prevdepth=\dimen@
+    \endgroup
+  \else
+    \reflowtex@anchorbox@
+  \fi}
 % #1 is the saved original macro, #2 the label.
 %
 % One reference macro often prints through another – \eqref is (\ref{...}) – and
@@ -634,13 +652,7 @@
 % Records the entry and places its anchor here.
 \def\reflowtex@outline@mark#1#2#3#4{%
   \reflowtex@outline@note{#1}{#2}{#3}{#4}%
-  \ifvmode
-    \dimen@=\prevdepth \nointerlineskip
-    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
-    \prevdepth=\dimen@
-  \else
-    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
-  \fi}
+  \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup}
 \def\reflowtex@outline@acl#1#2#3{%
   \def\reflowtex@ol@file{#1}\def\reflowtex@ol@toc{toc}%
   \ifx\reflowtex@ol@file\reflowtex@ol@toc
@@ -659,13 +671,7 @@
   \global\advance\reflowtexAnchorCount by 1
   \directlua{Serializer.note_label(\the\reflowtexAnchorCount,
     "reflowtex-toc-\the\reflowtexTocAnchorCount")}%
-  \ifvmode
-    \dimen@=\prevdepth \nointerlineskip
-    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
-    \prevdepth=\dimen@
-  \else
-    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
-  \fi}
+  \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup}
 % #1 heading name (Theorem), #2 number, #3 note (may be empty).
 \def\reflowtex@outline@thm#1#2#3{%
   \begingroup

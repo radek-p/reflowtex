@@ -6,7 +6,7 @@
 //     node --test --test-name-pattern displays tests/render/render.test.ts   # one case
 import { test, after } from 'node:test';
 import { mkdirSync } from 'node:fs';
-import { allCases, BUILD, buildDir, compare, problems, serve, worst, type Case } from './render.ts';
+import { againstPlain, allCases, BUILD, buildDir, compare, problems, serve, worst, type Case } from './render.ts';
 import { writeIndex, writeResult, type Status } from './report/results.ts';
 
 const ALL = process.env.REFLOWTEX_RENDER_ALL === '1';
@@ -43,6 +43,21 @@ for (const c of cases.values()) {
       if (found.length) throw new Error(`${c.name} at ${v.hsize_pt} pt:\n  ${found.join('\n  ')}\n  report: ${report}`);
     });
   }
+}
+
+// The pipeline's compile against plain lualatex's, for the cases that ask:
+// the strip the browser is measured against must be the author's document.
+for (const c of cases.values()) {
+  if (!c.against_plain) continue;
+  test(`${c.name}@plain`, { skip: c.slow && !ALL ? 'slow (make test-render-all)' : false }, async () => {
+    const r = await againstPlain(c);
+    const found: string[] = [];
+    if (r.glyphs.strip !== r.glyphs.plain) found.push(`the strip has ${r.glyphs.strip} glyphs, plain lualatex's page ${r.glyphs.plain}`);
+    if (r.first) found.push(`glyphs off plain lualatex's by up to ${r.worst.across.toFixed(3)} pt across and ` +
+      `${r.worst.down.toFixed(3)} down, from glyph ${r.first.index} at y ${r.first.y.toFixed(2)} on: ` +
+      `(${r.first.dx.toFixed(3)}, ${r.first.dy.toFixed(3)})`);
+    if (found.length) throw new Error(`${c.name}, the pipeline's compile against plain lualatex's:\n  ${found.join('\n  ')}`);
+  });
 }
 
 // Each test's worst glyph and rule against its ceilings and the target, and

@@ -206,7 +206,12 @@ end
 -- is at the page top. In the galley it stays — 2 × (9.5 + 10)pt around two
 -- empty figures of testmath — so here the empty box, the interline glue
 -- before it, and the topskip after it are dropped. The user skips around
--- them stay, as they do in the paged run.
+-- them stay, as they do in the paged run. \clearpage leaves the same
+-- pair, `\vbox{}\penalty-10001`. The marker is known by that penalty after
+-- it: a penalty below -10000 is a request to LaTeX's own output routine, and
+-- the kernel puts an empty box before each one it makes. Any other empty box – a
+-- \label's anchor, an author's \hbox{} – is part of the document, and so is
+-- the glue TeX set above it.
 --
 -- The ends. \maketitle's `\null\vskip 2em` and \end{document}'s \clearpage
 -- leave glue and an empty box before the first line and after the last;
@@ -221,10 +226,14 @@ local function empty_box(p)
         and p.width == 0 and p.height == 0 and p.depth == 0
 end
 
+local function output_request(p)
+    return p and ntype(p) == "penalty" and p.penalty < -10000
+end
+
 local function drop_float_leftovers(nodes)
     local drop = {}
     for k, p in ipairs(nodes) do
-        if empty_box(p) then
+        if empty_box(p) and output_request(nodes[k + 1]) then
             drop[k] = true
             local q = nodes[k - 1]
             if q and ntype(q) == "glue" and (q.subtype == GLUE_BASELINESKIP or q.subtype == GLUE_LINESKIP) then

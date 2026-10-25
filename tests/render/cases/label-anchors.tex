@@ -1,0 +1,41 @@
+% A \label in vertical mode – straight after \begin{theorem}, \section and \item, and a theorem straight after a display – leaves the spacing as it is without the label.
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+\section{Introduction}\label{s:intro}
+A paragraph under a labelled section, long enough to break onto more than one
+line of the column, and with a descender to end on: quickly.
+\begin{theorem}[Labelled after a paragraph]\label{t:para}
+A theorem whose label comes straight after its \verb|\begin|, before its
+text, as it does in most papers that label their results.
+\end{theorem}
+A paragraph that ends in a display, set on its own line, so that the next
+environment starts straight below it:
+\begin{equation}
+  f(y) = \int_0^1 g(x)\,dx.
+\end{equation}
+\begin{definition}\label{d:display}
+A definition whose label comes first, straight after the display above, with
+no paragraph between them.
+\end{definition}
+Another display, then a blank line before a labelled environment:
+\[
+  \sum_{k=1}^{n} k = \frac{n(n+1)}{2}.
+\]
+
+\begin{theorem}\label{t:blank}
+A theorem after a display and a blank line, labelled first as well.
+\end{theorem}
+\section{Lists}\label{s:lists}
+\begin{itemize}
+  \item\label{i:one} A first item with its label before its text, long enough
+        to break onto a second line when the column is narrow, quickly.
+  \item\label{i:two} A second item, labelled the same way.
+\end{itemize}
+A closing paragraph, so that the last label is followed by text set from the
+depth of the line above it.
+\end{document}

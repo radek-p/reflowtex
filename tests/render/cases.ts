@@ -30,6 +30,12 @@ export interface CaseSettings {
    *  its own. Their strokes are not rules to the browser: count them in
    *  rules_missing */
   tex_pictures?: boolean;
+  /** also compile the document with plain lualatex, as its author would, and
+   *  check the strip at its own width glyph by glyph against that PDF (test
+   *  <case>@plain, within the PDFs' precision): the pipeline's compile must set the
+   *  document as LaTeX does. The document must fit on one page and have no
+   *  page number (\pagestyle{empty}), footnotes or floats */
+  against_plain?: boolean;
   /** a whole document: skipped by make test-render */
   slow?: boolean;
   /** a failure on record: the case runs as an expected failure, and when it
@@ -80,6 +86,13 @@ export const cases: Record<string, CaseSettings> = {
   // Worst attained 2026-10-25: 0.011 (0.13 to 0.22 when the column was rounded).
   'fractional-width': { file: 'tests/render/cases/paragraph.tex', widths: [0.37, -100.21, 84.83], tolerance: 0.011 },
   rules: { tolerance: 0.010, rule_tolerance: 0.004 },
+  // A \label in vertical mode – after \begin{theorem}, \section and \item, and
+  // a theorem straight after a display – as in real papers: its anchor used to
+  // take interline glue and reset \prevdepth, so the pipeline's own compile set
+  // the next line lower than LaTeX does (by the depth of the line above), and
+  // after a display the browser counted interline glue twice (up to 4.8 pt
+  // here). against_plain checks the compile itself. Worst attained 2026-10-25.
+  'label-anchors': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.002 },
   // A rule and a box set in vertical mode, and a paragraph holding only a
   // rule: kept as fixed displays (they used to be dropped, with 202 glyphs
   // after them out of place). Worst attained 2026-09-26.
