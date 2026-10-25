@@ -133,6 +133,10 @@ message Node {
   // (src/pipeline/mathml.ts). Only on a formula a reader meets: not on one
   // inside another, nor in a display's cells (the display item has those).
   optional string mathml = 57;
+  // hlist: the text the box stands for, read instead of its glyphs' (the
+  // accessible layer, the viewer's text): a virtual font's accented letter,
+  // drawn as a letter and an accent, is "é" (src/pipeline/fonts/vf.ts).
+  optional string actual_text = 58;
 }
 
 // A named placeholder in running text (\webtext{name}{default} in

@@ -10,6 +10,7 @@ import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
+import { a11yLayer, type LayerDocument } from '../../src/pipeline/a11y.ts';
 
 type Node = { type: string; char?: number; font?: number; color?: string; link?: number; stream?: number; mathml?: unknown;
               width?: number; children?: Node[]; replace?: Node[]; pre?: Node[]; post?: Node[] };
@@ -319,6 +320,15 @@ test('a virtual font (ae: T1 over Computer Modern) draws its packets\' glyphs', 
   const d = await capture('Caf\\\'e, na\\"ive.', '\\usepackage[T1]{fontenc}\n\\usepackage{ae}');
   assert.deepEqual(drawnGlyphNames(d).map(([face, g]) => `${face}:${g}`).join(' '),
     'cmr10:C cmr10:a cmr10:f cmr10:acute cmr10:e cmr10:comma cmr10:n cmr10:a cmr10:dieresis cmr10:dotlessi cmr10:v cmr10:e cmr10:period');
+});
+
+// Its accented letters, drawn as a letter and an accent, read as the letter
+// they are: in the accessible layer (what a reader and find-in-page get).
+test('a virtual font\'s accented letters read as one character each (ae: é, ï, ç)', async () => {
+  const d = await capture('Caf\\\'e, na\\"ive, fa\\c{c}ade.', '\\usepackage[T1]{fontenc}\n\\usepackage{ae}');
+  const texts = [...walk(d.paragraphs.flatMap(p => p.nodes))].map(n => (n as { actual_text?: string }).actual_text).filter(Boolean);
+  assert.deepEqual(texts, ['é', 'ï', 'ç']);
+  assert.match(a11yLayer(d as unknown as LayerDocument), /Café, naïve, façade\./);
 });
 
 // newtx is in the CI image (docker/test-packages.txt); elsewhere, run where it is installed.

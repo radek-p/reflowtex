@@ -13,7 +13,11 @@
 //  * anything else (a character moved, several characters, rules): a box of
 //    the virtual character's size holding the pieces where the packet puts
 //    them – a kern to each piece's place, a lowered box for a piece moved
-//    down or up – each glyph carrying the virtual glyph's attributes.
+//    down or up – each glyph carrying the virtual glyph's attributes. The
+//    box notes the character it stands for (`virtual_char`); once its
+//    pieces are in Unicode, compositeTexts gives one that is a letter and
+//    accents (ae's é: an acute and an e) that letter as its text, so it is
+//    read, searched and found as one.
 // The fonts the pieces are in join the font table, an entry per face and
 // size, its file 'unknown': the classic-font conversion that follows gives
 // it its outline. Pure (files in through `readFile`), so the editor's
@@ -191,6 +195,7 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
       delete n.gindex;
       return;
     }
+    const virtualChar = n.char;
     const attrs = Object.fromEntries(Object.entries(n).filter(([k]) => !GLYPH_OWN.has(k)));
     const children: Node[] = [];
     let at = 0;
@@ -207,9 +212,58 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
       at = q.x + width;
     }
     for (const k of Object.keys(n)) if (k !== 'width' && k !== 'height' && k !== 'depth') delete n[k];
-    Object.assign(n, hbox(n.width as number, n.height as number, n.depth as number, children, 0));
+    Object.assign(n, hbox(n.width as number, n.height as number, n.depth as number, children, 0), { virtual_char: virtualChar });
   });
   return replaced;
+}
+
+// ── A composite's text ──────────────────────────────────────────────────────
+// A virtual font's accented letter is drawn as a letter and a spacing accent
+// (ae's é: cmr10's acute, then its e), which read as two characters, "´e".
+// Its pieces say which character it is: the letter with the accents as
+// combining marks, composed (NFC) – é. Read so wherever the box's text is
+// read (the box's actual_text: the accessible layer, the viewer's text).
+
+/** A spacing accent's combining mark. */
+const COMBINING_OF: Record<number, number> = {
+  0x60: 0x300, 0xB4: 0x301, 0x2C6: 0x302, 0x2DC: 0x303, 0xAF: 0x304, 0x2C9: 0x304, 0x2D8: 0x306, 0x2D9: 0x307,
+  0xA8: 0x308, 0x2DA: 0x30A, 0x2DD: 0x30B, 0x2C7: 0x30C, 0xB8: 0x327, 0x2DB: 0x328,
+};
+/** A dotless letter takes the accent as the dotted one does (ï is i and a dieresis). */
+const DOTTED: Record<number, number> = { 0x131: 0x69, 0x237: 0x6A };
+const isMark = (cp: number) => cp < 0xF0000 && /^\p{M}$/u.test(String.fromCodePoint(cp));
+const isPrivate = (cp: number) => (cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000;
+
+/** The text of the pieces `nodes` (glyph code points, in Unicode) when they
+ *  are one letter and accents: the letter with them, composed. Null for any
+ *  other pieces (several letters, no accent), read as they are. */
+export function compositeText(nodes: Node[]): string | null {
+  const cps: number[] = [];
+  const visit = (ns: Node[]) => { for (const k of ns) { if (k.type === 'glyph' && typeof k.char === 'number') cps.push(k.char); visit((k.children as Node[]) ?? []); } };
+  visit(nodes);
+  const marks: number[] = [], letters: number[] = [];
+  for (const cp of cps) {
+    if (isPrivate(cp)) continue;
+    if (COMBINING_OF[cp] !== undefined) marks.push(COMBINING_OF[cp]);
+    else if (isMark(cp)) marks.push(cp);
+    else letters.push(cp);
+  }
+  if (letters.length !== 1 || !marks.length) return null;
+  return String.fromCodePoint(DOTTED[letters[0]] ?? letters[0], ...marks).normalize('NFC');
+}
+
+/** Each box a virtual character became (resolveVirtualFonts) gets its text
+ *  as actual_text when its pieces are a letter and accents (compositeText);
+ *  their code points must be Unicode by then. Returns the boxes given one. */
+export function compositeTexts(each: (visit: (n: Node) => void) => void): number {
+  let named = 0;
+  each(n => {
+    if (n.virtual_char === undefined) return;
+    delete n.virtual_char;
+    const text = compositeText((n.children as Node[]) ?? []);
+    if (text !== null) { n.actual_text = text; named++; }
+  });
+  return named;
 }
 
 const hbox = (width: number, height: number, depth: number, children: Node[], shift: number): Node =>

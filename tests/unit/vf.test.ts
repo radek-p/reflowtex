@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { FontFiles, readVf, resolveVirtualFonts } from '../../src/pipeline/fonts/vf.ts';
+import { FontFiles, compositeText, compositeTexts, readVf, resolveVirtualFonts } from '../../src/pipeline/fonts/vf.ts';
 import { readTfm, texScale } from '../../src/pipeline/fonts/tfm.ts';
 import { kpsewhich } from '../../src/pipeline/fonts/type1.ts';
 
@@ -69,7 +69,7 @@ test('a moved character: a box of the virtual character\'s size, a kern to the p
   assert.deepEqual(nodes[0], { type: 'hlist', subtype: 2, width: 300000, height: 400000, depth: 1000, shift: 0, glue_set: 0, glue_sign: 0, glue_order: 0, children: [
     { type: 'kern', kern: tenth, subtype: 1 },
     { type: 'glyph', char: 65, font: 4, width: w(cmr, 65), height: cmr.char(65, SIZE)!.height, depth: 0, color: '#c2410c', link: 2 },
-  ] });
+  ], virtual_char: 66 });
 });
 
 test('several characters in two fonts and a rule, each where the packet sets it', { skip: NO_CM }, () => {
@@ -112,4 +112,37 @@ test('aer10.vf: its local fonts, and é as an acute moved left over e', { skip: 
   assert.deepEqual(pieces.map(p => p.kind === 'char' ? [p.font, p.char, p.y] : null), [['cmr10', 0o23, 0], ['cmr10', 101, 0]]);
   assert.ok(Math.abs(pieces[0].x + 0.02799 * at) < 2, `the acute ${pieces[0].x} sp from the origin`);
   assert.equal(pieces[1].x, 0);
+});
+
+// A composite's text: a letter and accents read as the one character they
+// draw. Code points as they are once the pieces are in Unicode (cmr10's
+// acute is U+00B4, its dieresis U+00A8, its dotless i U+0131).
+const g = (char: number): N => ({ type: 'glyph', char, font: 4 });
+const k = (kern: number): N => ({ type: 'kern', kern, subtype: 1 });
+
+test('a composite\'s text: a letter and spacing accents, composed', () => {
+  assert.equal(compositeText([k(-1835), g(0xB4), k(-200000), g(0x65)]), 'é');
+  assert.equal(compositeText([g(0xA8), g(0x131)]), 'ï', 'a dotless i takes the accent as i');
+  assert.equal(compositeText([g(0x43), { type: 'hlist', children: [g(0xB8)] } as N]), 'Ç', 'an accent in a moved box');
+  assert.equal(compositeText([g(0x65), g(0x301)]), 'é', 'a combining mark as it is');
+  assert.equal(compositeText([g(0x53), g(0x53)]), null, 'two letters, no accent: read as they are');
+  assert.equal(compositeText([g(0x65), g(0xE001), g(0xB4)]), 'é', 'a private-use piece reads nothing');
+  assert.equal(compositeText([g(0x41)]), null);
+});
+
+test('the box a virtual character became gets its text once its pieces are in Unicode; other nodes are left alone', { skip: NO_CM }, () => {
+  const { nodes } = resolve([69, 67]);               // E: an acute over e; C: a, alpha, a rule
+  assert.equal(nodes[0].virtual_char, 69);
+  // the pieces' slots as their Unicode (as the classic-font conversion does)
+  const uni: Record<number, number> = { 0x13: 0xB4, 101: 0x65, 97: 0x61, 11: 0x3B1 };
+  const each = (visit: (n: N) => void) => { const go = (ns: N[]) => { for (const n of ns) { visit(n); go((n.children as N[]) ?? []); } }; go(nodes); };
+  each(n => { if (n.type === 'glyph') n.char = uni[n.char as number] ?? n.char; });
+  const plain = { type: 'hlist', children: [g(0xB4), g(0x65)] } as N;
+  nodes.push(plain);
+  assert.equal(compositeTexts(each), 1);
+  assert.equal(nodes[0].actual_text, 'é');
+  assert.equal(nodes[1].actual_text, undefined, 'several letters: read as its pieces');
+  assert.ok(!('virtual_char' in nodes[0]) && !('virtual_char' in nodes[1]), 'the note is gone');
+  assert.equal(plain.actual_text, undefined, 'a box TeX made is read as its glyphs');
+  assert.deepEqual((nodes[0].children as N[]).filter(c => c.type === 'glyph').map(c => c.char), [0xB4, 0x65], 'still drawn as its pieces');
 });

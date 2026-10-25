@@ -72,6 +72,8 @@ interface GlyphIndex {
      *  joined; a glyph drawn only at a line break has none). */
     text: string;
     starts: number[];
+    /** The glyphs drawing more of the character before (an é's e). */
+    continues: Set<GNode>;
 }
 const indexes = new WeakMap<Doc, GlyphIndex>();
 
@@ -80,11 +82,15 @@ const indexes = new WeakMap<Doc, GlyphIndex>();
 // that refers to it, and any stream not reached (an aside) at the end. A
 // disc's three lists all count, whichever the lines use. The order depends
 // on the document only, so a position means the same glyph on every load.
+// A box that says what it stands for (a virtual font's é, an accent and an
+// e) has that text on its first glyph, none on the others.
 function glyphIndex(doc: Doc): GlyphIndex {
     let ix = indexes.get(doc);
     if (ix) return ix;
     const nodes: GNode[] = [], seen = new Set<GNode>(), streams = new Set<number>();
     const atBreak = new Set<GNode>();      // a disc's pre and post: drawn only where a line breaks
+    const own = new Map<GNode, string>();  // a glyph's text when its box gives it (actual_text)
+    const continues = new Set<GNode>();
     const node = (n: GNode, broken = false) => {
         if (seen.has(n)) return;
         seen.add(n);
@@ -94,7 +100,9 @@ function glyphIndex(doc: Doc): GlyphIndex {
             if (n.stream) stream(n.stream);
             return;
         }
+        const first = nodes.length;
         for (const c of n.children || []) node(c, broken);
+        if (n.actual_text !== undefined) nodes.slice(first).forEach((g, i) => { own.set(g, i ? '' : n.actual_text!); if (i) continues.add(g); });
         for (const c of n.pre || []) node(c, true);
         for (const c of n.post || []) node(c, true);
         for (const c of n.replace || []) node(c, broken);
@@ -120,9 +128,9 @@ function glyphIndex(doc: Doc): GlyphIndex {
         starts.push(text.length);
         // The text as read, unbroken: a hyphen TeX may put at a line's
         // end has a position (it can be marked where drawn) but no text.
-        if (!atBreak.has(n)) text += n.text !== undefined ? n.text : String.fromCodePoint(n.char || 0xfffd);
+        if (!atBreak.has(n)) text += own.get(n) ?? (n.text !== undefined ? n.text : String.fromCodePoint(n.char || 0xfffd));
     });
-    indexes.set(doc, ix = { nodes, at, text, starts });
+    indexes.set(doc, ix = { nodes, at, text, starts, continues });
     return ix;
 }
 
@@ -193,7 +201,10 @@ function resolve(r: TextRange): { data: BlockData; from: number; to: number } | 
     // Back from characters to glyphs.
     const glyphAt = (c: number) => { let lo = 0, hi = n - 1;
         while (lo < hi) { const m = (lo + hi + 1) >> 1; if (ix.starts[m] <= c) lo = m; else hi = m - 1; } return lo; };
-    const f = glyphAt(best), t = glyphAt(best + r.text.length - 1);
+    // (the last character's glyphs: an é drawn as an accent and an e, both)
+    let t = glyphAt(best + r.text.length - 1);
+    while (t + 1 < n && ix.continues.has(ix.nodes[t + 1])) t++;
+    const f = glyphAt(best);
     return textOf(ix, f, t) === r.text ? { data, from: f, to: t } : null;
 }
 

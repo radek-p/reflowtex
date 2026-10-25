@@ -49,6 +49,7 @@ function textOf(nodes: TexNode[] | undefined): string {
         if (n.type === 'glyph' && n.char !== undefined) s += glyphText(n.char);
         else if (n.type === 'glue' && ((n.width || 0) > 0 || (n.stretch || 0) > 0)) s += ' ';   // as runsOf
         else if (n.type === 'disc') s += textOf(n.replace);
+        else if (n.actual_text !== undefined) s += n.actual_text;
         else if (n.children) s += textOf(n.children);
     }
     return s;
@@ -174,7 +175,7 @@ export function runsOf(data: BlockData, i: number, a: number, b: number): LayerR
                 if (k < nodes.length - 1) addText(textOf(n.replace), n);
                 else if (text) text.hyphen = true;
             }
-            else if (n.type === 'hlist' || n.type === 'vlist') addText(textOf(n.children), n);
+            else if (n.type === 'hlist' || n.type === 'vlist') addText(n.actual_text ?? textOf(n.children), n);
         }
         if (text && !text.hyphen) text.text = text.text.replace(/\s*$/, ' ');   // the line break reads as a space
         if (text) text.text = text.text.replace(/^\s+/, text.lead ? ' ' : '');

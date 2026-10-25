@@ -173,3 +173,11 @@ test('formulas are shipped whole: in a <noscript>, with the script that inserts 
   assert.equal(body({ paragraphs: [{ nodes: formula(odd) }], content: [{ kind: 'paragraph', para: 1 }] }), `<p data-para="1">${shipped(odd)}</p>`);
   assert.equal(body({ paragraphs: [{ nodes: formula(raw) }], content: [{ kind: 'paragraph', para: 1 }] }), `<p data-para="1">${raw}</p>`);
 });
+
+// A virtual font's é is drawn as an acute and an e (src/pipeline/fonts/vf.ts),
+// in a box that says what it stands for: read as é, not "´e".
+test('a box with an actual text reads as that text, not as its glyphs', () => {
+  const e = { type: 'hlist', actual_text: 'é', children: [{ type: 'kern', kern: -1835 }, { type: 'glyph', char: 0xB4 }, { type: 'glyph', char: 0x65 }] };
+  const doc: LayerDocument = { paragraphs: [{ nodes: [...text('Caf'), e, ...text(' & <x>')] }], content: [{ kind: 'paragraph', para: 1 }] };
+  assert.equal(body(doc), '<p data-para="1">Café &amp; &lt;x&gt;</p>');
+});

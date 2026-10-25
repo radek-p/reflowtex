@@ -21,7 +21,7 @@ import { messageType } from './schema.ts';
 const HL_ALIGNMENT = 4;   // an amsmath alignment row
 
 type LayerNode = { type?: string; char?: number; width?: number; stretch?: number; mathml?: string; subtype?: number;
-                   children?: LayerNode[]; replace?: LayerNode[]; stream?: number; aside?: number };
+                   children?: LayerNode[]; replace?: LayerNode[]; stream?: number; aside?: number; actual_text?: string };
 type LayerItem = { kind?: string; para?: number; box?: LayerNode; mathml?: string; stream?: number; [field: string]: unknown };
 type LayerStream = { kind?: string; content?: LayerItem[]; text?: string };
 export interface LayerDocument { paragraphs: { nodes?: LayerNode[] }[]; content: LayerItem[]; streams?: LayerStream[] }
@@ -105,7 +105,9 @@ function nodesHtml(nodes: LayerNode[], refs: number[] = []): string {
       else if (n.type === 'disc') visit(n.replace ?? []);
       else {
         ref(n.aside);
-        if (n.children) visit(n.children);
+        // a box that says what it stands for (a virtual font's é) is read so
+        if (n.actual_text !== undefined) out += escapeText(n.actual_text);
+        else if (n.children) visit(n.children);
       }
     }
   };

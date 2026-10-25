@@ -737,3 +737,25 @@ test('the viewer puts the formulas in place where the layer\'s script did not ru
   expect(await page.locator('.latex-a11y math').count()).toBe(9);
   expect(await page.evaluate(() => window.__incomplete)).toEqual([]);
 });
+
+// A virtual font's accented letter (ae's é: an acute and an e, drawn as
+// such) reads as the letter: in the layer, which a reader and find-in-page
+// get, and in the viewer's own text (host.rangesOf, a mark found by its text).
+test('a virtual font\'s accented letters read as the letters they are', async ({ openPage }) => {
+  const page = await openPage('a11y-virtual');
+  await idle(page);
+  const layer = (await page.locator('.latex-a11y').textContent())!.replace(/\s+/g, ' ');
+  expect(layer).toContain('A café, a naïve façade.');
+  const r = await page.evaluate(() => {
+    const block = document.querySelector('.latex-block[data-nodelist-b64]')!, range = document.createRange();
+    range.selectNodeContents(block);
+    const [all] = reflowtex.host.rangesOf(range);
+    const drawn = [...block.querySelectorAll('svg text tspan')].map(t => t.textContent).join('');
+    const m = reflowtex.host.addMark([{ block: all.block, from: -1, to: -1, text: 'naïve' }]);
+    return { text: all.text, drawn, found: m && m.ranges[0].text, glyphs: m ? m.elements().length : 0 };
+  });
+  expect(r.text).toBe('Acafé,anaïvefaçade.');
+  expect(r.drawn, 'still drawn as letters and accents').toContain('´e');
+  expect(r.found).toBe('naïve');
+  expect(r.glyphs, 'the mark takes the ï\'s accent and dotless i both').toBe(6);
+});

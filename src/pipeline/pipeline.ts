@@ -26,7 +26,7 @@ import { convertPictures, includedPictureFiles } from './pictures.ts';
 import { Fonts, glyphRequirements, drawnCodepoints } from './fonts/fonts.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
 import { kpsewhich } from './fonts/type1.ts';
-import { FontFiles, resolveVirtualFonts } from './fonts/vf.ts';
+import { FontFiles, compositeTexts, resolveVirtualFonts } from './fonts/vf.ts';
 import { protoText } from './schema.ts';
 import { BackendUnavailable, BuildError, MissingCapability } from './errors.ts';
 import { documentNeeds, supports, unmetNeeds, capabilityInfo } from './backend/capabilities.ts';
@@ -320,7 +320,9 @@ export class Pipeline {
    *  strip what the wire format does not model, resolve glyphs of virtual
    *  fonts to the fonts their packets draw, convert classic fonts (first: it
    *  gives 'unknown' fonts real files, which the glyph addressing and
-   *  provisioning that follow then see), address glyphs. `formulas` is
+   *  provisioning that follow then see), the text of a virtual font's
+   *  accented letters (its pieces are in Unicode now, and an accent not yet
+   *  moved to the private-use area), address glyphs. `formulas` is
    *  LaTeX's MathML as captured (default: read from `dir`). Changes `data`. */
   async transform(data: SerializerOutput, dir: string,
                   o: { block?: string; docTag?: string; formulas?: Map<number, string>; pictures?: PictureSource } = {}): Promise<void> {
@@ -330,6 +332,7 @@ export class Pipeline {
     const nStripped = stripUnsupportedNodes(data);
     const nVirtual = resolveVirtualFonts(data.fonts, visit => forEachNode(data, visit), this.fontFiles);
     const nLegacy = normaliseLegacyFontAddressing(data, this.fonts);
+    compositeTexts(visit => forEachNode(data, visit));
     const nRewritten = normaliseGlyphAddressing(data, this.fonts, this.log);
     const bits = [
       nDropped && `dropped ${nDropped} unreferenced paragraph(s)`, nStripped && `stripped ${nStripped} node(s)`,

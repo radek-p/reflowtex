@@ -70,6 +70,9 @@ export interface NodeFields extends Rates, Floors {
     m_d?: number;
     /** A formula as MathML, on the math node that opens it. */
     mathml?: string;
+    /** A box's text, read instead of its glyphs' (a virtual font's é, drawn
+     *  as an accent and an e). */
+    actual_text?: string;
 
     // What the viewer adds.
     /** A picture's payload, hung on its node once per block (runtime/init). */
