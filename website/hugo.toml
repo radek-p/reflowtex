@@ -13,6 +13,7 @@ enableInlineShortcodes = true
 
 [params]
   github = "https://github.com/radek-p/reflowtex"
+  reflowed = "https://radek-p.github.io/reflowed/"
   # AGPL-3.0 §13 source offer, read by the viewer partial's footer.
   reflowtexSource = "https://github.com/radek-p/reflowtex"
   tagline = "LaTeX typeset by TeX, with the lines broken in the browser to fit any screen."

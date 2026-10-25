@@ -9,5 +9,6 @@
   {{- with .Page }}{{ $href = .RelPermalink }}{{ end -}}
   <a class="navlink" href="{{ $href }}">{{ .Name }}</a>
   {{- end }}
+  <a class="navlink" href="{{ site.Params.reflowed }}">ReflowEd</a>
   <a class="navlink" href="{{ site.Params.github }}" rel="noopener">GitHub</a>
 </nav>
