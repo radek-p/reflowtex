@@ -1839,7 +1839,10 @@ local function write_output()
         if it.box then remap_footnote_refs(it.box.children) end
     end
     annotate_fonts()
-    local f = assert(io.open("output.json", "w"))
+    -- Written beside, then renamed into place: a run killed while encoding
+    -- (out of memory, on a long document) leaves no output.json, rather than
+    -- an empty or partial one that a later reader would take for the run's.
+    local f = assert(io.open("output.json.tmp", "w"))
     f:write(json_encode({
         source_width = source_width,
         fonts      = json_object(used_fonts),      -- keyed by LuaTeX font id
@@ -1853,7 +1856,8 @@ local function write_output()
         outline    = json_array(outline),
         mathml     = MathML and json_array(MathML.formulas) or nil,
     }))
-    f:close()
+    assert(f:close())
+    assert(os.rename("output.json.tmp", "output.json"))
     local n_disp, n_fn = 0, 0
     for _, it in ipairs(content) do
         if it.kind == "display" then n_disp = n_disp + 1 end

@@ -290,10 +290,15 @@ export async function wideVariants(first: SerializerOutput, previous: Serializer
   const todo = firsts.map((_, i) => i).filter(i =>
     !displayAgrees(firsts[i], prevs[i], news[i], x0, xb, xc) && !some([prevs[i].box!], n => n.type === 'picture'));
   if (!todo.length) return [0, 0];
-  const probes = new Map<number, SerializerOutput | null>();
-  const sample = async (w: number) => {
-    if (!probes.has(w)) probes.set(w, await probe(w));
-    return probes.get(w)!;
+  // A probe is the whole document compiled again, tens of megabytes on a long
+  // one, and the search reads only its display items: they are taken here,
+  // and the output goes with this call. (No width is probed twice: each lies
+  // strictly inside an open interval, which then ends at it.)
+  let compiled = 0;
+  const sample = async (w: number): Promise<ContentItem[] | null> => {
+    compiled++;
+    const d = await probe(w);
+    return d && displayItems(d);
   };
   // The switch lies in (lo, hi]: at lo the display is set the narrow way, at
   // hi on the wide law. All displays are bisected together, sharing
@@ -304,14 +309,14 @@ export async function wideVariants(first: SerializerOutput, previous: Serializer
     const open = todo.filter(i => hi.get(i)! - lo.get(i)! > WIDE_RESOLUTION_SP);
     if (!open.length) break;
     const w = Math.floor((lo.get(open[0])! + hi.get(open[0])!) / 2);
-    const d = await sample(w);
-    const items = d ? displayItems(d) : [];
+    const items = await sample(w);
+    const counts = items !== null && items.length === firsts.length;
     for (const i of open) {
       if (!(lo.get(i)! < w && w < hi.get(i)!)) continue;
-      if (items.length === firsts.length && displayAgrees(items[i], prevs[i], news[i], w, xb, xc)) hi.set(i, w);
+      if (counts && displayAgrees(items[i], prevs[i], news[i], w, xb, xc)) hi.set(i, w);
       else {
         lo.set(i, w);
-        if (items.length === firsts.length) loData.set(i, items[i]);
+        if (counts) loData.set(i, items[i]);
       }
     }
   }
@@ -347,7 +352,7 @@ export async function wideVariants(first: SerializerOutput, previous: Serializer
       attachRates(item.box!, item.box!, near.box!, dn);
     }
   }
-  return [todo.length, probes.size];
+  return [todo.length, compiled];
 }
 
 // ── Paragraphs: boxes set to the measure ────────────────────────────────────

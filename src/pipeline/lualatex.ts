@@ -37,7 +37,7 @@ export interface LuaLatexOptions {
   shellEscape?: boolean;
 }
 
-function lualatex(cwd: string, env: NodeJS.ProcessEnv, trusted: boolean): Promise<{ code: number | null; stdout: string; stderr: string }> {
+function lualatex(cwd: string, env: NodeJS.ProcessEnv, trusted: boolean): Promise<{ code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }> {
   const shellEscape = trusted ? '-shell-escape' : '-no-shell-escape';
   return new Promise((resolve, reject) => {
     const p = spawn('lualatex', [shellEscape, '-interaction=nonstopmode', 'input.tex'], { cwd, env });
@@ -45,7 +45,7 @@ function lualatex(cwd: string, env: NodeJS.ProcessEnv, trusted: boolean): Promis
     p.stdout.on('data', d => { stdout += d; });
     p.stderr.on('data', d => { stderr += d; });
     p.on('error', reject);
-    p.on('close', code => resolve({ code, stdout, stderr }));
+    p.on('close', (code, signal) => resolve({ code, signal, stdout, stderr }));
   });
 }
 
@@ -62,11 +62,11 @@ function readBack(dir: string): string {
  *  error is fatal even though nonstopmode carried on and produced a node
  *  list: what it produced is a *repaired* document, which still renders and
  *  is simply wrong. The failed run's output.json is removed, so nothing
- *  later mistakes it for a block's. */
+ *  later mistakes it for a block's; so is each pass's before it starts, so a
+ *  pass that is killed (a memory limit) cannot leave the one before's. */
 export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<string> {
   const env = { ...process.env, TEXINPUTS: [...opts.texinputs, process.env.TEXINPUTS ?? ''].join(delimiter) };
   const outputJson = join(dir, 'output.json');
-  rmSync(outputJson, { force: true });
   let before = readBack(dir);
   let result: Awaited<ReturnType<typeof lualatex>> | null = null;
   const log = join(dir, 'input.log');
@@ -77,6 +77,7 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<s
     // the PDF, which fails on a character it cannot read (luamml's raw DEL
     // for a classic font's double accent). The PDF here needs none: gone.
     rmSync(join(dir, 'input-luamml-mathml.html'), { force: true });
+    rmSync(outputJson, { force: true });
     result = await lualatex(dir, env, opts.shellEscape ?? process.env.REFLOWTEX_SHELL_ESCAPE === '1');
     opts.onPass?.(n + 1, existsSync(log) ? readFileSync(log, 'utf8') : '');
     const after = readBack(dir);
@@ -88,7 +89,8 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<s
     // stderr is where a lualatex wrapper says what it tried (the container's
     // lazy package install)
     if (result!.stderr.trim()) detail += `\n--- stderr ---\n${result!.stderr.slice(-2000)}`;
-    throw new TexError(`lualatex failed:\n${detail}`, opts.block);
+    const status = result!.signal ? `killed by ${result!.signal}` : `exit code ${result!.code}`;
+    throw new TexError(`lualatex failed (${status}):\n${detail}`, opts.block);
   }
   const errors = readFileSync(log, 'utf8').split('\n').filter(l => l.startsWith('! '));
   if (errors.length) {
