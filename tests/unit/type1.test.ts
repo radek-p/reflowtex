@@ -3,14 +3,15 @@
 // map says it, as it says it to TeX: Latin Modern's maths fonts are named
 // after their outlines (lmsy10.pfb) but re-encoded by the map
 // (lm-mathsy.enc). Read with the outline's own encoding instead, slot 106 of
-// lmsy10 was no glyph at all, and `|x|` could not be drawn.
+// lmsy10 was no glyph at all, and `|x|` could not be drawn. A document may bring
+// its own map lines (setDocumentMapLines), read before pdftex.map.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { basename, join } from 'node:path';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import opentype from 'opentype.js';
-import { convertOutline, convertType1, findOutline, PUA_BASE } from '../../src/pipeline/fonts/type1.ts';
+import { convertOutline, convertType1, findOutline, kpsewhich, parseMapLines, PUA_BASE, readEncoding, setDocumentMapLines } from '../../src/pipeline/fonts/type1.ts';
 
 /** The outline file and encoding `face` is converted with. */
 function outlineOf(face: string): { file: string; encoding: string[] | null } {
@@ -81,4 +82,25 @@ test('Latin Modern maths slots convert to the glyphs TeX set', () => {
   assert.deepEqual(convertedNames('lmmi10', [0x0B, 0x0C, 0x3B]), ['alpha', 'beta', 'comma']);
   assert.deepEqual(convertedNames('lmsy10', [0x00, 0x31]), ['minus', 'infinity']);
   assert.deepEqual(convertedNames('lmex10', [0x50, 0x58]), ['summationtext', 'summationdisplay']);
+});
+
+test('map lines: \\pdfmapline\'s + and = read, a removal and comments skipped, the first line wins', () => {
+  const map = parseMapLines(['% comment', '+foo Foo "E ReEncodeFont" <e.enc <foo.pfb', '=foo Other <other.pfb',
+    '-bar Bar <bar.pfb', 'baz Baz <[baz.enc <baz.pfa']);
+  assert.deepEqual([...map], [['foo', ['foo.pfb', 'e.enc']], ['baz', ['baz.pfa', 'baz.enc']]]);
+});
+
+test('a document\'s own map line gives its face the outline and encoding it names', () => {
+  // a face of the document's (no docface.pfb anywhere): lmmi10's outline through lm-mathit.enc
+  let lines: string[] = ['+docface LMMathItalic10-Regular "enclmmathit ReEncodeFont" <lm-mathit.enc <lmmi10.pfb'];
+  setDocumentMapLines(() => lines);
+  try {
+    const found = findOutline('docface');
+    assert.ok(found);
+    assert.equal(found[0], kpsewhich('lmmi10.pfb'));
+    assert.deepEqual(found[1], readEncoding(kpsewhich('lm-mathit.enc')!));
+    assert.deepEqual(convertedNames('docface', [0x0B]), ['alpha']);
+    lines = [];                                       // another document: the face is gone
+    assert.equal(findOutline('docface'), null);
+  } finally { setDocumentMapLines(() => []); }
 });

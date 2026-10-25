@@ -49,25 +49,51 @@ export function kpsewhich(name: string): string | null {
   return kpseCache.get(name)!;
 }
 
-let fontMap: Map<string, [string, string | null]> | null = null;
-/** TeX font name → [outline file, encoding file] from pdftex.map, the map the
- *  TeX installation itself uses to embed Type 1 fonts. */
-function mapEntries(): Map<string, [string, string | null]> {
-  if (fontMap) return fontMap;
-  fontMap = new Map();
-  const path = kpsewhich('pdftex.map');
-  if (!path) return fontMap;
-  for (const line of readFileSync(path, 'latin1').split(/\r?\n/)) {
-    const t = line.trimStart();
-    if (!line.trim() || '%#*;'.includes(t[0])) continue;
-    const words = line.match(/"[^"]*"|\S+/g) ?? [];
+type MapEntry = [outline: string, encoding: string | null];
+
+/** Font map lines (pdftex.map's syntax) → TeX font name → [outline file,
+ *  encoding file]; the first line for a face wins. A line may start with
+ *  \pdfmapline's + or =; a removal (-) is skipped. */
+export function parseMapLines(lines: Iterable<string>): Map<string, MapEntry> {
+  const map = new Map<string, MapEntry>();
+  for (const line of lines) {
+    const t = line.trim().replace(/^[+=]/, '');
+    if (!t || '%#*;-'.includes(t[0])) continue;
+    const words = t.match(/"[^"]*"|\S+/g) ?? [];
     const files = words.slice(1).filter(w => w.startsWith('<')).map(w => w.replace(/^[<[]+/, ''));
     const outline = files.find(w => w.endsWith('.pfb') || w.endsWith('.pfa'));
     const enc = files.find(w => w.endsWith('.enc')) ?? null;
     const face = words[0];
-    if (face && outline && !fontMap.has(face)) fontMap.set(face, [outline, enc]);
+    if (face && outline && !map.has(face)) map.set(face, [outline, enc]);
   }
+  return map;
+}
+
+let fontMap: Map<string, MapEntry> | null = null;
+/** TeX font name → [outline file, encoding file] from pdftex.map, the map the
+ *  TeX installation itself uses to embed Type 1 fonts. */
+function mapEntries(): Map<string, MapEntry> {
+  if (fontMap) return fontMap;
+  const path = kpsewhich('pdftex.map');
+  fontMap = path ? parseMapLines(readFileSync(path, 'latin1').split(/\r?\n/)) : new Map();
   return fontMap;
+}
+
+let documentLines: () => readonly string[] = () => [];
+let documentMap: { from: readonly string[]; map: Map<string, MapEntry> } | null = null;
+/** Map lines a document declares itself (\pdfmapline, a .map file it ships
+ *  read through \pdfmapfile), for the faces it brings: read before
+ *  pdftex.map. `get` is asked at every lookup; a different array is parsed
+ *  again, so the lines can follow the document being typeset. */
+export function setDocumentMapLines(get: () => readonly string[]): void {
+  documentLines = get;
+  documentMap = null;
+}
+/** The map entry for a face: the document's lines first, then pdftex.map. */
+function mapEntry(name: string): MapEntry | undefined {
+  const lines = documentLines();
+  if (documentMap?.from !== lines) documentMap = { from: lines, map: parseMapLines(lines) };
+  return documentMap.map.get(name) ?? mapEntries().get(name);
 }
 
 /** The 256 glyph names of a PostScript encoding vector (.enc). */
@@ -79,12 +105,12 @@ export function readEncoding(path: string): string[] {
 }
 
 /** A face's outline in the TeX tree, and the encoding it is used with, as the
- *  font map gives them: ec-lmr10 is lmr10.pfb re-encoded through lm-ec.enc,
+ *  font map (a document's own lines, then pdftex.map) gives them: ec-lmr10 is lmr10.pfb re-encoded through lm-ec.enc,
  *  and lmsy10 is lmsy10.pfb re-encoded through lm-mathsy.enc, though the file
  *  is named after the face. No encoding (null) is the outline's own. A face
  *  the map does not list is `<name>.pfb` with its own encoding. */
 export function findOutline(name: string): [string, string[] | null] | null {
-  const entry = mapEntries().get(name);
+  const entry = mapEntry(name);
   const pfb = entry ? kpsewhich(entry[0]) : null;
   if (!entry || !pfb) {
     const own = kpsewhich(`${name}.pfb`);
