@@ -1,16 +1,17 @@
 name: CI
 
 # Every check of a change, in one run (CONTRIBUTING.md, "CI"):
-#   typescript  type checking and the unit tests, on Node alone;
+#   typescript  type checking, and the unit tests (in the CI image: some
+#               read TeX Live's fonts, run lualatex or hugo);
 #   render      every glyph the browser draws against TeX's own pageless PDF
 #               (tests/render/README.md), the capture tests and the backend
 #               conformance suite (docs/backends.md);
 #   web         what a site does in the browser: the viewer, the companion
 #               package and the Hugo integration, in Chromium, WebKit and
 #               Firefox (tests/web/README.md).
-# render and web run in the CI image (ci-image.yml): built once, the first
-# time its inputs change, and pulled from GitHub's registry by every job
-# after that. No test fetches anything while it runs: the TeX packages and
+# All three run in the CI image (ci-image.yml): built once, the first time
+# its inputs change, and pulled from GitHub's registry by every job after
+# that. No test fetches anything while it runs: the TeX packages and
 # the browsers are in the image, and the browser's scripts are built from
 # the checkout.
 
@@ -29,16 +30,22 @@ jobs:
     uses: ./.github/workflows/ci-image.yml
 
   typescript:
+    needs: image
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      IMAGE: ${{ needs.image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm test
+      - run: .github/scripts/ci-image.sh login && .github/scripts/ci-image.sh pull "$IMAGE"
+      - name: Type check and run the unit tests
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace reflowtex:test bash -lc '
+            set -e
+            npm ci --no-audit --no-fund
+            npm run typecheck
+            npm test
+          '
 
   render:
     needs: image

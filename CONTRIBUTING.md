@@ -50,14 +50,16 @@ A pull request cannot be merged before its author has signed.
 One workflow, **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)),
 checks every push to main and every pull request:
 
-- **typescript**: `npm run typecheck` and the unit tests, on Node alone;
+- **typescript**: `npm run typecheck` and the unit tests, in the CI image
+  (some read TeX Live's fonts, or run lualatex or hugo);
 - **render**: the capture tests, the backend conformance suite
   ([docs/backends.md](docs/backends.md)) and the render tests, every glyph
   against TeX's pageless PDF;
 - **web**: the web tests, in Chromium, WebKit and Firefox.
 
-**The image.** render and web run in the CI image, the Dockerfile's `test`
-target (TeX Live with the tests' packages, Node, Hugo, the three browsers).
+**The image.** typescript, render and web run in the CI image, the
+Dockerfile's `test` target (TeX Live with the tests' packages, Node, Hugo,
+the three browsers).
 [`ci-image.yml`](.github/workflows/ci-image.yml) names it by a hash of what
 goes into it – the `Dockerfile`, `docker/` and `package-lock.json` – as
 `ghcr.io/<owner>/reflowtex-ci:<hash>`, in this repository's own package
