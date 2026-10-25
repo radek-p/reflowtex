@@ -329,6 +329,21 @@ everything a page draws:
   forgets it.
 - **Fonts**: `host.fonts.provide(file, source)`, `host.fonts.loaded(file)`,
   `host.fonts.ready()` (see Fonts).
+- **The drawing as data**, for a host that places a caret or tests a click
+  itself: `block.segments()` lists a block's segments in drawing order
+  (`kind` 'text', 'display' or 'stream'; `svg`, the element drawn in;
+  `painted`; a stream's own `segments()`), and `segment.walk({ line, node })`
+  gives each line's nodes and each node's position, in the svg's user units,
+  without touching the DOM (map them to the screen with the svg's CTM).
+  The nodes are objects of `block.document`, the block's decoded document
+  (latex.proto's), so a glyph found by a click can be looked up there; sizes
+  in it are TeX's scaled points, `host.spToPx` px each. `block.layout()` is
+  the measure and alignment it was last laid out at and the width TeX set it
+  at; `block.relayout()` lays it out again. `host.mount` resolves once the
+  block's faces have loaded and its segments within a window's height of the
+  viewport are painted (in a rendered element: `visibility: hidden` counts),
+  so a new result can be mounted out of sight and swapped in at once.
+  `host.idle()` resolves once the viewer has nothing still to come.
 - **Views**: one block shown in several elements at once, a split view say.
   `host.mount(el, { of, view? })` makes an empty `el` another view of a
   block on the page (`of`: a `Block`, its element or its key; `view`: a

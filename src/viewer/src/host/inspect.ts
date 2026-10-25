@@ -114,20 +114,26 @@ const inspect: Inspect = {
         // (a block's own cache, or one given: a stream's nested one, a surface's)
         const data = blockData.get(el);
         cache = cache || (data && data.cache);
-        const L = cache && cache.layout && cache.layout.laid[i];
-        if (!L || L.deferred || !L.lines || !L.lrp) return false;
-        useGlyphMetrics(cache!.metrics);
-        const noop = () => {};
-        const s = { glyph: noop, missing: noop, space: noop, rule: noop, picture: noop,
-                    beginTransform: noop, endTransform: noop,
-                    node: sink.node, vnode: sink.vnode };
-        for (let j = 0; j < L.lines.length; j++) {
-            const { ratio, er, x0, fillRatio, fillOrder } = L.lrp[j];
-            if (sink.line) sink.line(j, L.lines[j], x0, L.baselineYs![j]);
-            renderNodes(data!.fontInfo, s, L.lines[j].nodes, x0, L.baselineYs![j],
-                        fillOrder ? fillRatio : ratio, er, fillOrder || 0);
-        }
-        return true;
+        return !!data && !!cache && replaySegment(data.fontInfo, cache, i, sink);
     },
 };
+
+/** Segment i of `cache` drawn again through `sink`, touching no DOM (inspect.replay, Segment.walk). False when it
+ *  has no lines yet (a stream, or a layout deferred until it scrolls near). */
+export function replaySegment(fontInfo: BlockData['fontInfo'], cache: LayoutCache, i: number, sink: ReplaySink): boolean {
+    const L = cache.layout && cache.layout.laid[i];
+    if (!L || L.deferred || !L.lines || !L.lrp) return false;
+    useGlyphMetrics(cache.metrics);
+    const noop = () => {};
+    const s = { glyph: noop, missing: noop, space: noop, rule: noop, picture: noop,
+                beginTransform: noop, endTransform: noop,
+                node: sink.node, vnode: sink.vnode };
+    for (let j = 0; j < L.lines.length; j++) {
+        const { ratio, er, x0, fillRatio, fillOrder } = L.lrp[j];
+        if (sink.line) sink.line(j, L.lines[j], x0, L.baselineYs![j]);
+        renderNodes(fontInfo, s, L.lines[j].nodes, x0, L.baselineYs![j],
+                    fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+    }
+    return true;
+}
 api.inspect = inspect;

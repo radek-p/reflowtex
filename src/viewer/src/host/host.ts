@@ -20,7 +20,10 @@ import { blockData } from '../runtime/blocks.ts';
 import { flushBlock, layoutDone, pageLayout, setPageLayout } from '../runtime/slices.ts';
 import { applyFade, applyFit, displayFadeDefault, displayFadeOf, displayFitDefault, displayFitOf, fadesNow, forgetFade, forgetFit,
          revealInDisplay, setDisplayFadeDefault, setDisplayFadeOf, setDisplayFitDefault, setDisplayFitOf } from './displays.ts';
-import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
+import type { Block, BlockEvents, Host, Instance, InstanceQuery, Segment } from './types.ts';
+import type { LayoutCache } from '../engine/layout/types.ts';
+import { replaySegment } from './inspect.ts';
+import { idle } from '../runtime/pending.ts';
 import { screenCTM } from '../runtime/screen-ctm.ts';
 import { fontLoaded, fontsReady, provideFont } from '../runtime/fonts.ts';
 
@@ -36,6 +39,23 @@ function screenPoint(el: Element | null, x: number, y: number): DOMRect | null {
     return new DOMRect(p.x, p.y, 0, 0);
 }
 const num = (el: Element, a: string) => parseFloat(el.getAttribute(a) || '0') || 0;
+
+// A block's segments (Block.segments): its layout's, each with its drawing's
+// element; a stream's own, through its nested layout.
+function segmentsOf(data: ViewerBlockData, cache: LayoutCache): Segment[] {
+    return (cache.layout?.laid ?? []).map((L, i) => {
+        const dom = cache.dom?.segs[i];
+        const kind = L.seg.kind;
+        return {
+            kind,
+            svg: kind === 'stream' ? null : dom?.svg ?? null,
+            painted: !!dom?.painted,
+            segments: () => (kind === 'stream' && dom?.sub ? segmentsOf(data, dom.sub) : []),
+            walk: (sink: Parameters<Segment['walk']>[0]) => kind !== 'stream' && replaySegment(data.fontInfo, cache, i, {
+                node: sink.node, line: sink.line && ((j, line, x0, by) => sink.line!(j, line.nodes, x0, by)) }),
+        };
+    });
+}
 
 class BlockImpl implements Block {
     private _roots: InstanceImpl[] | null = null;
@@ -74,6 +94,13 @@ class BlockImpl implements Block {
     }
     displayFit() { return displayFitOf(this.el); }
     setDisplayFit(fit: 'natural' | 'column' | null) { setDisplayFitOf(this.el, fit); }
+    get document() { return this.data.doc; }
+    layout() {
+        const d = this.data;
+        return d.lastWidth > 0 ? { widthPt: d.lastWidth, align: d.lastAlign, sourceWidthPt: (d.cache.sourceWidthSp ?? 0) / 65536 } : null;
+    }
+    relayout() { this.data.cache.relayout?.(); }
+    segments(): readonly Segment[] { return segmentsOf(this.data, this.data.cache); }
     on<E extends keyof BlockEvents>(event: E, fn: BlockEvents[E]): () => void {
         // 'layout' is the block's reflowtex:layout DOM event (announceLayout);
         // the layout* ones, slices.ts's.
@@ -177,6 +204,8 @@ export const host: Host = {
     setDisplayFade(on) { setDisplayFadeDefault(on, blocks.map(b => b.el)); },
     displayFit: () => displayFitDefault(),
     setDisplayFit(fit) { setDisplayFitDefault(fit, blocks.map(b => b.el)); },
+    idle: () => idle(),
+    spToPx: SP_TO_PX,
     fonts: {
         provide: (file, source) => provideFont(file, source),
         loaded: file => fontLoaded(file),

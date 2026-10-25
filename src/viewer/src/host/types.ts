@@ -14,7 +14,7 @@
 
 // (For the paragraph breaker a page may plug in: the viewer's own node and
 // line shapes.)
-import type { TexNode, ViewerFont } from '../engine/model.ts';
+import type { Doc, TexNode, ViewerFont } from '../engine/model.ts';
 import type { Line } from '../engine/layout/types.ts';
 import type { Params } from '../runtime/params.ts';
 import type { Inspect } from './inspect.ts';
@@ -311,6 +311,42 @@ export interface Block {
      *  a display that fits is all in view already. False when there is no
      *  such display. */
     revealInDisplay(display: number | Element, x?: number, options?: { margin?: number }): boolean;
+    /** The block's decoded document (latex.proto's Document), read-only: its
+     *  fonts, glyph metrics, paragraphs. This view's own working copy: the
+     *  nodes Segment.walk gives are its objects (by identity), except those
+     *  a live text (\webtext) set. */
+    readonly document: Readonly<Doc>;
+    /** The measure (pt) and alignment it was last laid out at, and the
+     *  width TeX set it at (\hsize, pt; 0 if unknown); null before its first
+     *  layout. */
+    layout(): { widthPt: number; align: string; sourceWidthPt: number } | null;
+    /** Lay it out again now, after a change the viewer cannot see (a custom
+     *  property it reads, say). */
+    relayout(): void;
+    /** Its segments in drawing order: runs of paragraphs, displays, and
+     *  streams (boxes laid out of the flow, with segments of their own). */
+    segments(): readonly Segment[];
+}
+
+/** One segment of a block's drawing (Block.segments). */
+export interface Segment {
+    readonly kind: 'text' | 'display' | 'stream';
+    /** The <svg> it is drawn in (null for a stream, whose segments have
+     *  their own); its lines are drawn as they near the window, so it may be
+     *  empty yet. Its CTM maps the units walk() gives to the screen. */
+    readonly svg: SVGSVGElement | null;
+    /** Whether its lines are drawn now. */
+    readonly painted: boolean;
+    /** A stream's own segments; [] for the others. */
+    segments(): readonly Segment[];
+    /** Walk its lines and nodes as they are drawn now, in its svg's user
+     *  units, touching no DOM: line(j, nodes, x0, baselineY) for each line,
+     *  node(n, x, baselineY, advance) for each node of it in drawing order
+     *  (glyphs, and the maths on and off nodes among others). False when it
+     *  has no lines yet (a stream; a layout put off until it nears the
+     *  window). */
+    walk(sink: { line?(j: number, nodes: readonly TexNode[], x0: number, baselineY: number): void;
+                 node?(n: TexNode, x: number, baselineY: number, advance: number): void }): boolean;
 }
 
 /** Where the viewer shows a detached instance, for its kind to draw in:
@@ -469,12 +505,24 @@ export interface Host {
     /** Every block's instances matching the query. */
     instances(query?: InstanceQuery): Instance[];
     find(id: string): Instance | undefined;
+    /** Resolves once the viewer has nothing still to come on the page: no
+     *  layout, paint, set-up, face or animation it waits for (over three
+     *  frames). For a test, or a host that acts after a change has settled. */
+    idle(): Promise<void>;
+    /** CSS px per TeX scaled point: the unit of a block drawing's svg (what
+     *  Segment.walk gives) per the unit of its document's sizes. */
+    readonly spToPx: number;
     /** Called for every block, now for those already initialised and later
      *  for each new one. Returns an unsubscribe function. */
     onBlock(fn: (block: Block) => void): () => void;
     /** Render a block element added after the page loaded (a framework's,
      *  say): one carrying data-nodelist-b64, as the integrations write it.
-     *  Resolves when it is laid out; a block already rendered resolves at
+     *  Resolves when it is laid out: its faces loaded (or failed), and its
+     *  segments within a window's height of the viewport painted, when the
+     *  element is rendered (visibility: hidden counts; display: none does
+     *  not, and those are painted once it is shown). So a host may mount a
+     *  new result into a hidden element and swap it in at once, with no
+     *  frame drawn without its text. A block already rendered resolves at
      *  once. With `of`, `el` (an empty element) becomes another view of that
      *  block instead: see BlockMountOptions. */
     mount(el: HTMLElement, options?: BlockMountOptions): Promise<Block>;
