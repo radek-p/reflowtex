@@ -421,6 +421,11 @@
   \begingroup
     \pagewidth=\reflowtexTikzWidth
     \pageheight=\dimexpr\reflowtexTikzHeight+\reflowtexTikzDepth\relax
+    % the page is the box, wherever the document's pages are moved on the
+    % paper: by \hoffset and \voffset (a class's \advance\hoffset-1in,
+    % geometry's hoffset) or by the PDF origin
+    \hoffset=0pt
+    \voffset=0pt
     \pdfvariable horigin=0pt
     \pdfvariable vorigin=0pt
     \setbox\reflowtexTikzPageBox=\vbox{%

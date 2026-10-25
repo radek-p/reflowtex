@@ -1,0 +1,32 @@
+% A page whose origin is moved, as some classes move it: geometry's hoffset
+% and voffset, a class's own \advance\hoffset-1in, and the PDF origin. They
+% place the page on the paper, not the text in the column, so neither the
+% strip nor a captured picture moves with them. The PDF draws the picture as
+% TeX does (tex_pictures), so the capture's private page is under test too.
+\documentclass{article}
+\usepackage[hoffset=13pt, voffset=-21pt]{geometry}
+\usepackage{tikz}
+\AtBeginDocument{%
+  \advance\hoffset-1in
+  \advance\voffset-1in
+  \pdfvariable horigin=50pt
+  \pdfvariable vorigin=30pt}
+\begin{document}
+The harmonic series diverges, though very slowly: its partial sums grow like
+the logarithm of the number of terms. Its terms tend to zero, which is not
+enough. A series whose terms tend to zero may still diverge, and this is the
+first example most students meet.
+
+\begin{center}
+\begin{tikzpicture}
+  \draw[->] (0,0) -- (3,0) node[right] {$x$};
+  \draw[->] (0,0) -- (0,2) node[above] {$y$};
+  \node[draw] at (1.5,1) {a label};
+\end{tikzpicture}
+\end{center}
+A second paragraph, after the picture, with a display in it:
+\[
+  \sum_{k=1}^{n} k = \frac{n(n+1)}{2},
+\]
+and a short last line.
+\end{document}

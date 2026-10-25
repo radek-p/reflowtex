@@ -136,4 +136,10 @@ export const cases: Record<string, CaseSettings> = {
   // ones drawn twice. Worst attained 2026-10-25 (12 of TeX's rules not drawn
   // until then, when only TeX's strokes counted).
   nicematrix: { tex_pictures: true, tolerance: 0.009, rule_tolerance: 0.005 },
+  // A page whose origin is moved – geometry's hoffset and voffset, a class's
+  // \advance\hoffset-1in, the PDF origin – with a picture: the strip and the
+  // captured picture are shipped with no offsets (both used to keep them:
+  // every glyph of the strip off by the offsets, and the picture's labels and
+  // lines off its box). Worst attained 2026-10-25.
+  'page-offsets': { tex_pictures: true, tolerance: 0.013, rule_tolerance: 0.004 },
 };

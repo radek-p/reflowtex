@@ -55,7 +55,6 @@ export function instrument(template: string, margin: string, capture = true): st
   if (!capture && !template.includes('\\let\\reflowtexOrigTikzpicture\\tikzpicture')) throw new Error('template does not capture TikZ pictures');
   const restore = capture ? '' : '\\let\\tikzpicture\\reflowtexOrigTikzpicture\n\\let\\endtikzpicture\\reflowtexOrigEndtikzpicture\n\\let\\reflowtexCaptureEnvBegin\\relax\n\\let\\reflowtexCaptureEnvEnd\\relax\n';
   const hook = restore + '\\AddToHook{enddocument/afterlastpage}{%\n'
-    + `  \\pdfvariable horigin=${margin} \\pdfvariable vorigin=0pt\n`
     + `  \\directlua{Pageless.ship{margin = tex.sp("${margin}")}}}\n`;
   // the line that begins the document – not a mention in a comment above it
   const at = [...template.matchAll(/^\\begin\{document\}/gm)].pop();

@@ -24,13 +24,17 @@
 -- empty box). Their positions in the strip are recorded so stack.py can draw
 -- the private pages back into place.
 --
+-- The strip's pages have an origin of their own: the margin across, nothing
+-- down. What moved the document's pages on the paper – \hoffset and \voffset
+-- (a class's \advance\hoffset-1in, geometry's hoffset) and the PDF origin –
+-- placed the page, not the text in the column, and is set aside before the
+-- strip is shipped.
+--
 -- Load this file right after serializer.lua (it wraps
 -- Serializer.note_captured_picture to learn the private page numbers), and
--- call Pageless.ship() from the `enddocument/afterlastpage` hook with
--- \pdfvariable horigin set to the margin and vorigin to 0pt:
+-- call Pageless.ship() from the `enddocument/afterlastpage` hook:
 --
 --   \AddToHook{enddocument/afterlastpage}{%
---     \pdfvariable horigin=36pt \pdfvariable vorigin=0pt
 --     \directlua{Pageless.ship{margin = tex.sp("36pt")}}}
 --
 -- Output: the pages, appended to the job's PDF, and pageless.json describing
@@ -308,6 +312,10 @@ function Pageless.ship(opts)
     for p in node.traverse(head) do nodes[#nodes + 1] = p end
     if opts.floats ~= false then nodes = drop_float_leftovers(nodes) end
     if opts.trim ~= false then nodes = trim_galley(nodes) end
+
+    -- the origin: the margin, and none of the document's offsets
+    tex.hoffset, tex.voffset = 0, 0
+    pdf.setorigin(margin, 0)
 
     local chunks, pictures = {}, {}
     local y0 = 0
