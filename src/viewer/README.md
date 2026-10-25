@@ -45,7 +45,8 @@ the DOM below.
 <script src="latex-viewer.js"></script>
 ```
 
-On `DOMContentLoaded` the viewer parses the schema, finds every
+On `DOMContentLoaded` (or at once, when the script runs after it: added by a
+loader, say) the viewer parses the schema, finds every
 `[data-nodelist-b64]`, lays each out at its measured pixel width, and paints
 inline SVG. It re-breaks lines on resize and repaints on theme change. Blocks far
 below the fold are laid out immediately but painted lazily as they approach the
@@ -499,7 +500,9 @@ everything a page draws:
   painter asks `liveOn(node)` for every glyph it draws.
 - **Colour maps**: `host.colorMaps()` gives the maps in force (the page's
   island, or what was set last), `host.setColorMaps(maps)` replaces them;
-  the page's colours follow at once, with no layout (see Theming).
+  the page's colours follow at once, with no layout (see Theming). Maps set
+  before the viewer reads its island (at its first block) are kept over the
+  island's, map by map.
 
 ## Streams
 

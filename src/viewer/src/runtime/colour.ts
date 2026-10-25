@@ -81,7 +81,9 @@ export function installColorMaps(): void {
         try { maps = JSON.parse(island.textContent!); }
         catch (e) { console.error('[latex-viewer] malformed #latex-color-maps JSON', e); }
     }
-    setColorMaps(maps);
+    // what the page gave host.setColorMaps before the first block wins over
+    // the island, map by map (it was replaced by it)
+    setColorMaps({ ...maps, ...currentMaps });
     document.documentElement.setAttribute('data-latex-viewer', BUILD);
 }
 

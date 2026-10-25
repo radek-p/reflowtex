@@ -65,4 +65,9 @@ export function installViewerStyles(): void {
 installHost();
 installSelection();
 // (counted from here until every block is set up: inspect.idle waits for it)
-track('page set-up', new Promise<void>(done => document.addEventListener('DOMContentLoaded', () => done(init()))));
+// On DOMContentLoaded; or, when the script runs after it (added by a loader,
+// or with async), at once – after this script's own top level.
+track('page set-up', new Promise<void>(done => {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => done(init()), { once: true });
+    else queueMicrotask(() => done(init()));
+}));
