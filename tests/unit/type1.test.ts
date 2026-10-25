@@ -6,8 +6,11 @@
 // lmsy10 was no glyph at all, and `|x|` could not be drawn.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { basename } from 'node:path';
-import { convertOutline, findOutline, PUA_BASE } from '../../src/pipeline/fonts/type1.ts';
+import { basename, join } from 'node:path';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import opentype from 'opentype.js';
+import { convertOutline, convertType1, findOutline, PUA_BASE } from '../../src/pipeline/fonts/type1.ts';
 
 /** The outline file and encoding `face` is converted with. */
 function outlineOf(face: string): { file: string; encoding: string[] | null } {
@@ -57,4 +60,25 @@ test('a face named after no outline file takes the map\'s outline and encoding',
   assert.equal(ec.file, 'lmr10.pfb');
   assert.ok(ec.encoding);
   assert.equal(ec.encoding[0xC4], 'Adieresis');
+});
+
+/** The glyph name the converted face draws for each of `slots`. */
+function convertedNames(face: string, slots: number[]): (string | null)[] {
+  const out = mkdtempSync(join(tmpdir(), 'reflowtex-type1-'));
+  const res = convertType1(face, out);
+  assert.ok(res, `${face} converts`);
+  const buf = readFileSync(join(out, res.served));
+  const font = opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+  return slots.map(s => {
+    const cp = res.addressing.get(s);
+    return cp === undefined ? null : font.charToGlyph(String.fromCodePoint(cp)).name;
+  });
+}
+
+test('Latin Modern maths slots convert to the glyphs TeX set', () => {
+  // lmmi10: 0x0B alpha, 0x0C beta, 0x3B comma; lmsy10: 0x00 minus, 0x31 infinity;
+  // lmex10: 0x50 summationtext, 0x58 summationdisplay
+  assert.deepEqual(convertedNames('lmmi10', [0x0B, 0x0C, 0x3B]), ['alpha', 'beta', 'comma']);
+  assert.deepEqual(convertedNames('lmsy10', [0x00, 0x31]), ['minus', 'infinity']);
+  assert.deepEqual(convertedNames('lmex10', [0x50, 0x58]), ['summationtext', 'summationdisplay']);
 });

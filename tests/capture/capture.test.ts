@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
 
-type Node = { type: string; char?: number; color?: string; link?: number; stream?: number; mathml?: unknown;
+type Node = { type: string; char?: number; font?: number; color?: string; link?: number; stream?: number; mathml?: unknown;
               width?: number; children?: Node[]; replace?: Node[]; pre?: Node[]; post?: Node[] };
 type Item = { kind: string; para?: number; box?: Node; mathml?: unknown;
               display_used_above?: number; display_used_below?: number; display_below?: number };
@@ -280,6 +280,36 @@ test('Lean: the parts are marked, decl and url on the widget', async () => {
   const roles = streams.filter(s => attrsOf(s.attrs)['rtx-part']).map(s => attrsOf(s.attrs)['rtx-part']);
   assert.deepEqual(roles.sort(), ['code', 'tex']);
   assert.match(streams.find(s => attrsOf(s.attrs)['rtx-part'] === 'code')!.text!, /example : 1 = 1 := rfl/);
+});
+
+// ── Classic fonts ───────────────────────────────────────────────────────────
+// A Type 1 face is converted for the browser (src/pipeline/fonts/type1.ts)
+// and its glyphs readdressed; what each glyph then draws is checked in the
+// converted file.
+
+import opentype, { type Font } from 'opentype.js';
+/** [face, glyph name the served file draws] for each glyph of the paragraphs. */
+function drawnGlyphNames(d: Output): [string, string][] {
+  const fonts = d.fonts as Record<string, { name: string; filename: string }>;
+  const parsed = new Map<string, Font>();
+  const out: [string, string][] = [];
+  for (const n of walk(d.paragraphs.flatMap(p => p.nodes))) {
+    if (n.type !== 'glyph') continue;
+    const f = fonts[String(n.font)];
+    if (!parsed.has(f.filename)) {
+      const buf = readFileSync(join(root, 'fonts', f.filename));
+      parsed.set(f.filename, opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)));
+    }
+    out.push([f.name, parsed.get(f.filename)!.charToGlyph(String.fromCodePoint(n.char!)).name ?? '']);
+  }
+  return out;
+}
+
+test('Latin Modern maths (lmodern) draws the glyphs TeX set', async () => {
+  const d = await capture('Let $\\alpha+\\sum_i x_i \\leq \\infty$.', '\\usepackage{lmodern}');
+  const maths = drawnGlyphNames(d).filter(([face]) => /^lm(mi|sy|ex)/.test(face));
+  assert.deepEqual(maths, [['lmmi10', 'alpha'], ['lmex10', 'summationtext'], ['lmmi7', 'i'], ['lmmi10', 'x'],
+                           ['lmmi7', 'i'], ['lmsy10', 'lessequal'], ['lmsy10', 'infinity']]);
 });
 
 // ── MathML ──────────────────────────────────────────────────────────────────
