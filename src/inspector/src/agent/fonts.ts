@@ -4,6 +4,7 @@ import { I } from './context.ts';
 import { census, familyOf, fileOf, fontKeyOf } from './census.ts';
 import { faceFromWire } from '../../../shared/font-face.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
+import { isPrivateUse } from '../../../shared/glyph-text.ts';
 import type { FontGlyphs, FontOrigin, GlyphCell } from '../protocol.ts';
 import type { DocFont } from '../../../viewer/src/engine/model.ts';
 import type { BlockData } from '../../../viewer/src/runtime/block-data.ts';
@@ -18,7 +19,6 @@ interface ParsedFont { upem: number; numGlyphs: number; adv: number[]; cps: numb
 // private-use ones among them – and serves under another name (only the
 // page's font map, and so the @font-face rule, says so); 'original', served as
 // it is; null with no face.
-export const isPUA = (cp: number): boolean => (cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000;
 export function fontOrigin(f: DocFont, family: string | null): FontOrigin {
     const face = faceFromWire(f);
     switch (face.kind) {
@@ -197,7 +197,7 @@ export async function fontGlyphs(fontKey: string): Promise<FontGlyphs | null> {
         codes: (f0.codes || []).length };
     const cell = (gid: number | null, name: string | null, cps: number[], adv: number | null): GlyphCell => {
         const u = cps.map(c => used.get(c)).filter(r => !!r);
-        return { gid, name, cps, adv, uses: u.reduce((a, r) => a + r.count, 0),
+        return { gid, name, cps, privateUse: cps.filter(isPrivateUse), adv, uses: u.reduce((a, r) => a + r.count, 0),
                  tex: u.length ? u[0].tex : null, codes: u.length ? u[0].codes : null };
     };
     let font: ParsedFont | null = null;
@@ -213,10 +213,10 @@ export async function fontGlyphs(fontKey: string): Promise<FontGlyphs | null> {
     else if (!out.url) out.error = 'no @font-face rule for it on this page';
     else try { font = await loadFontFile(out.url); } catch (e) { out.error = `could not read ${out.url}: ${(e as Error).message || e}`; }
     out.origin = fontOrigin(inst[0].f, family);
-    out.puaUsed = [...used.keys()].filter(isPUA).length;
+    out.puaUsed = [...used.keys()].filter(isPrivateUse).length;
     if (font) {
         out.upem = font.upem; out.numGlyphs = font.numGlyphs;
-        out.puaInFile = font.cps.reduce((a, l) => a + l.filter(isPUA).length, 0);
+        out.puaInFile = font.cps.reduce((a, l) => a + l.filter(isPrivateUse).length, 0);
         const mapped = new Set<number>();
         for (let g = 0; g < font.numGlyphs; g++) {
             font.cps[g].forEach(c => mapped.add(c));

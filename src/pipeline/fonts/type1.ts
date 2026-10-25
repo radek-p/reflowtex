@@ -11,7 +11,8 @@
 //    searchable character gets that real code point, so the text can be
 //    selected and found – keyed on the name, not the slot (cmr's slot 0x3C
 //    is 'exclamdown', and gets U+00A1, not '<');
-//  * everything else keeps a private-use code, U+E000 + slot.
+//  * everything else keeps a private-use code, U+E000 + slot (slotCode in
+//    src/shared/glyph-text.ts, which reads it as no text).
 // Real code points are claimed first-come by ascending slot, so the cmap
 // stays a function. Every converted font is its own @font-face, so private
 // codes never collide across fonts.
@@ -28,9 +29,9 @@ import { join } from 'node:path';
 import opentype from 'opentype.js';
 import { toUnicode } from './agl.ts';
 import { readSfnt, writeSfnt, setHeadTimes } from './sfnt.ts';
+import { slotCode } from '../../shared/glyph-text.ts';
 
 type Bytes = Uint8Array;
-export const PUA_BASE = 0xE000;
 /** head.created/modified of every converted font: fixed, so a conversion is
  *  byte-reproducible and its content-hashed name stable (1904-based seconds;
  *  the Python pipeline's value). */
@@ -409,6 +410,7 @@ const SEARCHABLE_RANGES: [number, number][] = [
   [0x0100, 0x017F],   // Latin Extended-A
   [0x0391, 0x03A9],   // Greek capitals
   [0x03B1, 0x03C9],   // Greek smalls
+  [0xFB00, 0xFB04],   // the f-ligatures, read as their letters (src/shared/glyph-text.ts)
 ];
 const SEARCHABLE_SINGLES = new Set([0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2020, 0x2021, 0x2026, 0x2122]);
 const searchable = (cp: number) => SEARCHABLE_SINGLES.has(cp) || SEARCHABLE_RANGES.some(([lo, hi]) => cp >= lo && cp <= hi);
@@ -420,7 +422,7 @@ export function addressing(slots: Map<number, string>): Map<number, number> {
     const u = [...toUnicode(slots.get(slot)!)];
     const cp = u.length === 1 ? u[0].codePointAt(0)! : null;
     if (cp !== null && searchable(cp) && !claimed.has(cp)) { out.set(slot, cp); claimed.add(cp); }
-    else out.set(slot, PUA_BASE + slot);
+    else out.set(slot, slotCode(slot));
   }
   return out;
 }

@@ -12,6 +12,7 @@ import { applyMark, liveOn, registerGlyph } from '../host/marks.ts';
 import { registerSpace, selectedGlyph, selectionEdges } from '../host/selection.ts';
 import { droppedAttribute, droppedElement } from './safe.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
+import { nodeText } from '../../../shared/glyph-text.ts';
 import type { GlyphNode, TexNode, ViewerFace, ViewerFont } from './model.ts';
 import type { Sink, SvgMatrix } from './render.ts';
 import type { LayoutCache, PaintStats } from './layout/types.ts';
@@ -169,7 +170,13 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
             if (!el) {
                 el = svgEl('tspan', {x, y, 'font-family': family, 'font-size': fi?.size_px ?? 12});
                 // A \webtext slot's word (see Slots) is a whole word, as text.
-                el.textContent = n.text !== undefined ? n.text : String.fromCodePoint(n.char!);
+                // A glyph is drawn by its code point; where that is not what it
+                // says as text (a private-use code, a ligature), the text is
+                // kept beside it, for copying (runtime/copy.ts).
+                const drawn = n.text !== undefined ? n.text : String.fromCodePoint(n.char!);
+                el.textContent = drawn;
+                const read = nodeText(n);
+                if (read !== drawn) el.dataset.text = read;
                 // Inline style so it wins over the page's `fill: currentColor`
                 // rule; uncoloured glyphs keep currentColor (dark-mode aware).
                 // Coloured ones go through the theme substitution maps.

@@ -4,11 +4,8 @@
 // served, maps to exactly that glyph. Two passes make it so.
 import { forEachNode, fontFile, type SerializerOutput } from '../nodes.ts';
 import { unreachable } from '../../shared/unreachable.ts';
+import { GLYPH_INDEX_PUA, isPrivateUse } from '../../shared/glyph-text.ts';
 import type { Fonts } from './fonts.ts';
-
-/** Private-use base for rewritten glyphs (plane 16, clear of LuaTeX's own
- *  plane-15 assignments): PUA_BASE + glyph index. */
-export const PUA_BASE = 0x100000;
 
 /** A font's per-character protrusion and expansion codes are keyed by the
  *  character's code; after a rewrite one character can live under several
@@ -33,7 +30,8 @@ function remapFontCodes(data: SerializerOutput, remap: Map<string, Map<number, S
 
 const COMBINING = /^\p{M}$/u;
 
-/** Rewrite a glyph to PUA_BASE + its glyph index whenever drawing it by its
+/** Rewrite a glyph to GLYPH_INDEX_PUA + its glyph index (plane 16, clear of
+ *  LuaTeX's own plane-15 assignments) whenever drawing it by its
  *  code point would not reliably give the glyph LuaTeX set:
  *   * a GSUB result (script-size variants, sized delimiters): the cmap maps
  *     the code point to another glyph, and asking the browser to re-apply
@@ -55,10 +53,10 @@ export function normaliseGlyphAddressing(data: SerializerOutput, fonts: Fonts, l
     const fid = String(n.font ?? '');
     const file = files.get(fid);
     const lookup = file ? fonts.cmapLookup(file) : null;
-    const needsPua = cp < PUA_BASE && (
-      (cp < 0xF0000 && COMBINING.test(String.fromCodePoint(cp))) ||
+    const needsPua = cp < GLYPH_INDEX_PUA && (
+      (!isPrivateUse(cp) && COMBINING.test(String.fromCodePoint(cp))) ||
       (lookup !== null && lookup.get(cp) !== gi));
-    if (needsPua) { n.char = PUA_BASE + gi; rewritten++; }
+    if (needsPua) { n.char = GLYPH_INDEX_PUA + gi; rewritten++; }
     if (!remap.has(fid)) remap.set(fid, new Map());
     const t = remap.get(fid)!;
     if (!t.has(cp)) t.set(cp, new Set());

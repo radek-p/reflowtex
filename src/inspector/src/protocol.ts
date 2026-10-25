@@ -118,6 +118,9 @@ export interface GlyphCell {
     gid: number | null;
     name: string | null;
     cps: number[];
+    /** Those of `cps` that are private-use codes (src/shared/glyph-text.ts):
+     *  the pipeline gave the glyph a code of its own, which says nothing. */
+    privateUse: number[];
     adv: number | null;
     uses: number;
     /** Per size used: [size, width, height, depth] (sp). */

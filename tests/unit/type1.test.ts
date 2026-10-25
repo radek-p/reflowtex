@@ -11,7 +11,8 @@ import { basename, join } from 'node:path';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import opentype from 'opentype.js';
-import { convertOutline, convertType1, findOutline, glyphOutline, kpsewhich, parseMapLines, parseType1, PUA_BASE, readEncoding, setDocumentMapLines } from '../../src/pipeline/fonts/type1.ts';
+import { convertOutline, convertType1, findOutline, glyphOutline, kpsewhich, parseMapLines, parseType1, readEncoding, setDocumentMapLines } from '../../src/pipeline/fonts/type1.ts';
+import { glyphText, slotCode } from '../../src/shared/glyph-text.ts';
 
 /** Why a test is skipped: the TeX Live files it reads that this machine
  *  lacks (false when it has them all). In the CI image every one is there. */
@@ -55,7 +56,19 @@ test('every slot of lmsy10 that TeX uses is addressed', { skip: LM_MATHS }, () =
   // \aleph, |, \infty, \cup, \subseteq, \langle, \rangle, the brackets
   for (const slot of [64, 106, 49, 91, 18, 104, 105, 102, 103]) assert.ok(addressing.has(slot), `slot ${slot} not addressed`);
   assert.equal(addressing.get(106), '|'.codePointAt(0));
-  assert.equal(addressing.get(64), PUA_BASE + 64);       // aleph: not a searchable character
+  assert.equal(addressing.get(64), slotCode(64));        // aleph: not a searchable character
+});
+
+// They were private-use codes (U+E000 + slot): read as nothing, copied as
+// garbage, so "find" in a classic font read "nd".
+test("a classic font's f-ligatures are their characters, and read as their letters", () => {
+  for (const face of ['cmr10', 'ec-lmr10']) {
+    const found = findOutline(face);
+    assert.ok(found);
+    const { addressing } = convertOutline(found[0], face, found[1]);
+    const slots = face === 'cmr10' ? [11, 12, 13, 14, 15] : [0x1B, 0x1C, 0x1D, 0x1E, 0x1F];
+    assert.deepEqual(slots.map(s => glyphText(addressing.get(s)!)), ['ff', 'fi', 'fl', 'ffi', 'ffl'], face);
+  }
 });
 
 test('a face whose map entry has no encoding keeps the outline\'s own', { skip: lacking('pdftex.map', 'cmsy10.pfb') }, () => {

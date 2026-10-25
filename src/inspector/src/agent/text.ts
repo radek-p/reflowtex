@@ -9,6 +9,7 @@ import { gapInfo } from './vspace.ts';
 import { children, summary } from './describe.ts';
 import type { Pen } from './geometry.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
+import { nodeText } from '../../../shared/glyph-text.ts';
 import type { TexNode } from '../../../viewer/src/engine/model.ts';
 
 type Attr = [string, string | number | null | undefined];
@@ -22,7 +23,9 @@ type Attr = [string, string | number | null | undefined];
 export const num = (sp: number): string => String(+(sp / 65536).toFixed(3));
 export const esc = (s: string): string => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as Record<string, string>)[c]!)
     .replace(/[-]|[\u{F0000}-\u{10FFFF}]/gu, c => `&#x${c.codePointAt(0)!.toString(16).toUpperCase()};`);
-export const glyphText = (n: TexNode): string => n.text !== undefined ? n.text : String.fromCodePoint(n.char || 32);
+/** The character a glyph is drawn by (its text, the plain-text form's, is
+ *  nodeText's: src/shared/glyph-text.ts). */
+export const drawnText = (n: TexNode): string => n.text !== undefined ? n.text : String.fromCodePoint(n.char || 32);
 export function attrs(list: Attr[]): string {
     return list.filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => ` ${k}="${esc(String(v))}"`).join('');
 }
@@ -36,8 +39,8 @@ export function xmlNodes(list: TexNode[], at: Map<TexNode, Pen> | null | undefin
         if (n.type === 'glyph') {                    // a run of plain glyphs in one font
             let j = i, s = '';
             while (j < list.length && list[j].type === 'glyph' && list[j].font === n.font && list[j].color === n.color
-                   && !list[j].link && !list[j].slot) s += glyphText(list[j++]);
-            if (j === i) { s = glyphText(n); j = i + 1; }
+                   && !list[j].link && !list[j].slot) s += drawnText(list[j++]);
+            if (j === i) { s = drawnText(n); j = i + 1; }
             out.push(`${ind}<t${attrs([['f', n.font], ['color', n.color]])}>${esc(s)}</t>`);
             i = j; continue;
         }
@@ -70,8 +73,8 @@ export function xmlNode(n: TexNode, at: Map<TexNode, Pen> | null | undefined, in
             const plain = (l: TexNode[]) => l.every(c => c.type === 'glyph');
             const a: Attr[] = [['penalty', n.penalty]];
             if (plain(pre) && plain(post) && plain(rep)) {    // letters only (a hyphenation point, a dash): one line
-                out.push(`${ind}<disc${attrs([['pre', pre.map(glyphText).join('')], ['post', post.map(glyphText).join('')],
-                                              ['replace', rep.map(glyphText).join('')], ...a])}/>`);
+                out.push(`${ind}<disc${attrs([['pre', pre.map(drawnText).join('')], ['post', post.map(drawnText).join('')],
+                                              ['replace', rep.map(drawnText).join('')], ...a])}/>`);
                 return;
             }
             out.push(`${ind}<disc${attrs(a)}>`);
@@ -98,7 +101,7 @@ export function xmlNode(n: TexNode, at: Map<TexNode, Pen> | null | undefined, in
             out.push(`${ind}</${tag}>`);
             return;
         }
-        case 'glyph': out.push(`${ind}<t${attrs([['f', n.font], ['color', n.color]])}>${esc(glyphText(n))}</t>`); return;
+        case 'glyph': out.push(`${ind}<t${attrs([['f', n.font], ['color', n.color]])}>${esc(drawnText(n))}</t>`); return;
         case 'local_par': out.push(`${ind}<local_par/>`); return;
         default: unreachable(n, 'node');
     }
@@ -107,7 +110,7 @@ export function xmlNode(n: TexNode, at: Map<TexNode, Pen> | null | undefined, in
 // between them, a line break between lines (and around a display).
 export function textOfNodes(list: TexNode[] | undefined, out: string[]): string[] {
     for (const n of list || []) {
-        if (n.type === 'glyph') out.push(glyphText(n));
+        if (n.type === 'glyph') out.push(nodeText(n));
         else if (n.type === 'glue') { if (out.length && out[out.length - 1] !== ' ') out.push(' '); }
         else if (n.type === 'disc' || n.type === 'wdisc') textOfNodes(n.replace, out);
         else if (n.children) textOfNodes(n.children, out);

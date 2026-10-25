@@ -5,6 +5,7 @@
 
 import { BREAK_NODES, SP_TO_PX, useGlyphMetrics } from '../engine/core.ts';
 import { renderNodes } from '../engine/render.ts';
+import { glyphText } from '../../../shared/glyph-text.ts';
 import type { BlockData } from './block-data.ts';
 import type { TexNode } from '../engine/model.ts';
 import type { InkItem, SegmentLayout } from '../engine/layout/types.ts';
@@ -34,14 +35,6 @@ export const maxOf = (profile: InkItem[] | undefined, key: 'h' | 'd'): number =>
 
 // ── Line by line ─────────────────────────────────────────────────────────────
 
-/** A glyph's text: private-use code points (glyphs addressed by index,
- *  unencoded variants) say nothing; ligatures read as their letters. As the
- *  builder reads them (src/pipeline/a11y.ts). */
-function glyphText(cp: number): string {
-    if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000) return '';
-    const ch = String.fromCodePoint(cp);
-    return cp >= 0xFB00 && cp <= 0xFB06 ? ch.normalize('NFKC') : ch;
-}
 /** The text of a box's contents (a \mbox, a footnote mark). */
 function textOf(nodes: TexNode[] | undefined): string {
     let s = '';

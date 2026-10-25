@@ -52,7 +52,7 @@ test('patching one font leaves the renamed files of fonts patched before', { ski
 test('a private-use entry in a font without a format-12 cmap: one is made, with the font\'s Unicode map', { skip: !have && 'Latin Modern OTF not installed' }, async () => {
   const { readFileSync } = await import('node:fs');
   const { readSfnt, parseCmap, codepointsToGlyphs } = await import('../../src/pipeline/fonts/sfnt.ts');
-  const { PUA_BASE } = await import('../../src/pipeline/fonts/addressing.ts');
+  const { GLYPH_INDEX_PUA: PUA_BASE } = await import('../../src/shared/glyph-text.ts');
   const dir = mkdtempSync(join(tmpdir(), 'rtx-font-patch-'));
   try {
     const before = codepointsToGlyphs(readSfnt(readFileSync(kpsewhich(REGULAR)!)));
@@ -79,7 +79,7 @@ test('a private-use entry in a font without a format-12 cmap: one is made, with 
 test('whole: a font patched for any glyph gets every glyph, the same file whatever the blocks drew', { skip: !have && 'Latin Modern OTF not installed' }, async () => {
   const { readFileSync } = await import('node:fs');
   const { readSfnt, codepointsToGlyphs, numGlyphs } = await import('../../src/pipeline/fonts/sfnt.ts');
-  const { PUA_BASE } = await import('../../src/pipeline/fonts/addressing.ts');
+  const { GLYPH_INDEX_PUA: PUA_BASE } = await import('../../src/shared/glyph-text.ts');
   const dirs = [mkdtempSync(join(tmpdir(), 'rtx-font-patch-')), mkdtempSync(join(tmpdir(), 'rtx-font-patch-'))];
   try {
     const pua = (gs: number[]) => new Map(gs.map(g => [PUA_BASE + g, g] as [number, number | null]));

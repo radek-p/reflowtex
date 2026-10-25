@@ -17,6 +17,7 @@
 // after the paragraph that refers to it. Headings, lists, tables, links and
 // a language are not in it yet.
 import { messageType } from './schema.ts';
+import { glyphText } from '../shared/glyph-text.ts';
 
 const HL_ALIGNMENT = 4;   // an amsmath alignment row
 
@@ -66,13 +67,6 @@ export function withMathInserted(html: string): string {
 }
 
 const escapeText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-/** A glyph's text: private-use code points (glyphs addressed by index,
- *  unencoded variants) say nothing; ligatures read as their letters. */
-function glyphText(cp: number): string {
-  if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000) return '';
-  const ch = String.fromCodePoint(cp);
-  return cp >= 0xFB00 && cp <= 0xFB06 ? ch.normalize('NFKC') : ch;
-}
 
 /** Index just past the end-math node of the formula begun at nodes[i]. */
 function formulaEnd(nodes: LayerNode[], i: number): number {

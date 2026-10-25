@@ -9,7 +9,8 @@ import { screenRectOf } from './rects.ts';
 import { textOfNodes } from './text.ts';
 import { blockLabel, blocksLabel, census, citeEntries, clip, familyOf, fileOf, fontKeyIn, fontKeyOf } from './census.ts';
 import { scrollIntoViewIfNeeded, viewBottom } from './overlay.ts';
-import { fontOrigin, isPUA } from './fonts.ts';
+import { fontOrigin } from './fonts.ts';
+import { isPrivateUse } from '../../../shared/glyph-text.ts';
 import { blockOf, nodeOf } from './ids.ts';
 import type { DetailRow, Resource, ResourceRow, Resources } from '../protocol.ts';
 import type { Doc, DocFont, Mark, Stream, TexNode } from '../../../viewer/src/engine/model.ts';
@@ -140,7 +141,7 @@ export function resources(): Resources {
     const range = (set: Set<number>) => blocksLabel([...set]);
     const fontName = (r: FontUse) => (r.file ? r.file.replace(/\.otf$/i, '') : [...r.names][0]) || '';
     const fontRows = [...fonts.values()].sort((a, b) => fontName(a).localeCompare(fontName(b), 'en', { numeric: true, sensitivity: 'base' })).map(r => {
-        const origin = fontOrigin(r.font, r.family), pua = [...r.chars].filter(isPUA).length;
+        const origin = fontOrigin(r.font, r.family), pua = [...r.chars].filter(isPrivateUse).length;
         return { key: r.key, cat: 'font', origin, label: r.file ? r.file.replace(/\.otf$/i, '') : [...r.names][0]!,
             note: (origin === 'converted' ? 'converted from Type 1 · ' : origin === 'patched' ? 'cmap patched · ' : '')
                   + `${[...r.sizes].sort((a, b) => a - b).map(pt).join(', ')} · ${r.chars.size} character${r.chars.size === 1 ? '' : 's'}`

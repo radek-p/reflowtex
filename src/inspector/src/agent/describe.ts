@@ -9,6 +9,7 @@ import { gapBefore, gapDetails, gapInfo, gapSummary, partSummary } from './vspac
 import { displayBand, screenRectOf } from './rects.ts';
 import { fontKeyIn } from './census.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
+import { isPrivateUse } from '../../../shared/glyph-text.ts';
 import type { NodeEntry } from './ids.ts';
 import type { DetailRow, Details, Row } from '../protocol.ts';
 import type { DisplaySegment, LayoutCache, StreamSegment, TextSegment } from '../../../viewer/src/engine/layout/types.ts';
@@ -99,7 +100,7 @@ export function summary(id: number): Row {
                 // A private-use code point (an unencoded math glyph) draws as
                 // nothing in the panel's font: show the number instead.
                 const c = n.char!;
-                const pua = n.text === undefined && ((c >= 0xE000 && c <= 0xF8FF) || c >= 0xF0000);
+                const pua = n.text === undefined && isPrivateUse(c);
                 const ch = n.text !== undefined ? n.text
                          : pua ? 'U+' + c.toString(16).toUpperCase() : String.fromCodePoint(n.char || 32);
                 const m: { width?: number } | undefined = n.metrics ? (stateOfSeg(e.seg!).cache.metrics || [])[n.metrics - 1] : n;

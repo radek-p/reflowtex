@@ -13,7 +13,6 @@ import type { FontGlyphs, GlyphCell } from '../protocol.ts';
 type Rows = [string, string][];
 
 export const hex = (cp: number): string => 'U+' + cp.toString(16).toUpperCase().padStart(4, '0');
-const isPUA = (cp: number): boolean => (cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000;
 const ptOf = (sp: number): string => +(sp / 65536).toFixed(3) + 'pt';
 const plural = (n: number, one: string, many = one + 's'): string => `${n} ${n === 1 ? one : many}`;
 // A glyph the documents use, as a resource of its own (its uses on the page).
@@ -144,7 +143,7 @@ function glyphsShown(d: FontGlyphs, q: string, which: string): number[] {
             const c = d.cells[i];
             if (which === 'used' && !c.uses) return false;
             if (which === 'unused' && c.uses) return false;
-            if (which === 'pua' && !c.cps.some(isPUA)) return false;
+            if (which === 'pua' && !c.privateUse.length) return false;
             return !test || test(c);
         });
 }
@@ -175,7 +174,7 @@ function GlyphPane({ d, i }: { d: FontGlyphs; i: number }) {
     if (c.gid != null) rows.push(['glyph index', `#${c.gid}`]);
     if (c.name) rows.push(['name', c.name]);
     rows.push(['code point' + (c.cps.length > 1 ? 's' : ''), c.cps.length
-        ? c.cps.map(cp => hex(cp) + (isPUA(cp) ? ' (private use: the pipeline gave the glyph a code point of its own)' : '')).join(', ')
+        ? c.cps.map(cp => hex(cp) + (c.privateUse.includes(cp) ? ' (private use: the pipeline gave the glyph a code point of its own)' : '')).join(', ')
         : 'none: the viewer cannot draw it']);
     if (c.missing) rows.push(['in the file', 'no – the document uses it, but the font\'s cmap has no such character']);
     if (c.adv != null) rows.push(['advance', `${c.adv} units` + (d.upem ? ` = ${d.sizes.map(sz => ptOf(c.adv! / d.upem! * sz)).join(', ')}` : '')]);

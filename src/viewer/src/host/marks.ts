@@ -13,6 +13,7 @@
 // its position in the block's text: every glyph, in reading order (glyphIndex
 // below), which is the same on every load of the same document.
 import { glyphScreenRect } from '../defaults/footnotes.ts';
+import { nodeText } from '../../../shared/glyph-text.ts';
 import { allData, type BlockData, type BlockSource } from '../runtime/block-data.ts';
 import type { ContentItem, Doc, TexNode } from '../engine/model.ts';
 import { markDirty } from '../runtime/blocks.ts';
@@ -128,7 +129,7 @@ function glyphIndex(doc: Doc): GlyphIndex {
         starts.push(text.length);
         // The text as read, unbroken: a hyphen TeX may put at a line's
         // end has a position (it can be marked where drawn) but no text.
-        if (!atBreak.has(n)) text += own.get(n) ?? (n.text !== undefined ? n.text : String.fromCodePoint(n.char || 0xfffd));
+        if (!atBreak.has(n)) text += own.get(n) ?? nodeText(n);
     });
     indexes.set(doc, ix = { nodes, at, text, starts, continues });
     return ix;

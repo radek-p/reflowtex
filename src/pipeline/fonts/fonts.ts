@@ -30,7 +30,7 @@ import { unreachable } from '../../shared/unreachable.ts';
 import { type CmapSubtable, readSfnt, writeSfnt, parseCmap, buildCmap, parseName, nameString, setNameString, buildName, numGlyphs, codepointsToGlyphs } from './sfnt.ts';
 import { subsetFont } from './subset.ts';
 import { convertType1, kpsewhich, MODIFIED_TAG } from './type1.ts';
-import { PUA_BASE } from './addressing.ts';
+import { GLYPH_INDEX_PUA } from '../../shared/glyph-text.ts';
 
 const hash8 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex').slice(0, 8);
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -152,7 +152,7 @@ export class Fonts {
    *  does, as blocks bring new code points).
    *
    *  `whole`: a font that needs any entry gets every glyph's private-use one
-   *  (PUA_BASE + glyph index, the only code points addressing.ts adds), so
+   *  (GLYPH_INDEX_PUA + glyph index, the only code points addressing.ts adds), so
    *  its patched file is the same whatever the blocks drew: one original
    *  gives one patched file, one name, for every document and every round,
    *  and it is never patched again for a later block. A font that needs
@@ -179,10 +179,10 @@ export class Fonts {
       if (!missing.length) { this.served.set(filename, filename); log(`  font-patch: ${filename} already complete`); continue; }
       if (whole) {
         const all = new Map<number, number | null>(missing);
-        for (let g = 0, n = numGlyphs(font); g < n; g++) if (!existing.has(PUA_BASE + g)) all.set(PUA_BASE + g, g);
+        for (let g = 0, n = numGlyphs(font); g < n; g++) if (!existing.has(GLYPH_INDEX_PUA + g)) all.set(GLYPH_INDEX_PUA + g, g);
         missing = [...all].sort((a, b) => a[0] - b[0]);
       }
-      // A non-BMP entry (a private-use rewrite: PUA_BASE + glyph index) needs
+      // A non-BMP entry (a private-use rewrite: GLYPH_INDEX_PUA + glyph index) needs
       // a (3,10) format-12 subtable; a font without one (Latin Modern's and
       // STIX Two's text faces) gets one, holding its Unicode map too, since a
       // browser that finds it reads it instead of the format-4 one. Every
