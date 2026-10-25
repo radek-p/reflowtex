@@ -2,7 +2,8 @@
 
 **Render real LaTeX on the web, and let it reflow to the reader's screen.**
 
-[Website](https://radek-p.github.io/reflowtex/)
+[Website](https://radek-p.github.io/reflowtex/) ·
+[ReflowEd](https://radek-p.github.io/reflowed/), a LaTeX editor in the browser built on Reflow TeX
 
 Reflow TeX compiles a LaTeX snippet with LuaTeX, captures the finished node list
 (every glyph, kern, rule and box, with the exact positions TeX computed), and
