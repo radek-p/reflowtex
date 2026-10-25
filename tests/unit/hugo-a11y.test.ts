@@ -3,7 +3,7 @@
 // in its data (and gives it to a block compiled before it did, without
 // compiling again); the shortcode puts it after the block, and hides the
 // drawing from screen readers, when the site's params.reflowtexA11y (or the
-// block's a11y="…") asks. Needs TeX and hugo; skipped without hugo.
+// block's a11y="…") asks. Needs TeX and hugo; skipped without either.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -15,8 +15,9 @@ import { fileURLToPath } from 'node:url';
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const luamml09 = (() => { try { execFileSync('kpsewhich', ['luamml-mathflatten.lua']); return true; } catch { return false; } })();
 const hasHugo = (() => { try { execFileSync('hugo', ['version'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+const hasLualatex = (() => { try { execFileSync('lualatex', ['--version'], { stdio: 'ignore' }); return true; } catch { return false; } })();
 
-test('Hugo blocks carry the accessible layer when the site asks', { skip: !hasHugo && 'no hugo' }, () => {
+test('Hugo blocks carry the accessible layer when the site asks', { skip: (!hasHugo && 'no hugo') || (!hasLualatex && 'lualatex not installed') }, () => {
   const site = mkdtempSync(join(tmpdir(), 'rtx-hugo-a11y-'));
   try {
     mkdirSync(join(site, 'content'), { recursive: true });

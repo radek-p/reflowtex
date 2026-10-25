@@ -36,7 +36,12 @@ const files = new FontFiles(name => {
   const p = kpsewhich(name);
   return p ? readFileSync(p) : null;
 });
-const cmr = readTfm(readFileSync(kpsewhich('cmr10.tfm')!)), cmmi = readTfm(readFileSync(kpsewhich('cmmi10.tfm')!));
+// The small font is drawn from Computer Modern: without TeX Live's files (a
+// machine without TeX) the tests that read them are skipped, by name.
+const NO_CM = (!kpsewhich('cmr10.tfm') || !kpsewhich('cmmi10.tfm')) && 'not installed: cmr10.tfm, cmmi10.tfm';
+const NO_AE = (NO_CM || !kpsewhich('aer10.vf')) && 'not installed: aer10.vf (ae), cmr10.tfm';
+const tfm = (name: string) => { const p = kpsewhich(name); return p ? readTfm(readFileSync(p)) : null; };
+const cmr = tfm('cmr10.tfm')!, cmmi = tfm('cmmi10.tfm')!;
 const w = (t: typeof cmr, c: number) => t.char(c, SIZE)!.width;
 
 type N = { type: string; [k: string]: unknown };
@@ -51,14 +56,14 @@ function resolve(chars: number[]) {
   return { n, nodes, fonts };
 }
 
-test('one character at the origin: the glyph node itself, in the base font, its box and attributes kept', () => {
+test('one character at the origin: the glyph node itself, in the base font, its box and attributes kept', { skip: NO_CM }, () => {
   const { n, nodes, fonts } = resolve([65]);
   assert.equal(n, 1);
   assert.deepEqual(nodes[0], { type: 'glyph', char: 66, font: 4, width: 300000, height: 400000, depth: 1000, color: '#c2410c', link: 2 });
   assert.deepEqual(fonts.get('4')!.codes, [{ char: 66, lp: 50, rp: 0, ef: 1000 }], 'its protrusion code goes along');
 });
 
-test('a moved character: a box of the virtual character\'s size, a kern to the piece', () => {
+test('a moved character: a box of the virtual character\'s size, a kern to the piece', { skip: NO_CM }, () => {
   const { nodes } = resolve([66]);
   const tenth = texScale(TENTH, SIZE);
   assert.deepEqual(nodes[0], { type: 'hlist', subtype: 2, width: 300000, height: 400000, depth: 1000, shift: 0, glue_set: 0, glue_sign: 0, glue_order: 0, children: [
@@ -67,7 +72,7 @@ test('a moved character: a box of the virtual character\'s size, a kern to the p
   ] });
 });
 
-test('several characters in two fonts and a rule, each where the packet sets it', () => {
+test('several characters in two fonts and a rule, each where the packet sets it', { skip: NO_CM }, () => {
   const { nodes, fonts } = resolve([67]);
   const kids = nodes[0].children as N[];
   assert.deepEqual(kids.map(k => [k.type, k.char ?? null, k.font ?? null]), [['glyph', 97, 4], ['glyph', 11, 5], ['rule', null, null]]);
@@ -76,7 +81,7 @@ test('several characters in two fonts and a rule, each where the packet sets it'
   assert.deepEqual(kids[2], { type: 'rule', width: texScale(EM / 2, SIZE), height: texScale(RULE_H, SIZE), depth: 0 });
 });
 
-test('a raised character: in a box shifted up', () => {
+test('a raised character: in a box shifted up', { skip: NO_CM }, () => {
   const { nodes } = resolve([68]);
   const [inner] = nodes[0].children as N[];
   assert.equal(inner.type, 'hlist');
@@ -84,7 +89,7 @@ test('a raised character: in a box shifted up', () => {
   assert.deepEqual((inner.children as N[]).map(k => k.char), [65]);
 });
 
-test('push and pop: an accent placed over the letter that follows', () => {
+test('push and pop: an accent placed over the letter that follows', { skip: NO_CM }, () => {
   const { nodes } = resolve([69]);
   const kids = nodes[0].children as N[];
   const tenth = texScale(TENTH, SIZE);
@@ -99,7 +104,7 @@ test('a face that is not virtual is left alone', () => {
   assert.deepEqual(nodes, [{ type: 'glyph', char: 65, font: 1 }]);
 });
 
-test('aer10.vf: its local fonts, and é as an acute moved left over e', () => {
+test('aer10.vf: its local fonts, and é as an acute moved left over e', { skip: NO_AE }, () => {
   const path = kpsewhich('aer10.vf')!;
   const vf = readVf(readFileSync(path));
   assert.deepEqual([...vf.fonts.values()].map(f => f.name), ['cmr10', 'cmmi10', 'cmmi10', 'cmsy10', 'cmu10']);

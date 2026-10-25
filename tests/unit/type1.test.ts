@@ -13,6 +13,14 @@ import { tmpdir } from 'node:os';
 import opentype from 'opentype.js';
 import { convertOutline, convertType1, findOutline, glyphOutline, kpsewhich, parseMapLines, parseType1, PUA_BASE, readEncoding, setDocumentMapLines } from '../../src/pipeline/fonts/type1.ts';
 
+/** Why a test is skipped: the TeX Live files it reads that this machine
+ *  lacks (false when it has them all). In the CI image every one is there. */
+function lacking(...files: string[]): string | false {
+  const missing = files.filter(f => !kpsewhich(f));
+  return missing.length > 0 && `not installed: ${missing.join(', ')}`;
+}
+const LM_MATHS = lacking('pdftex.map', 'lmsy10.pfb', 'lmex10.pfb', 'lmmi10.pfb', 'lm-mathsy.enc', 'lm-mathex.enc', 'lm-mathit.enc');
+
 /** The outline file and encoding `face` is converted with. */
 function outlineOf(face: string): { file: string; encoding: string[] | null } {
   const found = findOutline(face);
@@ -20,7 +28,7 @@ function outlineOf(face: string): { file: string; encoding: string[] | null } {
   return { file: basename(found[0]), encoding: found[1] };
 }
 
-test('Latin Modern maths fonts take the encoding the font map gives them', () => {
+test('Latin Modern maths fonts take the encoding the font map gives them', { skip: LM_MATHS }, () => {
   const sy = outlineOf('lmsy10');
   assert.equal(sy.file, 'lmsy10.pfb');
   assert.ok(sy.encoding, 'lmsy10: read with its own encoding, not lm-mathsy.enc');
@@ -40,7 +48,7 @@ test('Latin Modern maths fonts take the encoding the font map gives them', () =>
   assert.equal(mi.encoding[11], 'alpha');
 });
 
-test('every slot of lmsy10 that TeX uses is addressed', () => {
+test('every slot of lmsy10 that TeX uses is addressed', { skip: LM_MATHS }, () => {
   const found = findOutline('lmsy10');
   assert.ok(found);
   const { addressing } = convertOutline(found[0], 'lmsy10', found[1]);
@@ -50,13 +58,13 @@ test('every slot of lmsy10 that TeX uses is addressed', () => {
   assert.equal(addressing.get(64), PUA_BASE + 64);       // aleph: not a searchable character
 });
 
-test('a face whose map entry has no encoding keeps the outline\'s own', () => {
+test('a face whose map entry has no encoding keeps the outline\'s own', { skip: lacking('pdftex.map', 'cmsy10.pfb') }, () => {
   const cm = outlineOf('cmsy10');
   assert.equal(cm.file, 'cmsy10.pfb');
   assert.equal(cm.encoding, null);
 });
 
-test('a face named after no outline file takes the map\'s outline and encoding', () => {
+test('a face named after no outline file takes the map\'s outline and encoding', { skip: lacking('pdftex.map', 'lmr10.pfb', 'lm-ec.enc') }, () => {
   const ec = outlineOf('ec-lmr10');
   assert.equal(ec.file, 'lmr10.pfb');
   assert.ok(ec.encoding);
@@ -76,7 +84,7 @@ function convertedNames(face: string, slots: number[]): (string | null)[] {
   });
 }
 
-test('Latin Modern maths slots convert to the glyphs TeX set', () => {
+test('Latin Modern maths slots convert to the glyphs TeX set', { skip: LM_MATHS }, () => {
   // lmmi10: 0x0B alpha, 0x0C beta, 0x3B comma; lmsy10: 0x00 minus, 0x31 infinity;
   // lmex10: 0x50 summationtext, 0x58 summationdisplay
   assert.deepEqual(convertedNames('lmmi10', [0x0B, 0x0C, 0x3B]), ['alpha', 'beta', 'comma']);
@@ -90,7 +98,7 @@ test('map lines: \\pdfmapline\'s + and = read, a removal and comments skipped, t
   assert.deepEqual([...map], [['foo', ['foo.pfb', 'e.enc']], ['baz', ['baz.pfa', 'baz.enc']]]);
 });
 
-test('a document\'s own map line gives its face the outline and encoding it names', () => {
+test('a document\'s own map line gives its face the outline and encoding it names', { skip: lacking('lmmi10.pfb', 'lm-mathit.enc') }, () => {
   // a face of the document's (no docface.pfb anywhere): lmmi10's outline through lm-mathit.enc
   let lines: string[] = ['+docface LMMathItalic10-Regular "enclmmathit ReEncodeFont" <lm-mathit.enc <lmmi10.pfb'];
   setDocumentMapLines(() => lines);
@@ -113,7 +121,8 @@ test('a face whose map encoding is missing is not converted (metric boxes, not o
 
 // Bitstream Charter (charter; mathdesign's Charter draws from it) closes each
 // subroutine with "noaccess put", each glyph with "noaccess def": two tokens.
-const NO_CHARTER = !kpsewhich('bchr8a.pfb') && 'Bitstream Charter is not installed';
+// In the CI image (docker/test-packages.txt); elsewhere, run where it is installed.
+const NO_CHARTER = lacking('bchr8a.pfb');
 test('a Type 1 font whose entries close with two tokens: every subroutine and glyph read', { skip: NO_CHARTER }, () => {
   const pfb = kpsewhich('bchr8a.pfb')!;
   const font = parseType1(pfb);
