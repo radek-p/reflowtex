@@ -108,7 +108,9 @@ export function readEncoding(path: string): string[] {
  *  font map (a document's own lines, then pdftex.map) gives them: ec-lmr10 is lmr10.pfb re-encoded through lm-ec.enc,
  *  and lmsy10 is lmsy10.pfb re-encoded through lm-mathsy.enc, though the file
  *  is named after the face. No encoding (null) is the outline's own. A face
- *  the map does not list is `<name>.pfb` with its own encoding. */
+ *  the map does not list is `<name>.pfb` with its own encoding. None when
+ *  the encoding the map names is missing: read otherwise, the face would draw
+ *  other glyphs than TeX set. */
 export function findOutline(name: string): [string, string[] | null] | null {
   const entry = mapEntry(name);
   const pfb = entry ? kpsewhich(entry[0]) : null;
@@ -117,6 +119,7 @@ export function findOutline(name: string): [string, string[] | null] | null {
     return own ? [own, null] : null;
   }
   const encPath = entry[1] ? kpsewhich(entry[1]) : null;
+  if (entry[1] && !encPath) return null;
   return [pfb, encPath ? readEncoding(encPath) : null];
 }
 

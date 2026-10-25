@@ -104,3 +104,9 @@ test('a document\'s own map line gives its face the outline and encoding it name
     assert.equal(findOutline('docface'), null);
   } finally { setDocumentMapLines(() => []); }
 });
+
+test('a face whose map encoding is missing is not converted (metric boxes, not other glyphs)', () => {
+  setDocumentMapLines(() => ['+docface LMMathItalic10-Regular "E ReEncodeFont" <no-such-encoding.enc <lmmi10.pfb']);
+  try { assert.equal(findOutline('docface'), null); }
+  finally { setDocumentMapLines(() => []); }
+});
