@@ -78,16 +78,18 @@ export function readEncoding(path: string): string[] {
   return [...names, ...new Array(256).fill('.notdef')].slice(0, 256);
 }
 
-/** A face's outline in the TeX tree, and the encoding it is used with: its
- *  own (null) when the outline is named after the face, or the one the font
- *  map gives (ec-lmr10 is lmr10.pfb re-encoded through lm-ec.enc). */
+/** A face's outline in the TeX tree, and the encoding it is used with, as the
+ *  font map gives them: ec-lmr10 is lmr10.pfb re-encoded through lm-ec.enc,
+ *  and lmsy10 is lmsy10.pfb re-encoded through lm-mathsy.enc, though the file
+ *  is named after the face. No encoding (null) is the outline's own. A face
+ *  the map does not list is `<name>.pfb` with its own encoding. */
 export function findOutline(name: string): [string, string[] | null] | null {
-  const own = kpsewhich(`${name}.pfb`);
-  if (own) return [own, null];
   const entry = mapEntries().get(name);
-  if (!entry) return null;
-  const pfb = kpsewhich(entry[0]);
-  if (!pfb) return null;
+  const pfb = entry ? kpsewhich(entry[0]) : null;
+  if (!entry || !pfb) {
+    const own = kpsewhich(`${name}.pfb`);
+    return own ? [own, null] : null;
+  }
   const encPath = entry[1] ? kpsewhich(entry[1]) : null;
   return [pfb, encPath ? readEncoding(encPath) : null];
 }

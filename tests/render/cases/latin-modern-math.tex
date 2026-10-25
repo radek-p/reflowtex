@@ -1,0 +1,18 @@
+% Latin Modern with classic maths, as lmodern (and classes that load it) set
+% it: the maths fonts lmmi10, lmsy10 and lmex10 are Type 1 outlines that the
+% font map re-encodes, so their slots are read through its encodings.
+\documentclass{article}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\begin{document}
+Text in Latin Modern, with maths in it: $\sum_{i=1}^n |x_i| \le \infty$ and
+$1/\infty = 0$, $\sqrt{x}$, $f'(x) = \frac{1}{2}\alpha\beta$, $\aleph_0 <
+2^{\aleph_0}$, $\mathcal{L}(\mathbf{R})$, $\{a\} \cup \langle b \rangle
+\subseteq C$, $\|v\| \to 0$ and $\int_0^1 g(t)\,dt \neq \oint_\gamma h$. The
+symbols come from three fonts, and the larger sizes of the brackets from the
+extension font.
+\[ \sum_{k=1}^{n} \prod_{k} \int_0^1 \bigcup_{i} A_i \quad
+   \bigl( \Bigl( \biggl( \Biggl( x \Biggr) \biggr) \Bigr) \bigr) \quad
+   \Bigl[ \bigg\{ \Big\langle y \Big\rangle \bigg\} \Bigr] \quad
+   \left| \frac{a}{b} \right| \sqrt{\frac{1}{1+x^2}} \]
+\end{document}

@@ -77,6 +77,10 @@ export const cases: Record<string, CaseSettings> = {
   displays: { tolerance: 0.01, rule_tolerance: 0.005 },
   footnotes: { tolerance: 0.009 },
   'inline-math': { tolerance: 0.009, rule_tolerance: 0.001 },
+  // lmodern with classic maths: lmmi, lmsy and lmex read through the font
+  // map's encodings (with their own, the page was refused for code points the
+  // fonts lacked). All 235 glyphs found. Worst attained 2026-10-25.
+  'latin-modern-math': { tolerance: 0.009, rule_tolerance: 0.004 },
   'lists-headings': { tolerance: 0.009 },
   microtype: { tolerance: 0.014 },
   paragraph: { tolerance: 0.010 },
