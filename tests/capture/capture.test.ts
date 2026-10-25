@@ -501,3 +501,40 @@ test('MathML: \\dddot is a three-dot accent', { skip: OLD }, async () => {
   const d = await capture('Let $\\dddot Q$ be given.', '\\DocumentMetadata{tagging=on}\n\\usepackage{amsmath}\n\\usepackage{unicode-math}');
   assert.doesNotMatch(allMathml(d)[0], /alttext="[^"]*period/);
 });
+
+// ── Theorem notes ───────────────────────────────────────────────────────────
+// The template wraps the theorem head (\@begintheorem) to note the theorem in
+// the outline, and passes the note on. A note holding a `]` – a cite with its
+// own optional argument, as in real papers – is braced by the author; it must
+// reach the head braced still, and print as LaTeX prints it.
+
+const NOTES = [
+  '\\begin{proposition}[{\\cite[p.~3]{knuth}}]', 'Cited.', '\\end{proposition}',
+  '\\begin{proposition}[A plain note]', 'Plain.', '\\end{proposition}',
+  '\\begin{proposition}[]', 'Empty.', '\\end{proposition}',
+  '\\begin{proposition}', 'None.', '\\end{proposition}',
+  '\\begin{proposition}[{a]b}]', 'Bracket.', '\\end{proposition}',
+  '\\begin{thebibliography}{9}', '\\bibitem{knuth} D. Knuth. The TeXbook.', '\\end{thebibliography}',
+].join('\n');
+const THEOREM = '\\newtheorem{proposition}{Proposition}';
+/** Each theorem's first paragraph, as its glyphs read (spaces are glue). */
+const theoremHeads = (d: Output) => d.paragraphs.map(p => glyphText(p.nodes)).filter(t => t.startsWith('Proposition'));
+// (what lualatex prints for the same document without the template)
+const AMS_HEADS = ['Proposition1([1,p.3]).Cited.', 'Proposition2(Aplainnote).Plain.', 'Proposition3.Empty.',
+                   'Proposition4.None.', 'Proposition5(a]b).Bracket.'];
+
+test('theorem notes: a cite with an optional argument, amsthm', async () => {
+  const d = await capture(NOTES, `\\usepackage{amsthm}\n${THEOREM}`, 2);
+  assert.deepEqual(theoremHeads(d), AMS_HEADS);
+});
+
+test('theorem notes: a cite with an optional argument, amsthm and natbib', async () => {
+  const d = await capture(NOTES, `\\usepackage[numbers]{natbib}\n\\usepackage{amsthm}\n${THEOREM}`, 2);
+  assert.deepEqual(theoremHeads(d), AMS_HEADS);
+});
+
+test('theorem notes: a cite with an optional argument, LaTeX\'s own theorems', async () => {
+  const d = await capture(NOTES, THEOREM, 2);
+  assert.deepEqual(theoremHeads(d), ['Proposition1([1,p.3])Cited.', 'Proposition2(Aplainnote)Plain.',
+    'Proposition3()Empty.', 'Proposition4None.', 'Proposition5(a]b)Bracket.']);
+});

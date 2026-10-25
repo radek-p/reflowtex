@@ -158,6 +158,10 @@
 % that filename (and an optional PDF page) while preserving graphicx's starred,
 % key/value, and legacy two-optional-argument forms. This is deliberately a
 % separate hook: completed TikZ boxes use the post-preamble capture below.
+% The first optional argument is passed on braced, [{#2}]: reading it took
+% off the braces an author may put round options holding a `]`, and graphicx
+% takes them off again. (The second, a bounding box's corner, graphicx itself
+% splits at its comma, as written.)
 \let\reflowtexOrigIncludeGraphics\includegraphics
 \RenewDocumentCommand{\includegraphics}{s o o m}{%
   \global\advance\reflowtexPicCount by 1
@@ -171,13 +175,13 @@
       {\IfNoValueTF{#2}
          {\reflowtexOrigIncludeGraphics*{#4}}%
          {\IfNoValueTF{#3}
-            {\reflowtexOrigIncludeGraphics*[#2]{#4}}%
-            {\reflowtexOrigIncludeGraphics*[#2][#3]{#4}}}}%
+            {\reflowtexOrigIncludeGraphics*[{#2}]{#4}}%
+            {\reflowtexOrigIncludeGraphics*[{#2}][#3]{#4}}}}%
       {\IfNoValueTF{#2}
          {\reflowtexOrigIncludeGraphics{#4}}%
          {\IfNoValueTF{#3}
-            {\reflowtexOrigIncludeGraphics[#2]{#4}}%
-            {\reflowtexOrigIncludeGraphics[#2][#3]{#4}}}}%
+            {\reflowtexOrigIncludeGraphics[{#2}]{#4}}%
+            {\reflowtexOrigIncludeGraphics[{#2}][#3]{#4}}}}%
   \endgroup}
 
 % ── User preamble ────────────────────────────────────────────────────────────
@@ -703,7 +707,12 @@
   \def\reflowtex@ol@secname{#1}\reflowtex@ss{#1}{#2}{#3}{#4}{#5}{#6}}
 \def\reflowtex@ol@ssect#1#2#3#4#5{%
   \reflowtex@outline@starred{#5}\reflowtex@sss{#1}{#2}{#3}{#4}{#5}}
-\def\reflowtex@ams@bt#1#2[#3]{\reflowtex@bt{#1}{#2}[#3]\reflowtex@outline@thm{#1}{#2}{#3}}
+% amsthm's head reads the note as a delimited argument, [#3], which takes off
+% the braces an author puts round a note holding a `]` (\cite[p.~3]{key});
+% passed on as [#3], the head would end the note at that `]`. So it is passed
+% on braced, [{#3}], and the head takes the braces off again. (LaTeX's own
+% theorems pass the note as {#3}, and need nothing.)
+\def\reflowtex@ams@bt#1#2[#3]{\reflowtex@bt{#1}{#2}[{#3}]\reflowtex@outline@thm{#1}{#2}{#3}}
 \def\reflowtex@k@bt#1#2{\reflowtex@bt{#1}{#2}\reflowtex@outline@thm{#1}{#2}{}}
 \def\reflowtex@k@obt#1#2#3{\reflowtex@obt{#1}{#2}{#3}\reflowtex@outline@thm{#1}{#2}{#3}}
 \AtBeginDocument{%

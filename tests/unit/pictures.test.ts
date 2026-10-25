@@ -152,6 +152,20 @@ test('PNG and JPEG \\includegraphics through the pipeline', { skip: !hasLualatex
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('\\includegraphics options braced whole, holding a `]`', { skip: !hasLualatex && 'lualatex not installed' }, async () => {
+  // The template's \includegraphics reads the options and passes them on to
+  // graphicx's, with the braces round the whole list that protect a `]` in it.
+  const root = mkdtempSync(join(tmpdir(), 'rtx-bitmap-braced-'));
+  try {
+    const pipe = tmpPipeline(root, [FIXTURES]);
+    await pipe.compile('\\includegraphics[{width=30pt,alt=Figure [1]}]{bitmap-6x4.png}', '', { key: 'braced' });
+    await pipe.compile('\\includegraphics[width=30pt,alt={Figure [1]}]{bitmap-6x4.png}', '', { key: 'inner' });
+    const paragraphs = (key: string) => readSerializerOutput(readFileSync(join(root, 'build', key, 'output.json'), 'utf8')).paragraphs;
+    assert.equal(picturesOf(root, 'braced').nodes.length, 1);
+    assert.deepEqual(paragraphs('braced'), paragraphs('inner'), 'as with the braces round the value only');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('a PDF holding a bitmap: dvisvgm\'s <use> sized to its symbol', { skip: (!hasLualatex || !hasDvisvgm) && 'lualatex or dvisvgm not installed' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'rtx-bitmap-pdf-'));
   try {
