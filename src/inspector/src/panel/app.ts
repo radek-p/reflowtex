@@ -180,12 +180,24 @@ function syncTheme() {
     dark.value = m ? (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) < 110 : matchMedia('(prefers-color-scheme: dark)').matches;
 }
 // A page in another window draws with its own fonts; the Resources view
-// draws their glyphs here, so this document declares them too (@font-face,
-// its URLs made absolute). Read again as the page adds fonts.
+// draws their glyphs here, so this document declares them too: the viewer's
+// faces (made by script, from a URL or the bytes the page gave), and any
+// @font-face rule (its URLs made absolute). Read again as the page adds fonts.
 let mirrored = -1;
+const mirroredFaces = new Map<string, FontFace>();       // family → this document's copy of the page's face
 function mirrorFonts() {
     const w = pageWindow();
     if (w === window) return;
+    try {
+        for (const f of w.reflowtex?.inspect?.faces?.() ?? []) {
+            const src = f.url ? `url(${JSON.stringify(f.url)})` : f.bytes ? f.bytes.slice(0) : null;
+            if (!src || mirroredFaces.has(f.family)) continue;
+            const face = new FontFace(f.family, src);
+            mirroredFaces.set(f.family, face);
+            document.fonts.add(face);
+            void face.load().catch(() => {});
+        }
+    } catch { /* an older viewer, or the page is going */ }
     let css = '', n = 0;
     try {
         for (const sheet of w.document.styleSheets) {

@@ -10,6 +10,7 @@ import { disposePiece } from './inline.ts';
 import { textHooks } from './instances.ts';
 import { frame, track } from '../runtime/pending.ts';
 import { layoutBlock, slicedFor, startSlices } from '../runtime/slices.ts';
+import { familyLoaded, whenFamilyLoaded } from '../runtime/fonts.ts';
 import type { BlockData, BlockSource } from '../runtime/block-data.ts';
 import type { Doc, FontTable, GlueNode, GlyphNode, Slot, TexNode, ViewerFont } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
@@ -69,10 +70,11 @@ export function slotNodes(fontInfo: FontTable, slot: Slot, id: number, run: TexN
     const fi = fontInfo[String(t.font)];
     if (!fi || fi.unresolved) return run;
     const height = Math.max(...glyphs.map(gH)), depth = Math.max(...glyphs.map(gD));
-    const spec = `${fi.size_px}px ${JSON.stringify(fi.family)}`;
-    // Measured again once the face has loaded, if it had not yet.
-    if (document.fonts && !document.fonts.check(spec, text)) {
-        track('slot face', document.fonts.load(spec, text)).then(() => scheduleSlots(), () => {});
+    // Measured again once the face has loaded, if it had not yet (the
+    // viewer's own record of its faces: document.fonts.check costs a few ms
+    // a call, for every slot of every block on each change of a text).
+    if (!familyLoaded(fi.family)) {
+        track('slot face', whenFamilyLoaded(fi.family)).then(() => scheduleSlots(), () => {});
     }
     const out: TexNode[] = [];
     const glue = (): GlueNode => ({ type: 'glue', subtype: 13, width: slot.space || 0,

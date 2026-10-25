@@ -22,6 +22,7 @@ import { applyFade, applyFit, displayFadeDefault, displayFadeOf, displayFitDefau
          revealInDisplay, setDisplayFadeDefault, setDisplayFadeOf, setDisplayFitDefault, setDisplayFitOf } from './displays.ts';
 import type { Block, BlockEvents, Host, Instance, InstanceQuery } from './types.ts';
 import { screenCTM } from '../runtime/screen-ctm.ts';
+import { fontLoaded, fontsReady, provideFont } from '../runtime/fonts.ts';
 
 /** A block's (a view's) data (runtime/block-data.ts). */
 type ViewerBlockData = BlockData;
@@ -176,6 +177,11 @@ export const host: Host = {
     setDisplayFade(on) { setDisplayFadeDefault(on, blocks.map(b => b.el)); },
     displayFit: () => displayFitDefault(),
     setDisplayFit(fit) { setDisplayFitDefault(fit, blocks.map(b => b.el)); },
+    fonts: {
+        provide: (file, source) => provideFont(file, source),
+        loaded: file => fontLoaded(file),
+        ready: () => fontsReady(),
+    },
     onBlock(fn) {
         blockListeners.add(fn);
         for (const b of blocks) fn(b);

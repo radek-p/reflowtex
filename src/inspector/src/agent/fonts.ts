@@ -30,6 +30,9 @@ export function fontOrigin(file: string | null, family: string | null | undefine
 // it and its advance – and, from the documents, how often each character is
 // used, at what sizes, with the metrics TeX gave it and its microtype codes.
 function fontUrl(family: string): string | null {
+    // the viewer's own faces (made by script: no @font-face rule), else an older viewer's rule
+    const face = I.faces?.().find(f => f.family === family);
+    if (face) return face.url ?? (face.bytes ? `bytes:${family}` : null);
     for (const ss of document.styleSheets) {
         let rules: CSSRuleList;
         try { rules = ss.cssRules; } catch { continue; }
@@ -46,7 +49,10 @@ const fontStatus = (family: string): string | null => { for (const f of document
 const fontFiles = new Map<string, Promise<ParsedFont>>();                     // url → a promise of the parsed file
 function loadFontFile(url: string): Promise<ParsedFont> {
     if (!fontFiles.has(url)) {
-        const p = fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer(); }).then(parseFont);
+        // a face the page gave as bytes (host.fonts.provide): read from the viewer, not fetched
+        const given = url.startsWith('bytes:') ? I.faces?.().find(f => f.family === url.slice(6))?.bytes : null;
+        const p = given ? Promise.resolve(given.slice(0)).then(parseFont)
+            : fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer(); }).then(parseFont);
         p.catch(() => fontFiles.delete(url));    // may work another time
         fontFiles.set(url, p);
     }

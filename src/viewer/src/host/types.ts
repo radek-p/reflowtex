@@ -499,6 +499,28 @@ export interface Host {
     layout(): 'sliced' | 'sync';
     /** Set that default; 'sync' finishes at once what slices had left. */
     setLayout(mode: 'sliced' | 'sync'): void;
+    /** The faces the blocks draw in (one per font file, by its original
+     *  name). Without provide(), a face comes from the served file beside
+     *  the viewer (fonts/, data-fonts-base, #latex-font-map). */
+    readonly fonts: Fonts;
+}
+
+/** host.fonts. */
+export interface Fonts {
+    /** Give a font's file by its original name (cmr10.otf; for a converted
+     *  Type 1 face, the hashed name its blocks give): bytes, or a URL. Before
+     *  any block uses it, its face is made from this instead of the served
+     *  file. After, the face is replaced only once the new file has loaded
+     *  (no blank or stand-in frame; a file that fails leaves the old face, with
+     *  a warning), and every block is drawn again. Resolves then: true once
+     *  the file is in effect (at once for a font no block uses yet), false
+     *  when it could not be loaded or a newer one was given meanwhile. */
+    provide(file: string, source: ArrayBuffer | Uint8Array | string): Promise<boolean>;
+    /** Whether the font's face has loaded. */
+    loaded(file: string): boolean;
+    /** Settles once every face asked for so far (and every replacement on
+     *  its way) has loaded or failed. */
+    ready(): Promise<void>;
 }
 
 export interface ScopeOptions {

@@ -11,6 +11,7 @@ import { idle, pending } from '../runtime/pending.ts';
 import { scopeSizes } from './slots.ts';
 import { sliceState } from '../runtime/slices.ts';
 import type { SliceState } from '../runtime/slices.ts';
+import { faceRecords } from '../runtime/fonts.ts';
 import type { BlockData } from '../runtime/block-data.ts';
 import type { TexNode } from '../engine/model.ts';
 import type { LayoutCache, Line } from '../engine/layout/types.ts';
@@ -40,6 +41,7 @@ export interface Inspect {
     surfaces(el: HTMLElement): InspectSurface[];
     kinds(): ReturnType<typeof definedKinds>;
     replay(el: Element, i: number, sink: ReplaySink, cache?: LayoutCache): boolean;
+    faces(): ReturnType<typeof faceRecords>;
 }
 
 // ── Inspection ───────────────────────────────────────────────────────────────
@@ -69,6 +71,10 @@ export interface Inspect {
 //                           'page'. Their caches replay like the block's.
 //   kinds()                 the kinds the page defines (host.define), with
 //                           whether each measures (inline) – for listing.
+//   faces()                 the font faces in effect: { file, family, status,
+//                           url, bytes } – where each came from (a URL, or the
+//                           bytes host.fonts.provide gave), for a tool that
+//                           reads the font's file.
 //   replay(el, i, sink[, cache])
 //                           re-runs the drawing of segment i of `cache` (the
 //                           block's own by default; a stream's nested one,
@@ -103,6 +109,7 @@ const inspect: Inspect = {
         });
     },
     kinds: () => definedKinds(),
+    faces: () => faceRecords(),
     replay(el, i, sink, cache) {
         // (a block's own cache, or one given: a stream's nested one, a surface's)
         const data = blockData.get(el);

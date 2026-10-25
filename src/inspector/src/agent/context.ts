@@ -8,7 +8,7 @@ import type { Host } from '../../../viewer/src/host/types.ts';
 
 /** The viewer's inspection API as the agent reads it: an older viewer may
  *  lack the later calls. */
-export type ViewerInspect = Omit<Inspect, 'surfaces' | 'kinds' | 'scopes'> & Partial<Pick<Inspect, 'surfaces' | 'kinds' | 'scopes'>>;
+export type ViewerInspect = Omit<Inspect, 'surfaces' | 'kinds' | 'scopes' | 'faces'> & Partial<Pick<Inspect, 'surfaces' | 'kinds' | 'scopes' | 'faces'>>;
 
 /** The viewer's inspection API (set by install, index.ts). */
 export let I: ViewerInspect = null!;

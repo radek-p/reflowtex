@@ -70,7 +70,10 @@ viewport.
 
 ## Fonts
 
-The viewer injects `@font-face` rules that load each font from a **`fonts/`
+The viewer makes one face per font file (a `FontFace`, added to
+`document.fonts` by script, not an `@font-face` rule: in Chromium a new style
+sheet makes every rule's face load again, which blanked finished blocks as
+new ones arrived). Each face loads from a **`fonts/`
 directory next to `latex-viewer.js` itself** – resolved from the script's own
 URL (`new URL('fonts/', <script src>)`), not a fixed absolute path. That keeps
 it working unmodified under a domain root, an arbitrary subpath, a different
@@ -93,6 +96,14 @@ characters the site uses: no other site fetches that file, so it need hold
 nothing more. An unmodified one is served whole, so a browser that has it
 cached from another site can use it. Without the island, the original name is
 used as-is.
+
+A page that has a font's file itself – an editor that typesets in the
+browser, say – gives it with `host.fonts.provide(file, bytes | url)`, by the
+font's original name. Given before any block uses the font, the face is made
+from it; given again later, the face is replaced only once the new file has
+loaded, and the blocks are drawn again, so nothing shows blank or in a stand-in
+meanwhile. `host.fonts.loaded(file)` says whether a face has loaded, and
+`host.fonts.ready()` settles once every face asked for has.
 
 If a font file cannot be downloaded, the block still lays out (the metrics
 travel with it) but draws in a stand-in face, and the symbol fonts of
@@ -316,6 +327,8 @@ everything a page draws:
   `host.mount(el)` renders a block element added after the page loaded (a
   framework's), and `block.destroy()` undoes everything drawn for one and
   forgets it.
+- **Fonts**: `host.fonts.provide(file, source)`, `host.fonts.loaded(file)`,
+  `host.fonts.ready()` (see Fonts).
 - **Views**: one block shown in several elements at once, a split view say.
   `host.mount(el, { of, view? })` makes an empty `el` another view of a
   block on the page (`of`: a `Block`, its element or its key; `view`: a
