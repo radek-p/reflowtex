@@ -82,7 +82,7 @@ export function sizeSegment(s: DomSegment, L: SegmentLayout, prev: SegmentLayout
     // unshrinkable picture box, so it can overflow the column precisely the
     // way a display can – and gets the same scroll-box treatment.
     const scrollable = L.seg.kind === 'display' || (L.seg.kind === 'text' && L.seg.isFigure);
-    const overflows = scrollable && L.W > columnPx + tolerancePx;
+    const overflows = scrollable && (L.fitW ?? L.W) > columnPx + tolerancePx;
     // columnPx unless genuinely overflowing: an ordinary (non-scrollable)
     // text segment's own L.W is now real ink width (see layoutTextSegment),
     // not always exactly columnPx – a paragraph with, say, one line 0.3px
@@ -384,7 +384,7 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
         const estimate = g === prev ? !!prev.estimate : !(hint && hint[i]);
         stats.pending++;
         return { seg, deferred: true, pending: true, estimate, held: g === prev && !prev.estimate,
-                 lines: [], H: g.H, W: g.W ?? columnPx, firstAscent: g.firstAscent, lastDepth: g.lastDepth,
+                 lines: [], H: g.H, W: g.W ?? columnPx, fitW: g.fitW, firstAscent: g.firstAscent, lastDepth: g.lastDepth,
                  firstMeta: g.firstMeta, gapBefore: seg.gapBefore || 0, preDisplaySizeSp: g.preDisplaySizeSp,
                  displayLeftSp: g.displayLeftSp, atSourceWidth: g.atSourceWidth };
     };
@@ -422,7 +422,7 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
             const g = cached || (quickLayout && prevLaid && prevLaid[i]);
             if (g) {
                 stats.deferred++;
-                return { seg, deferred: true, held: !cached, lines: [], H: g.H, W: g.W, firstAscent: g.firstAscent,
+                return { seg, deferred: true, held: !cached, lines: [], H: g.H, W: g.W, fitW: g.fitW, firstAscent: g.firstAscent,
                          lastDepth: g.lastDepth, firstMeta: g.firstMeta, gapBefore: seg.gapBefore || 0,
                          preDisplaySizeSp: g.preDisplaySizeSp, displayLeftSp: g.displayLeftSp, atSourceWidth: g.atSourceWidth };
             }
@@ -528,7 +528,7 @@ export const EXACT_LAYOUTS_KEPT = 3;
 export function rememberLayout(hc: HeightCache, w: number, L: SegmentLayout): void {
     hc.exact.set(w, L);
     if (hc.exact.size > EXACT_LAYOUTS_KEPT) hc.exact.delete(hc.exact.keys().next().value!);
-    const o: Observation = { w, H: L.H, W: L.W, firstAscent: L.firstAscent, lastDepth: L.lastDepth, firstMeta: L.firstMeta,
+    const o: Observation = { w, H: L.H, W: L.W, fitW: L.fitW, firstAscent: L.firstAscent, lastDepth: L.lastDepth, firstMeta: L.firstMeta,
                 preDisplaySizeSp: L.preDisplaySizeSp, displayLeftSp: L.displayLeftSp, atSourceWidth: L.atSourceWidth };
     const obs = hc.obs;
     let k = 0;
@@ -557,7 +557,7 @@ export function cachedGeometry(hc: HeightCache, w: number): Observation | null {
 // wrong moves the content below once the segment is laid out.
 /** What a pending segment is placed by (estimateGeometry's, or a layout's). */
 export type PendingGeometry = Pick<SegmentLayout, 'H' | 'firstAscent' | 'lastDepth' | 'firstMeta'>
-    & Partial<Pick<SegmentLayout, 'W' | 'estimate' | 'preDisplaySizeSp' | 'displayLeftSp' | 'atSourceWidth'>>;
+    & Partial<Pick<SegmentLayout, 'W' | 'fitW' | 'estimate' | 'preDisplaySizeSp' | 'displayLeftSp' | 'atSourceWidth'>>;
 export function estimateGeometry(seg: TextSegment | DisplaySegment, widthPt: number, cache: LayoutCache): PendingGeometry {
     const widthSp = widthPt * 65536;
     if (seg.kind === 'display') {

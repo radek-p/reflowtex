@@ -83,6 +83,9 @@ export interface SegmentGeometry {
     gaps?: (number | null)[];
     itemStarts?: number[];
     W: number;
+    /** A display's: the width its boxes need (layoutDisplaySegment), which
+     *  decides whether it overflows; W, its surface, covers its ink too. */
+    fitW?: number;
     preDisplaySizeSp?: PreDisplaySize | null;
     displayLeftSp?: number;
     atSourceWidth?: boolean;
@@ -111,6 +114,8 @@ export interface SegmentLayout {
     profiles?: InkItem[][];
     baselineYs?: number[];
     W: number;
+    /** A display's: see SegmentGeometry. */
+    fitW?: number;
     H: number;
     firstAscent: number;
     lastDepth: number;
@@ -146,7 +151,7 @@ export interface LinePair { g: SVGGElement; text: SVGTextElement; attached: bool
 
 /** Geometry a segment had at one width (the height cache). */
 export interface Observation {
-    w: number; H: number; W: number; firstAscent: number; lastDepth: number; firstMeta: LineMeta | null;
+    w: number; H: number; W: number; fitW?: number; firstAscent: number; lastDepth: number; firstMeta: LineMeta | null;
     preDisplaySizeSp?: PreDisplaySize | null; displayLeftSp?: number; atSourceWidth?: boolean;
 }
 /** A segment's layouts by width, for one set of parameters. */
