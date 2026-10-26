@@ -34,7 +34,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, isAbsolute, join } from 'node:path';
+import { basename, join } from 'node:path';
 import { inflateSync, constants as zlibConstants } from 'node:zlib';
 import { forEachNode, type SerializerOutput } from './nodes.ts';
 import { PictureError } from './errors.ts';
@@ -143,17 +143,14 @@ export function bitmapPicture(bytes: Uint8Array, format: Exclude<PictureFormat, 
   return { svg: `<image id='${prefix}image' width='${w}' height='${h}' preserveAspectRatio='none' href='${uri}'/>`, vb_w: w, vb_h: h };
 }
 
-/** Where an \includegraphics picture node's file is: the path LuaTeX's
- *  kpse.find_file gave, relative to the build directory it ran in. */
-const includedPath = (src: string, buildDir: string) => (isAbsolute(src) ? src : join(buildDir, src));
-
 /** The files a document's \includegraphics read, each once, in order, as
- *  paths (read before convertPictures, which takes the names off the nodes).
- *  Captured and externalised pictures are made by the build and not listed. */
-export function includedPictureFiles(data: SerializerOutput, buildDir: string): string[] {
+ *  absolute paths (the serializer records them so; read before
+ *  convertPictures, which takes the names off the nodes). Captured and
+ *  externalised pictures are made by the build and not listed. */
+export function includedPictureFiles(data: SerializerOutput): string[] {
   const files = new Set<string>();
   forEachNode(data, n => {
-    if (n.type === 'picture' && typeof n.file === 'string' && !n.externalized && !n.generated) files.add(includedPath(n.file, buildDir));
+    if (n.type === 'picture' && typeof n.file === 'string' && !n.externalized && !n.generated) files.add(n.file);
   });
   return [...files];
 }
@@ -227,12 +224,11 @@ export async function convertPictures(data: SerializerOutput, buildDir: string, 
       if (!externalized && !generated) {
         // An included file: a PNG or JPEG becomes its own <image>, whatever
         // the backend; one picture per file and aspect ratio of its box.
-        const file = includedPath(src, buildDir);
-        if (!existsSync(file)) throw new PictureError(`picture source ${file} is missing`, block);
-        const bytes = readFileSync(file);
+        if (!existsSync(src)) throw new PictureError(`picture source ${src} is missing`, block);
+        const bytes = readFileSync(src);
         const format = pictureFormat(bytes);
-        if (!format && !file.toLowerCase().endsWith('.pdf'))
-          throw new PictureError(`picture source ${file} is not a PDF, PNG or JPEG file; only those can be included`, block);
+        if (!format && !src.toLowerCase().endsWith('.pdf'))
+          throw new PictureError(`picture source ${src} is not a PDF, PNG or JPEG file; only those can be included`, block);
         if (format === 'png' || format === 'jpeg') {
           const w = Number(n.width) || 0, h = (Number(n.height) || 0) + (Number(n.depth) || 0);
           key = JSON.stringify([src, 'bitmap', w ? Number((h / w).toFixed(6)) : 0]);
@@ -256,12 +252,7 @@ export async function convertPictures(data: SerializerOutput, buildDir: string, 
         let pdf: string, out: string;
         if (generated) { pdf = join(buildDir, src); out = join(buildDir, `captured-picture-${page}.svg`); }
         else if (externalized) { pdf = join(buildDir, `${src}.pdf`); out = join(buildDir, `${src}.svg`); }
-        else {
-          // src is what kpse.find_file returned inside LuaTeX, relative to *its*
-          // working directory (the build dir) when TEXINPUTS was relative.
-          pdf = includedPath(src, buildDir);
-          out = join(buildDir, `included-${pictures.length + 1}.svg`);
-        }
+        else { pdf = src; out = join(buildDir, `included-${pictures.length + 1}.svg`); }
         if (!existsSync(pdf)) throw new PictureError(`picture source ${pdf} is missing`, block);
         const input = externalized || generated ? pdf : await normalised(pdf);
         // --tmpdir: dvisvgm's temporary files are not namespaced per process,

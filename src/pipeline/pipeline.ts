@@ -295,7 +295,7 @@ export class Pipeline {
       this.diagnostics.set(key, final.diagnostics);
 
       const data = final.data;
-      this.inputs.set(key, fileHashes(includedPictureFiles(data, final.dir).filter(f => existsSync(f))));
+      this.inputs.set(key, fileHashes(includedPictureFiles(data).filter(f => existsSync(f))));
       await this.transform(data, final.dir, {
         block: label, docTag: key.replace(/[^0-9A-Za-z]/g, '').slice(0, 8), formulas: final.mathml, pictures: final.pictures,
       });

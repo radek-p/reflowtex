@@ -154,35 +154,21 @@
 \newcount\reflowtexPicCount
 
 % Ordinary \includegraphics images arrive as the same kind of LuaTeX image
-% rule, and likewise do not expose their filename through the node API. Record
-% that filename (and an optional PDF page) while preserving graphicx's starred,
-% key/value, and legacy two-optional-argument forms. This is deliberately a
-% separate hook: completed TikZ boxes use the post-preamble capture below.
-% The first optional argument is passed on braced, [{#2}]: reading it took
-% off the braces an author may put round options holding a `]`, and graphicx
-% takes them off again. (The second, a bounding box's corner, graphicx itself
-% splits at its comma, as written.)
-\let\reflowtexOrigIncludeGraphics\includegraphics
-\RenewDocumentCommand{\includegraphics}{s o o m}{%
+% rule, and likewise do not expose their filename through the node API.
+% graphicx hands every file it includes, with the name it found it under
+% (through \graphicspath, \input@path or with a default extension), to
+% \Gin@setfile. The call is wrapped here: it records that name and the PDF
+% page asked for, and stamps the image it makes with the record's id.
+\makeatletter
+\let\reflowtexOrigGinSetfile\Gin@setfile
+\def\Gin@setfile#1#2#3{%
   \global\advance\reflowtexPicCount by 1
-  \IfNoValueTF{#2}
-    {\directlua{Serializer.note_graphic(\the\reflowtexPicCount,
-       "\luaescapestring{#4}", "")}}%
-    {\directlua{Serializer.note_graphic(\the\reflowtexPicCount,
-       "\luaescapestring{#4}", "\luaescapestring{#2}")}}%
+  \directlua{Serializer.note_graphic(\the\reflowtexPicCount,
+    "\luaescapestring{#3}", "\luaescapestring{\Gin@page}")}%
   \begingroup\attribute902=\reflowtexPicCount\relax
-    \IfBooleanTF{#1}
-      {\IfNoValueTF{#2}
-         {\reflowtexOrigIncludeGraphics*{#4}}%
-         {\IfNoValueTF{#3}
-            {\reflowtexOrigIncludeGraphics*[{#2}]{#4}}%
-            {\reflowtexOrigIncludeGraphics*[{#2}][#3]{#4}}}}%
-      {\IfNoValueTF{#2}
-         {\reflowtexOrigIncludeGraphics{#4}}%
-         {\IfNoValueTF{#3}
-            {\reflowtexOrigIncludeGraphics[{#2}]{#4}}%
-            {\reflowtexOrigIncludeGraphics[{#2}][#3]{#4}}}}%
+    \reflowtexOrigGinSetfile{#1}{#2}{#3}%
   \endgroup}
+\makeatother
 
 % ── User preamble ────────────────────────────────────────────────────────────
 % ── Companion package switch ─────────────────────────────────────────────────

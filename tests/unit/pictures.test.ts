@@ -152,9 +152,36 @@ test('PNG and JPEG \\includegraphics through the pipeline', { skip: !hasLualatex
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('\\includegraphics finds the file graphicx found: \\graphicspath, default extensions', { skip: !hasLualatex && 'lualatex not installed' }, async () => {
+  // As in real papers, the figures are in folders that only \graphicspath
+  // names. The first is named without its extension, and a JPEG of the same
+  // name beside the document is not the one graphicx takes: it tries .png
+  // before .jpg, in every folder of the path. The second is in the path's
+  // second folder.
+  const root = mkdtempSync(join(tmpdir(), 'rtx-graphicspath-'));
+  try {
+    const src = join(root, 'src');
+    mkdirSync(join(src, 'figs'), { recursive: true });
+    mkdirSync(join(src, 'more'));
+    copyFileSync(PNG, join(src, 'figs', 'bitmap-6x4.png'));
+    copyFileSync(JPEG, join(src, 'bitmap-6x4.jpg'));
+    copyFileSync(JPEG, join(src, 'more', 'bitmap-8x8.jpg'));
+    const pipe = tmpPipeline(root, [src]);
+    await pipe.compile('\\includegraphics[width=30pt]{bitmap-6x4} \\includegraphics[height=20pt]{bitmap-8x8.jpg}',
+      '\\graphicspath{{figs/}{more/}}', { key: 'graphicspath' });
+    const { pictures, nodes } = picturesOf(root, 'graphicspath');
+    assert.equal(nodes.length, 2);
+    const payload = (i: number) => /href='data:(image\/\w+);base64,([^']+)'/.exec(pictures[Number(nodes[i].picture) - 1].svg)?.slice(1);
+    assert.deepEqual(payload(0), ['image/png', readFileSync(PNG).toString('base64')], 'figs/bitmap-6x4.png, as TeX took it');
+    assert.deepEqual(payload(1), ['image/jpeg', readFileSync(JPEG).toString('base64')]);
+    assert.deepEqual(Object.keys(pipe.inputs.get('graphicspath')!),
+      [join(src, 'figs', 'bitmap-6x4.png'), join(src, 'more', 'bitmap-8x8.jpg')], 'the figures are the block\'s inputs');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('\\includegraphics options braced whole, holding a `]`', { skip: !hasLualatex && 'lualatex not installed' }, async () => {
-  // The template's \includegraphics reads the options and passes them on to
-  // graphicx's, with the braces round the whole list that protect a `]` in it.
+  // graphicx reads the options itself (the template only watches the file it
+  // includes), with the braces round the whole list that protect a `]` in it.
   const root = mkdtempSync(join(tmpdir(), 'rtx-bitmap-braced-'));
   try {
     const pipe = tmpPipeline(root, [FIXTURES]);
@@ -163,6 +190,21 @@ test('\\includegraphics options braced whole, holding a `]`', { skip: !hasLualat
     const paragraphs = (key: string) => readSerializerOutput(readFileSync(join(root, 'build', key, 'output.json'), 'utf8')).paragraphs;
     assert.equal(picturesOf(root, 'braced').nodes.length, 1);
     assert.deepEqual(paragraphs('braced'), paragraphs('inner'), 'as with the braces round the value only');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('\\includegraphics[page=2] draws the PDF\'s second page', { skip: (!hasLualatex || !hasDvisvgm) && 'lualatex or dvisvgm not installed' }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'rtx-pdf-page-'));
+  try {
+    // two pages, 100 × 50 bp and 40 × 80 bp
+    writeFileSync(join(root, 'two.tex'), '\\outputmode=1 \\nopagenumbers \\hoffset=-1in \\voffset=-1in\n'
+      + '\\pagewidth=100bp \\pageheight=50bp A\\vfill\\eject \\pagewidth=40bp \\pageheight=80bp B\\bye\n');
+    execFileSync('luatex', ['-interaction=nonstopmode', 'two.tex'], { cwd: root, stdio: 'ignore' });
+    const pipe = tmpPipeline(root, [root]);
+    await pipe.compile('\\includegraphics[page=2]{two} \\includegraphics{two.pdf}', '', { key: 'page' });
+    const { pictures, nodes } = picturesOf(root, 'page');
+    const size = (i: number) => { const p = pictures[Number(nodes[i].picture) - 1]; return [Math.round(p.vb_w), Math.round(p.vb_h)]; };
+    assert.deepEqual([size(0), size(1)], [[40, 80], [100, 50]]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

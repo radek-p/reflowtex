@@ -527,18 +527,16 @@ function Serializer.note_captured_picture(id, page)
     }
 end
 
-function Serializer.note_graphic(id, file, options)
-    local resolved = kpse.find_file(file)
-    -- a name without an extension: graphicx tries these in this order
-    if not resolved and not file:match("%.[^/]+$") then
-        for _, ext in ipairs({ ".pdf", ".png", ".jpg", ".jpeg" }) do
-            resolved = kpse.find_file(file .. ext)
-            if resolved then break end
-        end
-    end
+-- The name graphicx found an included file under, which may be relative to a
+-- folder of TEXINPUTS (figs/a.pdf), and the page asked for. kpse makes the
+-- same lookup LuaTeX makes for the image; the result is made absolute, so it
+-- names the same file from whatever directory the pipeline reads it.
+function Serializer.note_graphic(id, name, page)
+    local file = kpse.find_file(name) or name
+    if not file:match("^/") then file = lfs.currentdir() .. "/" .. (file:gsub("^%./", "")) end
     picture_files[id] = {
-        file = resolved or file,
-        page = tonumber(options:match("page%s*=%s*{?(%d+)")) or 1,
+        file = file,
+        page = tonumber(page) or 1,
         externalized = false,
     }
 end
