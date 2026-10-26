@@ -81,7 +81,7 @@ function capturedFace(raw: Record<string, unknown>): PipelineFace {
 export function fontFile(face: PipelineFace): string | null {
   switch (face.kind) {
     case 'tfm': return null;
-    case 'opentype': case 'type1': case 'virtual': case 'boxes': return faceFile(face);
+    case 'opentype': case 'type1': case 'bitmap': case 'virtual': case 'boxes': return faceFile(face);
     default: return unreachable(face, 'font face');
   }
 }

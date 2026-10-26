@@ -198,7 +198,8 @@ message Picture {
 
 // How a font's glyphs are drawn (src/shared/font-face.ts, TexFontFace), decided
 // by the pipeline once per font: from the OpenType file TeX loaded, from a
-// classic font's Type 1 outlines converted to OpenType, as the fonts a
+// classic font's Type 1 outlines converted to OpenType, from a METAFONT-only
+// font's bitmaps (their pixels' outlines, in OpenType), as the fonts a
 // virtual font's packets name (none from the virtual font itself), or – with
 // no outline any producer could give – as boxes of the size TeX gave each
 // glyph.
@@ -207,6 +208,7 @@ enum FontKind {
   type1    = 1;
   boxes    = 2;
   virtual  = 3;
+  bitmap   = 4;
 }
 
 message FontInfo {

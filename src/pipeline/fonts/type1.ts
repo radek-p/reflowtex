@@ -472,9 +472,15 @@ export function convertOutline(pfb: string, name: string, encoding: string[] | n
     familyName: label, styleName: 'Regular', fullName: label, postScriptName: `${name}-ReflowTeXConverted`,
     unitsPerEm: upm, ascender: upm, descender: 0, glyphs,
   });
-  const sfnt = readSfnt(new Uint8Array(font.toArrayBuffer()));
+  return { bytes: reproducible(new Uint8Array(font.toArrayBuffer())), addressing: addr };
+}
+
+/** opentype.js's output with its head's times fixed, so that a face made
+ *  again is the same bytes and keeps its content-hashed name. */
+export function reproducible(otf: Bytes): Bytes {
+  const sfnt = readSfnt(otf);
   setHeadTimes(sfnt, FIXED_TIME);
-  return { bytes: writeSfnt(sfnt), addressing: addr };
+  return writeSfnt(sfnt);
 }
 
 export const MODIFIED_TAG = 'reflowtex';
@@ -488,10 +494,17 @@ export function convertType1(name: string, outDir: string): { served: string; ad
   let result: ReturnType<typeof convertOutline>;
   try { result = convertOutline(found[0], name, found[1]); }
   catch (e) { return { reason: `its Type 1 outline ${found[0]} does not convert (${(e as Error).message})` }; }
-  const served = `${name}.${MODIFIED_TAG}-${createHash('sha256').update(result.bytes).digest('hex').slice(0, 8)}.otf`;
+  return { served: finishConverted(name, result.bytes, outDir), addressing: result.addressing };
+}
+
+/** A face this pipeline made for classic font `name` (any producer: these
+ *  outlines, METAFONT's bitmaps) written into `outDir` as
+ *  NAME.reflowtex-HASH.otf; its file name. */
+export function finishConverted(name: string, bytes: Bytes, outDir: string): string {
+  const served = `${name}.${MODIFIED_TAG}-${createHash('sha256').update(bytes).digest('hex').slice(0, 8)}.otf`;
   mkdirSync(outDir, { recursive: true });
   const tmp = join(outDir, `.${name}.building.otf`);
-  writeFileSync(tmp, result.bytes, { mode: 0o644 });
+  writeFileSync(tmp, bytes, { mode: 0o644 });
   renameSync(tmp, join(outDir, served));
-  return { served, addressing: result.addressing };
+  return served;
 }

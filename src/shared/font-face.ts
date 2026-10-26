@@ -16,6 +16,9 @@ import { unreachable } from './unreachable.ts';
  *    as it is or with its cmap completed (src/pipeline/fonts/fonts.ts, patch);
  *  - type1: a classic TeX font's Type 1 outlines, converted by the pipeline
  *    into an OpenType file of its own (src/pipeline/fonts/type1.ts);
+ *  - bitmap: a classic font with only a METAFONT source, rendered by
+ *    METAFONT at a high resolution and served as an OpenType file of the
+ *    outlines of its pixels (src/pipeline/fonts/metafont.ts);
  *  - virtual: a virtual font (its .vf's packets), each glyph of which the
  *    pipeline drew as the characters of the fonts the packets name, which
  *    have faces of their own (src/pipeline/fonts/vf.ts): no glyph is drawn
@@ -25,6 +28,7 @@ import { unreachable } from './unreachable.ts';
 export type TexFontFace =
     | { kind: 'opentype'; file: string }
     | { kind: 'type1'; file: string }
+    | { kind: 'bitmap'; file: string }
     | { kind: 'virtual' }
     | { kind: 'boxes'; reason: string };
 export type FontKind = TexFontFace['kind'];
@@ -33,12 +37,12 @@ export type FileFace = Extract<TexFontFace, { file: string }>;
 
 /** Every kind, as latex.proto's FontKind enum names them (checked by the
  *  unit tests). */
-export const FONT_KINDS: readonly FontKind[] = ['opentype', 'type1', 'boxes', 'virtual'];
+export const FONT_KINDS: readonly FontKind[] = ['opentype', 'type1', 'boxes', 'virtual', 'bitmap'];
 
 /** The file a face is drawn from, or null when it has none. */
 export function faceFile(face: TexFontFace): string | null {
     switch (face.kind) {
-        case 'opentype': case 'type1': return face.file;
+        case 'opentype': case 'type1': case 'bitmap': return face.file;
         case 'virtual': case 'boxes': return null;
         default: return unreachable(face, 'font face');
     }
@@ -50,7 +54,7 @@ export interface WireFace { kind?: string; filename?: string; reason?: string }
 /** A face as latex.proto carries it. */
 export function faceToWire(face: TexFontFace): { kind: FontKind; filename?: string; reason?: string } {
     switch (face.kind) {
-        case 'opentype': case 'type1': return { kind: face.kind, filename: face.file };
+        case 'opentype': case 'type1': case 'bitmap': return { kind: face.kind, filename: face.file };
         case 'virtual': return { kind: face.kind };
         case 'boxes': return { kind: face.kind, reason: face.reason };
         default: return unreachable(face, 'font face');
@@ -63,7 +67,7 @@ export function faceToWire(face: TexFontFace): { kind: FontKind; filename?: stri
 export function faceFromWire(w: WireFace): TexFontFace {
     const kind = w.kind as FontKind | undefined;
     switch (kind) {
-        case 'opentype': case 'type1':
+        case 'opentype': case 'type1': case 'bitmap':
             return w.filename ? { kind, file: w.filename } : { kind: 'boxes', reason: `a ${kind} font that names no file` };
         case 'virtual': return { kind };
         case 'boxes': return { kind, reason: w.reason ?? '' };

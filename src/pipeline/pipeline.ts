@@ -166,7 +166,7 @@ export class Pipeline {
     this.mathml = o.mathml ?? true;
     this.log = o.log ?? (s => console.log(s));
     const local = o.localFontsDir ? resolve(o.localFontsDir) : null;
-    this.fonts = new Fonts(resolve(o.fontsDir), local);
+    this.fonts = new Fonts(resolve(o.fontsDir), local, join(this.buildRoot, 'metafont'));
     this.localFonts = local && existsSync(local) ? readdirSync(local).filter(f => f.endsWith('.otf')).sort().map(f => join(local, f)) : [];
   }
 

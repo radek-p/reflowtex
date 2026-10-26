@@ -95,6 +95,11 @@ export const cases: Record<string, CaseSettings> = {
   // drawn without it. Worst attained 2026-10-25 (until then, 372 of the
   // browser's glyphs had none of TeX's within 0.7 pt).
   'inline-rules': { tolerance: 0.010, rule_tolerance: 0.001 },
+  // bbm's double-struck letters (\mathbbm), a font with only a METAFONT
+  // source, drawn from METAFONT's bitmaps as outlines. Worst attained
+  // 2026-10-26; all 358 glyphs found (also when they were boxes: the
+  // comparison sees where a glyph is, not its ink).
+  bbm: { tolerance: 0.009 },
   // A \label in vertical mode – after \begin{theorem}, \section and \item, and
   // a theorem straight after a display – as in real papers: its anchor used to
   // take interline glue and reset \prevdepth, so the pipeline's own compile set

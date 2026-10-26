@@ -1,0 +1,16 @@
+% Fonts with only a METAFONT source (bbm's double-struck letters): drawn from METAFONT's bitmaps, in text and in displays.
+\documentclass{article}
+\usepackage{amsmath,bbm}
+\begin{document}
+Double-struck letters set by \verb|\mathbbm| come from a font that has no
+outline of its own, only its METAFONT source: the real numbers
+$\mathbbm{R}$, the integers $\mathbbm{Z}$, the naturals $\mathbbm{N}$ and the
+indicator function $\mathbbm{1}_A$ of a set $A \subseteq \mathbbm{R}^n$, with
+the sans-serif form $\mathbbmss{N}$ and $\mathbbmss{1}$ beside them, in a
+paragraph long enough to break across lines differently at every width.
+\[
+  \mathbbm{1}_{[0,1]}(x) = \begin{cases} 1 & x \in [0,1], \\ 0 & x \in \mathbbm{R} \setminus [0,1], \end{cases}
+  \qquad \mathbbm{E}\,X = \sum_{k \in \mathbbm{N}} k\, \mathbbm{P}(X = k).
+\]
+And after the display, a last line with $\mathbbm{C}$ and $\mathbbm{Q}$ in it.
+\end{document}

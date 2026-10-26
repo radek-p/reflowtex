@@ -21,6 +21,8 @@ declare module 'opentype.js' {
     path: Path;
     /** its outline at (x, y), `fontSize` px to the em, y down */
     getPath(x: number, y: number, fontSize: number): Path;
+    /** its outline's extent, in font units, y up */
+    getBoundingBox(): { x1: number; y1: number; x2: number; y2: number };
   }
   export interface FontOptions {
     familyName: string; styleName: string; fullName?: string; postScriptName?: string;

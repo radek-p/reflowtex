@@ -22,7 +22,7 @@ interface ParsedFont { upem: number; numGlyphs: number; adv: number[]; cps: numb
 export function fontOrigin(f: DocFont, family: string | null): FontOrigin {
     const face = faceFromWire(f);
     switch (face.kind) {
-        case 'type1': return 'converted';
+        case 'type1': case 'bitmap': return 'converted';
         case 'opentype': {
             const url = family && fontUrl(family);
             return url && decodeURIComponent(new URL(url).pathname).split('/').pop() !== face.file ? 'patched' : 'original';
@@ -203,7 +203,7 @@ export async function fontGlyphs(fontKey: string): Promise<FontGlyphs | null> {
     let font: ParsedFont | null = null;
     const noFile = ((): string | null => {
         switch (face0.kind) {
-            case 'opentype': case 'type1': return null;
+            case 'opentype': case 'type1': case 'bitmap': return null;
             case 'boxes': return `no font file (${face0.reason}), so the viewer draws its glyphs as boxes`;
             case 'virtual': return 'a virtual font: its glyphs are drawn in the fonts its packets name';
             default: return unreachable(face0, 'font face');

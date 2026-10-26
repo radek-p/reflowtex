@@ -11,8 +11,10 @@ import { blockLabel, blocksLabel, census, citeEntries, clip, familyOf, fileOf, f
 import { scrollIntoViewIfNeeded, viewBottom } from './overlay.ts';
 import { fontOrigin } from './fonts.ts';
 import { isPrivateUse } from '../../../shared/glyph-text.ts';
+import { faceFromWire } from '../../../shared/font-face.ts';
+import { unreachable } from '../../../shared/unreachable.ts';
 import { blockOf, nodeOf } from './ids.ts';
-import type { DetailRow, Resource, ResourceRow, Resources } from '../protocol.ts';
+import type { DetailRow, FontOrigin, Resource, ResourceRow, Resources } from '../protocol.ts';
 import type { Doc, DocFont, Mark, Stream, TexNode } from '../../../viewer/src/engine/model.ts';
 import type { LayoutCache } from '../../../viewer/src/engine/layout/types.ts';
 import type { Instance } from '../../../viewer/src/host/types.ts';
@@ -71,6 +73,19 @@ function markCounts(doc: Doc): Map<number, number> {
     return n;
 }
 const markLabel = (m: Mark): string => [m.id ? `#${m.id}` : '', ...(m.classes || '').split(/\s+/).filter(Boolean).map(c => `.${c}`)].join(' ') || '(empty)';
+
+/** How a font's face was made, for its row: '' for one served as it is. */
+function faceNote(f: DocFont, origin: FontOrigin): string {
+    const face = faceFromWire(f);
+    switch (face.kind) {
+        case 'type1': return 'converted from Type 1 · ';
+        case 'bitmap': return 'drawn from METAFONT bitmaps · ';
+        case 'opentype': return origin === 'patched' ? 'cmap patched · ' : '';
+        case 'virtual': return 'virtual: drawn in the fonts it names · ';
+        case 'boxes': return `drawn as boxes (${face.reason}) · `;
+        default: return unreachable(face, 'font face');
+    }
+}
 
 export function resources(): Resources {
     interface FontUse { key: string; cat: string; font: DocFont; file: string | null; family: string | null; names: Set<string | undefined>;
@@ -143,7 +158,7 @@ export function resources(): Resources {
     const fontRows = [...fonts.values()].sort((a, b) => fontName(a).localeCompare(fontName(b), 'en', { numeric: true, sensitivity: 'base' })).map(r => {
         const origin = fontOrigin(r.font, r.family), pua = [...r.chars].filter(isPrivateUse).length;
         return { key: r.key, cat: 'font', origin, label: r.file ? r.file.replace(/\.otf$/i, '') : [...r.names][0]!,
-            note: (origin === 'converted' ? 'converted from Type 1 · ' : origin === 'patched' ? 'cmap patched · ' : '')
+            note: faceNote(r.font, origin)
                   + `${[...r.sizes].sort((a, b) => a - b).map(pt).join(', ')} · ${r.chars.size} character${r.chars.size === 1 ? '' : 's'}`
                   + (origin && origin !== 'original' ? ` (${pua} private-use)` : '')
                   + `, ${r.uses} glyph${r.uses === 1 ? '' : 's'} · ${range(r.blocks)}` + (r.file ? '' : ' · no font file'),

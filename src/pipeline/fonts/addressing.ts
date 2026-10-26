@@ -4,7 +4,8 @@
 // served, maps to exactly that glyph. Two passes make it so.
 import { forEachNode, fontFile, type SerializerOutput } from '../nodes.ts';
 import { unreachable } from '../../shared/unreachable.ts';
-import { GLYPH_INDEX_PUA, classicSlotCode, isPrivateUse } from '../../shared/glyph-text.ts';
+import { GLYPH_INDEX_PUA, isPrivateUse } from '../../shared/glyph-text.ts';
+import { classicAddressing } from './metafont.ts';
 import type { Fonts } from './fonts.ts';
 
 /** A font's per-character protrusion and expansion codes are keyed by the
@@ -30,8 +31,7 @@ function remapFontCodes(data: SerializerOutput, remap: Map<string, Map<number, S
 
 const COMBINING = /^\p{M}$/u;
 
-/** A classic font's 256 slots, as a font drawn as boxes is addressed. */
-const BOXES_ADDRESSING = new Map(Array.from({ length: 256 }, (_, slot) => [slot, classicSlotCode(slot)]));
+const SLOTS = Array.from({ length: 256 }, (_, slot) => slot);
 
 /** Rewrite a glyph to GLYPH_INDEX_PUA + its glyph index (plane 16, clear of
  *  LuaTeX's own plane-15 assignments) whenever drawing it by its
@@ -70,12 +70,13 @@ export function normaliseGlyphAddressing(data: SerializerOutput, fonts: Fonts, l
 }
 
 /** Classic 8-bit fonts (captured with no file: ClassicFace): give each its
- *  face – its Type 1 outlines converted to a served OTF (type1.ts), its
- *  glyphs' slot numbers rewritten to the code points the converted font
- *  maps – or, with no convertible outline, boxes, saying why. A font drawn
- *  as boxes keeps its glyphs as text (the viewer draws a transparent
- *  character over each box), by classicSlotCode; fonts.ts's verify warns of
- *  it. Returns the rewrites. */
+ *  face – a served OTF from the first producer that can make one (its Type 1
+ *  outlines, METAFONT's bitmaps: Fonts.legacyOtf), its glyphs' slot numbers
+ *  rewritten to the code points that OTF maps – or, with none, boxes, saying
+ *  why. A font drawn as boxes keeps its glyphs as text (the viewer draws a
+ *  transparent character over each box), addressed as a METAFONT font is
+ *  (classicAddressing); fonts.ts's verify warns of it. Returns the
+ *  rewrites. */
 export function normaliseLegacyFontAddressing(data: SerializerOutput, fonts: Fonts): number {
   const rewrite = new Map<string, Map<number, number>>();       // font id → slot → code point
   for (const [fid, info] of data.fonts) {
@@ -84,14 +85,14 @@ export function normaliseLegacyFontAddressing(data: SerializerOutput, fonts: Fon
         const res = fonts.legacyOtf(info.name);
         if ('reason' in res) {
           info.face = { kind: 'boxes', reason: res.reason };
-          rewrite.set(fid, BOXES_ADDRESSING);
+          rewrite.set(fid, classicAddressing(info.name, SLOTS));
           continue;
         }
         info.face = res.face;                                    // so the encoder and viewer fetch the OTF
         rewrite.set(fid, res.addressing);
         continue;
       }
-      case 'opentype': case 'type1': case 'virtual': case 'boxes': continue;
+      case 'opentype': case 'type1': case 'bitmap': case 'virtual': case 'boxes': continue;
       default: unreachable(info.face, 'font face');
     }
   }

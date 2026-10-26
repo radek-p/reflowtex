@@ -183,6 +183,22 @@ function encodeFormat12(map: Map<number, number>, language: number): Bytes {
 
 // Rebuild the cmap: changed subtables are re-encoded, the rest reused raw;
 // subtables that shared data keep sharing it.
+/** The (3,10) format-12 subtable of `subs`, which a code point outside the
+ *  BMP needs; made when there is none, holding the font's Unicode map too
+ *  (a browser that finds it reads it instead of the format-4 one), the
+ *  encoding records kept sorted by platform, then encoding. */
+export function format12(subs: CmapSubtable[]): CmapSubtable {
+  const have = subs.find(s => s.format === 12 && s.platformID === 3 && s.encodingID === 10);
+  if (have) return have;
+  const unicode = subs.find(s => s.platformID === 3 && s.encodingID === 1) ?? subs.find(s => s.platformID === 0) ?? subs.find(s => s.format === 4);
+  const made = { platformID: 3, encodingID: 10, format: 12, language: 0, map: new Map(unicode?.shared.map ?? []),
+                 raw: new Uint8Array(0), dirty: true } as CmapSubtable;
+  made.shared = made;
+  const at = subs.findIndex(s => s.platformID > 3 || (s.platformID === 3 && s.encodingID > 10));
+  subs.splice(at < 0 ? subs.length : at, 0, made);
+  return made;
+}
+
 export function buildCmap(subs: CmapSubtable[]): Bytes {
   const blobs: Bytes[] = [], blobOf = new Map<CmapSubtable, number>();
   for (const s of subs) {

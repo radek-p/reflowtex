@@ -151,14 +151,14 @@ export async function registerFonts(fontsData: Record<string, DocFont>): Promise
     const faceOf = (f: DocFont): ViewerFace => {
         const face = faceFromWire(f);
         switch (face.kind) {
-            case 'opentype': case 'type1': {
+            case 'opentype': case 'type1': case 'bitmap': {
                 const file = face.file;
                 if (!fileToFamily[file]) {
                     const family = familyOf(file);
                     ensureFace(file, family);
                     registeredFontFaces.add(file);
                     fileToFamily[file] = family;
-                    fileToName[file] = face.kind === 'type1' ? (f.name || family) : file.replace(/\.[^.]*$/, '');
+                    fileToName[file] = face.kind !== 'opentype' ? (f.name || family) : file.replace(/\.[^.]*$/, '');
                 }
                 return { kind: 'text', family: fileToFamily[file] };
             }

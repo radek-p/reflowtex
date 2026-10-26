@@ -343,6 +343,23 @@ test('newtx maths (virtual fonts over Type 1 faces) draws the glyphs TeX set', {
     'txsys:lessequal txsys:infinity NewTXMI:comma NewTXMI:u1D44E txmiaX:equal ntx-Regular-tlf-ot1r:one ntx-Regular-tlf-ot1r:two');
 });
 
+// A font with only a METAFONT source (bbm, \mathbbm): drawn from METAFONT's
+// bitmaps, its letters the double-struck ones Unicode has (they were boxes).
+// bbm is in the CI image (docker/test-packages.txt); elsewhere, run where it
+// is installed.
+const NO_BBM = !kpsewhich('bbm10.mf') && 'bbm is not installed';
+test('a METAFONT-only font (bbm) is drawn from its bitmaps, as double-struck letters', { skip: NO_BBM }, async () => {
+  const d = await capture('$\\mathbbm{R}^n, \\mathbbm{1}_A, \\mathbbmss{N}$', '\\usepackage{bbm}');
+  const fonts = d.fonts as Record<string, { name: string; face: TexFontFace }>;
+  const bbm = Object.values(fonts).filter(f => f.name.startsWith('bbm'));
+  assert.ok(bbm.length >= 2, JSON.stringify(bbm));
+  for (const f of bbm) assert.equal(f.face.kind, 'bitmap', `${f.name}: ${JSON.stringify(f.face)}`);
+  const chars = [...walk(d.paragraphs.flatMap(p => p.nodes))].filter(n => n.type === 'glyph' && fonts[String(n.font)].name.startsWith('bbm'))
+    .map(n => String.fromCodePoint(n.char!)).join('');
+  assert.equal(chars, 'ℝ𝟙ℕ');
+  assert.deepEqual(drawnGlyphNames(d).filter(([face]) => face.startsWith('bbm')).map(([, g]) => g), ['g82', 'g49', 'g78']);
+});
+
 // ── MathML ──────────────────────────────────────────────────────────────────
 // LaTeX's, as LaTeX writes it. An author who enables tagging and luamml –
 // \DocumentMetadata{tagging=on}, and \tagpdfsetup{math/mathml/luamml/load=true}

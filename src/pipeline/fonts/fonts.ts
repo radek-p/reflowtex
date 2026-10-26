@@ -26,13 +26,15 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { forEachNode, type PipelineFace, type SerializerOutput } from '../nodes.ts';
 import { FontError } from '../errors.ts';
 import { type FileFace } from '../../shared/font-face.ts';
 import { unreachable } from '../../shared/unreachable.ts';
-import { type CmapSubtable, readSfnt, writeSfnt, parseCmap, buildCmap, parseName, nameString, setNameString, buildName, numGlyphs, codepointsToGlyphs } from './sfnt.ts';
+import { format12, readSfnt, writeSfnt, parseCmap, buildCmap, parseName, nameString, setNameString, buildName, numGlyphs, codepointsToGlyphs } from './sfnt.ts';
 import { subsetFont } from './subset.ts';
 import { convertType1, kpsewhich, MODIFIED_TAG } from './type1.ts';
+import { convertMetafont } from './metafont.ts';
 import { GLYPH_INDEX_PUA } from '../../shared/glyph-text.ts';
 
 const hash8 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex').slice(0, 8);
@@ -52,6 +54,20 @@ function writeAtomic(dst: string, bytes: Uint8Array): void {
 /** A face made for a classic font, and its glyphs' slot → code point. */
 export interface ProducedFace { face: FileFace; addressing: Map<number, number> }
 
+/** What makes a face for a classic font (TeX name), in the order tried: its
+ *  Type 1 outlines converted (type1.ts), else METAFONT's bitmaps of it as
+ *  outlines (metafont.ts). A font none can give one is drawn as boxes. */
+const PRODUCERS: ((name: string, outDir: string, workDir: string) => ProducedFace | { reason: string })[] = [
+  (name, outDir) => {
+    const r = convertType1(name, outDir);
+    return 'reason' in r ? r : { face: { kind: 'type1', file: r.served }, addressing: r.addressing };
+  },
+  (name, outDir, workDir) => {
+    const r = convertMetafont(name, outDir, workDir);
+    return 'reason' in r ? r : { face: { kind: 'bitmap', file: r.served }, addressing: r.addressing };
+  },
+];
+
 /** What the blocks need of one font file (by its original name): its face,
  *  the TeX name it stands for, every code point a block reaches it by with
  *  the glyph index LuaTeX set (null: not known), and whether a \webtext slot
@@ -69,7 +85,11 @@ export class Fonts {
   private cmaps = new Map<string, Map<number, number> | null>();
   private converted = new Map<string, ProducedFace | { reason: string }>();
 
-  constructor(outputDir: string, localDir: string | null = null) {
+  /** where faces are made from other files (METAFONT's bitmaps), not served */
+  readonly workDir: string;
+
+  constructor(outputDir: string, localDir: string | null = null, workDir: string | null = null) {
+    this.workDir = workDir ?? join(tmpdir(), 'reflowtex-fonts-work');
     this.outputDir = outputDir;
     this.localDir = localDir;
   }
@@ -80,7 +100,7 @@ export class Fonts {
     const byFile = new Map<string, { name: string; face: FileFace }>();
     for (const f of fonts) {
       switch (f.face.kind) {
-        case 'opentype': case 'type1': byFile.set(f.face.file, { name: f.name, face: f.face }); break;
+        case 'opentype': case 'type1': case 'bitmap': byFile.set(f.face.file, { name: f.name, face: f.face }); break;
         case 'virtual': case 'boxes': break;
         case 'tfm': throw new FontError(`font ${f.name} has no face yet: the classic fonts were not given theirs (normaliseLegacyFontAddressing)`);
         default: unreachable(f.face, 'font face');
@@ -96,7 +116,7 @@ export class Fonts {
         continue;
       }
       switch (face.kind) {
-        case 'type1': {
+        case 'type1': case 'bitmap': {
           // A converted face named by blocks restored from a cache: convert it
           // again. The conversion is reproducible, so the same TeX installation
           // gives the same name; a different name means it changed under the
@@ -118,12 +138,19 @@ export class Fonts {
     }
   }
 
-  /** A classic face (by TeX name) converted to a served OTF, with its slot →
-   *  code point addressing; or why it has none. */
+  /** A classic face (by TeX name) as a served OTF, with its slot → code
+   *  point addressing, from the first producer that can make one (PRODUCERS);
+   *  or why none can, each producer's reason. */
   legacyOtf(name: string): ProducedFace | { reason: string } {
     if (!this.converted.has(name)) {
-      const r = convertType1(name, this.outputDir);
-      this.converted.set(name, 'reason' in r ? r : { face: { kind: 'type1', file: r.served }, addressing: r.addressing });
+      const reasons: string[] = [];
+      let made: ProducedFace | null = null;
+      for (const produce of PRODUCERS) {
+        const r = produce(name, this.outputDir, this.workDir);
+        if ('reason' in r) reasons.push(r.reason);
+        else { made = r; break; }
+      }
+      this.converted.set(name, made ?? { reason: reasons.join('; ') });
     }
     return this.converted.get(name)!;
   }
@@ -191,17 +218,8 @@ export class Fonts {
       // browser that finds it reads it instead of the format-4 one. Every
       // entry goes into it; a BMP one into the format-4 subtable as well.
       const f4 = subs.find(s => s.format === 4);
-      let f12 = subs.find(s => s.format === 12 && s.platformID === 3 && s.encodingID === 10);
-      if (!f12 && missing.some(([c]) => c >= 0x10000)) {
-        const unicode = subs.find(s => s.platformID === 3 && s.encodingID === 1) ?? subs.find(s => s.platformID === 0) ?? f4;
-        const made = { platformID: 3, encodingID: 10, format: 12, language: 0, map: new Map(unicode?.shared.map ?? []),
-                       raw: new Uint8Array(0), dirty: true } as CmapSubtable;
-        made.shared = made;
-        f12 = made;
-        // encoding records stay sorted by platform, then encoding
-        const at = subs.findIndex(s => s.platformID > 3 || (s.platformID === 3 && s.encodingID > 10));
-        subs.splice(at < 0 ? subs.length : at, 0, made);
-      }
+      const f12 = missing.some(([c]) => c >= 0x10000) ? format12(subs)
+        : subs.find(s => s.format === 12 && s.platformID === 3 && s.encodingID === 10);
       const glyphs = numGlyphs(font);
       let added = 0;
       for (const [c, g] of missing) {
@@ -243,7 +261,7 @@ export class Fonts {
       const served = this.served.get(filename) ?? filename;
       let written: boolean;
       switch (needs.face.kind) {
-        case 'type1': written = true; break;
+        case 'type1': case 'bitmap': written = true; break;
         case 'opentype': written = served !== filename; break;       // patched
         default: written = unreachable(needs.face, 'font face');
       }
@@ -302,7 +320,7 @@ export function fontNeeds(docs: Iterable<SerializerOutput>): FontNeeds {
     const byId = new Map<string, FileNeeds>(), boxed = new Map<string, { reason: string; glyphs: number }>();
     for (const [id, f] of d.fonts) {
       switch (f.face.kind) {
-        case 'opentype': case 'type1': {
+        case 'opentype': case 'type1': case 'bitmap': {
           const file = f.face.file;
           if (!files.has(file)) files.set(file, { name: f.name, face: f.face, reached: new Map(), slot: false });
           byId.set(id, files.get(file)!);

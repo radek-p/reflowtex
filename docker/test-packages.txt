@@ -19,3 +19,5 @@ xpatch          # newtx
 xkeyval         # newtx
 xstring         # newtx
 charter         # tests/unit/type1.test.ts (Bitstream Charter's Type 1 outlines)
+bbm             # tests/render/cases/bbm.tex: METAFONT-only fonts (src/pipeline/fonts/metafont.ts)
+bbm-macros      # bbm.sty, for the same case
