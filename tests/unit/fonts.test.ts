@@ -70,7 +70,7 @@ test('a classic font with no outline is given boxes, with the reason, its glyphs
     assert.deepEqual([...needs.boxes], [['rtxnoface10', { reason: face.kind === 'boxes' ? face.reason : '', glyphs: 3 }]]);
     const warnings = fonts.verify(needs);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0], /^font rtxnoface10 has no face \(no Type 1 outline of rtxnoface10 .*\): its 3 glyphs are drawn as boxes/);
+    assert.match(warnings[0], /^font rtxnoface10 has no face \(no Type 1 outline of rtxnoface10 .*\): nothing is drawn for its 3 glyphs; TeX's space for them is kept, and the text stays selectable$/);
     // and the block's own data says so, for the page's log: the same message, with a code and its particulars
     const [w] = fontWarnings(d);
     assert.deepEqual(w, { level: 'warning', code: 'font-without-face', message: warnings[0],

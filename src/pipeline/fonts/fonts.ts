@@ -17,8 +17,9 @@
 //  * verify – every code point a block reaches a font by must be in the file
 //    served for it, or the page would silently draw blanks. A font with no
 //    face at all (no producer could give it one: addressing.ts) is not
-//    refused: its glyphs are drawn as boxes of the size TeX gave them, with
-//    their text, and the build says so – this is the one place that decides.
+//    refused: nothing is drawn for its glyphs, which keep the space TeX gave
+//    them and their text, and the build says so – this is the one place that
+//    decides.
 //
 // Which of these a font goes through is its face's kind (src/shared/font-face.ts),
 // recorded on the font by addressing.ts; a file's name says nothing of it.
@@ -57,7 +58,8 @@ export interface ProducedFace { face: FileFace; addressing: Map<number, number> 
 
 /** What makes a face for a classic font (TeX name), in the order tried: its
  *  Type 1 outlines converted (type1.ts), else METAFONT's bitmaps of it as
- *  outlines (metafont.ts). A font none can give one is drawn as boxes. */
+ *  outlines (metafont.ts). A font none can give one has no face: its glyphs
+ *  draw nothing. */
 const PRODUCERS: ((name: string, outDir: string, workDir: string) => ProducedFace | { reason: string })[] = [
   (name, outDir) => {
     const r = convertType1(name, outDir);
@@ -286,7 +288,7 @@ export class Fonts {
   }
 
   /** Fail if any code point a block reaches a font by is missing from the
-   *  file served for it. Returns the warnings: a font drawn as boxes, by its
+   *  file served for it. Returns the warnings: a font with no face, by its
    *  TeX name and why. */
   verify(needs: FontNeeds): string[] {
     const problems: string[] = [];
@@ -309,9 +311,10 @@ export class Fonts {
   }
 }
 
-/** What the build says of a font drawn as boxes. */
+/** What the build says of a font with no face. */
 const boxedFontMessage = (name: string, b: { reason: string; glyphs: number }): string =>
-  `font ${name} has no face (${b.reason}): its ${b.glyphs} glyph${b.glyphs === 1 ? '' : 's'} are drawn as boxes of the size TeX gave them, as text all the same`;
+  `font ${name} has no face (${b.reason}): nothing is drawn for its ${b.glyphs} glyph${b.glyphs === 1 ? '' : 's'}; ` +
+  `TeX's space for ${b.glyphs === 1 ? 'it' : 'them'} is kept, and the text stays selectable`;
 
 /** A block's warnings about its fonts: each font with no face that it sets
  *  glyphs in (code font-without-face; details: font, reason, glyphs). */
