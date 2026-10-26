@@ -260,6 +260,7 @@ export interface ContentItem extends DisplayRates {
     display_quad?: number;
     display_interline_above?: number;
     display_interline_below?: number;
+    prev_depth?: number;
     display_baselineskip?: number;
     display_lineskip?: number;
     display_lineskiplimit?: number;

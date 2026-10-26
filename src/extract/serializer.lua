@@ -566,6 +566,9 @@ local WH_SAVE      = assert(WH.pdf_save,      "no pdf_save whatsit subtype")
 local WH_RESTORE   = assert(WH.pdf_restore,   "no pdf_restore whatsit subtype")
 local WH_COLORSTACK = assert(WH.pdf_colorstack, "no pdf_colorstack whatsit subtype")
 local WHATSIT_ID    = node.id("whatsit")
+local RULE_ID       = node.id("rule")
+local GLUE_ID       = node.id("glue")
+local PENALTY_ID    = node.id("penalty")
 
 
 -- ── Colour set between paragraphs ─────────────────────────────────────────
@@ -1165,18 +1168,21 @@ end
 -- Subtypes we key on (hlist): line=1, alignment=4, equation=6.
 local HL_LINE, HL_ALIGNMENT, HL_EQUATION = 1, 4, 6
 -- Vertical glue subtype 0 is userskip: the glue \vskip/\vspace/\addvspace insert,
--- and the before/after skips \@startsection puts around a section heading. That
--- is *explicit* spacing the author asked for, and it is preserved. So is
--- parskip (3): the glue TeX adds at every paragraph start is paragraph
--- spacing, not leading – zero in article's running text, but inside a list
--- it is \parsep, and dropping it pulled every item 4pt closer than TeX sets
--- them. Only baselineskip (2) and lineskip (1) are interline leading the
--- renderer re-derives per line, so those are dropped between text paragraphs.
+-- and the before/after skips \@startsection puts around a section heading;
+-- 3 is \parskip; baselineskip (2) and lineskip (1) are the interline glue TeX
+-- put above a box (§679); 4 to 7 are a display's skips. The renderer redoes
+-- the interline glue above a line it breaks again, so the glue directly above
+-- a paragraph's first line leaves the gap there (see walk_flow); every other
+-- glue and kern between two items is space as TeX set it, and stays.
 local GLUE_USERSKIP = 0
 local GLUE_PARSKIP  = 3
 local GLUE_LINESKIP, GLUE_BASELINESKIP = 1, 2
 local GLUE_ABOVEDISPLAY, GLUE_BELOWDISPLAY = 4, 5
 local GLUE_ABOVEDISPLAYSHORT, GLUE_BELOWDISPLAYSHORT = 6, 7
+-- \topskip and \splittopskip: the page builder's glue at the top of a page,
+-- copied with the material an output routine puts back. A pageless page has
+-- no page top, so it is no space.
+local GLUE_TOPSKIP, GLUE_SPLITTOPSKIP = 10, 11
 
 -- A display's box width is not what it occupies. \[..\] packs at natural
 -- width and is centred by its shift, while amsmath centres an alignment by
@@ -1232,18 +1238,72 @@ local cur_leading = {}
 -- indent box of a paragraph that opens with a display) or "display" – and
 -- the display item the next below-display glue belongs to.
 local last_box = nil
+-- the paragraph of the last line stacked
+local last_para = nil
 local last_display = nil
 -- The depth of the last line, display or box the flow stacked: what the
--- interline glue below it is set from.
-local last_depth = 0
+-- viewer sets the interline glue below it from. nil while the list being
+-- walked has nothing stacked yet.
+local last_depth = nil
 
 -- TeX's interline glue between a depth above and a height below (§679):
 -- \baselineskip less the two, or \lineskip where that leaves less than
--- \lineskiplimit. The viewer redoes it with the same rule.
+-- \lineskiplimit; none at all when the depth is \prevdepth's -1000pt
+-- (after \nointerlineskip, a rule, or at the top of a box). The viewer
+-- redoes it with the same rule.
+local IGNORE_DEPTH = -65536000
 local function interline_glue(depth, height, leading)
+    if depth <= IGNORE_DEPTH then return 0 end
     local b = (leading.bskip or 0) - depth - height
     if b >= (leading.lskiplimit or 0) then return b end
     return leading.lskip or 0
+end
+
+-- The viewer sets the interline glue above a line from the depth of the item
+-- it stacks above it. TeX set it from \prevdepth, which is that depth only
+-- while nothing else had a say: a document can assign \prevdepth
+-- (\nointerlineskip, a class after its title block, a framed box after
+-- itself), a rule leaves none, and a box the walk goes into (a \vbox, a
+-- \vtop) had glue above it set from its own height and none above its first
+-- line, and leaves its own depth below it. So the walk follows what TeX's
+-- \prevdepth comes from: `box_depth` is the depth of the last box or line
+-- TeX stacked on this list (IGNORE_DEPTH after a rule or at a box's top),
+-- and `depth_follows` says whether that is the viewer's item above too, or
+-- a box the viewer draws nothing for: across one, the space as a whole
+-- stays, and the viewer redoes the glue it derives over it.
+local box_depth = IGNORE_DEPTH
+local depth_follows = true
+
+-- The \prevdepth that gives interline glue `g` (of glue subtype `sub`, nil
+-- for none) above a line of height `h` under `leading`, by the rule above:
+-- \baselineskip less g and h for baselineskip glue; for lineskip glue, a
+-- depth just deep enough for the rule to choose \lineskip. IGNORE_DEPTH
+-- when TeX set none – or when no depth gives g, so that the viewer derives
+-- nothing and g stays in the gap.
+local function depth_for_glue(g, sub, h, leading)
+    if g == nil then return IGNORE_DEPTH end
+    local d
+    if sub == 2 then
+        d = (leading.bskip or 0) - h - g
+    else
+        d = (leading.bskip or 0) - h - (leading.lskiplimit or 0) + 1
+    end
+    if d > IGNORE_DEPTH and interline_glue(d, h, leading) == g then return d end
+    return IGNORE_DEPTH
+end
+
+-- A glue's width as the box holding it set it: a \vbox to a height stretches
+-- or shrinks the glue of its order (glue_order: 0 finite, 1-3 fil to filll).
+local function set_glue_width(g, box)
+    local w = g.width or 0
+    local gs = box and box.glue_set or 0
+    if gs == 0 then return w end
+    if box.glue_sign == 1 and (g.stretch_order or 0) == box.glue_order then
+        w = w + math.floor((g.stretch or 0) * gs + 0.5)
+    elseif box.glue_sign == 2 and (g.shrink_order or 0) == box.glue_order then
+        w = w - math.floor((g.shrink or 0) * gs + 0.5)
+    end
+    return w
 end
 
 -- ── Streams ───────────────────────────────────────────────────────────────
@@ -1279,20 +1339,25 @@ local function stream_out(ctx, sid)
     return s.content
 end
 
--- `blank`: a blank line stands in the gap (see walk_flow).
+-- What the walk holds between two items: `sp`, the space TeX set there, and
+-- `parts` (note_part). `par_start`: \parskip glue, which TeX puts at the
+-- start of every paragraph, lies in it. `interline` is the interline glue directly above the
+-- next box (`interline_sub` its subtype, `interline_part` its place in
+-- `parts`), which the item that box starts takes up; `box_top` says the top
+-- of a box the walk went into lies in the gap (see place_gap).
 local function reset_pending(pending)
-    pending.sp = 0; pending.explicit = 0; pending.parts = nil; pending.blank = nil
+    pending.sp = 0; pending.parts = nil; pending.box_top = nil; pending.par_start = nil
 end
 
 -- The vertical glue and kerns between two items, as TeX left them, for a
 -- vspace item to carry (its `glue`): what the gap is made of – the author's
 -- \vspace, a heading's skip, \parskip, a display's skip – for tools that
--- show it (the inspector). The widths of the parts kept add up to `amount`.
-local function note_part(pending, n, t)
+-- show it (the inspector). A glue's width is the one its box set it to.
+local function note_part(pending, n, t, width)
     local parts = pending.parts or {}
     pending.parts = parts
     if t == "glue" then
-        local g = { type = "glue", subtype = n.subtype, width = n.width }
+        local g = { type = "glue", subtype = n.subtype, width = width }
         if (n.stretch or 0) ~= 0 then g.stretch = n.stretch; g.stretch_order = n.stretch_order end
         if (n.shrink or 0) ~= 0 then g.shrink = n.shrink; g.shrink_order = n.shrink_order end
         parts[#parts + 1] = g
@@ -1342,14 +1407,13 @@ local function only_anchors(list)
     end
     return true
 end
--- `sp` is the full glue, `explicit` only the author's own; after a display,
--- or when `whole` says so (across a blank line), the full glue counts (it
--- carries the display's below-skip). As everywhere, a gap before anything at
--- all is dropped. `parts` (note_part) are kept with it: the explicit glue, or
--- with the full glue all of it. A gap whose explicit glue is all zero –
--- article's \parskip, 0pt plus 1pt – is still an item, of amount 0, so its
--- glue is not lost to a tool that shows it.
-local function place_gap(ctx, next_sid, sp, explicit, parts, whole)
+-- `amount` is the space the viewer is to keep, `parts` (note_part) what it is
+-- made of. As everywhere, a gap before anything at all is dropped, as TeX
+-- drops glue at the top of a page – unless the top of a box lies in it
+-- (`box_top`): what the box holds above its first line is the box's. A gap of
+-- zero made of glue – article's \parskip, 0pt plus 1pt – is still an item, so
+-- its glue is not lost to a tool that shows it.
+local function place_gap(ctx, next_sid, amount, parts, box_top)
     local list = stream_out(ctx, common_stream(ctx, ctx.last_sid, next_sid))
     local pos = #list
     while pos > 0 do
@@ -1362,16 +1426,9 @@ local function place_gap(ctx, next_sid, sp, explicit, parts, whole)
             break
         end
     end
-    whole = whole or ctx.last_kind == "display"
-    local amount = whole and sp or explicit
-    local glue = {}
-    for _, g in ipairs(parts or {}) do
-        if whole or (g.type == "glue" and (g.subtype == GLUE_USERSKIP or g.subtype == GLUE_PARSKIP)) then
-            glue[#glue + 1] = g
-        end
-    end
-    if pos > 0 and ((amount and amount ~= 0) or #glue > 0) then
-        table.insert(list, pos + 1, { kind = "vspace", amount = amount or 0,
+    local glue = parts or {}
+    if (pos > 0 or box_top) and (amount ~= 0 or #glue > 0) then
+        table.insert(list, pos + 1, { kind = "vspace", amount = amount,
                                       glue = (#glue > 0) and glue or nil })
     end
 end
@@ -1399,10 +1456,27 @@ local fixed_items = 0
 -- skips of zero, which makes its skip choice a no-op. A pre-display size of
 -- -\maxdimen says no empty line stands above it: the depth above is the
 -- previous item's own.
+--
+-- The leading in force is the one where the box was appended, which need not
+-- be the last paragraph's (a title's, before an author line): it is the one
+-- that gives TeX's glue from the depth above, \baselineskip from baselineskip
+-- glue, \lineskip from lineskip glue. Where TeX did not set the glue from
+-- the depth of the item above (see box_depth), it is not redone: the gap keeps
+-- it as TeX set it.
 local HL_EQUATION_WRAP = 6
 local function emit_fixed(n, box, pending, ctx)
-    place_gap(ctx, stream_attr(n), pending.sp, pending.sp, pending.parts)
+    place_gap(ctx, stream_attr(n), pending.sp, pending.parts)
     reset_pending(pending)
+    local g, h = pending.interline, box.height or 0
+    local leading = { bskip = cur_leading.bskip, lskip = cur_leading.lskip, lskiplimit = cur_leading.lskiplimit }
+    if g and pending.interline_sub == GLUE_BASELINESKIP then
+        leading.bskip = g + box_depth + h
+    elseif g then
+        leading.lskip = g
+    end
+    if not (g and depth_follows and box_depth == last_depth and interline_glue(box_depth, h, leading) == g) then
+        g = nil
+    end
     local out = stream_out(ctx, stream_attr(n))
     ctx.last_sid, ctx.last_kind = stream_attr(n), "display"
     out[#out + 1] = {
@@ -1414,16 +1488,18 @@ local function emit_fixed(n, box, pending, ctx)
         display_above       = 0, display_above_short = 0,
         display_below       = 0, display_below_short = 0,
         display_used_above  = 0,
-        display_interline_above = pending.interline,
-        display_baselineskip  = cur_leading.bskip,
-        display_lineskip      = cur_leading.lskip,
-        display_lineskiplimit = cur_leading.lskiplimit,
+        display_interline_above = g,
+        display_baselineskip  = leading.bskip,
+        display_lineskip      = leading.lskip,
+        display_lineskiplimit = leading.lskiplimit,
         display_after_line  = false,
         box = { type = "hlist", subtype = HL_EQUATION_WRAP, width = box.width, height = box.height,
                 depth = box.depth, shift = 0, glue_set = 0, glue_sign = 0, glue_order = 0,
                 children = { box } },
     }
     last_display = out[#out]; last_box = "display"; last_depth = box.depth or 0
+    -- TeX sets no interline glue below a rule (§1056)
+    box_depth = (n.id == RULE_ID) and IGNORE_DEPTH or (n.depth or 0); depth_follows = true
     pending.above_skip = nil; pending.interline = nil
     fixed_items = fixed_items + 1
 end
@@ -1451,8 +1527,10 @@ local function holds_emitted_lines(n)
     return false
 end
 
+-- The box as a fixed display draws it; nil for one that draws nothing, and
+-- nil, "emitted" for one holding text the stream already has.
 local function fixed_box(n, t)
-    if t ~= "rule" and holds_emitted_lines(n) then return nil end
+    if t ~= "rule" and holds_emitted_lines(n) then return nil, "emitted" end
     if t == "rule" then
         -- On a vertical list a rule's running width is the enclosing box's:
         -- the text width.
@@ -1472,7 +1550,35 @@ local function fixed_box(n, t)
     return s
 end
 
-local function walk_flow(head, pending, ctx)
+-- LaTeX's mark for a float or a \marginpar in vertical mode: \penalty-10004,
+-- an empty \vbox{} (with its interline glue), \prevdepth put back. Its
+-- output routine takes the box off again with the glue above it, so neither
+-- is space.
+local function float_marker(n)
+    if n.head or (n.height or 0) ~= 0 or (n.depth or 0) ~= 0 then return false end
+    local p = n.prev
+    if p and p.id == GLUE_ID and (p.subtype == GLUE_LINESKIP or p.subtype == GLUE_BASELINESKIP) then p = p.prev end
+    return p ~= nil and p.id == PENALTY_ID and p.penalty <= -10004
+end
+
+-- A box TeX stacked that the viewer draws nothing for – a line with no ink (a
+-- paragraph with nothing visible: an empty box, a \write, a label's anchor,
+-- an empty line of verbatim, the \vadjust of a \medskip after a display), an
+-- empty \hbox{} or \null in vertical mode, a rule with no ink – is not an
+-- item, but the space down to it, its height and depth, and whatever follows
+-- it are real space: all of it stays in the gap, which goes on to the next
+-- item, whatever that is. The viewer then redoes the interline glue over it
+-- as if it were not there (see the line branch), which in the gap's sum
+-- stands for the glue TeX set above it and below it.
+local function stack_blank(n, t, pending)
+    pending.sp = (pending.sp or 0) + (n.height or 0) + (n.depth or 0)
+    pending.interline = nil
+    box_depth = (t == "rule") and IGNORE_DEPTH or (n.depth or 0)
+end
+
+-- `box`: the box whose list `head` is, when the walk went into one (its glue
+-- setting applies to the glue in it).
+local function walk_flow(head, pending, ctx, box)
     ctx = ctx or { out = content, base = nil }
     for n in node.traverse(head) do
         local t = node.type(n.id)
@@ -1482,12 +1588,19 @@ local function walk_flow(head, pending, ctx)
             -- list instead of a paragraph and never reaches serialize_nodelist.
             -- Emit it into the content stream, where it lands between the two
             -- items it was written between – which is exactly the position a
-            -- section label is meant to name.
+            -- section label is meant to name. (The template sets it with no
+            -- glue and gives \prevdepth back: TeX's spacing is as without it.)
             local out = stream_out(ctx, stream_attr(n))
             out[#out + 1] = { kind = "anchorpoint",
                               anchor = node.get_attribute(n, ANCHOR_ATTR) }
         elseif t == "hlist" and n.subtype == HL_LINE then
             local p = find_para(n)
+            -- A line with nothing of a paragraph's on it – the empty last line
+            -- a paragraph ending in \\ has – is that paragraph's when no other
+            -- paragraph started since its line above (TeX puts \parskip glue
+            -- at every start): the viewer breaks it with the paragraph.
+            if not p and last_box == "line" and not pending.par_start then p = last_para end
+            last_para = p
             last_box = (p and has_visible_nodes(all_paragraphs[p].nodes)) and "line" or "blank"
             if p then
                 cur_band.indent = all_paragraphs[p].band_indent or all_paragraphs[p].indent
@@ -1496,48 +1609,74 @@ local function walk_flow(head, pending, ctx)
                                 lskiplimit = all_paragraphs[p].lineskiplimit }
             end
             if last_box == "blank" then
-                -- A blank line (a paragraph with nothing visible: an empty box,
-                -- a \write, a label's anchor, an empty line of verbatim, the
-                -- \vadjust of a \medskip after a display) is not an item, but
-                -- the space down to it, its height and depth, and whatever
-                -- follows it are real space: all of it stays in the gap, which
-                -- goes on to the next item, whatever that is.
-                pending.sp = (pending.sp or 0) + (n.height or 0) + (n.depth or 0)
-                pending.blank = true
+                stack_blank(n, t, pending)
             else
                 if p and not seen_para[p] then
                     seen_para[p] = true
-                    -- Abutting a display, keep TeX's full glue: above/belowdisplayskip
-                    -- carries the display's spacing. Between text paragraphs keep only
-                    -- explicit vspace: baselineskip leading is re-derived per line, but
-                    -- a \vspace or a section's before/after skip must survive.
-                    --
-                    -- The viewer redoes the interline glue between the item above
-                    -- and this line, from their depth and height at its width: the
-                    -- glue TeX set there, or across a blank line, the glue it would
-                    -- have set without one. Across a blank line the gap holds TeX's
-                    -- whole space, as after a display, and so that glue is taken out
-                    -- of it – after a display, it is the display's interline glue
-                    -- below, which the viewer takes out.
-                    local il = pending.blank and interline_glue(last_depth, n.height or 0, cur_leading)
-                               or pending.interline
-                    local sp = pending.sp or 0
-                    if ctx.last_kind == "display" then
-                        if last_display then last_display.display_interline_below = il end
-                    elseif pending.blank then
-                        sp = sp - il
+                    local item = { kind = "paragraph", para = p }
+                    local gap, parts = pending.sp or 0, pending.parts
+                    if last_depth ~= nil then
+                        -- The viewer redoes the interline glue above this line
+                        -- at its width, from the depth of the item above, or
+                        -- from prev_depth: the \prevdepth TeX set it from, where
+                        -- that is not the item above's depth (see box_depth).
+                        -- The glue TeX set says which. The glue the item
+                        -- above gives needs nothing (also where a \prevdepth
+                        -- was put back, as \vspace* does); the glue the last
+                        -- box gives comes from that box (a walked box's depth;
+                        -- none after a rule or at a box's top; across a box
+                        -- the viewer draws nothing for, as the item above);
+                        -- any other glue, or none, from a \prevdepth the
+                        -- document assigned.
+                        local h, g = n.height or 0, pending.interline
+                        local function glue_from(d)
+                            if d > IGNORE_DEPTH then return interline_glue(d, h, cur_leading) end
+                            return nil
+                        end
+                        local pd = nil
+                        if g == glue_from(last_depth) then
+                            pd = nil
+                        elseif g == glue_from(box_depth) then
+                            if box_depth <= IGNORE_DEPTH then
+                                pd = IGNORE_DEPTH
+                            elseif not depth_follows then
+                                pd = box_depth
+                            end
+                        else
+                            pd = depth_for_glue(g, pending.interline_sub, h, cur_leading)
+                        end
+                        item.prev_depth = pd
+                        -- the glue the viewer derives at this width, which the
+                        -- gap holds the rest of TeX's space beside; after a
+                        -- display the gap holds all of it, and the display
+                        -- records the glue the viewer takes out
+                        local il = interline_glue(pd or last_depth, h, cur_leading)
+                        if ctx.last_kind == "display" then
+                            if last_display then
+                                last_display.display_interline_below = (pd ~= IGNORE_DEPTH) and il or nil
+                            end
+                        else
+                            gap = gap - il
+                            if g and il == g and pending.interline_part then
+                                parts = {}
+                                for i, x in ipairs(pending.parts) do
+                                    if i ~= pending.interline_part then parts[#parts + 1] = x end
+                                end
+                            end
+                        end
                     end
-                    place_gap(ctx, stream_attr(n), sp, pending.explicit, pending.parts, pending.blank)
+                    place_gap(ctx, stream_attr(n), gap, parts, pending.box_top)
                     local out = stream_out(ctx, stream_attr(n))
-                    out[#out + 1] = { kind = "paragraph", para = p }
+                    out[#out + 1] = item
                     ctx.last_sid, ctx.last_kind = stream_attr(n), "paragraph"
                 end
                 reset_pending(pending)
                 last_depth = n.depth or 0
+                box_depth, depth_follows = last_depth, true
             end
             pending.interline = nil
         elseif t == "hlist" and (n.subtype == HL_EQUATION or n.subtype == HL_ALIGNMENT) then
-            place_gap(ctx, stream_attr(n), pending.sp, pending.sp, pending.parts)
+            place_gap(ctx, stream_attr(n), pending.sp, pending.parts, pending.box_top)
             reset_pending(pending)
             local out = stream_out(ctx, stream_attr(n))
             ctx.last_sid, ctx.last_kind = stream_attr(n), "display"
@@ -1588,6 +1727,7 @@ local function walk_flow(head, pending, ctx)
                 },
             }
             last_display = out[#out]; last_box = "display"; last_depth = n.depth or 0
+            box_depth, depth_follows = last_depth, true
             pending.above_skip = nil; pending.interline = nil
         elseif t == "whatsit" and n.subtype == WH_DEST and n.named_id == 1 then
             -- a destination between paragraphs (a section's, a \bibitem's): an
@@ -1596,16 +1736,39 @@ local function walk_flow(head, pending, ctx)
             local item = { kind = "anchorpoint" }
             item.anchor = note_dest(n, out, item)
             out[#out + 1] = item
-        elseif t == "vlist" and node.get_attribute(n, TIKZ_PIC_ATTR) then
-            -- a captured TikZ picture set in vertical mode: not a vlist of lines
-            local box = fixed_box(n, t)
-            if box then emit_fixed(n, box, pending, ctx) end
-        elseif t == "vlist" then
-            walk_flow(n.head, pending, ctx)
-        elseif t == "rule" or t == "hlist" then
-            -- neither a line nor a display (those are above): see fixed_box
-            local box = fixed_box(n, t)
-            if box then emit_fixed(n, box, pending, ctx) end
+        elseif t == "vlist" and float_marker(n) then
+            if pending.interline then
+                pending.sp = pending.sp - pending.interline
+                table.remove(pending.parts, pending.interline_part)
+                pending.interline = nil
+            end
+        elseif t == "vlist" and not node.get_attribute(n, TIKZ_PIC_ATTR) then
+            -- A box of lines (a \vbox, a \vtop, a title block), walked into: its
+            -- lines join the stream as the text around them. TeX set the glue
+            -- above the box from the box's height, and none above its first
+            -- line; it set the box's glue (a \vbox to a height stretches its
+            -- fil glue to fill it), and the glue below the box from the box's
+            -- depth. So the glue above stays in the gap, with what the box holds
+            -- above its first line – at the top of the page too, where TeX
+            -- drops only what comes before the box; the glue inside counts as
+            -- the box set it, and below it \prevdepth is the box's depth.
+            if ctx.last_kind == nil then reset_pending(pending) end
+            pending.interline = nil
+            pending.box_top = true
+            box_depth, depth_follows = IGNORE_DEPTH, false
+            walk_flow(n.head, pending, ctx, n)
+            pending.interline = nil
+            box_depth, depth_follows = n.depth or 0, false
+        elseif t == "rule" or t == "hlist" or t == "vlist" then
+            -- neither a line nor a display (those are above), nor a box of
+            -- lines: a captured TikZ picture set in vertical mode, a rule, a
+            -- box; see fixed_box
+            local fixed, why = fixed_box(n, t)
+            if fixed then
+                emit_fixed(n, fixed, pending, ctx)
+            elseif why ~= "emitted" then
+                stack_blank(n, t, pending)
+            end
         elseif t == "ins" then
             -- A footnote is not part of the pageless main stream. Retain its
             -- fully typeset paragraphs/displays as a stream of kind "footnote"
@@ -1621,25 +1784,30 @@ local function walk_flow(head, pending, ctx)
             local id = node.get_attribute(n, FOOTNOTE_INS_ATTR)
             local fn_content = {}
             local saved_band = { indent = cur_band.indent, width = cur_band.width }
-            local saved_last = last_box
-            local saved_depth = last_depth
-            walk_flow(n.head, { sp = 0, explicit = 0 },
+            local saved_last, saved_para = last_box, last_para
+            local saved_depth, saved_box_depth, saved_follows = last_depth, box_depth, depth_follows
+            -- its own list, which starts with nothing stacked
+            last_depth, box_depth, depth_follows = nil, IGNORE_DEPTH, true
+            walk_flow(n.head, { sp = 0 },
                       s and { out = s.content, base = aside }
                         or { out = fn_content, base = stream_attr(n) })
             cur_band = saved_band
-            last_box = saved_last
-            last_depth = saved_depth
+            last_box, last_para = saved_last, saved_para
+            last_depth, box_depth, depth_follows = saved_depth, saved_box_depth, saved_follows
             if s then
                 s.attrs[#s.attrs + 1] = { key = "aside", value = "true" }
             else
                 streams[#streams + 1] = { kind = "footnote", content = fn_content }
                 if id and id > 0 then footnote_index[id] = #streams end
             end
+        elseif t == "glue" and (n.subtype == GLUE_TOPSKIP or n.subtype == GLUE_SPLITTOPSKIP) then
+            pending.interline = nil
         elseif t == "glue" then
-            note_part(pending, n, t)
-            pending.sp = (pending.sp or 0) + (n.width or 0)
+            local w = set_glue_width(n, box)
+            note_part(pending, n, t, w)
+            pending.sp = (pending.sp or 0) + w
             if n.subtype == GLUE_ABOVEDISPLAY or n.subtype == GLUE_ABOVEDISPLAYSHORT then
-                pending.above_skip = n.width or 0
+                pending.above_skip = w
             elseif (n.subtype == GLUE_BELOWDISPLAY or n.subtype == GLUE_BELOWDISPLAYSHORT) and last_display then
                 -- Which of the two skips TeX chose, by the glue's kind (its
                 -- width is not the skip itself with tagging on: LaTeX then
@@ -1647,19 +1815,20 @@ local function walk_flow(head, pending, ctx)
                 -- the skip in again as its own – latex-lab-math). The glue is
                 -- kept as it is, in the gap.
                 local short = n.subtype == GLUE_BELOWDISPLAYSHORT
-                last_display.display_used_below = (short and last_display.display_below_short or last_display.display_below) or n.width or 0
-            elseif n.subtype == GLUE_BASELINESKIP or n.subtype == GLUE_LINESKIP then
-                -- the interline glue TeX put before a box: the display's own
-                -- when it comes next, the next line's after a display (see
-                -- the HL_LINE branch)
-                pending.interline = n.width or 0
+                last_display.display_used_below = (short and last_display.display_below_short or last_display.display_below) or w
             end
-            if n.subtype == GLUE_USERSKIP or n.subtype == GLUE_PARSKIP then
-                pending.explicit = (pending.explicit or 0) + (n.width or 0)
+            if n.subtype == GLUE_PARSKIP then pending.par_start = true end
+            if n.subtype == GLUE_BASELINESKIP or n.subtype == GLUE_LINESKIP then
+                -- the interline glue TeX put before a box: the display's own
+                -- when it comes next, the next line's (see the line branch)
+                pending.interline, pending.interline_sub, pending.interline_part = w, n.subtype, #pending.parts
+            else
+                pending.interline = nil
             end
         elseif t == "kern" then
             note_part(pending, n, t)
             pending.sp = (pending.sp or 0) + (n.kern or 0)
+            pending.interline = nil
         end
     end
 end
@@ -1828,7 +1997,7 @@ end
 
 local function write_output()
     hy_open = {}
-    walk_flow(flow_head, { sp = 0, explicit = 0 })
+    walk_flow(flow_head, { sp = 0 })
     resolve_hyperref()
     for _, p in ipairs(all_paragraphs) do remap_footnote_refs(p.nodes) end
     -- Streams are written in index order (the ids reflowtex.sty assigned, then

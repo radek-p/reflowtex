@@ -1,0 +1,28 @@
+% A paragraph ending in \\ (its last line empty) before a theorem, a label and a plain paragraph: the empty line is the paragraph's own, and the space after it is TeX's.
+\documentclass[12pt]{article}
+\usepackage{amsthm}
+\parindent=25pt
+\parskip=18pt
+\newtheorem{lemma}{Lemma}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+\baselineskip20pt
+Case A, label: a paragraph long enough to fill a line of the text width and then some more words, it ends in a newline.\\
+\begin{lemma}\label{a}
+Let the standing assumption hold true. Then the relation is symmetric.
+\end{lemma}
+Case B, no label: a paragraph long enough to fill a line of the text width and then some more words, it ends in a newline.\\
+\begin{lemma}
+Let the standing assumption hold true. Then the relation is symmetric.
+\end{lemma}
+Case C, a plain paragraph after: a paragraph long enough to fill a line of the text width and then some, it ends in a newline.\\
+
+A plain paragraph follows, long enough to fill one line of the text width and then some more words here.
+
+Case D, no newline: a paragraph long enough to fill a line of the text width and then some more words, it ends plainly.
+\begin{lemma}\label{d}
+Let the standing assumption hold true. Then the relation is symmetric.
+\end{lemma}
+The end.
+\end{document}

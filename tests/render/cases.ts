@@ -118,6 +118,16 @@ export const cases: Record<string, CaseSettings> = {
   // dropped with its space (12 to 25.6 pt each, 134 pt by the end). One page,
   // so against_plain too. Worst attained 2026-10-25.
   'blank-lines': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.003 },
+  // Interline glue TeX did not take from the lines it stands between, as in
+  // real papers: amsart's abstract, a \vtop of height zero with \prevdepth\z@
+  // after it; a \vbox to a fixed height with fil glue (a title box); a
+  // \prevdepth the document assigns, \nointerlineskip, an empty \hbox{}. And a
+  // paragraph ending in \\, whose empty last line was taken for a blank line
+  // and counted twice (20 pt). Worst attained 2026-10-26.
+  'amsart-abstract': { against_plain: true, tolerance: 0.009 },
+  'vbox-to': { against_plain: true, tolerance: 0.010 },
+  prevdepth: { against_plain: true, tolerance: 0.009 },
+  'par-newline': { against_plain: true, tolerance: 0.011 },
   // The same under hyperref, whose \caption leaves its anchor alone on a line
   // after a display (28.6 pt lost) or after a full-width box and a line end
   // (12 pt): floats, so not against plain. Worst attained 2026-10-25.

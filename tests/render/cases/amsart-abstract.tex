@@ -1,0 +1,20 @@
+% amsart's abstract: a \vtop of height zero on the main list, then the class's \prevdepth\z@ – the space above the abstract and below it is TeX's, not the lines'.
+\documentclass{amsart}
+\begin{document}
+\title{A title for the abstract to follow}
+\author{An Author}
+\begin{abstract}
+An abstract long enough to fill a line of the text width and then some more
+words to wrap onto a second and a third line at the narrow width, ending
+with a deep descender: why.
+\end{abstract}
+\maketitle
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\thispagestyle{empty}
+\section{Introduction}
+The main text, long enough to fill a line of the text width and then some
+more words for a second line, and a third one at the narrow width, quickly.
+
+A second paragraph of the main text, which follows the first at the usual
+distance, and which ends with a descender: gladly.
+\end{document}

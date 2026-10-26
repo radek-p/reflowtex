@@ -7,6 +7,8 @@ import type { BoxNode, FontTable, GlyphMetrics, GlueNode, TexNode, ViewerFont } 
 
 export const ZOOM         = 2;
 export const SP_TO_PX     = ZOOM / 65536;
+// TeX's \prevdepth that sets no interline glue (ignore_depth, -1000pt), in sp
+export const IGNORE_DEPTH_SP = -65536000;
 // The nodes a line break put at a line's end – a discretionary's pre-break
 // text (breaker.ts) – and what they are: 'drop', the hyphen of a word broken
 // there, no part of the text; 'keep', a hyphen the author typed ("well-" of

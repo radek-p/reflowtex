@@ -72,7 +72,11 @@ Ordinary interline leading (the per-line baselineskip glue) is *not* emitted as
 each paragraph records TeX's `\baselineskip`, `\lineskip`, and `\lineskiplimit`,
 and the renderer applies TeX's baseline-to-baseline rule as it stacks the
 re-broken lines – so lines land at exactly the LaTeX distance, and a heading sits
-the LaTeX distance above its body regardless of its descender depth.
+the LaTeX distance above its body regardless of its descender depth. Where TeX
+set that glue from a `\prevdepth` that is not the depth of the line above – one
+the document assigned, `\nointerlineskip`, the edges of a `\vbox` or `\vtop` whose
+lines the walk takes into the stream – the paragraph item carries it as
+`prev_depth`, and the renderer applies the rule with it.
 
 Node types: `glyph`, `glue`, `kern`, `rule`, `hlist`, `vlist`, `disc`, `penalty`,
 `math`, `picture`. Children hang off `children` / `pre` / `post` / `replace` /

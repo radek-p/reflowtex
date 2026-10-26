@@ -1,0 +1,24 @@
+% Interline glue that is not the lines' own: a \prevdepth the document assigns, \nointerlineskip, and an empty \hbox{} or \null in vertical mode between paragraphs.
+\documentclass{article}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+A first paragraph, long enough to fill a line of the text width and then a
+few more words, with a descender to end on: quickly.
+\par\prevdepth=0pt
+A paragraph after \verb|\prevdepth=0pt|, as a class sets it after a box, long
+enough to break onto a second line of the column.
+\par\prevdepth=.3\baselineskip
+A paragraph after \verb|\prevdepth=.3\baselineskip|, as a framed box sets it,
+long enough to break onto a second line of the column, gladly.
+\par\nointerlineskip
+A paragraph after \verb|\nointerlineskip|, which sets no glue between the
+lines above and this one, long enough to break onto a second line.
+\par\hbox{}
+A paragraph after an empty \verb|\hbox{}| in vertical mode, which TeX stacks as
+a box of its own, long enough to break onto a second line, gladly.
+
+\null
+A paragraph after \verb|\null| alone in vertical mode, long enough to break
+onto a second line of the column, which ends the page.
+\end{document}

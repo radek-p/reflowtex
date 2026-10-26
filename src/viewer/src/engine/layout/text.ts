@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { buildBreakCandidates, kpBreak } from '../breaker.ts';
-import { HL_ALIGNMENT, SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
+import { HL_ALIGNMENT, IGNORE_DEPTH_SP, SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
 import { mergeWidgetRuns } from '../../host/widgets.ts';
 import type { BoxNode, ContentItem, Doc, FontTable, Paragraph, TexNode } from '../model.ts';
@@ -163,7 +163,7 @@ export function segmentsOf(doc: Doc): Segments {
             // scroll box, and a shared one would let an oversized figure drag
             // perfectly-fitting text out of view with it.
             const fig: TextSegment = { kind: 'text', isFigure: true,
-                          items: [{ index: item.para!, para }], gapBefore: gap, vspace: vsp };
+                          items: [{ index: item.para!, para, prevDepth: item.prev_depth }], gapBefore: gap, vspace: vsp };
             segs.push(fig);
             own(fig, anchorIdsOf(para, para.nodes));
             text = null; gap = 0; vsp = null;
@@ -175,7 +175,7 @@ export function segmentsOf(doc: Doc): Segments {
         // the paragraph starts a new segment whose gapBefore reproduces exactly
         // the space TeX asked for (segment boxes stack baseline-to-baseline).
         if (!text || gap) { text = { kind: 'text', items: [], gapBefore: gap, vspace: vsp }; segs.push(text); vsp = null; }
-        text.items.push({ index: item.para!, para, vspace: vsp });   // a gap of 0 within the run
+        text.items.push({ index: item.para!, para, vspace: vsp, prevDepth: item.prev_depth });   // a gap of 0 within the run
         own(text, anchorIdsOf(para, para.nodes));
         gap = 0; vsp = null;
     }
@@ -253,7 +253,7 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
     // segment W is never read (only isFigure's mount logic consults it).
     let maxRightPx = columnPx;
 
-    for (const { index, para } of seg.items) {
+    for (const { index, para, prevDepth } of seg.items) {
         itemStarts.push(lines.length);
         // A paragraph holding a box set to the measure (a tabular*, a figure
         // scaled to \linewidth) carries rates: its nodes follow this width.
@@ -279,6 +279,10 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
             lskip:      (para.lineskip || 0) * SP_TO_PX,
             lskiplimit: (para.lineskiplimit || 0) * SP_TO_PX,
         } : null;
+        // and for its first line the \prevdepth TeX set the glue above from
+        let thisMeta: LineMeta | null = lineMeta && prevDepth != null
+            ? { ...lineMeta, prevDepth: prevDepth <= IGNORE_DEPTH_SP ? -Infinity : prevDepth * SP_TO_PX }
+            : lineMeta;
 
         // A list item's indent is a fixed measure (\leftmargin), so it stays
         // put and the text column narrows around it. The item's label hangs a
@@ -402,7 +406,8 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
             maxRightPx = Math.max(maxRightPx, x0 + indentPx + natPx);
             lines.push(ln);
             lrp.push({ ratio, er, x0: x0 + indentPx, fillRatio, fillOrder });
-            meta.push(lineMeta);
+            meta.push(thisMeta);
+            thisMeta = lineMeta;
         }
     }
     return { lines, lrp, meta, itemStarts, W: Math.ceil(maxRightPx),

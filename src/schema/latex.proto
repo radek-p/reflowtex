@@ -357,6 +357,13 @@ message ContentItem {
 
   // anchorpoint: 1-based index into Document.anchors.
   optional uint32 anchor = 12;
+  // paragraph: the \prevdepth TeX set the interline glue above its first line
+  // from (sp), where that is not the depth of the item above it: one the
+  // document assigned, a box's own depth below it, or -1000pt (or less) for
+  // no interline glue at all (\nointerlineskip, after a rule, the first line
+  // in a box). The viewer redoes the glue from it in place of the depth of
+  // the item above. Absent, it is that depth.
+  optional int32 prev_depth = 34;
   // stream: 1-based index into Document.streams.
   optional uint32 stream = 13;
   // display: the display as MathML (display="block"). An amsmath alignment

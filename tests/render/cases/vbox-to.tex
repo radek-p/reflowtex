@@ -1,0 +1,22 @@
+% A \vbox to a fixed height on the main list, with fil glue inside, as a title box at the top of the page and between paragraphs: walked into, its glue keeps TeX's setting and its edges TeX's interline glue. (Its lines are as many at every width: the box does not absorb a line more or less.)
+\documentclass[11pt]{article}
+\newlength\titlebox \setlength\titlebox{11\baselineskip}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+\vbox to \titlebox{\hsize\textwidth \linewidth\hsize \vskip 0.125in minus 0.125in \centering
+ {\Large\bfseries A Title in the Box \par} \vskip 0.2in plus 1fil minus 0.1in
+ \hbox to \linewidth{\large\hfil An Author\hfil}
+ \vskip 0.3in plus 2fil minus 0.1in}
+
+A first paragraph after the box, long enough to fill a line of the text width
+and then some more words, with a descender to end on: quickly.
+
+\vbox to 6\baselineskip{\hsize\textwidth
+ Text at the top of a second box.\par
+ \vfil
+ Text at the foot of the box, after its fil glue.\par}
+
+A last paragraph after the second box, long enough to fill a line of the
+text width and then some more words.
+\end{document}

@@ -14,7 +14,8 @@ import type { Params } from '../../runtime/params.ts';
 // ── Segments ───────────────────────────────────────────────────────────────
 
 /** A paragraph of a text segment, by its 1-based index in the document. */
-export interface TextItem { index: number; para: Paragraph; vspace?: ContentItem | null }
+/** A paragraph of a text segment; prevDepth is its item's prev_depth (sp). */
+export interface TextItem { index: number; para: Paragraph; vspace?: ContentItem | null; prevDepth?: number }
 /** A row of a display segment, and the space above it (px). */
 export interface DisplayRow { item: ContentItem; gap: number; vspace?: ContentItem | null }
 
@@ -67,8 +68,10 @@ export interface Line {
 /** How a line is set: its glue ratio, expansion, left edge (px) and the
  *  ratio of its infinite fill, if it has one with room to spare. */
 export interface LinePlacement { ratio: number; er: number; x0: number; fillRatio?: number; fillOrder?: number }
-/** TeX's interline parameters, in px. */
-export interface LineMeta { bskip: number; lskip: number; lskiplimit: number }
+/** TeX's interline parameters, in px; on a paragraph's first line, the depth
+ *  TeX set the glue above it from where that is not the line above's
+ *  (prevDepth; -Infinity: no glue, TeX's \prevdepth of -1000pt). */
+export interface LineMeta { bskip: number; lskip: number; lskiplimit: number; prevDepth?: number }
 /** A glyph's or box's extent on a line (px), for collision leading. */
 export interface InkItem { x1: number; x2: number; h: number; d: number }
 /** TeX's \predisplaysize from a line (sp) and the quad of its font. */

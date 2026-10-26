@@ -60,19 +60,21 @@ export function minRequiredAdvance(upper: InkItem[], lower: InkItem[]): number {
     return req;
 }
 
-// TeX's interline spacing rule, in px. Given the previous line's depth and this
+// TeX's interline glue (§679), in px. Given the previous line's depth and this
 // line's ascent, and the paragraph's \baselineskip / \lineskip / \lineskiplimit
-// (all px), return the baseline-to-baseline advance TeX would use: normally the
-// baselineskip, but when the two lines are tall enough that the baselineskip glue
-// would fall below lineskiplimit, the fixed lineskip instead. This is exactly the
-// rule LaTeX applies, so lines land at the LaTeX distance.
-export function texInterlineAdvance(prevDepth: number, thisAscent: number, m: LineMeta): number {
-    return (m.bskip - prevDepth - thisAscent >= m.lskiplimit)
-        ? m.bskip
-        : prevDepth + thisAscent + m.lskip;
-}
-// The glue portion of that advance (advance minus the two abutting extents), used
-// when segments are stacked as boxes with a margin between them.
+// (all px): normally the baselineskip less the two, but when the two lines are
+// tall enough that it would fall below lineskiplimit, the fixed lineskip
+// instead. This is exactly the rule LaTeX applies, so lines land at the LaTeX
+// distance. TeX takes the depth from \prevdepth, which is the line above's
+// unless m.prevDepth says otherwise; at -Infinity (-1000pt) it sets no glue.
 export function texInterlineGlue(prevDepth: number, thisAscent: number, m: LineMeta): number {
-    return texInterlineAdvance(prevDepth, thisAscent, m) - prevDepth - thisAscent;
+    const d = m.prevDepth ?? prevDepth;
+    if (d === -Infinity) return 0;
+    const b = m.bskip - d - thisAscent;
+    return b >= m.lskiplimit ? b : m.lskip;
+}
+// The baseline-to-baseline advance that gives: the glue and the two abutting
+// extents.
+export function texInterlineAdvance(prevDepth: number, thisAscent: number, m: LineMeta): number {
+    return prevDepth + texInterlineGlue(prevDepth, thisAscent, m) + thisAscent;
 }
