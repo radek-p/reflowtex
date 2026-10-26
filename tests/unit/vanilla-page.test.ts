@@ -22,3 +22,24 @@ test('the page loads the inspector only where it is installed', () => {
   assert.ok(renderPage({ ...o, inspector: true }).includes('<script src="inspector/inspector.js">'));
   assert.ok(!renderPage(o).includes('inspector/inspector.js"'), 'no inspector: no script tag for it');
 });
+
+// The viewer's log is configured by a JSON island (#latex-log-config), which
+// the page has only when the build was given a configuration, and then with
+// only what was given: the viewer has its defaults for the rest.
+test('the page carries the viewer\'s log configuration only when given one', () => {
+  const o = { title: 't', blocks: [], fontMap: {}, sourceUrl: 'https://example.org/src', fontsBase: 'fonts/' };
+  const island = (page: string) => {
+    const m = /<script id="latex-log-config" type="application\/json">(.*?)<\/script>/.exec(page);
+    return m ? JSON.parse(m[1]) : null;
+  };
+  assert.ok(!renderPage(o).includes('id="latex-log-config"'), 'none without a configuration');
+  assert.deepEqual(island(renderPage({ ...o, log: { alert: 'warning', show: ['error', 'missing-char'] } })),
+    { alert: 'warning', show: ['error', 'missing-char'] });
+  assert.deepEqual(island(renderPage({ ...o, log: { alert: 'none' } })), { alert: 'none' });
+  assert.deepEqual(island(renderPage({ ...o, log: { show: [] } })), { show: [] }, 'an empty list shows nothing: it is kept');
+  // after the font map, and nothing in it can end its script element
+  const page = renderPage({ ...o, log: { show: ['</script><b>'] } });
+  assert.ok(page.indexOf('id="latex-log-config"') > page.indexOf('id="latex-font-map"'));
+  assert.ok(!page.includes('</script><b>'));
+  assert.deepEqual(island(page), { show: ['</script><b>'] });
+});

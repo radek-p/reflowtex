@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bundleFiles, ensureBundles } from '../../src/pipeline/bundles.ts';
 import { installViewer } from '../../src/pipeline/site.ts';
+import { Log } from '../../src/shared/log.ts';
 
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -31,25 +32,25 @@ test('no generated file is tracked by git', () => {
 });
 
 test('a bundle missing or built from other sources is built again; one up to date is not', () => {
-  ensureBundles({ log: () => {} });
-  assert.deepEqual(ensureBundles({ log: () => {} }), [], 'all up to date');
+  ensureBundles({ log: new Log('pipeline') });
+  assert.deepEqual(ensureBundles({ log: new Log('pipeline') }), [], 'all up to date');
   const viewer = join(REPO, 'src/viewer/latex-viewer.js');
   // one built from other sources: its header's stamp does not match
   writeFileSync(viewer, readFileSync(viewer, 'utf8').replace(/sources sha256 [0-9a-f]+/, 'sources sha256 0'));
-  assert.deepEqual(ensureBundles({ log: () => {} }), ['viewer']);
+  assert.deepEqual(ensureBundles({ log: new Log('pipeline') }), ['viewer']);
   // a newer file is no reason: what counts is what it was built from
   const t = new Date(Date.now() + 60000);
   utimesSync(join(REPO, 'src/viewer/src/index.ts'), statSync(join(REPO, 'src/viewer/src/index.ts')).atime, t);
-  assert.deepEqual(ensureBundles({ log: () => {} }), []);
+  assert.deepEqual(ensureBundles({ log: new Log('pipeline') }), []);
   rmSync(join(REPO, 'src/companion/companion.js'));
-  assert.deepEqual(ensureBundles({ log: () => {} }), ['companion']);
+  assert.deepEqual(ensureBundles({ log: new Log('pipeline') }), ['companion']);
   assert.match(readFileSync(viewer, 'utf8').split('\n')[1], /version \S+; sources sha256 [0-9a-f]{64}/);
 });
 
 test('a site gets the inspector as built, not its sources', () => {
   const out = mkdtempSync(join(tmpdir(), 'rtx-install-'));
   try {
-    installViewer(out, { inspector: true, log: () => {} });
+    installViewer(out, { inspector: true, log: new Log('pipeline') });
     for (const f of ['latex-viewer.js', 'protobuf.min.js', 'companion/companion.js', 'inspector/inspector.js', 'inspector/agent.js',
                      'inspector/inspector.css', 'inspector/panel/app.js', 'inspector/vendor/preact.js'])
       assert.ok(existsSync(join(out, f)), f);
@@ -63,17 +64,17 @@ test('a site gets the inspector as built, not its sources', () => {
 // The bundles import src/shared/ too, which the stamp left out: a change
 // there left every bundle stale, built from the old code.
 test('a change in src/shared builds every bundle again', () => {
-  ensureBundles({ log: () => {} });
+  ensureBundles({ log: new Log('pipeline') });
   const probe = join(REPO, 'src/shared/zz-stamp-probe.ts');
   try {
     writeFileSync(probe, '// SPDX-License-Identifier: AGPL-3.0-or-later\nexport {};\n');
-    assert.deepEqual(ensureBundles({ log: () => {} }).sort(), ['companion', 'inspector', 'viewer']);
+    assert.deepEqual(ensureBundles({ log: new Log('pipeline') }).sort(), ['companion', 'inspector', 'viewer']);
   } finally { rmSync(probe, { force: true }); }
-  assert.deepEqual(ensureBundles({ log: () => {} }).sort(), ['companion', 'inspector', 'viewer'], 'and again once it is gone');
+  assert.deepEqual(ensureBundles({ log: new Log('pipeline') }).sort(), ['companion', 'inspector', 'viewer'], 'and again once it is gone');
 });
 
 test("the panel's modules import only each other and Preact; what they use of src/shared is in them", () => {
-  ensureBundles({ only: ['inspector'], log: () => {} });
+  ensureBundles({ only: ['inspector'], log: new Log('pipeline') });
   const dir = join(REPO, 'src/inspector/panel');
   for (const f of readdirSync(dir).filter(f => f.endsWith('.js'))) {
     const code = readFileSync(join(dir, f), 'utf8');

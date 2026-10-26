@@ -40,6 +40,7 @@ import { readSerializerOutput } from '../../src/pipeline/nodes.ts';
 import { a11yLayerFromBytes } from '../../src/pipeline/a11y.ts';
 import { listBackends, formatBackends } from '../../src/pipeline/backend/registry.ts';
 import { installViewer, passesFor, REF_PASSES, schemaBase64, pyJsonDumps, jsonSorted } from '../../src/pipeline/site.ts';
+import { consoleLog } from '../../src/shared/log.ts';
 
 // Two ways to write a block:
 //   inline     {{< latex [attrs] >}} …LaTeX… {{< /latex >}}
@@ -80,7 +81,10 @@ if (o.help) {
        node integrations/hugo/prebuild.ts --list-backends [--json]`);
   process.exit(0);
 }
-const fail: (msg: string) => never = msg => { console.error(`ERROR: ${msg}`); process.exit(1); };
+// The build's messages: the pipeline's and these, each a record with its
+// code, printed as lines (stdout; errors on stderr).
+const log = consoleLog();
+const fail: (msg: string) => never = msg => { log.error('build-error', `ERROR: ${msg}`); process.exit(1); };
 
 const site = resolve(positionals[0] ?? '.');
 const contentDir = join(site, 'content'), preambleDir = join(site, 'latex-preambles'), colorMapDir = join(site, 'latex-color-maps');
@@ -95,11 +99,11 @@ mkdirSync(dataDir, { recursive: true });
 let pipe: Pipeline;
 try {
   pipe = new Pipeline({ buildRoot, fontsDir: join(site, 'static', 'fonts'),
-    localFontsDir: existsSync(localFonts) ? localFonts : null, searchDirs: demosDirs, backend: o.backend });
+    localFontsDir: existsSync(localFonts) ? localFonts : null, searchDirs: demosDirs, backend: o.backend, log });
 } catch (e) { fail((e as Error).message); }
 writeFileSync(join(site, 'data', 'latex_schema.json'), JSON.stringify({ schema_b64: schemaBase64() }, null, 2));
 // the viewer's assets, so the partial loads them from the site root
-installViewer(join(site, 'static'));
+installViewer(join(site, 'static'), { log });
 
 // ── Scanning ────────────────────────────────────────────────────────────────
 // Preambles given by path (preamble="….tex"): by that path, their text.
@@ -218,7 +222,7 @@ for (const name of [...colorMapNames].sort()) {
   catch (e) { fail(`color-map "${name}" (${f}) is not valid JSON: ${(e as Error).message}`); }
 }
 writeFileSync(join(site, 'data', 'latex_color_maps.json'), jsonSorted(colorMaps));
-if (!blocks.size && !batches.size) { console.log('No {{< latex >}} blocks found.'); process.exit(0); }
+if (!blocks.size && !batches.size) { log.info('no-blocks', 'No {{< latex >}} blocks found.'); process.exit(0); }
 
 // ── Compiling ───────────────────────────────────────────────────────────────
 // Each block's data records the hash of its content and of the toolchain
@@ -254,18 +258,23 @@ const current = (key: string) => {
 
 const stale: { key: string; content: string; preamble: string; name: string; passes: number }[] = [];
 for (const [key, b] of blocks) {
-  if (!o.force && storedHash(key) === key) { current(key); console.log(`  ${b.name} (${key}): up to date`); continue; }
+  if (!o.force && storedHash(key) === key) { current(key); log.info('block-up-to-date', `  ${b.name} (${key}): up to date`, { name: b.name, key }); continue; }
   stale.push({ key, ...b, passes: passesFor(b.content) });
 }
 let failed = 0;
 if (stale.length) {
-  console.log(`reflowtex: compiling ${stale.length} block(s)…`);
+  log.info('compile-start', `reflowtex: compiling ${stale.length} block(s)…`, { blocks: String(stale.length) });
   const { results, failures } = await pipe.compileMany(stale, Number(o.jobs));
   for (const [key, bytes] of results) {
     writeBlock(key, bytes, key);
-    console.log(`  ${blocks.get(key)!.name} (${key}): done (${bytes.length} bytes)`);
+    const name = blocks.get(key)!.name;
+    log.info('block-compiled', `  ${name} (${key}): done (${bytes.length} bytes)`, { name, key, bytes: String(bytes.length) });
   }
-  for (const [key, e] of failures) { console.error(`ERROR: ${blocks.get(key)!.name} (${key}):\n${e.message}`); failed++; }
+  for (const [key, e] of failures) {
+    const name = blocks.get(key)!.name;
+    log.error('block-failed', `ERROR: ${name} (${key}):\n${e.message}`, { name, key, error: e.message });
+    failed++;
+  }
 }
 
 // Batches: every block with the same batch="…", in weight order (then page
@@ -287,20 +296,24 @@ for (const [bname, all] of [...batches].sort((a, b) => (a[0] < b[0] ? -1 : a[0] 
   liveBatches.add(bhash);
   if (!o.force && parts.every(p => storedHash(p.key) === bhash)) {
     for (const p of parts) current(p.key);
-    console.log(`  batch "${bname}" (${parts.length} part(s)): up to date`);
+    log.info('batch-up-to-date', `  batch "${bname}" (${parts.length} part(s)): up to date`, { batch: bname, parts: String(parts.length) });
     continue;
   }
   const passes = parts.some(p => passesFor(p.content) > 1) ? REF_PASSES : 1;
-  console.log(`reflowtex: compiling batch "${bname}" (${parts.length} part(s), ${passes} pass(es))…`);
+  log.info('batch-compile-start', `reflowtex: compiling batch "${bname}" (${parts.length} part(s), ${passes} pass(es))…`,
+    { batch: bname, parts: String(parts.length), passes: String(passes) });
   try {
     const blobs = await pipe.compileBatch(parts.map(p => ({ key: p.key, content: p.content, name: p.name })), preamble,
       { key: bhash, passes, name: `batch "${bname}"` });
     for (const [key, bytes] of blobs) writeBlock(key, bytes, bhash);
-    console.log(`  batch "${bname}": done (${[...blobs.values()].map(b => `${b.length} bytes`).join(', ')})`);
-  } catch (e) { console.error(`ERROR: batch "${bname}":\n${(e as Error).message}`); failed++; }
+    log.info('batch-compiled', `  batch "${bname}": done (${[...blobs.values()].map(b => `${b.length} bytes`).join(', ')})`, { batch: bname });
+  } catch (e) {
+    log.error('batch-failed', `ERROR: batch "${bname}":\n${(e as Error).message}`, { batch: bname, error: (e as Error).message });
+    failed++;
+  }
 }
 
-console.log('font-patch:');
+log.info('build-step', 'font-patch:', { step: 'font-patch' });
 await pipe.finishFonts({ subset: !o['no-font-subset'] });
 // original → served font file (a modified font is served renamed and
 // hashed); the viewer partial embeds this so @font-face fetches the right file
@@ -316,19 +329,20 @@ for (const [key, page] of [...blockPages].sort((a, b) => (a[0] < b[0] ? -1 : 1))
   for (const label of (readSerializerOutput(readFileSync(f, 'utf8')).anchors as string[] | undefined) ?? []) linkMap[label] ??= page;
 }
 writeFileSync(join(site, 'data', 'latex_link_map.json'), jsonSorted(linkMap));
-console.log(`link-map: ${Object.keys(linkMap).length} label(s) across ${new Set(Object.values(linkMap)).size} page(s)`);
+const labels = Object.keys(linkMap).length, pages = new Set(Object.values(linkMap)).size;
+log.info('link-map', `link-map: ${labels} label(s) across ${pages} page(s)`, { labels: String(labels), pages: String(pages) });
 
 if (o.prune) {
-  console.log('prune:');
+  log.info('build-step', 'prune:', { step: 'prune' });
   const live = new Set([...blocks.keys(), ...[...batches.values()].flat().map(p => p.key), ...liveBatches]);
   let removed = 0;
   for (const f of readdirSync(dataDir).sort()) {
     const stem = f.replace(/\.json$/, '');
-    if (f.endsWith('.json') && HASH_RE.test(stem) && !live.has(stem)) { rmSync(join(dataDir, f)); removed++; console.log(`  prune: data/latex_blocks/${f}`); }
+    if (f.endsWith('.json') && HASH_RE.test(stem) && !live.has(stem)) { rmSync(join(dataDir, f)); removed++; log.info('pruned', `  prune: data/latex_blocks/${f}`, { path: `data/latex_blocks/${f}` }); }
   }
   if (existsSync(buildRoot)) for (const d of readdirSync(buildRoot).sort()) {
-    if (HASH_RE.test(d) && !live.has(d) && statSync(join(buildRoot, d)).isDirectory()) { rmSync(join(buildRoot, d), { recursive: true }); removed++; console.log(`  prune: ${basename(buildRoot)}/${d}/`); }
+    if (HASH_RE.test(d) && !live.has(d) && statSync(join(buildRoot, d)).isDirectory()) { rmSync(join(buildRoot, d), { recursive: true }); removed++; log.info('pruned', `  prune: ${basename(buildRoot)}/${d}/`, { path: `${basename(buildRoot)}/${d}/` }); }
   }
-  console.log(`  prune: ${removed} stale entr${removed === 1 ? 'y' : 'ies'} removed`);
+  log.info('prune-done', `  prune: ${removed} stale entr${removed === 1 ? 'y' : 'ies'} removed`, { removed: String(removed) });
 }
-if (failed) { console.error(`${failed} block(s) or batch(es) failed; the others were written`); process.exit(1); }
+if (failed) { log.error('build-failed', `${failed} block(s) or batch(es) failed; the others were written`, { failed: String(failed) }); process.exit(1); }

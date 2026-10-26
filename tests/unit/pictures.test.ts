@@ -14,6 +14,7 @@ import { DVISVGM_OPTIMIZE, bitmapPicture, convertPictures, pictureFormat, rewrit
 import { Pipeline } from '../../src/pipeline/pipeline.ts';
 import { forEachNode, readSerializerOutput, type SerializerOutput, type TexNode } from '../../src/pipeline/nodes.ts';
 import { PictureError } from '../../src/pipeline/errors.ts';
+import { Log } from '../../src/shared/log.ts';
 
 const FIXTURE = fileURLToPath(new URL('fixtures/tikz-node-labels.pdf', import.meta.url));
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
@@ -112,7 +113,7 @@ test('a <use> of a symbol gets the symbol\'s size; other uses are left alone', (
 });
 
 const tmpPipeline = (root: string, searchDirs: string[]) =>
-  new Pipeline({ buildRoot: join(root, 'build'), fontsDir: join(root, 'fonts'), searchDirs, mathml: false, log: () => {} });
+  new Pipeline({ buildRoot: join(root, 'build'), fontsDir: join(root, 'fonts'), searchDirs, mathml: false, log: new Log('pipeline') });
 const picturesOf = (root: string, key: string) => {
   const data = readSerializerOutput(readFileSync(join(root, 'build', key, 'output.json'), 'utf8'));
   const nodes: TexNode[] = [];

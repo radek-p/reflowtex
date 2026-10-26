@@ -16,6 +16,7 @@ import { readTfm } from '../../src/pipeline/fonts/tfm.ts';
 import { kpsewhich } from '../../src/pipeline/fonts/type1.ts';
 import { Fonts } from '../../src/pipeline/fonts/fonts.ts';
 import { slotCode } from '../../src/shared/glyph-text.ts';
+import { Log } from '../../src/shared/log.ts';
 
 // ── The PK reader ───────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ test('a font with no Type 1 outline gets its METAFONT bitmaps; one with neither,
     assert.match(none.reason, /no Type 1 outline of rtxnoface10.*; no METAFONT source rtxnoface10\.mf/);
     // blocks restored from a cache name the file; with it gone, it is made again, the same
     rmSync(join(out, got.face.file));
-    new Fonts(out, null, work).provision([{ name: 'logo10', face: got.face }], () => {});
+    new Fonts(out, null, work).provision([{ name: 'logo10', face: got.face }], new Log('pipeline'));
     assert.ok(readFileSync(join(out, got.face.file)).length > 0);
   } finally { rmSync(out, { recursive: true, force: true }); rmSync(work, { recursive: true, force: true }); }
 });

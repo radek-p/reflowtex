@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
 import { a11yLayer, type LayerDocument } from '../../src/pipeline/a11y.ts';
+import { Log } from '../../src/shared/log.ts';
 
 type Node = { type: string; char?: number; font?: number; color?: string; link?: number; stream?: number; mathml?: unknown;
               width?: number; children?: Node[]; replace?: Node[]; pre?: Node[]; post?: Node[] };
@@ -27,7 +28,7 @@ type Output = { fonts: Record<string, unknown>; paragraphs: { nodes: Node[] }[];
 process.env.REFLOWTEX_NO_AUTOINSTALL ??= '1';
 
 const root = mkdtempSync(join(tmpdir(), 'reflowtex-capture-'));
-const pipe = new Pipeline({ buildRoot: join(root, 'build'), fontsDir: join(root, 'fonts'), log: () => {} });
+const pipe = new Pipeline({ buildRoot: join(root, 'build'), fontsDir: join(root, 'fonts'), log: new Log('pipeline') });
 
 /** A snippet's output.json, as the pipeline leaves it; compiled once per run.
  *  LuaTeX reports an error inside a callback as a warning and goes on without
@@ -384,7 +385,7 @@ const OLD = luammlVersion < 0.8 && 'luamml older than 0.8 (TeX Live 2025): taggi
 const luamml09 = luammlVersion >= 0.9;
 const LUAMML = '\\DocumentMetadata{tagging=on}\n\\tagpdfsetup{math/mathml/luamml/load=true}';
 
-const noMathml = new Pipeline({ buildRoot: join(root, 'build-nomathml'), fontsDir: join(root, 'fonts'), log: () => {}, mathml: false });
+const noMathml = new Pipeline({ buildRoot: join(root, 'build-nomathml'), fontsDir: join(root, 'fonts'), log: new Log('pipeline'), mathml: false });
 
 /** The same document compiled with the MathML capture switched off. */
 async function captureWithoutMathml(body: string, preamble = '', passes = 1): Promise<Output> {

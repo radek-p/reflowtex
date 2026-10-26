@@ -26,6 +26,28 @@
 <script id="latex-font-map" type="application/json">{{ . | jsonify | safeJS }}</script>
 {{ end }}
 
+{{/* The viewer's log, from the site's params: reflowtexLogAlert, the level
+     from which its messages go to the browser's console and as a
+     reflowtex:log event (none, error, warning, info or debug), and
+     reflowtexLogShow, which are shown to readers (a list, or a string
+     separated by commas or spaces, of codes such as font-load-failed and of
+     level names, meaning that level and above; [] or "none" shows nothing).
+     Only what the site sets: the viewer has its defaults for the rest, and
+     with neither set there is no #latex-log-config. */}}
+{{ $logConfig := dict }}
+{{ with site.Params.reflowtexLogAlert }}
+{{ if not (in (slice "none" "error" "warning" "info" "debug") .) }}
+{{ errorf "params.reflowtexLogAlert is one of none, error, warning, info or debug, not %q" . }}
+{{ end }}
+{{ $logConfig = merge $logConfig (dict "alert" .) }}
+{{ end }}
+{{ if isset site.Params "reflowtexlogshow" }}
+{{ $logConfig = merge $logConfig (dict "show" site.Params.reflowtexLogShow) }}
+{{ end }}
+{{ with $logConfig }}
+<script id="latex-log-config" type="application/json">{{ . | jsonify | safeJS }}</script>
+{{ end }}
+
 {{/* Colour maps: name → {colors, tints}, only for names some block's
      color-map="…" actually referenced (prebuild.py reads them from
      <site>/latex-color-maps/<name>.json). Entirely optional – a block with no

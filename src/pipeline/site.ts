@@ -8,6 +8,7 @@ import { join, relative } from 'node:path';
 import { protoText } from './schema.ts';
 import { a11yLayerFromBytes } from './a11y.ts';
 import { ensureBundles } from './bundles.ts';
+import { consoleLog, type Log } from '../shared/log.ts';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));
 const VIEWER_DIR = join(SRC, 'viewer');
@@ -53,7 +54,7 @@ export const escapeHtml = (s: string): string =>
  *  missing or stale (bundles.ts). Ship it as latex-viewer.js: the DOM
  *  contract, the fonts resolved relative to the script's URL and the ?v=
  *  cache-buster all key off that name. */
-export function viewerScript(log: (s: string) => void = console.log): string {
+export function viewerScript(log: Log = consoleLog()): string {
   ensureBundles({ only: ['viewer'], log });
   return join(VIEWER_DIR, 'latex-viewer.min.js');
 }
@@ -65,7 +66,7 @@ export const INSPECTOR_UNSHIPPED = new Set(['src', 'README.md']);
 /** Copy the viewer (and, if asked, the inspector: its script and what it loads
  *  from beside itself when opened – the built files, not its sources) into a
  *  site directory, each built first if it is missing or stale. */
-export function installViewer(outDir: string, { inspector = false, log = console.log }: { inspector?: boolean; log?: (s: string) => void } = {}): void {
+export function installViewer(outDir: string, { inspector = false, log = consoleLog() }: { inspector?: boolean; log?: Log } = {}): void {
   ensureBundles({ log });
   mkdirSync(outDir, { recursive: true });
   copyFileSync(viewerScript(log), join(outDir, 'latex-viewer.js'));

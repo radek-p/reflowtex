@@ -19,6 +19,7 @@ import { BackendUnavailable } from '../../src/pipeline/errors.ts';
 import { CAPABILITY_NAMES, supports, type CapabilityName } from '../../src/pipeline/backend/capabilities.ts';
 import { backendIds, createBackend } from '../../src/pipeline/backend/registry.ts';
 import type { CaptureBackend, GlyphSource } from '../../src/pipeline/backend/types.ts';
+import { Log } from '../../src/shared/log.ts';
 
 // Nothing is fetched while tests run (docker/test-packages.txt has what the
 // fixtures load beyond the pipeline's own list).
@@ -70,7 +71,7 @@ for (const id of ids) {
 
     if (!available.ok) {
       test('not available: selecting it fails clearly, and so does opening a document', async () => {
-        assert.throws(() => new Pipeline({ buildRoot: join(ROOT, id), fontsDir: join(ROOT, id, 'fonts'), backend: id, log: () => {} }),
+        assert.throws(() => new Pipeline({ buildRoot: join(ROOT, id), fontsDir: join(ROOT, id, 'fonts'), backend: id, log: new Log('pipeline') }),
           (e: Error) => e instanceof BackendUnavailable && e.message.includes('not available'));
         await assert.rejects(backend.open({ content: fixture('base'), preamble: '', dir: join(ROOT, id, 'x'), label: 'base',
           searchDirs: [], localFonts: [], mathml: false }), BackendUnavailable);
@@ -86,7 +87,7 @@ function conformance(id: string, backend: CaptureBackend): void {
   const caps = backend.capabilities;
   const claims = (c: CapabilityName) => supports(caps, c);
   const skip = (c: CapabilityName) => (claims(c) ? false : `${id} does not claim ${c}`);
-  const pipe = new Pipeline({ buildRoot: join(ROOT, id, 'build'), fontsDir: join(ROOT, id, 'fonts'), backend, log: () => {} });
+  const pipe = new Pipeline({ buildRoot: join(ROOT, id, 'build'), fontsDir: join(ROOT, id, 'fonts'), backend, log: new Log('pipeline') });
 
   /** A fixture compiled by the pipeline once: its bytes and its output.json. */
   const built = new Map<string, Promise<{ bytes: Uint8Array; data: SerializerOutput; key: string }>>();

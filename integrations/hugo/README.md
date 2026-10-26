@@ -129,6 +129,26 @@ has no MathML: its formulas are read as their text. Nothing is made up for
 it. luamml 0.8 or later (TeX Live 2026) is needed; older versions break
 amsmath's alignments with tagging on.
 
+### The viewer's log: what is alerted and shown
+
+The viewer keeps a log of what it finds on a page (a font that failed to
+load, a character no font has). Two params choose what is done with it:
+
+```toml
+[params]
+reflowtexLogAlert = "warning"                  # none, error, warning, info or debug
+reflowtexLogShow = ["error", "missing-char"]   # or a string: "error, missing-char"
+```
+
+- `reflowtexLogAlert`: messages at this level or above go to the browser's
+  console and as a `reflowtex:log` event (the viewer's default: `error`).
+- `reflowtexLogShow`: which messages readers are shown on the page – codes
+  (`font-load-failed`, `missing-char`) or level names (that level and above);
+  `[]` or `"none"` shows nothing (the viewer's default: `font-load-failed`).
+
+The partial writes what is set into a `#latex-log-config` JSON island; a site
+that sets neither gets no island, and the viewer's defaults.
+
 ### Books in parts: `batch` and `weight`
 
 Blocks with the same `batch="name"` are compiled together as one LaTeX

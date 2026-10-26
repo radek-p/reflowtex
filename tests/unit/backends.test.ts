@@ -19,6 +19,7 @@ import {
   createBackend, listBackends, registerBackend, unregisterBackend, selectedBackendId, formatBackends, DEFAULT_BACKEND,
   type Capabilities, type CaptureBackend, type CaptureDocument, type CaptureRun,
 } from '../../src/pipeline/backend/index.ts';
+import { Log } from '../../src/shared/log.ts';
 import { logDiagnostics, fillTemplate } from '../../src/pipeline/backend/luatex.ts';
 import type { SerializerOutput } from '../../src/pipeline/nodes.ts';
 
@@ -51,7 +52,7 @@ test('choosing a backend: explicit, else REFLOWTEX_BACKEND, else luatex', () => 
 test('an unknown backend names the ones there are; an unavailable one says why, at once', () => {
   assert.throws(() => createBackend('nope'), (e: Error) => e instanceof UnknownBackend && /luatex, tectonic/.test(e.message));
   const dir = tmp();
-  assert.throws(() => new Pipeline({ buildRoot: dir, fontsDir: join(dir, 'f'), backend: 'tectonic', log: () => {} }),
+  assert.throws(() => new Pipeline({ buildRoot: dir, fontsDir: join(dir, 'f'), backend: 'tectonic', log: new Log('pipeline') }),
     (e: Error) => e instanceof BackendUnavailable && /Tectonic backend is not available in this build/.test(e.message));
 });
 
@@ -127,9 +128,11 @@ function memoryBackend(caps: Capabilities, make: (run: CaptureRun) => Serializer
 }
 
 const pipeline = (backend: CaptureBackend, o: { missingCapabilities?: 'error' | 'warn' } = {}) => {
-  const dir = tmp(), log: string[] = [];
-  return { pipe: new Pipeline({ buildRoot: dir, fontsDir: join(dir, 'fonts'), backend, log: l => log.push(l), ...o }), log };
+  const dir = tmp(), log = new Log('pipeline');
+  return { pipe: new Pipeline({ buildRoot: dir, fontsDir: join(dir, 'fonts'), backend, log, ...o }), log };
 };
+/** The pipeline's records, as `level code: message` lines (for messages on failure). */
+const lines = (log: Log) => log.records().map(r => `${r.level} ${r.code}:${r.message}`).join('\n');
 
 test('a backend given as an object compiles through the pipeline; its diagnostics are kept by key', async () => {
   const b = memoryBackend({}, () => output());
@@ -147,18 +150,23 @@ test('displays: sampled only when the backend can compile wider; else kept at th
   const a = pipeline(plain);
   await a.pipe.compile('\\[x\\]', '', { key: 'd1' });
   assert.equal(plain.runs.length, 1, 'no width samples asked of a backend without widthResampling');
-  assert.ok(a.log.some(l => /cannot compile at other widths; displays stay/.test(l)), a.log.join('\n'));
+  assert.ok(a.log.records().some(r => r.level === 'warning' && r.code === 'display-widths-unsupported' && r.details.block === 'd1' &&
+    /^  d1: warning: backend memory cannot compile at other widths; displays stay/.test(r.message)), lines(a.log));
 
   const modelled = memoryBackend({ singlePassDisplays: true, widthResampling: true }, () => output({ display: true, modelled: true }));
   const b = pipeline(modelled);
   await b.pipe.compile('\\[x\\]', '', { key: 'd2' });
   assert.equal(modelled.runs.length, 1, 'the backend modelled the displays: no samples');
-  assert.ok(!b.log.some(l => /warning/.test(l)));
+  assert.ok(!b.log.records().some(r => r.level === 'warning'), lines(b.log));
 
   const resampling = memoryBackend({ widthResampling: true }, r => output({ display: true, width: 300 * 65536 + r.widthExtraSp }));
   const c = pipeline(resampling);
   await c.pipe.compile('\\[x\\]', '', { key: 'd3' });
   assert.deepEqual(resampling.runs.map(r => r.widthExtraSp / 65536), [0, 128, 256], 'the document, then two wider samples');
+  // the build's lines are records of the log, each with its code, the line as printed its message
+  const stable = c.log.records().filter(r => r.code === 'display-model-stable');
+  assert.deepEqual(stable.map(r => [r.level, r.source, r.message, r.details]),
+    [['info', 'pipeline', '  d3: display model stable at 300, 428, 556 pt', { block: 'd3', widths: '300, 428, 556' }]], lines(c.log));
 });
 
 test('passes: asked of a backend only when it can run again', async () => {
@@ -176,10 +184,11 @@ test('a missing capability: an error where the result would be wrong, a warning 
     (e: Error) => e instanceof MissingCapability && /backend memory lacks pictures/.test(e.message));
   assert.equal(b.runs.length, 0, 'nothing compiled');
   await pipe.compile('x', '\\usepackage{microtype}', { key: 'm' });
-  assert.ok(log.some(l => /warning: backend memory lacks protrusion/.test(l)), log.join('\n'));
+  assert.ok(log.records().some(r => r.level === 'warning' && r.code === 'missing-capability' && r.details.capability === 'protrusion' &&
+    /warning: backend memory lacks protrusion/.test(r.message)), lines(log));
   const lenient = pipeline(b, { missingCapabilities: 'warn' });
   await lenient.pipe.compile('\\begin{tikzpicture}\\end{tikzpicture}', '', { key: 'p2' });
-  assert.ok(lenient.log.some(l => /warning: backend memory lacks pictures/.test(l)));
+  assert.ok(lenient.log.records().some(r => r.code === 'missing-capability' && /warning: backend memory lacks pictures/.test(r.message)), lines(lenient.log));
 });
 
 test('the first of several documents runs alone only for a backend that asks for it', async () => {

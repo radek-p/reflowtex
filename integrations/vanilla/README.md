@@ -35,6 +35,21 @@ A directory of LaTeX snippets:
 | `--title` | `Reflow TeX` | page `<title>` and heading |
 | `-j, --jobs` | `1` | snippets compiled in parallel |
 | `--local-fonts` | `<source>/fonts` if present | repo-shipped OTF fonts |
+| `--log-alert` | the viewer's: `error` | the viewer's messages at this level or above go to the browser's console and as a `reflowtex:log` event: `none`, `error`, `warning`, `info` or `debug` |
+| `--log-show` | the viewer's: `font-load-failed` | which of the viewer's messages readers are shown on the page: codes (`font-load-failed`, `missing-char`) or level names (that level and above), separated by commas or spaces; `none` shows nothing |
+
+### The viewer's log
+
+With `--log-alert` or `--log-show`, the page carries the viewer's log
+configuration, as a JSON island after `#latex-font-map`:
+
+```html
+<script id="latex-log-config" type="application/json">{"alert":"warning","show":["error","missing-char"]}</script>
+```
+
+(from `--log-alert warning --log-show error,missing-char`). A flag not given is
+left out of it, and the viewer uses its default; with neither, the page has no
+island at all.
 
 ## Output
 

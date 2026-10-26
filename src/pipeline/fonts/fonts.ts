@@ -36,7 +36,7 @@ import { subsetFont } from './subset.ts';
 import { convertType1, kpsewhich, MODIFIED_TAG } from './type1.ts';
 import { convertMetafont } from './metafont.ts';
 import { GLYPH_INDEX_PUA } from '../../shared/glyph-text.ts';
-import type { Warning } from '../../shared/log.ts';
+import type { Log, Warning } from '../../shared/log.ts';
 
 const hash8 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex').slice(0, 8);
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -96,7 +96,7 @@ export class Fonts {
   }
 
   /** Make sure the file of every font named is in the output directory. */
-  provision(fonts: Iterable<{ name: string; face: PipelineFace }>, log: (s: string) => void = console.log): void {
+  provision(fonts: Iterable<{ name: string; face: PipelineFace }>, log: Log): void {
     mkdirSync(this.outputDir, { recursive: true });
     const byFile = new Map<string, { name: string; face: FileFace }>();
     for (const f of fonts) {
@@ -113,7 +113,7 @@ export class Fonts {
       if (existsSync(dst)) continue;
       if (this.localDir && existsSync(join(this.localDir, file))) {
         writeAtomic(dst, readFileSync(join(this.localDir, file)));
-        log(`  font-provision: ${file} ← ${join(this.localDir, file)}`);
+        log.info('font-provision', `  font-provision: ${file} ← ${join(this.localDir, file)}`, { file, from: join(this.localDir, file) });
         continue;
       }
       switch (face.kind) {
@@ -123,15 +123,15 @@ export class Fonts {
           // gives the same name; a different name means it changed under the
           // cached blocks.
           const got = this.legacyOtf(name);
-          if ('face' in got && got.face.file === file) { log(`  font-provision: ${file} ← converted again from ${name}`); continue; }
+          if ('face' in got && got.face.file === file) { log.info('font-provision', `  font-provision: ${file} ← converted again from ${name}`, { file, from: name }); continue; }
           throw new FontError(`font ${file} is referenced by compiled blocks, but converting ${name} now gives ` +
             `${'face' in got ? got.face.file : `nothing (${got.reason})`}; the TeX installation changed – rebuild with --force`);
         }
         case 'opentype': {
           const src = kpsewhich(file);
-          if (!src) { log(`  font-provision: WARNING – ${file} not found via kpsewhich; the browser will fall back to a system font`); continue; }
+          if (!src) { log.warn('font-not-found', `  font-provision: WARNING – ${file} not found via kpsewhich; the browser will fall back to a system font`, { file }); continue; }
           writeAtomic(dst, readFileSync(src));
-          log(`  font-provision: ${file} ← ${src}`);
+          log.info('font-provision', `  font-provision: ${file} ← ${src}`, { file, from: src });
           continue;
         }
         default: unreachable(face, 'font face');
@@ -188,7 +188,7 @@ export class Fonts {
    *  gives one patched file, one name, for every document and every round,
    *  and it is never patched again for a later block. A font that needs
    *  nothing stays the original. */
-  patch(files: Map<string, FileNeeds>, log: (s: string) => void = console.log, { whole = false }: { whole?: boolean } = {}): void {
+  patch(files: Map<string, FileNeeds>, log: Log, { whole = false }: { whole?: boolean } = {}): void {
     this.served = new Map();
     if (!files.size) return;
     this.provision(files.values(), log);
@@ -207,7 +207,7 @@ export class Fonts {
       const existing = new Set<number>();
       for (const s of subs) for (const c of s.map.keys()) existing.add(c);
       let missing = [...needs.reached].filter(([c, g]) => g !== null && !existing.has(c)).sort((a, b) => a[0] - b[0]);
-      if (!missing.length) { this.served.set(filename, filename); log(`  font-patch: ${filename} already complete`); continue; }
+      if (!missing.length) { this.served.set(filename, filename); log.info('font-patch', `  font-patch: ${filename} already complete`, { file: filename }); continue; }
       if (whole) {
         const all = new Map<number, number | null>(missing);
         for (let g = 0, n = numGlyphs(font); g < n; g++) if (!existing.has(GLYPH_INDEX_PUA + g)) all.set(GLYPH_INDEX_PUA + g, g);
@@ -225,12 +225,12 @@ export class Fonts {
       let added = 0;
       for (const [c, g] of missing) {
         if (g === null) continue;
-        if (g >= glyphs) { log(`  font-patch: ${filename} glyph index ${g} out of range – skipping ${hex(c)}`); continue; }
+        if (g >= glyphs) { log.warn('font-glyph-out-of-range', `  font-patch: ${filename} glyph index ${g} out of range – skipping ${hex(c)}`, { file: filename, glyph: String(g), char: hex(c) }); continue; }
         const tables = c >= 0x10000 ? [f12] : [f4, f12];
         for (const table of tables) if (table) { table.shared.map.set(c, g); table.shared.dirty = true; }
         if (tables.some(Boolean)) added++;
       }
-      if (!added) { this.served.set(filename, filename); log(`  font-patch: ${filename} already complete`); continue; }
+      if (!added) { this.served.set(filename, filename); log.info('font-patch', `  font-patch: ${filename} already complete`, { file: filename }); continue; }
       font.tables.set('cmap', buildCmap(subs));
       // the file's own names say it is modified too (the @font-face family the
       // browser uses is set separately: this is for honesty, not rendering)
@@ -248,14 +248,14 @@ export class Fonts {
       writeAtomic(join(this.outputDir, served), bytes);
       rmSync(path);                                          // not served under the original's name
       this.served.set(filename, served);
-      log(`  font-patch: ${filename} → ${served} (${added} entr${added === 1 ? 'y' : 'ies'} added, renamed)`);
+      log.info('font-patch', `  font-patch: ${filename} → ${served} (${added} entr${added === 1 ? 'y' : 'ies'} added, renamed)`, { file: filename, served, added: String(added) });
     }
   }
 
   /** Cut every font this pipeline wrote – a converted face, a patched one –
    *  down to the code points the blocks draw; but for those a \webtext slot
    *  sets text in, where a page may set any text. */
-  async subset(files: Map<string, FileNeeds>, log: (s: string) => void = console.log): Promise<void> {
+  async subset(files: Map<string, FileNeeds>, log: Log): Promise<void> {
     const tagged = new RegExp(`(\\.${MODIFIED_TAG}-[0-9a-f]{8})+$`);
     for (const filename of [...files.keys()].sort()) {
       const needs = files.get(filename)!;
@@ -267,7 +267,7 @@ export class Fonts {
         default: written = unreachable(needs.face, 'font face');
       }
       if (!written || !needs.reached.size) continue;
-      if (needs.slot) { log(`  font-subset: ${served} kept whole (a \\webtext slot sets text in it)`); continue; }
+      if (needs.slot) { log.info('font-subset', `  font-subset: ${served} kept whole (a \\webtext slot sets text in it)`, { file: filename, served }); continue; }
       const src = join(this.outputDir, served);
       if (!existsSync(src)) continue;
       const before = readFileSync(src);
@@ -280,8 +280,8 @@ export class Fonts {
       // full file goes; a converted one stays: it is what the blocks name.
       if (served !== filename && name !== served) rmSync(src);
       this.served.set(filename, name);
-      log(`  font-subset: ${served} → ${name} (${numGlyphs(readSfnt(bytes))} of ${numGlyphs(readSfnt(before))} glyphs, ` +
-          `${Math.floor(bytes.length / 1024)} KB of ${Math.floor(before.length / 1024)} KB)`);
+      log.info('font-subset', `  font-subset: ${served} → ${name} (${numGlyphs(readSfnt(bytes))} of ${numGlyphs(readSfnt(before))} glyphs, ` +
+          `${Math.floor(bytes.length / 1024)} KB of ${Math.floor(before.length / 1024)} KB)`, { file: filename, served: name });
     }
   }
 

@@ -89,8 +89,10 @@
      data-fonts-base is the URL prefix for those files – the default 'fonts/'
      resolves against latex-viewer.js's own URL (see build.py --fonts-base),
      which works under a subpath, a different domain, or opened straight off
-     disk over file://, with no reconfiguration. -->
-<script id="latex-font-map" type="application/json" data-fonts-base="{{FONTS_BASE}}">{{FONT_MAP_JSON}}</script>
+     disk over file://, with no reconfiguration. A #latex-log-config follows
+     it when the build was given --log-alert or --log-show: what the viewer
+     alerts and shows of its log. -->
+<script id="latex-font-map" type="application/json" data-fonts-base="{{FONTS_BASE}}">{{FONT_MAP_JSON}}</script>{{LOG_CONFIG}}
 
 <style>
   :root { color-scheme: light dark; }

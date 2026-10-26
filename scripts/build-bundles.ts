@@ -8,14 +8,17 @@
 //     node scripts/build-bundles.ts                 # what is missing or stale
 //     node scripts/build-bundles.ts --force [viewer|companion|inspector …]
 import { BUNDLE_NAMES, ensureBundles, type BundleName } from '../src/pipeline/bundles.ts';
+import { consoleLog } from '../src/shared/log.ts';
+
+const log = consoleLog();
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
 const names = args.filter(a => !a.startsWith('--'));
 const bad = names.filter(n => !(BUNDLE_NAMES as string[]).includes(n));
 if (bad.length) {
-  console.error(`unknown bundle: ${bad.join(', ')} (there are ${BUNDLE_NAMES.join(', ')})`);
+  log.error('usage-error', `unknown bundle: ${bad.join(', ')} (there are ${BUNDLE_NAMES.join(', ')})`);
   process.exit(2);
 }
-const built = ensureBundles({ only: names.length ? names as BundleName[] : BUNDLE_NAMES, force });
-if (!built.length) console.log('  bundles up to date');
+const built = ensureBundles({ only: names.length ? names as BundleName[] : BUNDLE_NAMES, force, log });
+if (!built.length) log.info('bundles-up-to-date', '  bundles up to date');

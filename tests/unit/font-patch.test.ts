@@ -11,10 +11,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Fonts, type FileNeeds } from '../../src/pipeline/fonts/fonts.ts';
 import { kpsewhich } from '../../src/pipeline/fonts/type1.ts';
+import { Log } from '../../src/shared/log.ts';
 
 const REGULAR = 'lmroman10-regular.otf', ITALIC = 'lmroman10-italic.otf';
 const have = !!kpsewhich(REGULAR) && !!kpsewhich(ITALIC);
-const quiet = () => {};
+const quiet = new Log('pipeline');
 const req = (file: string, glyphs: number[]) => new Map([[file, new Map(glyphs.map(g => [0xE100 + g, g] as [number, number]))]]);
 /** What the blocks need of OpenType files: code point → glyph index, by file. */
 const files = (m: Map<string, Map<number, number | null>>): Map<string, FileNeeds> =>
@@ -95,4 +96,27 @@ test('whole: a font patched for any glyph gets every glyph, the same file whatev
     for (let g = 0; g < numGlyphs(font); g++) assert.equal(map.get(PUA_BASE + g), g, `glyph ${g} by its private-use code point`);
     assert.equal(a.served.get(ITALIC), ITALIC, 'a font that needs nothing stays the original');
   } finally { for (const d of dirs) rmSync(d, { recursive: true, force: true }); }
+});
+
+// The font lines of a build are records of its log: each with its level and
+// code, and the line as printed (consoleLog) its message.
+test('provisioning, patching and subsetting are logged as records with codes', { skip: !have && 'Latin Modern OTF not installed' }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rtx-font-patch-'));
+  try {
+    const log = new Log('pipeline');
+    const f = new Fonts(dir), needs = files(req(REGULAR, [5, 6]));
+    f.patch(needs, log);
+    const patched = f.served.get(REGULAR)!;
+    await f.subset(needs, log);
+    const subset = f.served.get(REGULAR)!;
+    const records = log.records().map(r => ({ level: r.level, code: r.code, message: r.message, details: r.details, source: r.source }));
+    assert.deepEqual(records.map(r => [r.level, r.code]), [['info', 'font-provision'], ['info', 'font-patch'], ['info', 'font-subset']]);
+    assert.equal(records[0].message, `  font-provision: ${REGULAR} ← ${kpsewhich(REGULAR)}`);
+    assert.deepEqual(records[0].details, { file: REGULAR, from: kpsewhich(REGULAR)! });
+    assert.equal(records[1].message, `  font-patch: ${REGULAR} → ${patched} (2 entries added, renamed)`);
+    assert.deepEqual(records[1].details, { file: REGULAR, served: patched, added: '2' });
+    assert.match(records[2].message, new RegExp(`^  font-subset: ${patched.replace(/\./g, '\\.')} → ${subset.replace(/\./g, '\\.')} \\(\\d+ of \\d+ glyphs, \\d+ KB of \\d+ KB\\)$`));
+    assert.deepEqual(records[2].details, { file: REGULAR, served: subset });
+    assert.ok(records.every(r => r.source === 'pipeline'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

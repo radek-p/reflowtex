@@ -24,7 +24,7 @@ import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from '.
 import { attachMathML, readMathmlFile, speaker } from './mathml.ts';
 import { convertPictures, includedPictureFiles } from './pictures.ts';
 import { Fonts, fontNeeds, fontWarnings } from './fonts/fonts.ts';
-import type { Warning } from '../shared/log.ts';
+import { consoleLog, type Log, type Warning } from '../shared/log.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
 import { kpsewhich } from './fonts/type1.ts';
 import { FontFiles, compositeTexts, resolveVirtualFonts } from './fonts/vf.ts';
@@ -122,7 +122,8 @@ export interface PipelineOptions {
    *  stops the build where the result would be wrong or incomplete; 'warn'
    *  builds it, saying what is missing */
   missingCapabilities?: 'error' | 'warn';
-  log?: (line: string) => void;
+  /** where the build's messages go (default: consoleLog, the console) */
+  log?: Log;
 }
 
 export interface CompileOptions {
@@ -147,7 +148,7 @@ export class Pipeline {
   readonly diagnostics = new Map<string, Diagnostic[]>();
   private readonly mathml: boolean;
   private readonly localFonts: string[];
-  private readonly log: (line: string) => void;
+  private readonly log: Log;
   /** every block compiled or declared current (useCached), by key: what the
    *  served fonts must cover */
   private readonly blocks = new Map<string, SerializerOutput>();
@@ -165,7 +166,7 @@ export class Pipeline {
     if (!a.ok) throw new BackendUnavailable(a.reason);
     this.missingCapabilities = o.missingCapabilities ?? 'error';
     this.mathml = o.mathml ?? true;
-    this.log = o.log ?? (s => console.log(s));
+    this.log = o.log ?? consoleLog();
     const local = o.localFontsDir ? resolve(o.localFontsDir) : null;
     this.fonts = new Fonts(resolve(o.fontsDir), local, join(this.buildRoot, 'metafont'));
     this.localFonts = local && existsSync(local) ? readdirSync(local).filter(f => f.endsWith('.otf')).sort().map(f => join(local, f)) : [];
@@ -250,7 +251,7 @@ export class Pipeline {
     this.fonts.patch(needs.files, this.log);
     if (subset) await this.fonts.subset(needs.files, this.log);
     // every code point the blocks reach a font by must be in the file served
-    for (const w of this.fonts.verify(needs)) this.log(`  fonts: warning: ${w}`);
+    for (const w of this.fonts.verify(needs)) this.log.warn('font-without-face', `  fonts: warning: ${w}`);
   }
 
   /** original font file → served file, after finishFonts(). The viewer loads
@@ -272,7 +273,7 @@ export class Pipeline {
       const msg = `backend ${this.backend.id} lacks ${n.capability}, which this document needs: ${n.reason}`;
       if (capabilityInfo(n.capability).whenMissing === 'error' && this.missingCapabilities === 'error')
         throw new MissingCapability(`${msg} (missingCapabilities: 'warn' builds it anyway)`, label);
-      this.log(`  ${label}: warning: ${msg}`);
+      this.log.warn('missing-capability', `  ${label}: warning: ${msg}`, { block: label, backend: this.backend.id, capability: n.capability });
     }
 
     const job = await this.backend.open({
@@ -291,7 +292,8 @@ export class Pipeline {
           label, log: this.log, template: this.template,
         });
       } else if (DM.wantsModel(first.data)) {
-        this.log(`  ${label}: warning: backend ${this.backend.id} cannot compile at other widths; displays stay at the document's width`);
+        this.log.warn('display-widths-unsupported', `  ${label}: warning: backend ${this.backend.id} cannot compile at other widths; displays stay at the document's width`,
+          { block: label, backend: this.backend.id });
       }
       this.diagnostics.set(key, final.diagnostics);
 
@@ -333,7 +335,8 @@ export class Pipeline {
       nRewritten && `rewrote ${nRewritten} glyph(s) to PUA`, nVirtual && `${nVirtual} glyph(s) of virtual fonts resolved`, nLegacy && `converted legacy fonts, ${nLegacy} glyph(s) to PUA`,
       nPictures && `converted ${nPictures} picture(s)`, nMathml && `MathML for ${nMathml} formula(s)`,
     ].filter(Boolean);
-    if (bits.length) this.log(`  ${o.block ?? basename(dir)}: ${bits.join(', ')}`);
+    const block = o.block ?? basename(dir);
+    if (bits.length) this.log.info('block-transformed', `  ${block}: ${bits.join(', ')}`, { block });
   }
 
   /** Declare a document compiled elsewhere (already transformed) as one of
@@ -365,7 +368,7 @@ export interface SamplingOptions<S extends Sample = Sample> {
    *  changes regime (display-model.ts, wideVariants) */
   probe(extraSp: number): Promise<SerializerOutput | null>;
   label: string;
-  log: (line: string) => void;
+  log: Log;
   /** named in the message when a template reports no width */
   template?: string;
 }
@@ -393,7 +396,7 @@ export async function sampleDisplays<S extends Sample>(first: S, o: SamplingOpti
       if (ok) {
         const widths = [a, b, c].map(x => DM.pyG(Number(x.data.source_width) / 65536)).join(', ');
         if (a === first) {
-          o.log(`  ${label}: display model stable at ${widths} pt`);
+          o.log.info('display-model-stable', `  ${label}: display model stable at ${widths} pt`, { block: label, widths });
           return { ...a, data: DM.attachModel(a.data, b.data, c.data) };
         }
         // The document's own width fell outside the affine law; it is still the
@@ -403,11 +406,13 @@ export async function sampleDisplays<S extends Sample>(first: S, o: SamplingOpti
         const [data] = DM.anchorModel(first.data, b.data, c.data);
         const x0 = Number(first.data.source_width);
         const [nWide, nProbes] = await DM.wideVariants(data, b.data, c.data, async wd => o.probe(wd - x0));
-        o.log(`  ${label}: display model stable at ${widths} pt, anchored at the document's ${DM.pyG(x0 / 65536)} pt` +
-          (nWide ? `; ${nWide} display(s) set another way there get a wide form (${nProbes} more compilation(s) to find where)` : ''));
+        o.log.info('display-model-stable', `  ${label}: display model stable at ${widths} pt, anchored at the document's ${DM.pyG(x0 / 65536)} pt` +
+          (nWide ? `; ${nWide} display(s) set another way there get a wide form (${nProbes} more compilation(s) to find where)` : ''),
+          { block: label, widths, anchor: DM.pyG(x0 / 65536), wide: String(nWide) });
         return { ...first, data };
       }
-      o.log(`  ${label}: rejected display sample at ${DM.pyG(Number(a.data.source_width) / 65536)} pt: ${reason}`);
+      const width = DM.pyG(Number(a.data.source_width) / 65536);
+      o.log.info('display-sample-rejected', `  ${label}: rejected display sample at ${width} pt: ${reason}`, { block: label, width, reason: reason ?? '' });
       samples = samples.slice(-2);
     }
     if (w + DISPLAY_SAMPLE_STEP_SP >= TEX_MAX_DIMEN_SP) throw new BuildError('no stable affine display topology before \\maxdimen', label);

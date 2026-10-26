@@ -173,3 +173,7 @@ export function consoleSink({ debug = false }: { debug?: boolean } = {}): LogSin
         else console.log(r.message);
     };
 }
+
+/** A build's log (the pipeline's, an integration's): its records printed as
+ *  the build has always printed them (consoleSink). */
+export const consoleLog = (o: { debug?: boolean } = {}): Log => new Log('pipeline', [consoleSink(o)]);

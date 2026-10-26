@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { consoleLog, type Log } from '../shared/log.ts';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));
 const REPO = join(SRC, '..');
@@ -131,8 +132,8 @@ function writeAtomic(file: string, text: string): void {
 
 /** Build each of `only` (all, by default) that is missing or was built from
  *  other sources; `force`: build them all the same. Returns the names built. */
-export function ensureBundles({ only = BUNDLE_NAMES, force = false, log = console.log }:
-  { only?: BundleName[]; force?: boolean; log?: (s: string) => void } = {}): BundleName[] {
+export function ensureBundles({ only = BUNDLE_NAMES, force = false, log = consoleLog() }:
+  { only?: BundleName[]; force?: boolean; log?: Log } = {}): BundleName[] {
   const version = bundleVersion(), built: BundleName[] = [];
   for (const name of only) {
     const b = BUNDLES[name], stamp = stampOf(b, version), outputs = b.outputs(stamp);
@@ -144,7 +145,8 @@ export function ensureBundles({ only = BUNDLE_NAMES, force = false, log = consol
       if (existsSync(panel)) for (const f of readdirSync(panel)) if (!keep.has(f)) rmSync(join(panel, f));
     }
     for (const o of outputs) writeAtomic(o.file, o.code());
-    log(`  built ${name}: ${outputs.map(o => relative(REPO, o.file)).join(', ')}`);
+    const files = outputs.map(o => relative(REPO, o.file)).join(', ');
+    log.info('bundle-built', `  built ${name}: ${files}`, { bundle: name, files });
     built.push(name);
   }
   return built;

@@ -7,6 +7,7 @@ import { unreachable } from '../../shared/unreachable.ts';
 import { GLYPH_INDEX_PUA, isPrivateUse } from '../../shared/glyph-text.ts';
 import { classicAddressing } from './metafont.ts';
 import type { Fonts } from './fonts.ts';
+import type { Log } from '../../shared/log.ts';
 
 /** A font's per-character protrusion and expansion codes are keyed by the
  *  character's code; after a rewrite one character can live under several
@@ -44,7 +45,7 @@ const SLOTS = Array.from({ length: 256 }, (_, slot) => slot);
  *   * a code point with no cmap entry (LuaTeX's plane-15 codes for unencoded
  *     variants).
  *  The font patcher adds the matching cmap entries. Returns the rewrites. */
-export function normaliseGlyphAddressing(data: SerializerOutput, fonts: Fonts, log?: (s: string) => void): number {
+export function normaliseGlyphAddressing(data: SerializerOutput, fonts: Fonts, log: Log): number {
   const files = new Map([...data.fonts].map(([id, f]) => [id, fontFile(f.face)]));
   fonts.provision(data.fonts.values(), log);
   let rewritten = 0;

@@ -28,6 +28,7 @@ import { readSerializerOutput, writeSerializerOutput, type SerializerOutput } fr
 import { encodeDocument } from '../../src/pipeline/encode.ts';
 import { blockHtml, installViewer } from '../../src/pipeline/site.ts';
 import { renderPage } from '../../integrations/vanilla/page.ts';
+import { Log } from '../../src/shared/log.ts';
 
 const LATEX_DIR = fileURLToPath(new URL('../../src/latex', import.meta.url));
 // the files TeX reads back – references, contents, lists, bibliography
@@ -37,6 +38,8 @@ export interface SiteFromRunOptions { extraScripts?: string[]; title?: string; s
 
 export async function siteFromRun(build: string, site: string, o: SiteFromRunOptions = {}): Promise<string> {
   const log = o.log ?? (s => console.log(s));
+  // the pipeline's messages, each as its line
+  const pipelineLog = new Log('pipeline', [r => log(r.message)]);
   build = resolve(build); site = resolve(site);
   let data = readSerializerOutput(readFileSync(join(build, 'output.json'), 'utf8'));
   if (!o.singleWidth) {
@@ -64,7 +67,7 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
     const modelled = await sampleDisplays({ data, dir: build }, {
       at: extraSp => compileAt(extraSp, String(++k)),
       probe: extraSp => compileAt(extraSp, `w${extraSp}`).then(s => s.data, () => null),
-      label: basename(build), log,
+      label: basename(build), log: pipelineLog,
     });
     if (modelled.dir !== build) log(`  warning: the display model is anchored at a wider run than the strip's (${modelled.dir})`);
     data = modelled.data;
@@ -72,7 +75,7 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
 
   // The pipeline's stages on a copy, in site-build/run/ beside the run's own
   // PDF (its pictures) and pageless.json.
-  const pipe = new Pipeline({ buildRoot: join(build, 'site-build'), fontsDir: join(site, 'fonts'), log });
+  const pipe = new Pipeline({ buildRoot: join(build, 'site-build'), fontsDir: join(site, 'fonts'), log: pipelineLog });
   const work = join(build, 'site-build', 'run');
   mkdirSync(join(work, 'pics'), { recursive: true });
   for (const f of ['input.pdf', 'pageless.json']) if (existsSync(join(build, f))) copyFileSync(join(build, f), join(work, f));
@@ -85,7 +88,7 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
   await pipe.finishFonts();
   log(`  bundle ${bytes.length} bytes`);
 
-  installViewer(site, { log });
+  installViewer(site, { log: pipelineLog });
   for (const e of o.extraScripts ?? []) copyFileSync(e, join(site, basename(e)));
   // A replay of TeX: its breaks always, an overfull line included (the
   // viewer's default gives way to a looser line when TeX's would overflow).
