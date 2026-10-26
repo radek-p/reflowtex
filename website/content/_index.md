@@ -1,11 +1,11 @@
 ---
-title: Reflow TeX
+title: ReflowTeX
 latexTitle: true
 aliases: ["/docs/"]
 ---
 
 {{< latex preamble="home" >}}
-\pagetitle[Reflow\,\TeX]{\TeX{} typesetting on the web}
+\pagetitle[Reflow\TeX]{\TeX{} typesetting on the web}
 \bigskip
 \noindent Write \LaTeX{} as usual and let Lua\TeX{} typeset it. The page keeps
 \TeX's fonts, spacing and formulas; only the line breaks are left to the

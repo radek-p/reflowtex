@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Build (or serve) the Reflow TeX landing site.
+# Build (or serve) the ReflowTeX landing site.
 #
 #   ./build.sh            # compile LaTeX blocks + `hugo` -> public/
 #   ./build.sh server     # …then `hugo server` for live preview

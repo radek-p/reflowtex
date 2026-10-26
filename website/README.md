@@ -1,4 +1,4 @@
-# Reflow TeX – landing site
+# ReflowTeX – landing site
 
 The project's public site (Hugo), built to be hosted on **GitHub Pages**. Most of
 its prose is set through the reflowtex pipeline itself – the page is its own demo.

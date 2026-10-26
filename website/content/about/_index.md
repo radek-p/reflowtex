@@ -6,7 +6,7 @@ latexTitle: true
 {{< latex preamble="about" >}}
 \pagetitle[The project]{About}
 \bigskip
-Reflow\,\TeX{} is an experiment: \LaTeX{} documents on the web, typeset by
+Reflow\TeX{} is an experiment: \LaTeX{} documents on the web, typeset by
 \TeX, but with the lines broken for the reader's screen instead of fixed in
 a PDF.
 \section*{Plans}
@@ -32,7 +32,7 @@ Lua\LaTeX{} records the finished node list, Protocol Buffers carry it to the
 page, and the browser breaks it into lines. The repository's
 \texttt{README} and \texttt{docs/} describe the design.
 \section*{Licence}
-Reflow\,\TeX{} is free software under the \textbf{GNU Affero General Public
+Reflow\TeX{} is free software under the \textbf{GNU Affero General Public
 License, version 3 or later} (AGPL-3.0-or-later). Bundled third-party
 components (the protobuf.js runtime, the fonts a build ships) keep their own
 permissive licences.

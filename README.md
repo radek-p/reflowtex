@@ -1,11 +1,11 @@
-# Reflow TeX
+# ReflowTeX
 
 **Render real LaTeX on the web, and let it reflow to the reader's screen.**
 
 [Website](https://radek-p.github.io/reflowtex/) ·
-[ReflowEd](https://radek-p.github.io/reflowed/), a LaTeX editor in the browser built on Reflow TeX
+[ReflowEd](https://radek-p.github.io/reflowed/), a LaTeX editor in the browser built on ReflowTeX
 
-Reflow TeX compiles a LaTeX snippet with LuaTeX, captures the finished node list
+ReflowTeX compiles a LaTeX snippet with LuaTeX, captures the finished node list
 (every glyph, kern, rule and box, with the exact positions TeX computed), and
 ships it to the browser as a compact binary. A small JavaScript viewer then runs
 the Knuth–Plass line-breaking algorithm *in the browser* and paints the result as
@@ -194,7 +194,7 @@ under one control during its initial phase.
 
 ## License
 
-Reflow TeX is licensed under the **GNU Affero General Public License v3.0 or
+ReflowTeX is licensed under the **GNU Affero General Public License v3.0 or
 later** (AGPL-3.0-or-later). The full text is in [LICENSE](LICENSE).
 
 Copyright © 2026 Radosław Piórkowski.

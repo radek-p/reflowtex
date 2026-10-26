@@ -8,7 +8,7 @@ latexTitle: true
 {{< latex preamble="docs" >}}
 \pagetitle[The project]{Accessibility}
 \bigskip
-A page made with Reflow\,\TeX\ can carry, next to each block, the text a
+A page made with Reflow\TeX\ can carry, next to each block, the text a
 screen reader needs: the words in reading order, and every formula as
 MathML. VoiceOver reads MathML aloud and lets the reader
 step through a formula part by part.

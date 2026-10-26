@@ -8,7 +8,7 @@ aliases: ["/examples/", "/docs/showcase/in-the-wild/"]
 {{< latex preamble="about" >}}
 \pagetitle[The project]{Showcase}
 \bigskip
-Whole documents published with Reflow\,\TeX.
+Whole documents published with Reflow\TeX.
 
 \section*{On other sites}
 Documents published from their \LaTeX{} source, oldest first.
@@ -20,7 +20,7 @@ Documents published from their \LaTeX{} source, oldest first.
   -- a book by Mikołaj Bojańczyk
 \item \href{https://laxarchive.org/lax-242665/paper.html}{\textbf{An
   Introduction to Lax}} -- from the Lax archive, which is experimenting with
-  Reflow\,\TeX
+  Reflow\TeX
 \end{itemize}
 
 \section*{On this site}

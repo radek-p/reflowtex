@@ -7,7 +7,7 @@ latexTitle: true
 {{< latex preamble="about" >}}
 \pagetitle[Tools]{Render tests}
 \bigskip
-Every change to Reflow\,\TeX{} is checked against \TeX{} by the render
+Every change to Reflow\TeX{} is checked against \TeX{} by the render
 tests. Each test document is typeset by LuaTeX as a
 \href{../pageless-pdf/}{pageless PDF} and shown in the browser with its
 column as wide as the PDF's, and every glyph and rule the browser draws is

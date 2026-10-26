@@ -1,4 +1,4 @@
-# Reflow TeX – project landing site.
+# ReflowTeX – project landing site.
 #
 # Build it with ./build.sh (runs the reflowtex prebuild, then hugo). See README.md.
 #
@@ -8,7 +8,7 @@
 # domain or a user/org page served at the root, set it to that root instead.
 baseURL = "https://radek-p.github.io/reflowtex/"
 languageCode = "en-us"
-title = "Reflow TeX"
+title = "ReflowTeX"
 enableInlineShortcodes = true
 
 [params]

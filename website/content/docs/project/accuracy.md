@@ -14,7 +14,7 @@ How closely does the browser follow \TeX? To find out, a document is
 typeset by LuaTeX twice from one run: as a
 \href{../../tools/pageless-pdf/}{pageless PDF} -- one page as tall as the
 document, so that nothing is moved to another page -- and in the browser by
-Reflow\,\TeX, with its column exactly as wide as the PDF's. The two are then
+Reflow\TeX, with its column exactly as wide as the PDF's. The two are then
 compared in two ways, each with a tool to see the results.
 {{< /latex >}}
 
@@ -39,7 +39,7 @@ compared in two ways, each with a tool to see the results.
 The first comparison uses no pixels. The position of every glyph and rule
 in the PDF is read from the PDF, and the position the browser gave it from
 the page, and the two are matched. This is what the render tests do on every
-change to Reflow\,\TeX: a short document for each feature (paragraphs,
+change to Reflow\TeX: a short document for each feature (paragraphs,
 inline mathematics, displays, alignments, lists, footnotes, microtype,
 rules, TikZ pictures) and all of the AMS sample paper
 \texttt{testmath.tex}. The short documents are also typeset 100\,pt narrower

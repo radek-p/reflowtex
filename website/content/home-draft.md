@@ -1,5 +1,5 @@
 ---
-title: Reflow TeX
+title: ReflowTeX
 latexTitle: true
 # A candidate for the home page, set as one LaTeX document. Not linked from
 # anywhere and not listed; to adopt it, move this content to _index.md (its
@@ -16,13 +16,13 @@ sitemap:
 
 {{< latex batch="home" preamble="homedoc" >}}
 \begin{center}
-{\LARGE\bfseries Reflow\,\TeX\par}
+{\LARGE\bfseries Reflow\TeX\par}
 \medskip
 {\large \TeX{} typesetting on the web\par}
 \end{center}
 
 \begin{abstract}
-Reflow\,\TeX{} puts \LaTeX{} documents on web pages. You write \LaTeX{} as
+Reflow\TeX{} puts \LaTeX{} documents on web pages. You write \LaTeX{} as
 usual and Lua\TeX{} typesets it. Readers get \TeX's fonts, spacing,
 formulas and pictures, with the lines broken again for the width of their
 screen, so a paper can be read on a phone without zooming. This page is
@@ -37,7 +37,7 @@ written in \LaTeX{}; each section shows one thing you get.
 
 {{< latex batch="home" preamble="homedoc" class="opens-section" >}}
 \section{Lines that fit the screen}
-A PDF is set for one page width. Reflow\,\TeX{} keeps each paragraph as
+A PDF is set for one page width. Reflow\TeX{} keeps each paragraph as
 \TeX{} built it, before it was broken into lines, and the browser breaks
 it for the width it has.
 {{< /latex >}}
