@@ -17,7 +17,9 @@
 //     line whose natural width was over the measure only by what hangs was
 //     taken for overfull, its fill given nothing;
 //   - punctuation after inline maths, and a theorem's lines (italic text, a
-//     bold head), no different from any other;
+//     bold head), no different from any other; the first starts with the
+//     theorem's anchor, an empty box, which LuaTeX steps over: the head's
+//     first character protrudes as at any line's start;
 //   - a centred line (a figure's caption) is centred on what does not
 //     protrude.
 import { test, expect, type WebPage } from './fixtures.ts';
@@ -37,6 +39,7 @@ interface Line {
   slot: boolean;         // ends in a word of live text
   fill: boolean;         // holds an infinite fill (\hfill)
   afterMath: boolean;    // its last character follows a math-off node
+  afterBox: boolean;     // its first character follows an empty box
   kerns: string;         // the breaker's own left and right protrusion (for the report)
   align: string;         // its paragraph's alignment
   lastOfPara: boolean;   // its paragraph's last line (not justified)
@@ -49,9 +52,11 @@ const fullLines = (page: WebPage, i: number) => page.evaluate((i: number) => {
   const fonts = new Map<number, any>();
   (st.doc.fonts || []).forEach((f: any, k: number) => fonts.set(f.id ?? k + 1, f));
   // as LuaTeX finds the character at a line's edge (cp_skipable): past
-  // penalties, empty glue, font kerns and math nodes without surround
+  // penalties, empty glue, font kerns, math nodes without surround and empty
+  // boxes (a theorem's first line starts with its anchor, \hbox{})
+  const empty = (n: any) => n.type === 'hlist' && !(n.children || []).length && !n.width && !n.height && !n.depth;
   const skip = (n: any) => n.type === 'penalty' || (n.type === 'glue' && !n.width && !n.stretch && !n.shrink)
-    || (n.type === 'kern' && (!n.kern || !n.subtype)) || (n.type === 'math' && !n.surround);
+    || (n.type === 'kern' && (!n.kern || !n.subtype)) || (n.type === 'math' && !n.surround) || empty(n);
   const code = (n: any, side: 'lp' | 'rp') => {
     if (!n || n.type !== 'glyph') return 0;
     const f = fonts.get(n.font), chars = [...(n.text ?? String.fromCodePoint(n.char))];
@@ -68,10 +73,11 @@ const fullLines = (page: WebPage, i: number) => page.evaluate((i: number) => {
       const para = seg.items[k].para;
       const lastOfPara = j === (L.itemStarts[k + 1] ?? L.lines.length) - 1;
       const top = new Set(ln.nodes);
-      let first: any = null, last: any = null;
+      let first: any = null, last: any = null, box = false;
       ins.replay(el, s, {
         node(n: any, x: number, _y: number, adv: number) {
           if (!top.has(n)) return;   // (replay draws every line)
+          if (!first && empty(n)) box = true;
           if (!first && !skip(n) && !(n.type === 'glue')) first = { n, x };
           if (n.type !== 'glue' && n.type !== 'penalty' && adv > 0) last = { n, end: x + adv };
         },
@@ -94,6 +100,7 @@ const fullLines = (page: WebPage, i: number) => page.evaluate((i: number) => {
         slot: edge?.type === 'glyph' && edge.text !== undefined,
         fill: ns.some((n: any) => n.type === 'glue' && n.stretch_order > 0 && n.stretch > 0),
         afterMath: e > 0 && ns[e - 1].type === 'math',
+        afterBox: box,
         align: para.align || 'justify', lastOfPara,
         kerns: `${((ln.leftProtrusion || 0) / 65536).toFixed(2)}/${((ln.rightProtrusion || 0) / 65536).toFixed(2)}`,
       });
@@ -167,6 +174,8 @@ test('a theorem\'s lines end at the margin', async ({ openPage }) => {
   const all = await check(page, 3);
   expect(all.length).toBeGreaterThan(20);
   expect(all.filter(l => l.hang > 0.5).length, 'no theorem line ended in punctuation that hangs').toBeGreaterThanOrEqual(1);
+  expect(all.filter(l => l.afterBox && l.lhang > 0.1).length,
+    'no theorem line started with an empty box before a character that protrudes').toBeGreaterThanOrEqual(1);
 });
 
 test('a centred line is centred on what does not protrude', async ({ openPage }) => {
