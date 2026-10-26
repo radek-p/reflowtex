@@ -4,6 +4,7 @@
 // the margin notes) subscribes, to draw its instances of a kind again when
 // the kind is defined, redefined or undefined.
 import type { KindDef } from './types.ts';
+import { report } from '../runtime/log.ts';
 
 const kinds = new Map<string, KindDef>();
 const listeners = new Set<(kind: string) => void>();
@@ -17,7 +18,7 @@ export function onKindChange(fn: (kind: string) => void): void { listeners.add(f
 
 function changed(kind: string) {
     for (const fn of listeners) {
-        try { fn(kind); } catch (e) { console.error(`[latex-viewer] redrawing kind "${kind}":`, e); }
+        try { fn(kind); } catch (e) { report('error', 'kind-failed', `redrawing kind "${kind}" failed`, { kind, error: e }); }
     }
 }
 

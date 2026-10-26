@@ -21,7 +21,10 @@ export const COPY_KEY = IS_MAC ? '⌘C' : 'Ctrl+C';
 
 // ── The panel ──────────────────────────────────────────────────────────────────
 export const isOpen = signal(false);
-export const view = signal<'tree' | 'res'>(recall<string>('view', 'tree', plain) === 'res' ? 'res' : 'tree');   // 'tree' | 'res'
+export type View = 'tree' | 'res' | 'col' | 'log';
+const VIEWS: readonly string[] = ['tree', 'res', 'col', 'log'];
+const recalled = recall<string>('view', 'tree', plain);
+export const view = signal<View>(VIEWS.includes(recalled) ? recalled as View : 'tree');
 export const dark = signal(false);
 // the page overlays: { baselines, badness, springs, a11y }
 export type Guides = Pick<Options, 'baselines' | 'badness' | 'springs' | 'a11y'>;

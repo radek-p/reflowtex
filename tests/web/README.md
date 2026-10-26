@@ -94,6 +94,7 @@ that `idle()` waits for it.
 | Themes: the typeset ink follows the page's | `themes.spec.ts` |
 | Included PNG and JPEG: each its own image, at the size TeX gave it, kept through a re-break | `pictures.spec.ts` |
 | Hugo: subpath, references, a reference to another page, an example's controls | `hugo.spec.ts` |
+| The page's log: a block's warnings from the build in it and nothing of them on the page; the inspector's Log tab lists every record, newest last, filters by level, code and text, counts them on its tab, and selects a record's block; the alerted level decides what reaches the console and `reflowtex:log` (by the host API and by the page's island); readers are shown the fonts that failed by default, nothing when configured so, another kind by its code or level | `log.spec.ts` |
 
 ## Regressions
 

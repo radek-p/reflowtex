@@ -14,7 +14,8 @@
 //   fontLoaded(file) · familyLoaded(family) · familyLoading(family) · whenFamilyLoaded(family) · fontsReady() · faceRecords()
 
 import { ZOOM } from '../engine/core.ts';
-import { SCRIPT_URL, api } from './page.ts';
+import { SCRIPT_URL } from './page.ts';
+import { report } from './log.ts';
 import { scheduleFontRepaint } from './blocks.ts';
 import { faceFromWire } from '../../../shared/font-face.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
@@ -105,7 +106,7 @@ export function provideFont(file: string, source: FontSource): Promise<boolean> 
         return true;
     }, (e: unknown) => {
         if (latest.get(family) === next.face) latest.delete(family);
-        console.warn(`[latex-viewer] font ${file}: the new file could not be loaded (${(e as Error)?.message ?? e}); the previous one stays`);
+        report('warning', 'font-replace-failed', `font ${file}: the new file could not be loaded (${(e as Error)?.message ?? e}); the previous one stays`, { font: file, error: e });
         return false;
     });
     const done = swap.then(() => {}).finally(() => swaps.delete(done));
@@ -216,49 +217,16 @@ export async function registerFonts(fontsData: Record<string, DocFont>): Promise
 // Without its fonts a block still lays out (the metrics travel with the
 // document) but draws its glyphs in a stand-in face, or not at all for the
 // symbol fonts of mathematics – which a reader cannot tell from a broken page.
-// So a failed download shows a bar at the bottom of the window, as a cookie
-// notice does, naming the fonts and offering a reload. A page may style it
-// (.latex-font-warning) or switch it off: window.reflowtex.fontWarning = false.
+// So a failed download is logged (font-load-failed, an error) naming every
+// font that failed so far; the page's log shows it to readers unless the page
+// is configured otherwise (log.ts).
 export const failedFonts = new Set<string>();
-export let fontWarning: HTMLDivElement | null = null;
 export function reportFontFailure(names: string[]): void {
     for (const n of names) failedFonts.add(n);
-    if (api.fontWarning === false || !document.body) return;
-    if (!fontWarning) {
-        const st = document.createElement('style');
-        st.textContent = `
-          .latex-font-warning { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
-            z-index: 2147483000; box-sizing: border-box; width: min(44rem, calc(100vw - 32px));
-            display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 18px;
-            font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; color: #fff; background: #2b2622;
-            border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.28); }
-          /* display: flex above would outrank the hidden attribute Dismiss sets */
-          .latex-font-warning[hidden] { display: none; }
-          .latex-font-warning p { margin: 0; flex: 1; }
-          .latex-font-warning strong { color: #ffcf8a; }
-          .latex-font-warning button { font: inherit; font-weight: 600; color: inherit; cursor: pointer;
-            border: 1px solid rgba(255,255,255,.35); background: none; border-radius: 8px; padding: 6px 12px; }
-          .latex-font-warning button:hover { background: rgba(255,255,255,.12); }
-          .latex-font-warning button[data-act="close"] { border: 0; padding: 6px 8px; font-size: 18px; line-height: 1; opacity: .8; }
-          @media print { .latex-font-warning { display: none; } }`;
-        document.head.appendChild(st);
-        fontWarning = document.createElement('div');
-        fontWarning.className = 'latex-font-warning';
-        fontWarning.setAttribute('role', 'alert');
-        fontWarning.innerHTML = '<p></p><button type="button" data-act="reload">Reload</button>'
-            + '<button type="button" data-act="close" aria-label="Dismiss">\u00d7</button>';
-        fontWarning.addEventListener('click', e => {
-            const act = (e.target as Element).closest('button')?.dataset.act;
-            if (act === 'reload') location.reload();
-            if (act === 'close') fontWarning!.hidden = true;
-        });
-        document.body.appendChild(fontWarning);
-    }
     const list = [...failedFonts];
     const shown = list.slice(0, 4).join(', ') + (list.length > 4 ? ` and ${list.length - 4} more` : '');
-    fontWarning.querySelector('p')!.innerHTML = '<strong>Some fonts could not be downloaded</strong> '
-        + `(${shown.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as Record<string, string>)[c]!)}). `
-        + 'Text may appear in a stand-in font, and mathematics may be missing.';
+    report('error', 'font-load-failed', `Some fonts could not be downloaded (${shown}). `
+        + 'Text may appear in a stand-in font, and mathematics may be missing.', { fonts: list.join(', ') });
 }
 
 // Optional: {original filename → served filename} written into the page as a JSON

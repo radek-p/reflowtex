@@ -17,6 +17,7 @@ import { BLOCK_SELECTOR } from '../runtime/page.ts';
 import type { InlineEnv, Instance, KindDef, PieceHost } from './types.ts';
 import type { WidgetNode } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
+import { report } from '../runtime/log.ts';
 
 const versions = new Map<string, number>();      // instance id → bumped by invalidate
 
@@ -73,7 +74,7 @@ export function renderPiece(n: WidgetNode, el: Element, box: HTMLElement, cache:
             set.add(el);
         }
     } catch (e) {
-        console.error(`[latex-viewer] kind "${instance.kind}": drawing a piece failed:`, e);
+        report('error', 'kind-failed', `kind "${instance.kind}": drawing a piece failed`, { kind: instance.kind, error: e });
     }
 }
 
@@ -82,7 +83,7 @@ export function disposePiece(el: Element | undefined) {
     const u = el && undo.get(el);
     if (!u) return;
     undo.delete(el!);
-    try { u(); } catch (e) { console.error('[latex-viewer] ending a piece failed:', e); }
+    try { u(); } catch (e) { report('error', 'kind-failed', 'ending a piece failed', { error: e }); }
 }
 
 /** A layout's drawing is rebuilt: end every piece in it, nested layouts too. */

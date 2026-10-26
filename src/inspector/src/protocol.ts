@@ -2,6 +2,9 @@
 // What the page agent (agent/) answers the panel (panel/), through
 // window.__rtxInspector: plain JSON, apart from the elements fromElement and
 // elementOf take and give. Types only.
+import type { LogRecord } from '../../shared/log.ts';
+
+export type { LogRecord };
 
 /** A row of the tree. `kind` is what it is to the agent; `type` how a panel
  *  shows it (a node's type, or 'block', 'text', 'display', 'stream', 'line',
@@ -181,6 +184,11 @@ export interface AgentApi {
     importColourMaps(json: unknown): string;
     exportColourMaps(): string;
     resetColourMaps(): string;
+    /** The page's log: its records after a seq (all, without one); null
+     *  when the viewer has no log. */
+    logs(after?: number): LogRecord[] | null;
+    /** The path to the row of the block with this key, or null. */
+    logBlock(key: string): number[] | null;
 }
 
 /** What the panel's module gives the loader (panel/app.ts, mount): the

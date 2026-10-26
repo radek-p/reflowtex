@@ -125,6 +125,7 @@ export function documentObject(data: SerializerOutput): Record<string, unknown> 
     anchors: data.anchors ?? [],
     slots: data.slots ?? [],
     marks: data.marks ?? [],
+    warnings: data.warnings ?? [],
     glyph_metrics: table,
   };
   return prune(messageType('Document'), doc, index, 'document');

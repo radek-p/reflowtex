@@ -26,6 +26,8 @@ import { replaySegment } from './inspect.ts';
 import { idle } from '../runtime/pending.ts';
 import { screenCTM } from '../runtime/screen-ctm.ts';
 import { fontLoaded, fontsReady, provideFont } from '../runtime/fonts.ts';
+import { alertLevel, pageLog, report, setAlertLevel, setShown, shown } from '../runtime/log.ts';
+import { isLogLevel } from '../../../shared/log.ts';
 
 /** A block's (a view's) data (runtime/block-data.ts). */
 type ViewerBlockData = BlockData;
@@ -211,6 +213,19 @@ export const host: Host = {
         loaded: file => fontLoaded(file),
         ready: () => fontsReady(),
     },
+    log: {
+        records: after => pageLog.records(after),
+        subscribe: fn => pageLog.subscribe(r => fn(r)),
+        report(level, code, message, details, options = {}) {
+            if (!isLogLevel(level)) throw new TypeError(`log.report: level 'debug', 'info', 'warning' or 'error', not ${JSON.stringify(level)}`);
+            if (typeof code !== 'string' || !code) throw new TypeError('log.report: a code, a non-empty string');
+            return report(level, code, String(message), details, { block: options.block, source: options.source ?? 'page' });
+        },
+        alertLevel: () => alertLevel(),
+        setAlertLevel: level => setAlertLevel(level),
+        shown: () => shown(),
+        setShown: selection => setShown(selection),
+    },
     onBlock(fn) {
         blockListeners.add(fn);
         for (const b of blocks) fn(b);
@@ -237,7 +252,7 @@ export function registerBlock(data: ViewerBlockData) {
     applyFit(data.el);
     blocks.push(b);
     for (const fn of [...blockListeners]) {
-        try { fn(b); } catch (e) { console.error('[latex-viewer] onBlock listener:', e); }
+        try { fn(b); } catch (e) { report('error', 'listener-failed', 'an onBlock listener failed', { error: e }); }
     }
 }
 

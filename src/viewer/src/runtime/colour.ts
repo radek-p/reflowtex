@@ -2,6 +2,7 @@
 
 import { BUILD } from './page.ts';
 import type { ColorMap } from '../host/types.ts';
+import { report } from './log.ts';
 
 // ── Colour maps (optional, page-supplied) ────────────────────────────────────
 // reflowtex ships no palette of its own – colour substitution is entirely
@@ -79,7 +80,7 @@ export function installColorMaps(): void {
     let maps: Record<string, ColorMap> = {};
     if (island) {
         try { maps = JSON.parse(island.textContent!); }
-        catch (e) { console.error('[latex-viewer] malformed #latex-color-maps JSON', e); }
+        catch (e) { report('error', 'color-maps-malformed', 'malformed #latex-color-maps JSON', { error: e }); }
     }
     // what the page gave host.setColorMaps before the first block wins over
     // the island, map by map (it was replaced by it)

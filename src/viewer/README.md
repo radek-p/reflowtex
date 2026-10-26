@@ -108,10 +108,72 @@ meanwhile. `host.fonts.loaded(file)` says whether a face has loaded, and
 
 If a font file cannot be downloaded, the block still lays out (the metrics
 travel with it) but draws in a stand-in face, and the symbol fonts of
-mathematics may draw nothing. So the viewer shows a bar at the bottom of the
-window naming the fonts, with Reload and Dismiss. Style it with
-`.latex-font-warning`, or switch it off before the viewer runs:
-`window.reflowtex = { fontWarning: false }`.
+mathematics may draw nothing. So the viewer logs it (`font-load-failed`, an
+error, naming the fonts), and by default shows it to readers in the notice
+bar at the bottom of the window, with Reload and Dismiss (see The log; style
+it with `.latex-notice`). To show it no more, leave `font-load-failed` out of
+the log's `show`; `window.reflowtex = { fontWarning: false }`, set before
+the viewer runs, does the same.
+
+## The log
+
+The viewer keeps one log for the page: every record the build wrote into
+the blocks' data (each block carries its `warnings`: a font with no face to
+draw it, say), and the viewer's own (a font that failed to download, a kind
+whose component threw). Each record has a level (`error`, `warning`,
+`info`, `debug`), a stable `code` for its kind (`font-load-failed`,
+`font-without-face`, `kind-failed`), its message, its particulars
+(`details`, strings by name), where it comes from (`pipeline`, `viewer`,
+`companion` or `page`), the block it is about (its key) and its time. The
+type is `LogRecord` in [src/shared/log.ts](../shared/log.ts).
+
+The inspector's **Log** tab lists every record. What else becomes of one is
+the page's to configure, with two settings:
+
+- **`alert`, the alerted level**: `none`, `error`, `warning`, `info` or
+  `debug`. A record at that level or above is *alerted*: written to the
+  browser's console (`[latex-viewer] …`) and sent as `reflowtex:log` on
+  `document` (`event.detail.record`), for a site that reports them its own
+  way. Below it, a record is only in the log. The default is **`error`**: an
+  author or a site's developer sees what is broken in the console, as before,
+  while what the build merely noticed – a character a font lacks, a font
+  drawn as boxes – stays in the inspector, where an author looks for it,
+  rather than filling every reader's console (or a site's error reporting)
+  on every page.
+- **`show`, what readers are shown**: a list of codes, and of level names
+  (meaning that level and above). Each record it selects is shown in the
+  notice bar, a line per code (its latest message). The default is
+  **`["font-load-failed"]`**: readers learn that text may be missing, and
+  nothing else. `[]` shows nothing; `["error"]` every error;
+  `["font-load-failed", "missing-char"]` adds characters a font lacks.
+
+Both are set by the page, in a JSON island read once the page has loaded:
+
+```html
+<script id="latex-log-config" type="application/json">
+  { "alert": "warning", "show": ["font-load-failed", "font-without-face"] }
+</script>
+```
+
+(`show` may also be a string of codes and levels, separated by spaces or
+commas; `none` is nothing.) The integrations write it from their own settings
+(the Hugo params `reflowtexLogAlert` and `reflowtexLogShow`, the vanilla
+build's `--log-alert` and `--log-show`). A page's script may set either
+instead, which wins over the island, through the host API:
+
+```js
+const { log } = reflowtex.host;
+log.records();                         // every record so far, oldest first
+log.subscribe(r => …);                 // every record from now on, alerted or not
+log.setAlertLevel('warning');          // null: back to the island's, or the default
+log.setShown(['error', 'missing-char']);
+log.report('warning', 'my-code', 'Something the page noticed', { id: 'x' });
+document.addEventListener('reflowtex:log', e => myReporter(e.detail.record));
+```
+
+`log.alertLevel()` and `log.shown()` say what is in force. Debug records
+(the viewer's timings) are made only while `window.reflowtex.debug` is on
+(or with `?reflowtex-debug`), and are then printed too.
 
 ## Overflow
 
@@ -330,6 +392,8 @@ everything a page draws:
   forgets it.
 - **Fonts**: `host.fonts.provide(file, source)`, `host.fonts.loaded(file)`,
   `host.fonts.ready()` (see Fonts).
+- **The log**: `host.log.records()`, `subscribe(fn)`, `report(…)`, the
+  alerted level and what readers are shown (see The log).
 - **The drawing as data**, for a host that places a caret or tests a click
   itself: `block.segments()` lists a block's segments in drawing order
   (`kind` 'text', 'display' or 'stream'; `svg`, the element drawn in;

@@ -36,6 +36,7 @@ import { subsetFont } from './subset.ts';
 import { convertType1, kpsewhich, MODIFIED_TAG } from './type1.ts';
 import { convertMetafont } from './metafont.ts';
 import { GLYPH_INDEX_PUA } from '../../shared/glyph-text.ts';
+import type { Warning } from '../../shared/log.ts';
 
 const hash8 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex').slice(0, 8);
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -304,9 +305,21 @@ export class Fonts {
       }
     }
     if (problems.length) throw new FontError(`served fonts cannot draw every glyph the blocks reference – the page would render blanks:\n  ${problems.join('\n  ')}`);
-    return [...needs.boxes].filter(([, b]) => b.glyphs).map(([name, b]) =>
-      `font ${name} has no face (${b.reason}): its ${b.glyphs} glyph${b.glyphs === 1 ? '' : 's'} are drawn as boxes of the size TeX gave them, as text all the same`);
+    return [...needs.boxes].filter(([, b]) => b.glyphs).map(([name, b]) => boxedFontMessage(name, b));
   }
+}
+
+/** What the build says of a font drawn as boxes. */
+const boxedFontMessage = (name: string, b: { reason: string; glyphs: number }): string =>
+  `font ${name} has no face (${b.reason}): its ${b.glyphs} glyph${b.glyphs === 1 ? '' : 's'} are drawn as boxes of the size TeX gave them, as text all the same`;
+
+/** A block's warnings about its fonts: each font with no face that it sets
+ *  glyphs in (code font-without-face; details: font, reason, glyphs). */
+export function fontWarnings(doc: SerializerOutput): Warning[] {
+  return [...fontNeeds([doc]).boxes].filter(([, b]) => b.glyphs).map(([name, b]) => ({
+    level: 'warning', code: 'font-without-face', message: boxedFontMessage(name, b),
+    details: { font: name, reason: b.reason, glyphs: String(b.glyphs) },
+  }));
 }
 
 // ── What the blocks need ────────────────────────────────────────────────────

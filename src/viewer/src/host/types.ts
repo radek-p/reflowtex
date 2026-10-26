@@ -18,6 +18,9 @@ import type { Doc, TexNode, ViewerFont } from '../engine/model.ts';
 import type { Line } from '../engine/layout/types.ts';
 import type { Params } from '../runtime/params.ts';
 import type { Inspect } from './inspect.ts';
+import type { AlertLevel, LogLevel, LogRecord } from '../../../shared/log.ts';
+
+export type { AlertLevel, LogLevel, LogRecord };
 
 /** Where an instance stands relative to the text. */
 export type Placement =
@@ -551,6 +554,37 @@ export interface Host {
      *  name). Without provide(), a face comes from the served file beside
      *  the viewer (fonts/, data-fonts-base, #latex-font-map). */
     readonly fonts: Fonts;
+    /** The page's log: the warnings the blocks' data carry from the build,
+     *  and the viewer's own records (the viewer's README, The log). */
+    readonly log: HostLog;
+}
+
+/** host.log. */
+export interface HostLog {
+    /** Every record so far, oldest first; with `after`, those after that
+     *  record's seq. */
+    records(after?: number): LogRecord[];
+    /** Be given every record from now on, alerted or not; returns the call
+     *  that stops it. */
+    subscribe(fn: (record: LogRecord) => void): () => void;
+    /** Add a record of the page's own (source 'page'), as the viewer's are:
+     *  alerted and shown as configured. `details`: its particulars, as
+     *  strings (an `error` is kept as its message, and given to the
+     *  console as it is); `block`: the key of the block it is about. */
+    report(level: LogLevel, code: string, message: string, details?: Record<string, unknown>,
+           options?: { block?: string | null; source?: 'page' | 'companion' }): LogRecord;
+    /** The alerted level: records at it or above are written to the
+     *  browser's console and sent as `reflowtex:log` on document. From
+     *  #latex-log-config's `alert`, else 'error'. */
+    alertLevel(): AlertLevel;
+    /** Set it for this page; null: back to the page's configuration. */
+    setAlertLevel(level: AlertLevel | null): void;
+    /** What is shown to readers in the notice bar: codes, and level names
+     *  (that level and above). From #latex-log-config's `show`, else
+     *  ['font-load-failed']. */
+    shown(): string[];
+    /** Set it for this page; null: back to the page's configuration. */
+    setShown(selection: readonly string[] | null): void;
 }
 
 /** host.fonts. */
@@ -651,7 +685,8 @@ export interface ReflowTeX {
     host?: Host;
     /** Timing lines in the console, read on each line (or ?reflowtex-debug). */
     debug?: boolean;
-    /** false: no warning bar when fonts fail to download. */
+    /** false: the notice that fonts failed to download is not shown (as
+     *  leaving font-load-failed out of HostLog.shown). */
     fontWarning?: boolean;
     /** How the accessible layer gives formulas: as MathML, or as their
      *  words. The reader's choice, remembered; reflowtex:accessible-math on
@@ -683,6 +718,8 @@ declare global {
     interface DocumentEventMap {
         /** Sent once, on document, when window.reflowtex.host exists. */
         'reflowtex:host': CustomEvent<{ host: Host }>;
+        /** Sent on document for each record at the alerted level or above (HostLog). */
+        'reflowtex:log': CustomEvent<{ record: LogRecord }>;
         /** Sent on document after live marks change (host.addMark). */
         'reflowtex:marks': CustomEvent<{ marks: LiveMark[] }>;
     }

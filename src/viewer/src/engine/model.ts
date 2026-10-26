@@ -8,6 +8,7 @@
 
 import type { InlineEnv, Instance, KindDef } from '../host/types.ts';
 import type { FontKind } from '../../../shared/font-face.ts';
+import type { Warning } from '../../../shared/log.ts';
 
 // ── Nodes ──────────────────────────────────────────────────────────────────
 
@@ -335,6 +336,9 @@ export interface Doc {
     outline: OutlineEntry[];
     slots: Slot[];
     marks: Mark[];
+    /** What the build found about the block (src/shared/log.ts); a map
+     *  with no entries decodes as absent. */
+    warnings?: (Omit<Warning, 'details'> & { details?: Warning['details'] })[];
     /** The viewer's (host/slots). */
     slotParas?: SlotParagraph[];
     slotDisplays?: SlotDisplay[];

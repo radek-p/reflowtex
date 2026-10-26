@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,4 +58,28 @@ test('a site gets the inspector as built, not its sources', () => {
     // the viewer shipped is the minified one, under the bundle's name
     assert.equal(readFileSync(join(out, 'latex-viewer.js'), 'utf8'), readFileSync(join(REPO, 'src/viewer/latex-viewer.min.js'), 'utf8'));
   } finally { rmSync(out, { recursive: true, force: true }); }
+});
+
+// The bundles import src/shared/ too, which the stamp left out: a change
+// there left every bundle stale, built from the old code.
+test('a change in src/shared builds every bundle again', () => {
+  ensureBundles({ log: () => {} });
+  const probe = join(REPO, 'src/shared/zz-stamp-probe.ts');
+  try {
+    writeFileSync(probe, '// SPDX-License-Identifier: AGPL-3.0-or-later\nexport {};\n');
+    assert.deepEqual(ensureBundles({ log: () => {} }).sort(), ['companion', 'inspector', 'viewer']);
+  } finally { rmSync(probe, { force: true }); }
+  assert.deepEqual(ensureBundles({ log: () => {} }).sort(), ['companion', 'inspector', 'viewer'], 'and again once it is gone');
+});
+
+test("the panel's modules import only each other and Preact; what they use of src/shared is in them", () => {
+  ensureBundles({ only: ['inspector'], log: () => {} });
+  const dir = join(REPO, 'src/inspector/panel');
+  for (const f of readdirSync(dir).filter(f => f.endsWith('.js'))) {
+    const code = readFileSync(join(dir, f), 'utf8');
+    for (const [, from] of code.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm))
+      assert.match(from, /^\.\/[\w-]+\.js$|^\.\.\/vendor\/preact\.js$/, `${f} imports ${from}`);
+  }
+  // (the Log view's filter is src/shared/log.ts's)
+  assert.match(readFileSync(join(dir, 'log.js'), 'utf8'), /function matchesFilter\b/);
 });

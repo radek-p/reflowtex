@@ -24,6 +24,7 @@ import type { FontTable } from '../engine/model.ts';
 import type { LayoutCache, LineMeta, SegmentLayout } from '../engine/layout/types.ts';
 import type { Instance, MountOptions, Surface, SurfaceMetrics, TypesetPart } from './types.ts';
 import { cancelFrame, frame } from '../runtime/pending.ts';
+import { report } from '../runtime/log.ts';
 
 /** What a part needs of its block: the viewer's per-block data. */
 export interface BlockData {
@@ -174,7 +175,7 @@ export class SurfaceImpl implements Surface {
         };
         this.box.dataset.baseline = String(this.last.firstBaseline);
         for (const fn of [...this.listeners]) {
-            try { fn(this.last); } catch (e) { console.error('[latex-viewer] surface listener:', e); }
+            try { fn(this.last); } catch (e) { report('error', 'listener-failed', 'a surface listener failed', { error: e }); }
         }
         surfaceChanged(this);
     }

@@ -23,7 +23,8 @@ import * as DM from './display-model.ts';
 import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from './transforms.ts';
 import { attachMathML, readMathmlFile, speaker } from './mathml.ts';
 import { convertPictures, includedPictureFiles } from './pictures.ts';
-import { Fonts, fontNeeds } from './fonts/fonts.ts';
+import { Fonts, fontNeeds, fontWarnings } from './fonts/fonts.ts';
+import type { Warning } from '../shared/log.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
 import { kpsewhich } from './fonts/type1.ts';
 import { FontFiles, compositeTexts, resolveVirtualFonts } from './fonts/vf.ts';
@@ -176,7 +177,7 @@ export class Pipeline {
   /** Compile one snippet: the bytes a page embeds. */
   async compile(content: string, preamble = '', o: CompileOptions = {}): Promise<Uint8Array> {
     const { data, dir, key } = await this.compileData(content, preamble, o);
-    const bytes = encodeDocument(data);
+    const bytes = encodeBlock(data);
     writeFileSync(join(dir, 'nodelist.pb'), bytes);
     this.blocks.set(key, data);
     return bytes;
@@ -205,7 +206,7 @@ export class Pipeline {
       const dir = join(this.buildRoot, p.key);
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'output.json'), writeSerializerOutput(split[i]));
-      const bytes = encodeDocument(split[i]);
+      const bytes = encodeBlock(split[i]);
       writeFileSync(join(dir, 'nodelist.pb'), bytes);
       this.blocks.set(p.key, split[i]);
       this.inputs.set(p.key, this.inputs.get(key) ?? {});
@@ -338,6 +339,13 @@ export class Pipeline {
   /** Declare a document compiled elsewhere (already transformed) as one of
    *  this pipeline's blocks: finishFonts() serves its fonts too. */
   adopt(key: string, data: SerializerOutput): void { this.blocks.set(key, data); }
+}
+
+/** The bytes a page embeds for a block: its data, with its warnings – those
+ *  the transforms recorded, and those about the fonts it sets glyphs in –
+ *  for the viewer to add to the page's log. */
+function encodeBlock(data: SerializerOutput): Uint8Array {
+  return encodeDocument({ ...data, warnings: [...((data.warnings as Warning[] | undefined) ?? []), ...fontWarnings(data)] });
 }
 
 // ── Display geometry ────────────────────────────────────────────────────────

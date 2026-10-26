@@ -416,6 +416,19 @@ message Document {
   repeated OutlineEntry outline        = 13;
   repeated Slot         slots          = 14;
   repeated Mark         marks          = 15;
+  // What the build found about this block that a reader or an author may
+  // want to know (src/shared/log.ts): the viewer adds them to the page's log.
+  repeated Warning      warnings       = 16;
+}
+
+// One record of the build's log, about this block: a level (error, warning
+// or info), a stable code for its kind (font-without-face), the message in
+// words, and its particulars by name.
+message Warning {
+  optional string level   = 1;
+  optional string code    = 2;
+  optional string message = 3;
+  map<string, string> details = 4;
 }
 
 message OutlineEntry {

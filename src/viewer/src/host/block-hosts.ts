@@ -31,6 +31,7 @@ import type { DomSegment, SegmentLayout, StreamSegment } from '../engine/layout/
 import { kindDef, onKindChange } from './kinds.ts';
 import { frame as nextFrame } from '../runtime/pending.ts';
 import { BLOCK_SELECTOR } from '../runtime/page.ts';
+import { report } from '../runtime/log.ts';
 
 interface HostRecord {
     box: HTMLElement;
@@ -107,7 +108,7 @@ function dispose(rec: HostRecord) {
     records.delete(rec);
     rec.owner.hosts?.delete(rec.index);
     if (rec.undo) {
-        try { rec.undo(); } catch (e) { console.error(`[latex-viewer] kind "${rec.kind}": undoing render failed:`, e); }
+        try { rec.undo(); } catch (e) { report('error', 'kind-failed', `kind "${rec.kind}": undoing render failed`, { kind: rec.kind, error: e }); }
     }
     rec.undo = null;
 }
@@ -165,7 +166,7 @@ export function layoutHostedSegment(s: DomSegment, seg: StreamSegment, widthPt: 
             const undo = def.render(instance, rec.host);
             rec.undo = typeof undo === 'function' ? undo : null;
         } catch (e) {
-            console.error(`[latex-viewer] kind "${rec.kind}": render failed, drawn by default:`, e);
+            report('error', 'kind-failed', `kind "${rec.kind}": render failed, drawn by default`, { kind: rec.kind, error: e });
             rec.failed = true;
             records.delete(rec);
             s.box.replaceChildren();

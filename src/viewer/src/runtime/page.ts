@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { ReflowTeX } from '../host/types.ts';
+import { report } from './log.ts';
 
 // document.currentScript is only valid during this script's own synchronous
 // top-level execution – it reads as null from inside any callback (DOMContent-
@@ -21,8 +22,9 @@ export const api: ReflowTeX = window.reflowtex = window.reflowtex || {};
 // = true (read on each line, so it can be flipped in the console), or add
 // ?reflowtex-debug to the page URL.
 if (/[?&]reflowtex-debug\b/.test(location.search)) api.debug = true;
-export const debugLog = (...a: unknown[]): void => { if (api.debug) console.debug(...a); };
-debugLog(`[latex-viewer] build ${BUILD}`);
+// Each is a debug record of the page's log (code timing), made only then.
+export const debugLog = (line: string): void => { if (api.debug) report('debug', 'timing', line); };
+debugLog(`build ${BUILD}`);
 
 // A block element: one the integrations wrote (data-nodelist-b64), or a view
 // of it a page mounted elsewhere (host.mount(el, { of }), data-latex-view).

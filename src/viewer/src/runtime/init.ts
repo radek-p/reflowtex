@@ -32,6 +32,7 @@ import type { BlockData, BlockSource } from './block-data.ts';
 import type { Doc, FontTable, TexNode } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
 import type { OutlineItem } from '../host/types.ts';
+import { pageLog, report } from './log.ts';
 
 /** How long a block's set-up took (ms), and how many segments it painted. */
 interface InitTimes { decode: number; fonts: number; layout: number; paint: number; total: number; segTotal: number; segPainted: number }
@@ -177,6 +178,8 @@ export async function initBlock(el: HTMLElement, of: BlockSource | null = null, 
     if (slicedFor(data)) startSlices(data);
     announceLayout(el);
     registerBlock(data);
+    // What the build found about the block, into the page's log (once: not again for each view).
+    if (!of) pageLog.addWarnings(doc.warnings, cache.blockKey ?? null, 'pipeline');
     observedBlocks.add(el);
     const t4 = performance.now();
     ro.observe(el);
@@ -271,14 +274,14 @@ export async function init(): Promise<void> {
             const t = await renderOnce(el);
             if (!t) continue;
             segPainted += t.segPainted; segTotal += t.segTotal;
-            debugLog(`[latex-viewer] block ${++idx}/${blocks.length}: ${t.total.toFixed(1)} ms `
+            debugLog(`block ${++idx}/${blocks.length}: ${t.total.toFixed(1)} ms `
                 + `(decode ${t.decode.toFixed(1)}, fonts ${t.fonts.toFixed(1)}, layout ${t.layout.toFixed(1)}, paint ${t.paint.toFixed(1)}) `
                 + `– ${t.segPainted}/${t.segTotal} segments painted`);
         }
-        catch (e) { el.textContent = `Render error: ${(e as Error).message}`; console.error(e); }
+        catch (e) { el.textContent = `Render error: ${(e as Error).message}`; report('error', 'block-failed', `a block could not be drawn: ${(e as Error).message}`, { error: e }); }
     }
     const segDeferred = segTotal - segPainted;
-    debugLog(`[latex-viewer] ${blocks.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms `
+    debugLog(`${blocks.length} block(s) in ${(performance.now() - tStart).toFixed(1)} ms `
         + `· ${segPainted}/${segTotal} segments painted`
         + (segDeferred ? `, ${segDeferred} deferred (painted on scroll)` : ''));
     watchFonts();

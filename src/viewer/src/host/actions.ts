@@ -13,6 +13,7 @@
 // detail { action, verb, arg, source, instance, handled }.
 import type { Action, Instance } from './types.ts';
 import { host } from './host.ts';
+import { report } from '../runtime/log.ts';
 
 type Handler = (a: Action) => boolean | void;
 const handlers = new WeakMap<Instance, Map<string, Set<Handler>>>();
@@ -42,7 +43,7 @@ export function dispatchAction(source: Element, text: string): void {
     for (let i: Instance | null = origin; i && !handled; i = i.parent) {
         for (const fn of handlers.get(i)?.get(verb) || []) {
             let r: boolean | void;
-            try { r = fn(action); } catch (e) { console.error(`[latex-viewer] action "${text}":`, e); r = undefined; }
+            try { r = fn(action); } catch (e) { report('error', 'action-failed', `action "${text}" failed`, { action: text, error: e }); r = undefined; }
             if (r !== false) { handled = true; break; }
         }
     }

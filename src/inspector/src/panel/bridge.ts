@@ -13,7 +13,7 @@ import type { AgentApi } from '../protocol.ts';
 // already in the page – installed by another copy of the panel, or served
 // from a stale cache – is replaced: agent.js is loaded again, with a query of
 // its own so no cache can hand back the old file.
-export const AGENT = 7;
+export const AGENT = 8;
 export const MISSING: unique symbol = Symbol('missing');
 export type Missing = typeof MISSING;
 
@@ -36,6 +36,8 @@ function loadAgent(): Promise<void> {
     const w = page, a = w.__rtxInspector;
     if (w.__rtxInspectorInstall && (!a || a.agent >= AGENT)) return Promise.resolve();
     if (a && retried) return Promise.resolve();                // tried once: make do
+    // (a page just navigated to, with no head yet: asked again at the next call)
+    if (!w.document.head) return Promise.resolve();
     const fresh = !!w.__rtxInspectorInstall;
     return loading = loading || new Promise<void>((resolve, reject) => {
         const s = w.document.createElement('script');
@@ -57,7 +59,8 @@ export async function call<M extends Method>(method: M, ...args: Parameters<Agen
     // (the page went – an iframe navigated – while the agent loaded)
     if (w !== page || w.closed) return MISSING;
     let a = w.__rtxInspector;
-    if ((!a || a.agent < AGENT) && w.__rtxInspectorInstall!() === 'ok') a = w.__rtxInspector;
+    if (!w.__rtxInspectorInstall) return MISSING;                // (not loaded yet)
+    if ((!a || a.agent < AGENT) && w.__rtxInspectorInstall() === 'ok') a = w.__rtxInspector;
     if (a && typeof a[method] !== 'function') {
         say(`the page's inspector agent is older than this panel (${a.agent}, needs ${AGENT}): reload the page`, 10000);
         return MISSING;

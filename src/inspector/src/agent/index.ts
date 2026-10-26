@@ -29,12 +29,13 @@ import { guidesPaints, listen, options, redraw, schedule, scrollIntoViewIfNeeded
 import { elementOf, fromElement, startPick, stopPick } from './pick.ts';
 import { fontGlyphs } from './fonts.ts';
 import { openPopover, resource, resources, uses } from './resources.ts';
+import { logBlock, logs } from './log.ts';
 import { colourMaps, exportColourMaps, importColourMaps, resetColourMaps, setMapColour, setMapTint, setPageTheme } from './colours.ts';
 import type { ViewerInspect } from './context.ts';
 import type { AgentApi } from '../protocol.ts';
 
 window.__rtxInspectorInstall = (): 'ok' | 'no-api' => {
-const AGENT = 7;
+const AGENT = 8;
 const prev = window.__rtxInspector;
 if (prev && prev.agent === AGENT) return 'ok';
 const I = window.reflowtex && window.reflowtex.inspect as ViewerInspect | undefined;
@@ -78,6 +79,8 @@ const api: AgentApi = {
     // Accessibility: what the accessible layer holds for a row.
     accessible,
     openPopover, colourMaps, setPageTheme, setMapColour, setMapTint, importColourMaps, exportColourMaps, resetColourMaps,
+    // The page's log (the Log tab): its records after a seq; a block's row by its key.
+    logs, logBlock,
 };
 window.__rtxInspector = api;
 return 'ok';

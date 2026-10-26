@@ -6,7 +6,8 @@ blocks → segments → lines → nodes (hbox, vbox, glyph, glue, kern, penalty,
 discretionary, math, rule, picture, widget). The page highlights the node you
 hover, as Chrome's does. A second view, **Resources**, lists what the blocks draw
 with: fonts and their glyphs, pictures, streams (footnotes among them),
-links, citations, anchors and slots.
+links, citations, anchors and slots. A third, **Colours**, shows and edits
+the page's colour maps, and a fourth, **Log**, lists the page's log.
 
 The project's website includes it on every page. Press **Alt+Shift+I**
 (**⌥⇧I** on a Mac), click **Inspect** on an example's result, or choose
@@ -157,6 +158,26 @@ and downloads them (`color-maps.json`), **Import file** and **Paste JSON**
 replace them, and **Reset** brings back the page's own. Nothing is saved to
 the site's files: paste the export into the site's colour map to keep it.
 
+## Log
+
+The **Log** tab lists the page's log (the viewer's `host.log`; its README,
+The log): every record, newest last – the warnings each block's data carries
+from the build (a font with no face, a character a font lacks), and what the
+viewer, the companion's components and the page's own code reported. Each
+row gives the record's level, message, particulars, code, where it comes
+from and when, and the block it is about. The tab's badge counts them,
+coloured by the gravest. It lists everything, whatever the page alerts or
+shows its readers; nothing is drawn on the page for a record.
+
+- **Filter**: the levels shown (Errors, Warnings, Info, Debug, each with its
+  count; ⌥-click (Alt-click) shows one alone), a code (the menu lists those
+  logged), and a text found in the message, the code, the particulars or the
+  block's key. **Clear filter** shows all again. The browser remembers the
+  levels.
+- **Its block**: hovering a record outlines its block on the page, and
+  **Show block** (or Enter, on the selected record) selects it in the Boxes
+  view.
+
 The panel floats over the page, or docks to the left, right or bottom edge
 of the window: the four dock icons in the toolbar's corner choose (folded
 into one button, with a menu, when the panel is narrow). Floating, drag the
@@ -231,8 +252,8 @@ size. Anything the page fixes to the window can keep clear with them:
 - **The panel** is Preact components written with htm (tagged templates),
   and its state is Preact Signals
   (`panel/store.js`): `dock.js` places it, `tree.js` is the Boxes view,
-  `resources.js` and `font.js` the Resources view, `ui.js` the shared
-  parts. The rows are keyed by node id, so a reflow changes only the text
+  `resources.js` and `font.js` the Resources view, `colours.js` the
+  Colours view, `log.js` the Log view, `ui.js` the shared parts. The rows are keyed by node id, so a reflow changes only the text
   that changed: the tree does not flicker while a width moves, and a press
   on a row lands on the row it began on.
 - **The sources** are in `src/`: `src/inspector.*`, `src/agent/` and
@@ -240,7 +261,7 @@ size. Anything the page fixes to the window can keep clear with them:
   that installs the inspector, when they are missing or stale
   (src/pipeline/bundles.ts; `make build-inspector` on demand): the loader
   and the agent bundled into one classic script each, the panel's modules
-  one file each. Each built file names, on its second line, what it was
+  one file each (what they use of `src/shared/` inlined in each). Each built file names, on its second line, what it was
   built from.
 - **`vendor/preact.js`** is Preact, htm and Preact Signals in one ES module
   (MIT; 23 KB, 9 KB gzipped), rebuilt at pinned versions by

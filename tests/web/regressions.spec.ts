@@ -85,7 +85,7 @@ test('the gap in a link is hoverable', async ({ openPage }) => {
 test('a font failure is shown and dismissed', async ({ openPage }) => {
   const page = await openPage('notes', { route: ['**/*.otf', r => r.fulfill({ status: 404 })] });
   page.errors.length = 0;                               // the 404s are the point here
-  const bar = page.locator('.latex-font-warning');
+  const bar = page.locator('.latex-notice');
   await bar.waitFor({ state: 'visible' });
   expect(await bar.innerText()).toMatch(/lmroman|cm/);
   await bar.locator('[data-act="close"]').click();

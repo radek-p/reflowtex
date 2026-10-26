@@ -6,6 +6,7 @@ import { BLOCK_SELECTOR } from '../runtime/page.ts';
 import type { Instance, Surface } from '../host/types.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
 import { screenCTM } from '../runtime/screen-ctm.ts';
+import { report } from '../runtime/log.ts';
 
 /** An element that opens a stream in the popover: a glyph, or a margin mark. */
 type Source = HTMLElement | SVGElement;
@@ -145,7 +146,7 @@ export function footnoteGroupRect(el: Source): ScreenRect {
 let shown: { key: string; instance: Instance; surface?: Surface; undo?: (() => void) | null } | null = null;
 function undraw() {
     if (!shown) return;
-    if (shown.undo) { try { shown.undo(); } catch (e) { console.error('[latex-viewer] popover:', e); } }
+    if (shown.undo) { try { shown.undo(); } catch (e) { report('error', 'kind-failed', 'undoing a popover failed', { error: e }); } }
     if (shown.surface) shown.surface.dispose();
     shown = null;
 }
@@ -170,7 +171,7 @@ export function renderFootnote(block: Element, id: string): boolean {
             shown.undo = typeof u === 'function' ? u : null;
             return true;
         } catch (e) {
-            console.error(`[latex-viewer] kind "${instance.kind}": render failed, drawn by default:`, e);
+            report('error', 'kind-failed', `kind "${instance.kind}": render failed, drawn by default`, { kind: instance.kind, error: e });
             footnoteBody!.replaceChildren();
         }
     }

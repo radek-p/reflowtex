@@ -66,7 +66,7 @@ export function settleAll(): void {
         if (d) scroller.scrollTop += d;
     }
     frame('settle: scroll anchoring back', restore);
-    debugLog(`[latex-viewer] settled ${els.length} block(s) in ${(performance.now() - t0).toFixed(1)} ms`);
+    debugLog(`settled ${els.length} block(s) in ${(performance.now() - t0).toFixed(1)} ms`);
 }
 function settleSliced(data: BlockData): void {
     const params = { ...data.params, align: data.lastAlign };

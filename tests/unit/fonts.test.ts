@@ -11,7 +11,7 @@ import { FONT_KINDS, faceFromWire, faceToWire, type TexFontFace } from '../../sr
 import { readSerializerOutput, writeSerializerOutput, type SerializerOutput } from '../../src/pipeline/nodes.ts';
 import { encodeDocument, SchemaMismatch } from '../../src/pipeline/encode.ts';
 import { messageType, schema } from '../../src/pipeline/schema.ts';
-import { Fonts, fontNeeds } from '../../src/pipeline/fonts/fonts.ts';
+import { Fonts, fontNeeds, fontWarnings } from '../../src/pipeline/fonts/fonts.ts';
 import { normaliseLegacyFontAddressing } from '../../src/pipeline/fonts/addressing.ts';
 import { slotCode } from '../../src/shared/glyph-text.ts';
 
@@ -21,7 +21,7 @@ const doc = (fonts: Record<string, unknown>, nodes: Record<string, unknown>[] = 
 const wire = (d: SerializerOutput) => {
   const Document = messageType('Document');
   return Document.toObject(Document.decode(encodeDocument(d)), { defaults: false, arrays: true, enums: String, longs: Number }) as
-    { fonts: Record<string, unknown>[]; paragraphs: { nodes: Record<string, unknown>[] }[] };
+    { fonts: Record<string, unknown>[]; paragraphs: { nodes: Record<string, unknown>[] }[]; warnings: { level: string; code: string; message: string; details?: Record<string, string> }[] };
 };
 
 test("every kind of face is one of latex.proto's FontKind values, and the other way round", () => {
@@ -71,6 +71,14 @@ test('a classic font with no outline is given boxes, with the reason, its glyphs
     const warnings = fonts.verify(needs);
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /^font rtxnoface10 has no face \(no Type 1 outline of rtxnoface10 .*\): its 3 glyphs are drawn as boxes/);
+    // and the block's own data says so, for the page's log: the same message, with a code and its particulars
+    const [w] = fontWarnings(d);
+    assert.deepEqual(w, { level: 'warning', code: 'font-without-face', message: warnings[0],
+                          details: { font: 'rtxnoface10', reason: face.kind === 'boxes' ? face.reason : '', glyphs: '3' } });
+    assert.deepEqual(wire({ ...d, warnings: [w] }).warnings, [w], 'carried on the wire as it is');
+    assert.deepEqual(wire(d).warnings, [], 'none when the transforms recorded none');
+    // (a block that sets no glyph in the font has no warning about it)
+    assert.deepEqual(fontWarnings(doc({ 7: { name: 'rtxnoface10', size_sp: 655360, face: d.fonts.get('7')!.face } })), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

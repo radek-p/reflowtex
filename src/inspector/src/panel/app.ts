@@ -12,12 +12,14 @@ import { SIDES, SIDE_TITLES, side, embedded, panelStyle, setDock, applyDock, cho
 import { Tree, Details, RowMenu, selected, refresh, reveal, forgetSelection } from './tree.js';
 import { ResourceList, ResourceDetails, loadResources, markUses, resSel, forgetResources } from './resources.js';
 import { ColourView, loadColours } from './colours.js';
-import type { Guides } from './store.js';
+import { LogView, loadLog, forgetLog, logBadge } from './log.js';
+import type { Guides, View } from './store.js';
 import type { InspectorPanel } from '../protocol.ts';
 
 const TABS: [string, string, string][] = [['tree', 'Boxes', 'Blocks, lines, boxes and glue'],
               ['res', 'Resources', 'Fonts and their glyphs, pictures, instances, kinds, marks, streams (footnotes, popovers), links, citations, anchors, slots'],
-              ['col', 'Colours', "The page's colour maps: each TeX colour as each theme shows it, and as shown now"]];
+              ['col', 'Colours', "The page's colour maps: each TeX colour as each theme shows it, and as shown now"],
+              ['log', 'Log', "The page's log: what the build found about each block, and what the viewer reported"]];
 // The page overlays, in the Overlays menu: [key, label, what it draws].
 const OVERLAYS: [keyof Guides, string, string][] = [
     ['baselines', 'Baselines', 'The baseline of every line'],
@@ -34,11 +36,12 @@ const LEGEND = [['box, glyph', 'box'], ['glue', 'glue'], ['kern', 'kern'], ['mat
 // promise it answers.)
 export function setView(v: string): Promise<void> | null {
     if (view.value === v) return null;
-    view.value = v as typeof view.value;
+    view.value = v as View;
     keep('view', v, plain);
     const focus = (el: HTMLElement | null) => requestAnimationFrame(() => el && el.focus({ preventScroll: true }));
     if (v === 'res') { call('select', null); focus(refs.rbody); return loadResources(); }
     if (v === 'col') { call('select', null); return loadColours(); }
+    if (v === 'log') { call('select', null); return loadLog(); }
     call('mark', null);
     if (selected.value != null) call('select', selected.value, { scroll: false });
     focus(refs.tree);
@@ -64,7 +67,7 @@ const NAV_KEYS = /^(Arrow(Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/;
 
 // ── The panel ──────────────────────────────────────────────────────────────────
 function Toolbar() {
-    const g = guides.value, now = side.value;
+    const g = guides.value, now = side.value, badge = logBadge.value;
     return html`<div class="bar" onPointerDown=${startMove}>
         <span class="tools">
             <${IconButton} class=${'pick' + (picking.value ? ' on' : '')} title="Pick a box or glue in the page (Esc cancels)" onClick=${togglePick}>
@@ -75,7 +78,7 @@ function Toolbar() {
             <span class="sep"></span>
             <span class="tabs" role="tablist">
                 ${TABS.map(([v, label, title]) => html`<button type="button" role="tab" key=${v} data-view=${v} title=${title}
-                    aria-selected=${String(view.value === v)} onClick=${() => setView(v)}><span>${label}</span></button>`)}
+                    aria-selected=${String(view.value === v)} onClick=${() => setView(v)}><span>${label}</span>${v === 'log' && badge ? html`<span class=${'badge l-' + badge.level} aria-label=${`${badge.count} records`}>${badge.count}</span>` : null}</button>`)}
             </span>
         </span>
         <span class="fill"></span>
@@ -163,7 +166,7 @@ function Panel() {
             data-view=${view.value} data-edge=${emb || s === 'float' ? undefined : s} style=${panelStyle}
             onPointerMove=${() => setShowSel(false)} onPointerDownCapture=${onPointerDownCapture} onKeyDownCapture=${onKeyDownCapture}>
         <${Toolbar}/>
-        <div class="main"><${Tree}/><${Details}/><${ResourceList}/><${ResourceDetails}/><${ColourView}/></div>
+        <div class="main"><${Tree}/><${Details}/><${ResourceList}/><${ResourceDetails}/><${ColourView}/><${LogView}/></div>
         <${Foot}/>
         <div class="grip" aria-hidden="true" onPointerDown=${startSize}></div>
         <${Menus}/>
@@ -226,13 +229,15 @@ async function inspect(w: Window): Promise<void> {
     mirrored = -1;
     forgetSelection();
     forgetResources();
+    forgetLog();
     blocks.value = null;
     lastPaints = null;
     if (!isOpen.value) return;
     mirrorFonts();
     try { await refresh(); } catch (e) { say(String((e as Error).message || e), 10000); return; }
     if (view.value === 'res') loadResources();
-    if ((view.value as string) === 'col') loadColours();
+    if (view.value === 'col') loadColours();
+    loadLog();
     applyGuides();
     poll();
 }
@@ -253,6 +258,7 @@ async function poll() {
     noViewer.value = !got(st);
     if (!got(st)) { picking.value = false; return; }
     picking.value = st.picking;
+    loadLog();
     // Blocks that start (or go) after the panel opened: the tree, and the
     // resources they bring, follow without being asked.
     if (blocks.value !== null && st.blocks !== blocks.value) { followReflow(); if (view.value === 'res') loadResources(); }
@@ -298,6 +304,8 @@ async function open(block?: Element | null, { dock: where, scroll = true }: { do
         blocks.value = null;
         try { await refresh(); } catch (e) { say(String((e as Error).message || e), 10000); return; }
         if (view.value === 'res') loadResources();
+        if (view.value === 'col') loadColours();
+        loadLog();
         applyGuides();
         lastPaints = null;
         requestAnimationFrame(watchPaints);

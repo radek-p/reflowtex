@@ -26,6 +26,7 @@ import { surfacesOf, type SurfaceImpl } from '../host/surface.ts';
 import type { Instance, KindDef, NoteHost, Surface } from '../host/types.ts';
 import type { InstanceImpl } from '../host/instances.ts';
 import { frame } from '../runtime/pending.ts';
+import { report } from '../runtime/log.ts';
 
 export const MARGIN = { gap: 28, min: 150, max: 260 };   // px, by default
 
@@ -49,7 +50,7 @@ function marginHost(it: Item, instance: Instance, again: () => void): NoteHost {
 }
 
 function undraw(it: Item) {
-    if (it.undo) { try { it.undo(); } catch (e) { console.error('[latex-viewer] margin note:', e); } }
+    if (it.undo) { try { it.undo(); } catch (e) { report('error', 'kind-failed', 'undoing a margin note failed', { error: e }); } }
     it.surface?.dispose();
     it.undo = null; it.surface = null; it.edges = {};
     it.note.replaceChildren();
@@ -67,7 +68,7 @@ function draw(it: Item, instance: Instance, width: number, again: () => void) {
                 it.undo = typeof u === 'function' ? u : null;
                 return;
             } catch (e) {
-                console.error(`[latex-viewer] kind "${instance.kind}": render failed, drawn by default:`, e);
+                report('error', 'kind-failed', `kind "${instance.kind}": render failed, drawn by default`, { kind: instance.kind, error: e });
                 it.note.replaceChildren();
             }
         }

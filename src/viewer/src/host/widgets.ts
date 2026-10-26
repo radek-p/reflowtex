@@ -6,6 +6,7 @@ import { colorFill } from '../runtime/colour.ts';
 import { inlineEnv, inlineOf, inlineVersion } from './inline.ts';
 import type { Doc, FontTable, Slot, TexNode, WidgetInline, WidgetNode, WidgetPart, WidgetRun } from '../engine/model.ts';
 import type { Box, InlineMetrics } from './types.ts';
+import { report } from '../runtime/log.ts';
 
 /** A measurement, whichever form it takes (InlineMetrics). */
 type Metrics = Partial<Box> & {
@@ -80,7 +81,7 @@ export function widgetNodes(fontInfo: FontTable, slot: Slot, id: number, run: Te
     const key = `${fontPx}|${version}`, kept = widgetMeasure.get(instance.id);
     let m: Metrics | null = kept && kept.key === key ? kept.m : null;
     if (!m) {
-        try { m = def.measure!(instance, env); } catch (e) { console.error(`[latex-viewer] kind "${instance.kind}": measure failed:`, e); return null; }
+        try { m = def.measure!(instance, env); } catch (e) { report('error', 'kind-failed', `kind "${instance.kind}": measure failed`, { kind: instance.kind, error: e }); return null; }
         if (!m) return null;
         widgetMeasure.set(instance.id, { key, m: m as InlineMetrics });
     }

@@ -11,8 +11,9 @@
 //
 // Each file's header names the version (REFLOWTEX_VERSION, else
 // package.json's, else "dev") and the SHA-256 of what it was built from: its
-// sources (path and contents, in byte order of the paths), this module and
-// the version. A header that does not match is a bundle to build again.
+// sources (path and contents, in byte order of the paths) – its own src/
+// and src/shared/, which every bundle may import – this module and the
+// version. A header that does not match is a bundle to build again.
 import { buildSync, version as esbuildVersion, type BuildOptions } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -47,7 +48,7 @@ const bundled = (o: BuildOptions): string => {
   return r.outputFiles![0].text;
 };
 
-const VIEWER = join(SRC, 'viewer'), COMPANION = join(SRC, 'companion'), INSPECTOR = join(SRC, 'inspector');
+const VIEWER = join(SRC, 'viewer'), COMPANION = join(SRC, 'companion'), INSPECTOR = join(SRC, 'inspector'), SHARED = join(SRC, 'shared');
 const tsOrJs = (f: string) => /\.(ts|tsx|js)$/.test(f) && !f.endsWith('.d.ts');
 
 const BUNDLES: Record<BundleName, Bundle> = {
@@ -89,9 +90,10 @@ const BUNDLES: Record<BundleName, Bundle> = {
         { file: join(INSPECTOR, 'agent.js'), code: () => head('src/agent/')
             + bundled({ entryPoints: [join(INSPECTOR, 'src/agent/index.ts')], bundle: true, format: 'iife', absWorkingDir: INSPECTOR })
             + 'window.__rtxInspectorInstall();\n' },
-        // the panel: one ES module each, importing each other (not bundled)
+        // the panel: one ES module each, importing each other and Preact
+        // (vendor/) as they are; what they use of src/shared/ is inlined
         ...panels.map(f => ({ file: join(INSPECTOR, 'panel', f.replace(/\.(ts|tsx|js)$/, '.js')), code: () => head(`src/panel/${f}`)
-            + bundled({ entryPoints: [join(INSPECTOR, 'src/panel', f)], format: 'esm', absWorkingDir: INSPECTOR }) })),
+            + bundled({ entryPoints: [join(INSPECTOR, 'src/panel', f)], bundle: true, external: ['./*', '../vendor/*'], format: 'esm', absWorkingDir: INSPECTOR }) })),
       ];
     },
   },
@@ -108,6 +110,7 @@ function stampOf(b: Bundle, version: string): string {
     }
   };
   walk(join(b.dir, 'src'));
+  walk(SHARED);
   files.sort((a, c) => Buffer.compare(Buffer.from(a), Buffer.from(c)));
   const h = createHash('sha256');
   for (const f of files) { h.update(`${f}\n`); h.update(readFileSync(join(b.dir, f))); }

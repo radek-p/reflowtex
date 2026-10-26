@@ -27,7 +27,10 @@ export interface BlockOptions {
 class Boundary extends Component<{ kind: string; plain: boolean; children: ComponentChildren }, { failed: boolean }> {
     state = { failed: false };
     componentDidCatch(error: unknown) {
-        console.error(`[reflowtex/companion] kind "${this.props.kind}" failed, drawn plainly:`, error);
+        // (into the page's log; an older viewer has none)
+        const message = `kind "${this.props.kind}" failed, drawn plainly`, log = window.reflowtex?.host?.log;
+        if (log) log.report('error', 'kind-failed', message, { kind: this.props.kind, error }, { source: 'companion' });
+        else console.error(`[reflowtex/companion] ${message}:`, error);
         this.setState({ failed: true });
     }
     render() { return this.state.failed ? (this.props.plain ? <Typeset /> : null) : this.props.children; }
