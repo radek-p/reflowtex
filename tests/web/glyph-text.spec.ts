@@ -47,19 +47,25 @@ test("copying gives each glyph's text: a ligature's letters, nothing for a priva
 // A font no producer can give a face (here one defined in Lua, with metrics
 // and nothing to draw): the page was refused at build time, and the boxes
 // the viewer drew for such a font had no text – not selected, copied, found
-// or linked.
-test('a font with no face: boxes of the size TeX gave each glyph, its text selected, copied and found', async ({ openPage }) => {
+// or linked. Then each glyph was outlined in red; now it takes the space TeX
+// gave it and draws nothing (the build's warning says why, in the log).
+test('a font with no face: its glyphs take their space unseen, their text selected, copied and found', async ({ openPage }) => {
   const page = await openPage('glyph-text');
   const block = page.locator('.latex-block[data-nodelist-b64]').nth(1);
-  const boxes = await block.locator('.latex-missing-glyph rect').evaluateAll(rs => rs.map(r => Number(r.getAttribute('width'))));
-  // "Boxed words, findable": 19 glyphs, each a box above the baseline and one below
-  expect(boxes.length).toBe(2 * 19);
-  for (const w of boxes) expect(w).toBeCloseTo(400000 / 65536 * 2, 2);       // TeX's width (sp), 2 px per pt
-  // over each box, its character, transparent
+  // nothing painted in the block but its text: no outline, no fill
+  const painted = await block.locator('svg *:not(text):not(tspan)').evaluateAll(es => es.filter(e => {
+    const s = getComputedStyle(e), seen = (p: string) => p !== 'none' && p !== 'rgba(0, 0, 0, 0)' && p !== 'transparent';
+    return e instanceof SVGGeometryElement && s.visibility !== 'hidden' && s.display !== 'none' && Number(s.opacity) > 0 &&
+      ((seen(s.stroke) && parseFloat(s.strokeWidth) > 0) || (seen(s.fill) && Number(s.fillOpacity) > 0));
+  }).map(e => e.outerHTML.slice(0, 120)));
+  expect(painted).toEqual([]);
+  // "Boxed words, findable": 19 glyphs, each its character, transparent,
+  // TeX's width (400000 sp, 2 px per pt) apart
   const carriers = await block.locator('tspan').evaluateAll(ts => ts.filter(t => t.getAttribute('font-family') === 'serif')
-    .map(t => [t.textContent, getComputedStyle(t).fill]));
+    .map(t => [t.textContent!, getComputedStyle(t).fill, Number(t.getAttribute('x'))] as const));
   expect(carriers.map(c => c[0]).join('')).toBe('Boxedwords,findable');
   for (const [, fill] of carriers) expect(fill).toBe('rgba(0, 0, 0, 0)');
+  expect(carriers[1][2] - carriers[0][2]).toBeCloseTo(400000 / 65536 * 2, 2);
   expect((await copyAll(block)).replace(/\s+/g, ' ')).toContain('Before the font, Boxed words, findable and after it again');
   const r = await block.evaluate(el => {
     const range = document.createRange();

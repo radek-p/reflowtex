@@ -82,7 +82,7 @@ function faceNote(f: DocFont, origin: FontOrigin): string {
         case 'bitmap': return 'drawn from METAFONT bitmaps · ';
         case 'opentype': return origin === 'patched' ? 'cmap patched · ' : '';
         case 'virtual': return 'virtual: drawn in the fonts it names · ';
-        case 'boxes': return `drawn as boxes (${face.reason}) · `;
+        case 'boxes': return `not drawn (${face.reason}), its glyphs' space and text kept · `;
         default: return unreachable(face, 'font face');
     }
 }

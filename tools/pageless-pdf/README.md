@@ -97,10 +97,10 @@ shape with straight sides: TeX's rules, and in a picture its straight lines,
 fills and arrow tips, which the strip has from LuaTeX's PDF and the viewer
 draws as dvisvgm's paths. `shapes.ts` decides it for both sides alike. A
 glyph of a font the pipeline could give no face is a glyph on both sides
-too: the viewer draws it as boxes of TeX's size under a transparent text
-carrier – a `<tspan>` at the glyph's origin, which is what is counted – and
-the strip has the glyph TeX drew (a bitmap from the font's METAFONT source,
-when there is one); its boxes are not rules. A font's .notdef (glyph 0
+too: the viewer draws nothing for it but a transparent text carrier in the
+space TeX gave it – a `<tspan>` at the glyph's origin, which is what is
+counted – and the strip has the glyph TeX drew (a bitmap from the font's
+METAFONT source, when there is one). A font's .notdef (glyph 0
 of any font but a Type 3 one) is a glyph on neither side: the PDF shows it
 for a character the font lacks (luaotfload sets it after each one TeX
 reports missing), and the viewer draws nothing there. Each

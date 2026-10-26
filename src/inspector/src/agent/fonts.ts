@@ -204,7 +204,7 @@ export async function fontGlyphs(fontKey: string): Promise<FontGlyphs | null> {
     const noFile = ((): string | null => {
         switch (face0.kind) {
             case 'opentype': case 'type1': case 'bitmap': return null;
-            case 'boxes': return `no font file (${face0.reason}), so the viewer draws its glyphs as boxes`;
+            case 'boxes': return `no font file (${face0.reason}), so the viewer draws nothing for its glyphs: each keeps its space and its text`;
             case 'virtual': return 'a virtual font: its glyphs are drawn in the fonts its packets name';
             default: return unreachable(face0, 'font face');
         }

@@ -23,7 +23,6 @@ export interface ElementRun extends Run { el: SVGElement }
 /** The painter's sink: renderNodes' calls, and what paintSegment asks of it. */
 export interface PaintSink extends Sink {
     beginLine(textEl: SVGTextElement, auxEl: SVGGElement): void;
-    boxes(n: TexNode, x: number, y: number): void;
     takeLinkRuns(): ElementRun[];
     takeMarkRuns(): [number | string, ElementRun][];
     takeSelectionRun(): Run | null;
@@ -76,10 +75,6 @@ export function insertPictureSvg(g: SVGGElement, markup: string): void {
 // whole line spacing: bands that met, and sat loose around the letters.)
 // Lines 1.2 em apart keep a gap of 0.2 em between their bands.
 export const BAND_MIN = { up: 0.75, down: 0.25 };
-
-/** A glyph of a font with no face: the boxes drawn for it (boxes()), by its
- *  node – byNode has its text carrier. */
-const boxesOf = new WeakMap<TexNode, SVGGElement>();
 
 export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Element>, stats: PaintStats, cache: LayoutCache): PaintSink {
     let textParent: SVGElement | null = null, auxParent: SVGElement | null = null;
@@ -165,10 +160,11 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
             let family: string, carrier = false;
             switch (face.kind) {
                 case 'text': family = face.family; break;
-                // A font with no face: the glyph is drawn as the boxes TeX gave
-                // it (boxes()), under a text carrier – its character, as any
-                // glyph's, in a stand-in face, transparent – so that it is
-                // selected, copied, found, linked and read as text all the same.
+                // A font with no face: the glyph takes the space TeX gave it
+                // and draws nothing (the build's warning says why). Its text
+                // carrier – its character, as any glyph's, in a stand-in face,
+                // transparent – is selected, copied, found, linked and read as
+                // text all the same.
                 case 'boxes': family = 'serif'; carrier = true; break;
                 default: family = unreachable(face, 'font face');
             }
@@ -210,7 +206,6 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
             else if (el.dataset.rtxMarks !== undefined) delete el.dataset.rtxMarks;
             place(textParent!, lastTspan, el, isNew);
             used.add(el); lastTspan = el;
-            if (carrier) this.boxes(n, x, y);
             // The extent of each reference on this line, for its hit area
             // (see paintLinkHits). Not inside a transform: that has its own
             // coordinates.
@@ -252,40 +247,6 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
             }
             selRun = null;
             return r && toLine(r);
-        },
-        // A glyph of a font with no face: its TeX metric boxes – the advance
-        // width by the height above the baseline, and by the depth below – as
-        // two outlined rects, so the missing ink's place and size are visible.
-        // (Its text is the carrier glyph() drew.)
-        boxes(n: TexNode, x: number, y: number) {
-            let el = boxesOf.get(n), isNew = !el;
-            const w = gW(n) * SP_TO_PX;
-            const h = gH(n) * SP_TO_PX;                 // above the baseline
-            const d = gD(n) * SP_TO_PX;                 // below the baseline
-            const boxes: [number, number, number, number][] = [];
-            if (h > 0) boxes.push([x, y - h, w, h]);
-            if (d > 0) boxes.push([x, y,     w, d]);
-            if (!el) {
-                el = svgEl('g', { class: 'latex-missing-glyph' });
-                for (const [bx, by, bw, bh] of boxes) {
-                    const r = svgEl('rect', { x: bx, y: by, width: bw, height: bh });
-                    r.style.fill = 'none';
-                    r.style.stroke = 'var(--latex-color-ff0000, #cc0000)';
-                    r.style.strokeWidth = '1';
-                    r.style.opacity = '0.55';
-                    el.appendChild(r);
-                }
-                boxesOf.set(n, el); stats.created++;
-            } else {
-                const rects = el.children;
-                boxes.forEach(([bx, by, bw, bh], i) => {
-                    rects[i].setAttribute('x', String(bx));     rects[i].setAttribute('y', String(by));
-                    rects[i].setAttribute('width', String(bw)); rects[i].setAttribute('height', String(bh));
-                });
-                stats.repositioned++;
-            }
-            place(auxParent!, lastRect, el, isNew);
-            used.add(el); lastRect = el;
         },
         space(n, x, y) {
             let el = byNode.get(n), isNew = !el;

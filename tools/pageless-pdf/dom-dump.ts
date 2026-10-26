@@ -130,7 +130,7 @@ export async function dumpDom(url: string, o: { hsize?: number; margin?: number;
         // path data, how it is painted, and the map from its own coordinates
         // to the strip's frame.
         for (const e of svg.querySelectorAll<SVGGraphicsElement>('rect:not(.latex-link-hit):not(.latex-aside-mark), .latex-picture path')) {
-          if (unseen(e) || e.closest('.latex-missing-glyph')) continue;
+          if (unseen(e)) continue;
           let d = e.getAttribute('d') ?? '';
           if (e.tagName === 'rect') {
             const x = parseFloat(e.getAttribute('x')!), y = parseFloat(e.getAttribute('y')!);
