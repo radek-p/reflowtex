@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
 import { a11yLayer, type LayerDocument } from '../../src/pipeline/a11y.ts';
 import { Log } from '../../src/shared/log.ts';
+import { messageType } from '../../src/pipeline/schema.ts';
 
 type Node = { type: string; char?: number; font?: number; color?: string; link?: number; stream?: number; mathml?: unknown;
               width?: number; children?: Node[]; replace?: Node[]; pre?: Node[]; post?: Node[] };
@@ -359,6 +360,46 @@ test('a METAFONT-only font (bbm) is drawn from its bitmaps, as double-struck let
     .map(n => String.fromCodePoint(n.char!)).join('');
   assert.equal(chars, 'ℝ𝟙ℕ');
   assert.deepEqual(drawnGlyphNames(d).filter(([face]) => face.startsWith('bbm')).map(([, g]) => g), ['g82', 'g49', 'g78']);
+});
+
+// A character the font lacks ("Missing character" in TeX's log) is drawn by
+// nothing in TeX's PDF; luaotfload sets the OpenType font's .notdef after it.
+// Both become empty boxes of their size, and the block's warnings list the
+// characters, by font, with a few words around them. They used to be kept as
+// glyphs: the converted T1 font drew its own ł, and the page was refused for
+// the rest.
+test('a character the font lacks is drawn by nothing, and the block lists it', async () => {
+  const body = 'Pawe\u0142 and Cherno\uFB00, then {\\fontencoding{TU}\\selectfont a frame \u2554\u2550\u2557 here}.';
+  const preamble = '\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}';
+  const d = await capture(body, preamble) as Output & { missing_chars: { font: string; char: number; count: number; where: string[] }[] };
+  const nodes = [...walk(d.paragraphs.flatMap(p => p.nodes))];
+  const missing = [0x142, 0xFB00, 0x2554, 0x2550, 0x2557];
+  assert.deepEqual(nodes.filter(n => n.type === 'glyph' && (missing.includes(n.char!) || (n as { gindex?: number }).gindex === 0)), [],
+    'no glyph for them, nor a .notdef');
+  // each a box holding a rule of size 0 (it stops the search for a protruding character)
+  const boxes = nodes.filter(n => n.type === 'hlist' && n.children?.length === 1 && n.children[0].type === 'rule' && !n.children[0].width);
+  // ł and ﬀ: 0 wide; each box-drawing character: 0, then its .notdef
+  assert.deepEqual(boxes.map(b => b.width! > 0), [false, false, false, true, false, true, false, true]);
+  // nor in the text layer (copy, search, screen readers): TeX's PDF has none
+  // of them (a .notdef copies from it as U+FFFD, which says nothing)
+  const text = a11yLayer(d as unknown as LayerDocument);
+  assert.match(text, /Pawe and Cherno, then a frame +here\./);
+  assert.doesNotMatch(text, /[\u0142\uFB00\u2550-\u2557\uFFFD]/);
+  assert.deepEqual(d.missing_chars.map(m => [m.font, m.char, m.count, m.where[0]]), [
+    ['ec-lmr10', 0x142, 1, 'Pawe\u0142 and Cherno, then a frame'],
+    ['ec-lmr10', 0xFB00, 1, 'Pawe and Cherno\uFB00, then a frame here.'],
+    ['LMRoman10-Regular', 0x2554, 1, 'and Cherno, then a frame \u2554 here.'],
+    ['LMRoman10-Regular', 0x2550, 1, 'and Cherno, then a frame \u2550 here.'],
+    ['LMRoman10-Regular', 0x2557, 1, 'and Cherno, then a frame \u2557 here.'],
+  ]);
+  // the block's data, as the page gets it
+  const pb = readFileSync(join(pipe.buildRoot, contentKey(body, preamble), 'nodelist.pb'));
+  const doc = messageType('Document').toObject(messageType('Document').decode(pb)) as { warnings: Record<string, unknown>[] };
+  assert.deepEqual(doc.warnings[0], {
+    level: 'warning', code: 'missing-char', message: 'There is no \u0142 (U+0142) in font ec-lmr10',
+    details: { font: 'ec-lmr10', char: '\u0142', codepoint: 'U+0142', count: '1', where: 'Pawe\u0142 and Cherno, then a frame' },
+  });
+  assert.deepEqual(doc.warnings.map(w => (w.details as Record<string, string>).codepoint), ['U+0142', 'U+FB00', 'U+2554', 'U+2550', 'U+2557']);
 });
 
 // ── MathML ──────────────────────────────────────────────────────────────────

@@ -1,0 +1,23 @@
+% Characters the font has no glyph for, typed raw as in real papers: TeX reports each one missing and sets nothing for it (an OpenType font sets its .notdef), and the page draws nothing there either.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+A paragraph in a T1 font, with characters typed raw that its 256 slots do
+not hold as Unicode: the reference to Paweł Borówka of Łódź, set in T1, loses
+its ł and Ł and ź, and a Chernoﬀ bound typed with the ligature character loses
+the ligature, while the letters around them stay where TeX put them. The same
+words with the encoding's own commands, Pawe\l{} and \L\'od\'z, keep theirs.
+
+{\fontencoding{TU}\selectfont
+A paragraph in Latin Modern's OpenType fonts, which have no box-drawing
+characters: a frame drawn in a listing as ╔══╗ and ║ and ╚══╝ is left out,
+each character set as the font's empty .notdef glyph, which keeps the line's
+spacing as TeX gave it. The text after it, in the same font, goes on as
+usual, long enough to break into several lines at every width.\par}
+
+A last paragraph in the T1 font again, with nothing missing, to show that
+the lines after the two above are set where TeX set them.
+\end{document}

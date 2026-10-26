@@ -11,6 +11,7 @@ import { messageType } from './schema.ts';
 import { walkNodes, contentItems, type SerializerOutput, type TexNode } from './nodes.ts';
 import { faceToWire } from '../shared/font-face.ts';
 import { SchemaMismatch } from './errors.ts';
+import { missingCharWarnings } from './warnings.ts';
 
 export { SchemaMismatch };
 
@@ -125,7 +126,8 @@ export function documentObject(data: SerializerOutput): Record<string, unknown> 
     anchors: data.anchors ?? [],
     slots: data.slots ?? [],
     marks: data.marks ?? [],
-    warnings: data.warnings ?? [],
+    // the build's warnings, and one per character TeX could not set
+    warnings: [...(data.warnings ?? []), ...missingCharWarnings(data.missing_chars ?? [])],
     glyph_metrics: table,
   };
   return prune(messageType('Document'), doc, index, 'document');

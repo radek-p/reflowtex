@@ -10,7 +10,8 @@ and `vector-compare.ts` matches each glyph the viewer drew (from the SVG,
 not from pixels) with the PDF's. A case passes when:
 
 - the browser drew the same number of glyphs as TeX, and every one of them
-  has its glyph in the PDF;
+  has its glyph in the PDF (a font's .notdef, which a PDF shows for a
+  character the font lacks, is not counted: the page draws nothing there);
 - no glyph is further than the case's `tolerance` from it, across or
   down;
 - every rule the browser drew is in the PDF, and every rule in the PDF is
@@ -166,7 +167,7 @@ so a curve, a triangle or a stroked outline is a rule on neither.
 The strip and the page both come from the pipeline's compile, inside its
 template. If the template changed what TeX sets, both would be wrong
 together and the comparison would still pass. A case with
-`against_plain` (`label-anchors`, `blank-lines`, `prevdepth`, …) is also compiled as its author would
+`against_plain` (`label-anchors`, `blank-lines`, `prevdepth`, `missing-chars`, …) is also compiled as its author would
 compile it, with plain lualatex, into `build/<case>/plain/`, and the test
 `<case>@plain` checks every glyph of the strip at the case's own width
 against that PDF's, each relative to the first, within what the two

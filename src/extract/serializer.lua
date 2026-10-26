@@ -665,6 +665,115 @@ local function note_dest(n, list, item)
     return -#hy_dests
 end
 
+-- ── Characters TeX could not set ─────────────────────────────────────────
+-- A glyph whose font has no such character ("Missing character: There is no
+-- ł (U+0142) in font ec-lmr10!") is drawn by nothing: LuaTeX's backend
+-- leaves it out of the PDF, and its width, height and depth are 0. An
+-- OpenType font set through luaotfload also gets the font's .notdef (glyph
+-- index 0) after it, which the PDF does show – for Latin Modern an empty
+-- glyph 2.8 pt wide. Neither is a character of the text. Each is written as
+-- what it is on the page: a box of the glyph's own size with nothing to
+-- draw. It is what the glyph was to TeX's line breaker, even at size 0: an
+-- item not discarded at a line's start, so the space after it is kept there
+-- (without it TeX breaks such a paragraph otherwise), and a character with
+-- no protrusion at a line's edge, where the search for one stops. So the
+-- box holds a rule of size 0, which draws nothing and stops that search, as
+-- an empty box would not. Each missing character is also recorded, by
+-- font, character and stream, with a few words around it, for the block's
+-- warnings (src/pipeline/warnings.ts).
+
+-- font id → its characters as LuaTeX's backend sees them: the table the font
+-- was defined from, else the engine's copy (font.getcopy) – which is also
+-- asked when the first lacks a character, as one added to the font later
+-- (font.addcharacters) is only in the engine's
+local font_tables, font_copies = {}, {}
+local function char_info(id, ch)
+    local f = font_tables[id]
+    if f == nil then
+        f = font.getfont(id) or false
+        font_tables[id] = f
+    end
+    local c = f and f.characters and f.characters[ch]
+    if c then return c, true end
+    local copy = font_copies[id]
+    if copy == nil and font.getcopy then
+        local ok, t = pcall(font.getcopy, id)
+        copy = ok and type(t) == "table" and t.characters or false
+        font_copies[id] = copy
+    end
+    if copy then return copy[ch], true end
+    return nil, (f and f.characters ~= nil) or false
+end
+
+local missing_chars, missing_index = {}, {}
+local MISSING_PLACES = 3   -- contexts kept per font, character and stream
+local NEAR = 24            -- characters of context on either side, to a word's end
+
+-- A glyph's characters, a ligature's from its parts; none for a control
+-- character or a private-use code. A classic font's slots are taken as the
+-- code points they mostly are: near enough to find the place by.
+local function glyph_chars(g)
+    if g.components then
+        local s = {}
+        for c in node.traverse_id(node.id("glyph"), g.components) do s[#s + 1] = glyph_chars(c) end
+        return table.concat(s)
+    end
+    local ch = g.char
+    if ch < 0x20 or ch >= 0xF0000 or (ch >= 0xE000 and ch <= 0xF8FF) or not char_info(g.font, ch) then return "" end
+    return utf8.char(ch)
+end
+
+local function text_beside(n, dir)
+    local parts, len = {}, 0
+    local m = n[dir]
+    while m do
+        local t = node.type(m.id)
+        if len >= 2 * NEAR or (len >= NEAR and t == "glue") then break end
+        local s = t == "glyph" and glyph_chars(m) or (t == "glue" and " " or "")
+        if s ~= "" then
+            parts[#parts + 1] = s
+            len = len + utf8.len(s)
+        end
+        m = m[dir]
+    end
+    if dir == "prev" then
+        local r = {}
+        for i = #parts, 1, -1 do r[#r + 1] = parts[i] end
+        parts = r
+    end
+    return table.concat(parts)
+end
+
+-- A glyph of a character its font lacks, or the font's .notdef. A font
+-- whose characters cannot be read (none known) is taken to have it.
+local function draws_nothing(g)
+    local c, known = char_info(g.font, g.char)
+    if c then return c.index == 0 end
+    return known
+end
+
+local function note_missing(n)
+    local name = font_tables[n.font] and (font_tables[n.font].fullname or font_tables[n.font].name)
+    if not name then
+        local ok, f = pcall(font.getcopy, n.font)
+        name = ok and type(f) == "table" and (f.fullname or f.name) or tostring(n.font)
+    end
+    local sid = node.get_attribute(n, STREAM_ATTR)
+    if sid and sid <= 0 then sid = nil end
+    local key = n.font .. ":" .. n.char .. ":" .. (sid or 0)
+    local m = missing_index[key]
+    if not m then
+        m = { font = name, char = n.char, stream = sid, count = 0, where = json_array({}) }
+        missing_index[key] = m
+        missing_chars[#missing_chars + 1] = m
+    end
+    m.count = m.count + 1
+    if #m.where < MISSING_PLACES then
+        local before, after = text_beside(n, "prev"), text_beside(n, "next")
+        m.where[#m.where + 1] = (before .. utf8.char(n.char) .. after):gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+    end
+end
+
 -- ── Node serializer ───────────────────────────────────────────────────────
 
 local function serialize_nodelist(head)
@@ -726,12 +835,19 @@ local function serialize_nodelist(head)
             -- (the resolved colour is baked into glyph/rule nodes).
             handle_colorstack(n)
 
+        elseif t == "glyph" and draws_nothing(n) then
+            -- a character the font lacks, or the font's .notdef: drawn by
+            -- nothing (see "Characters TeX could not set" above)
+            if not char_info(n.font, n.char) then note_missing(n) end
+            cur[#cur + 1] = { type = "hlist", subtype = 2, width = n.width, height = n.height, depth = n.depth,
+                              shift = 0, glue_set = 0, glue_sign = 0, glue_order = 0,
+                              children = { { type = "rule", width = 0, height = 0, depth = 0 } } }
+
         elseif t == "glyph" then
             note_font(n.font)
             note_char(n.font, n.char)
             if node.get_attribute(n, SLOT_ATTR) then slot_fonts[n.font] = true end
-            local fdata = font.getfont(n.font)
-            local cinfo = fdata and fdata.characters and fdata.characters[n.char]
+            local cinfo = char_info(n.font, n.char)
             local g = {
                 type   = "glyph",
                 char   = n.char,
@@ -2031,6 +2147,7 @@ local function write_output()
         marks      = dense("mark", mark_table, function() return json_object({}) end),
         outline    = json_array(outline),
         mathml     = MathML and json_array(MathML.formulas) or nil,
+        missing_chars = json_array(missing_chars),
     }))
     assert(f:close())
     assert(os.rename("output.json.tmp", "output.json"))
@@ -2040,6 +2157,11 @@ local function write_output()
     end
     for _, s in ipairs(stream_list) do
         if s.kind == "footnote" then n_fn = n_fn + 1 end
+    end
+    if #missing_chars > 0 then
+        local total = 0
+        for _, m in ipairs(missing_chars) do total = total + m.count end
+        texio.write_nl(string.format("serializer: %d character(s) the fonts lack, drawn by nothing as in TeX's PDF", total))
     end
     if fixed_items > 0 then
         texio.write_nl(string.format("serializer: %d box(es) or rule(s) outside any paragraph kept as fixed displays", fixed_items))

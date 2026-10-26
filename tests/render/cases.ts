@@ -128,6 +128,15 @@ export const cases: Record<string, CaseSettings> = {
   'vbox-to': { against_plain: true, tolerance: 0.010 },
   prevdepth: { against_plain: true, tolerance: 0.009 },
   'par-newline': { against_plain: true, tolerance: 0.011 },
+  // Characters typed raw that the font has no glyph for, as in real papers: ł,
+  // Ł, ź and ﬀ in a T1 font, box drawing in Latin Modern OpenType. TeX
+  // reports them missing and draws nothing (OpenType: the font's empty
+  // .notdef); the page was refused, as no served font could draw them, and
+  // the converted T1 font would have drawn its own ł. One page, so
+  // against_plain too. The worst glyphs are in the T1 paragraphs, as in other
+  // 8-bit T1 text (see virtual-fonts); the OpenType one is within 0.009.
+  // Worst attained 2026-10-26.
+  'missing-chars': { against_plain: true, tolerance: 0.180 },
   // The same under hyperref, whose \caption leaves its anchor alone on a line
   // after a display (28.6 pt lost) or after a full-width box and a line end
   // (12 pt): floats, so not against plain. Worst attained 2026-10-25.

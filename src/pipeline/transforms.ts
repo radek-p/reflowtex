@@ -51,12 +51,13 @@ export function stripUnsupportedNodes(data: SerializerOutput): number {
 // one document whose top-level flow is a run of "batch-part" streams. Each
 // part becomes a document of its own: the part's content as the main flow,
 // over copies of the shared tables pruned to what the part uses – the streams
-// (footnotes, boxes, panes) it reaches, paragraphs, pictures and anchors.
+// (footnotes, boxes, panes) it reaches, paragraphs, pictures, anchors and
+// the characters TeX could not set (for its warnings).
 // Pruning the anchors matters beyond size: a page registers every anchor of
 // its blocks as a label found on that page, so a part must not claim labels
 // another part defines.
 
-function partDocument(data: SerializerOutput, content: ContentItem[]): SerializerOutput {
+function partDocument(data: SerializerOutput, part: number, content: ContentItem[]): SerializerOutput {
   const d: SerializerOutput = structuredClone({ ...data, content });
   const streams = d.streams;
 
@@ -126,20 +127,22 @@ function partDocument(data: SerializerOutput, content: ContentItem[]): Serialize
   d.anchors = sorted(usedAnchors).filter(i => i >= 1 && i <= anchors.length).map(i => anchors[i - 1]);
   d.outline = ((d.outline as Record<string, unknown>[] | undefined) ?? [])
     .filter(e => amap.has(e.anchor as number)).map(e => ({ ...e, anchor: amap.get(e.anchor as number) }));
+  // the characters TeX could not set in the part: in its own stream, or in one it reaches
+  d.missing_chars = (d.missing_chars ?? []).filter(m => m.stream !== undefined && (m.stream === part || keep.has(m.stream)));
   return d;
 }
 
 /** The documents of a batch's parts, in part order. */
 export function batchParts(data: SerializerOutput): SerializerOutput[] {
-  const parts: [number, ContentItem[]][] = [];
+  const parts: [number, number, ContentItem[]][] = [];
   for (const it of data.content) {
     if (it.kind === 'stream' && it.stream !== undefined && it.stream >= 1 && it.stream <= data.streams.length) {
       const s = data.streams[it.stream - 1];
       if (s.kind === 'batch-part') {
         const n = Number((s.attrs ?? []).find(a => a.key === 'part')?.value ?? 0);
-        parts.push([n, s.content ?? []]);
+        parts.push([n, it.stream, s.content ?? []]);
       }
     }
   }
-  return parts.sort((a, b) => a[0] - b[0]).map(([, content]) => partDocument(data, content));
+  return parts.sort((a, b) => a[0] - b[0]).map(([, sid, content]) => partDocument(data, sid, content));
 }

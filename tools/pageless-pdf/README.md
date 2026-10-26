@@ -100,7 +100,10 @@ glyph of a font the pipeline could give no face is a glyph on both sides
 too: the viewer draws it as boxes of TeX's size under a transparent text
 carrier – a `<tspan>` at the glyph's origin, which is what is counted – and
 the strip has the glyph TeX drew (a bitmap from the font's METAFONT source,
-when there is one); its boxes are not rules. Each
+when there is one); its boxes are not rules. A font's .notdef (glyph 0
+of any font but a Type 3 one) is a glyph on neither side: the PDF shows it
+for a character the font lacks (luaotfload sets it after each one TeX
+reports missing), and the viewer draws nothing there. Each
 viewer glyph is matched to the nearest strip glyph within `--window`
 (0.7pt). Reported: the vertical residual along the document (a drift is
 height lost or gained in stacking), per text line the offset at its start

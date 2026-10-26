@@ -8,6 +8,7 @@
 import { walk, filterTree, type TreeNode } from '../shared/tree.ts';
 import { FONT_KINDS, faceFile, type TexFontFace, type FontKind } from '../shared/font-face.ts';
 import { unreachable } from '../shared/unreachable.ts';
+import type { MissingChar, Warning } from './warnings.ts';
 
 /** A node of TeX's finished node list, as serializer.lua writes it. */
 export interface TexNode extends TreeNode {
@@ -93,6 +94,10 @@ export interface SerializerOutput {
   paragraphs: Paragraph[];
   content: ContentItem[];
   streams: Stream[];
+  /** characters TeX could not set (serializer.lua), for the warnings */
+  missing_chars?: MissingChar[];
+  /** the block's warnings, beside those made from missing_chars */
+  warnings?: Warning[];
   [field: string]: unknown;
 }
 

@@ -34,10 +34,29 @@ import { Outline, filledRule, strokedRule, type Affine, type Pt } from './shapes
 
 const PT_PER_BP = 72.27 / 72;
 
+/** The names MuPDF gives the PDF's fonts that number their glyphs from a
+ *  .notdef at 0 – every kind but Type 3, whose glyphs are numbered by their
+ *  codes: by /BaseFont, the Type 0 font's and its descendant's. */
+function notdefFonts(doc: mupdf.Document): Set<string> {
+  const names = new Set<string>(), pdf = doc.asPDF();
+  if (!pdf) return names;
+  for (let i = 1; i < pdf.countObjects(); i++) {
+    const o = pdf.newIndirect(i).resolve();
+    if (!o.isDictionary() || !o.get('Type').isName() || o.get('Type').asName() !== 'Font') continue;
+    const sub = o.get('Subtype'), base = o.get('BaseFont');
+    if (sub.isName() && sub.asName() !== 'Type3' && base.isName()) names.add(base.asName());
+  }
+  return names;
+}
+
 /** The strip's glyph origins (pt, y down; a ligature's text-only characters
- *  left out) and its rules as four corners each. */
+ *  left out) and its rules as four corners each. A font's .notdef is left
+ *  out too: what the PDF shows for a character the font lacks (luaotfload
+ *  sets it after each one TeX reports missing), it is no character's glyph,
+ *  and the page draws nothing there. */
 export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
-  const page = mupdf.Document.openDocument(readFileSync(pdf), 'application/pdf').loadPage(0);
+  const doc = mupdf.Document.openDocument(readFileSync(pdf), 'application/pdf');
+  const page = doc.loadPage(0), notdef = notdefFonts(doc);
   const glyphs: Pt[] = [], rules: Pt[][] = [];
   // the device's matrix (bp, y down) taken on to pt
   const toPt = (m: mupdf.Matrix): Affine => m.map(v => v * PT_PER_BP) as Affine;
@@ -45,7 +64,12 @@ export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
   const device = new mupdf.Device({
     fillText(text: mupdf.Text, ctm: mupdf.Matrix) {
       const m = toPt(ctm);
-      text.walk({ showGlyph(_font: mupdf.Font, trm: mupdf.Matrix, gid: number) { if (gid >= 0) glyphs.push([m[0] * trm[4] + m[2] * trm[5] + m[4], m[1] * trm[4] + m[3] * trm[5] + m[5]]); } });
+      text.walk({
+        showGlyph(font: mupdf.Font, trm: mupdf.Matrix, gid: number) {
+          if (gid < 0 || (gid === 0 && notdef.has(font.getName()))) return;
+          glyphs.push([m[0] * trm[4] + m[2] * trm[5] + m[4], m[1] * trm[4] + m[3] * trm[5] + m[5]]);
+        },
+      });
     },
     // LuaTeX strokes a rule along its centre line, lw thick, under \rotatebox
     // through a rotating transform; a picture's straight lines and
