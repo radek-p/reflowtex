@@ -428,3 +428,102 @@ test('a view fits its displays on its own; the host default reaches only those w
     return [el.className, el.style.getPropertyValue('--latex-display-room-left')]; });
   expect(left).toEqual(['latex-block', '']);
 });
+
+// ── Ink that hangs past a display's boxes (page displays-hang) ──────────────
+// microtype patches the equation number (\tagform@) so that TeX hangs its ")"
+// past the measure by the parenthesis' \rpcode: a negative kern after it in
+// the number's box. The row is not overfull, and TeX lets the glyph hang. So
+// does the viewer: such a display is mounted bare, as one that fits, and its
+// ")" bleeds past the column; only a display whose boxes run past the column
+// gets a scroll box (layoutDisplaySegment's fitW, sizeSegment). It had one,
+// with the right fade dimming the ")", as its ink did run past the column.
+
+/** Block `i` of the page at `w` px. */
+async function blockAt(page: WebPage, i: number, w: number) {
+  await page.locator('.latex-block[data-nodelist-b64]').nth(i)
+    .evaluate((b: HTMLElement, w: number) => { b.style.maxWidth = 'none'; b.style.width = `${w}px`; }, w);
+  await idle(page);
+}
+
+/** Block `i`'s (first) display: its layout's widths, and how it is mounted. */
+const mounted = (page: WebPage, i: number) => page.evaluate((i: number) => {
+  const el = document.querySelectorAll<HTMLElement>('.latex-block[data-nodelist-b64]')[i];
+  const cache = reflowtex.inspect.state(el).cache;
+  const s = cache.layout.laid.findIndex((L: any) => L && L.seg.kind === 'display');
+  const L = cache.layout.laid[s], seg = cache.dom.segs[s], svg = seg.svg as SVGSVGElement;
+  const wrap = el.querySelector<HTMLElement>('.latex-display');
+  return {
+    deferred: !!L.deferred, W: L.W as number, fitW: L.fitW as number | undefined, column: cache.layoutCtx.columnPx as number,
+    wrap: !!wrap, cue: !!el.querySelector('.latex-overflow-right, .latex-overflow-left'),
+    wrapScrolls: !!wrap && wrap.scrollWidth > wrap.clientWidth,
+    bare: svg.parentElement === seg.box, overflowX: getComputedStyle(seg.box).overflowX,
+    surface: svg.width.baseVal.value, scroll: [el.scrollWidth, el.clientWidth],
+  };
+}, i);
+
+/** Where block `i`'s equation number's ")" ends past the column, as drawn
+ *  (pt, from the replayed pen positions; px on the screen), and the hang TeX
+ *  gave it: minus the kern after it in the number's box (pt). */
+const paren = (page: WebPage, i: number) => page.evaluate((i: number) => {
+  const el = document.querySelectorAll<HTMLElement>('.latex-block[data-nodelist-b64]')[i];
+  const ins = reflowtex.inspect, st = ins.state(el), cache = st.cache, pt = ins.spToPx * 65536;
+  const s = cache.layout.laid.findIndex((L: any) => L && L.seg.kind === 'display');
+  const L = cache.layout.laid[s], svg = cache.dom.segs[s].svg as SVGSVGElement;
+  let glyph: any = null, hang = 0;
+  const find = (n: any, inNumber: boolean) => {          // the number: a box of subtype 7
+    const c = n.children || [];
+    const k = inNumber ? c.findLastIndex((x: any) => x.type === 'glyph' && x.char === 41) : -1;
+    if (k >= 0) { glyph = c[k]; hang = c[k + 1]?.type === 'kern' ? -(c[k + 1].kern || 0) / 65536 : 0; }
+    for (const x of c) find(x, inNumber || (x.type === 'hlist' && x.subtype === 7));
+  };
+  find(L.lines[0].nodes[0], false);
+  let end = NaN;
+  ins.replay(el, s, { node(n: any, x: number, _y: number, adv: number) { if (n === glyph) end = x + adv; } });
+  const toScreen = (x: number) => new DOMPoint(x, 0).matrixTransform(svg.getScreenCTM()!).x;
+  return { hang, past: end / pt - st.lastWidth, pastPx: toScreen(end) - svg.getBoundingClientRect().right };
+}, i);
+
+test('an equation number\'s ")" hangs past the column, and the display is mounted bare', async ({ openPage }) => {
+  const page = await openPage('displays-hang');
+  for (const w of [360, 480, 600, 720]) {
+    await blockAt(page, 0, w);
+    const m = await mounted(page, 0), p = await paren(page, 0);
+    const at = `at ${w} px`;
+    // the fixture shows the case: its ink runs past the column by more than
+    // the tolerance for rounding, though its boxes fit
+    expect(m.W, `${at}: the ")" no longer hangs out past the tolerance`).toBeGreaterThan(m.column + 2);
+    expect(m.fitW, at).toBe(Math.ceil(m.column));
+    expect(m, at).toMatchObject({ deferred: false, wrap: false, cue: false, bare: true, overflowX: 'visible', surface: m.column });
+    expect(m.scroll[0], `${at}: the block scrolls sideways`).toBe(m.scroll[1]);
+    // the ")" ends where TeX hangs it, and is drawn there
+    expect(p.hang, at).toBeGreaterThan(0.5);
+    expect(Math.abs(p.past - p.hang), `${at}: ")" ends ${p.past.toFixed(2)} pt past the column, TeX ${p.hang.toFixed(2)}`).toBeLessThanOrEqual(0.05);
+    expect(Math.abs(p.pastPx - 2 * p.hang), `${at}: on the screen ${p.pastPx.toFixed(2)} px`).toBeLessThanOrEqual(0.5);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+test('a display whose boxes run past the column still gets its scroll box', async ({ openPage }) => {
+  const page = await openPage('displays-hang');
+  await blockAt(page, 1, 400);
+  const m = await mounted(page, 1);
+  expect(m.fitW!).toBeGreaterThan(m.column + 2);
+  expect(m).toMatchObject({ wrap: true, cue: true, wrapScrolls: true, bare: false, surface: m.W });
+  await blockAt(page, 1, 720);
+  expect(await mounted(page, 1)).toMatchObject({ wrap: false, cue: false, bare: true });
+});
+
+test('a display out of view, sized from the width cache, is mounted bare too', async ({ openPage }) => {
+  // Out of view, a display whose geometry at a width is cached is not laid
+  // out again (layoutDocument's deferred segments): it is sized from what the
+  // cache kept, fitW with the rest. Laid out at wider and wider widths, each
+  // past every one before (so none is answered from the cache), the first
+  // one's full layout is gone (EXACT_LAYOUTS_KEPT) and only its geometry is
+  // left when the width comes back to it.
+  const page = await openPage('displays-hang', { height: 400 });
+  for (const w of [640, 800, 900, 1000, 640]) await blockAt(page, 2, w);
+  const m = await mounted(page, 2);
+  expect(m.deferred, 'the display was laid out: it is not out of view').toBe(true);
+  expect(m.W).toBeGreaterThan(m.column + 2);
+  expect(m).toMatchObject({ wrap: false, cue: false, bare: true, surface: m.column });
+});

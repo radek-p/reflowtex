@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    RUNNING_RULE, SP_TO_PX, ZOOM, gD, gH, gW, glyphExpandScale, kernExpandScale, nodeWidthSp,
+    RUNNING_RULE, SP_TO_PX, ZOOM, gD, gH, gW, glyphExpandScale, hlistGlueRatio, kernExpandScale, nodeWidthSp,
 } from '../core.ts';
 import { texInterlineGlue } from './lines.ts';
 import { HL_ALIGNMENT, HL_EQUATION } from './text.ts';
@@ -43,6 +43,28 @@ export function inkExtentOf(fontInfo: FontTable, box: TexNode): { min: number; m
         picture(n, x, y) { note(x, n.width * SP_TO_PX, y - n.height * SP_TO_PX, y + n.depth * SP_TO_PX); },
     }, [box], 0, 0, 0, 0, 0);
     return isFinite(min) ? { min, max } : { min: 0, max: 0 };
+}
+
+// Where a display row's boxes end (px from the row's left edge): its children
+// at the pen positions TeX packed them to, each to its own width. Unlike
+// inkExtentOf, ink that hangs past the end of the box holding it does not
+// count – microtype's protruded ")" in an equation number (\rightprotrusion in
+// \tagform@: a negative kern after it inside the number's box), an \rlap – as
+// TeX does not count it: the row is not overfull, and TeX lets the glyph hang
+// past the measure.
+export function boxExtentOf(fontInfo: FontTable, box: TexNode): number {
+    if (box.type !== 'hlist') return (box.width || 0) * SP_TO_PX;
+    const top = new Set<TexNode>(box.children || []);
+    let max = -Infinity;
+    const { ratio, fillOrder } = hlistGlueRatio(box);
+    renderNodes(fontInfo, {
+        beginTransform() {}, endTransform() {}, glyph() {}, space() {}, rule() {}, picture() {},
+        node(n, x, _y, advance) {
+            if (top.has(n) && n.type !== 'kern' && n.type !== 'glue' && n.type !== 'math' && n.type !== 'penalty')
+                max = Math.max(max, x + advance);
+        },
+    }, box.children || [], 0, 0, ratio, 0, fillOrder, box.height, box.depth);
+    return isFinite(max) ? max : 0;
 }
 
 // Evaluate sparse affine geometry recovered from several increasingly wide
@@ -410,13 +432,20 @@ export function layoutDisplaySegment(fontInfo: FontTable, seg: DisplaySegment, w
     // The surface has to cover the measure the display was evaluated at *and*
     // whatever ink hangs past it, so a frozen display can be panned to its last
     // glyph rather than having it clipped by the scroll box.
-    let right = Math.max(columnPx, evaluatedSp * SP_TO_PX);
+    // Whether it overflows is the boxes' business, though: the measure it was
+    // evaluated at, and where the rows' boxes end (an overfull row's run past
+    // it). Ink hanging past boxes that fit is bleed, as in TeX: such a
+    // display is mounted bare and lets it bleed (sizeSegment).
+    let fit = Math.max(columnPx, evaluatedSp * SP_TO_PX);
+    for (const r of rows) fit = Math.max(fit, r.x0 + boxExtentOf(fontInfo, r.item.box!));
+    let right = fit;
     for (const r of rows) right = Math.max(right, r.x0 + r.ink.max);
     return {
         lines: rows.map(r => ({ nodes: [r.item.box!], ratio: 0, fitness: 2, leftProtrusion: 0 })),
         lrp:   rows.map(r => ({ ratio: 0, er: 0, x0: r.x0 })),
         gaps:  rows.map(r => r.gap || null),
         W:     Math.ceil(right),
+        fitW:  Math.ceil(fit),
         // the display's left edge at this width, for displaySkipsFull: the
         // shift plus the kern LuaTeX opens a numbered formula's box with
         displayLeftSp: (rows[0].item.display_shift || 0)
