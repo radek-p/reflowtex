@@ -1185,6 +1185,132 @@ local function append_flow(n)
     flow_tail = n
 end
 
+-- ── Forced page breaks: seams ─────────────────────────────────────────────
+-- The copy is to be the document as one column, every line where TeX would
+-- set it in the middle of a page, never at a page's edge. A forced break – a
+-- penalty of -10000 or less: \newpage, \clearpage, \cleardoublepage, LaTeX's
+-- requests to its output routine (a float's, multicol's) – leaves the edge's
+-- traces on the main vertical list. TeX's own run is not touched: the
+-- penalties stay in its list and its output routine runs as on paper. A break
+-- inside a box (a minipage, a \parbox) never reaches this callback and acts in
+-- its box as always.
+--
+-- In the copy every forced break is a seam, from the last visible item before
+-- it (a box with something in it or some size, a rule) to the first visible
+-- item after it. In a seam, what paging made is left out:
+--
+-- * the forced breaks themselves;
+-- * empty boxes: the \vbox{} LaTeX puts before each request to its output
+--   routine for it to find the spot by (\clearpage's \vbox{}\penalty-10001, a
+--   float's), the \hbox{} \cleardoublepage sets on a blank page, \null\newpage
+--   – but not a \label's anchor or a \webaside's place, which the walk reads;
+-- * glue that fills a page: no natural size, infinite stretch (\newpage's \vfil);
+-- * \topskip and \splittopskip glue, which the page builder and \vsplit make
+--   at the top of a page or a column, and which reach the contributions only
+--   when an output routine gives a page back (LaTeX's float routine,
+--   multicol's);
+-- * interline glue. The glue TeX set below an empty box it set from that
+--   box's depth, 0, as if the line above had no depth: the first line after
+--   \clearpage would stand that depth lower than with no break. So the
+--   interline glue of the first visible item after the seam is set again, by
+--   TeX's rule, from the depth of the last one before it – or left out where
+--   TeX would set none: after a rule, or with nothing before the seam.
+--
+-- What the author put there stays: glue, kerns, whatever draws, \writes,
+-- marks and insertions. On paper TeX discards glue, kerns and penalties at
+-- the top of a new page (a \vspace after \newpage vanishes there, a \vspace*
+-- stays); in one continuous column they are the author's spacing, and both
+-- are kept.
+local GLUE_LINESKIP_, GLUE_BASELINESKIP_ = 1, 2
+-- \topskip and \splittopskip glue: what the page builder puts before a page's
+-- first box, and \vsplit before what it splits off (a column, a box broken
+-- across pages)
+local GLUE_TOPSKIP, GLUE_SPLITTOPSKIP = 10, 11
+
+-- TeX's interline glue between a depth above and a height below (§679):
+-- \baselineskip less the two, or \lineskip where that leaves less than
+-- \lineskiplimit; none at all when the depth is \prevdepth's -1000pt
+-- (after \nointerlineskip, a rule, or at the top of a box). The viewer
+-- redoes it with the same rule.
+local IGNORE_DEPTH = -65536000
+local function interline_glue(depth, height, leading)
+    if depth <= IGNORE_DEPTH then return 0 end
+    local b = (leading.bskip or 0) - depth - height
+    if b >= (leading.lskiplimit or 0) then return b end
+    return leading.lskip or 0
+end
+
+local function interline(n)
+    return n.id == GLUE_ID and (n.subtype == GLUE_LINESKIP_ or n.subtype == GLUE_BASELINESKIP_)
+end
+
+local function visible(n)
+    local t = node.type(n.id)
+    if t == "rule" then return true end
+    return (t == "hlist" or t == "vlist")
+        and (n.head ~= nil or n.width ~= 0 or n.height ~= 0 or n.depth ~= 0)
+end
+
+local function page_made(n)
+    local t = node.type(n.id)
+    if t == "penalty" then return n.penalty <= -10000 end
+    if t == "hlist" or t == "vlist" then
+        return not (node.get_attribute(n, ANCHOR_ATTR) or node.get_attribute(n, ASIDE_MARK_ATTR))
+    end
+    if t == "glue" then
+        return n.subtype == GLUE_TOPSKIP or n.subtype == GLUE_SPLITTOPSKIP or interline(n)
+            or (n.width == 0 and n.stretch ~= 0 and n.stretch_order > 0)
+    end
+    return false
+end
+
+local function remove_flow(n)
+    if n.prev then n.prev.next = n.next else flow_head = n.next end
+    if n.next then n.next.prev = n.prev else flow_tail = n.prev end
+    node.free(n)
+end
+
+-- nil, or the seam the copy is in: { depth = the last visible item's, or nil
+-- when it was a rule or there was none }
+local seam = nil
+
+-- `n` into the copy, unless a seam leaves it out
+local function flow_add(n)
+    if not seam and n.id == PENALTY_ID and n.penalty <= -10000 then
+        local p = flow_tail
+        while p and not visible(p) do
+            local q = p.prev
+            if page_made(p) then remove_flow(p) end
+            p = q
+        end
+        seam = { depth = (p and p.id ~= RULE_ID) and p.depth or nil }
+    end
+    if not seam then return append_flow(node.copy(n)) end
+    if visible(n) then
+        seam = nil
+        return append_flow(node.copy(n))
+    end
+    if interline(n) then
+        local below = n.next
+        if seam.depth and below and visible(below) and below.id ~= RULE_ID then
+            local leading = { bskip = tex.getglue("baselineskip"), lskip = tex.getglue("lineskip"),
+                              lskiplimit = tex.lineskiplimit }
+            local c = node.copy(n)
+            c.width = interline_glue(seam.depth, below.height, leading)
+            -- the glue's kind, stretch and shrink: the parameter it came from
+            local from = (leading.bskip - seam.depth - below.height >= leading.lskiplimit)
+                         and "baselineskip" or "lineskip"
+            local _, st, sh, sto, sho = tex.getglue(from)
+            c.subtype = (from == "baselineskip") and GLUE_BASELINESKIP_ or GLUE_LINESKIP_
+            c.stretch, c.shrink, c.stretch_order, c.shrink_order = st, sh, sto, sho
+            return append_flow(c)
+        end
+        return
+    end
+    if page_made(n) then return end
+    append_flow(node.copy(n))
+end
+
 local function capture_flow()
     local head = tex.lists.contrib_head
     if not head then return end
@@ -1221,7 +1347,7 @@ local function capture_flow()
             if n.id == WHATSIT_ID and n.subtype == WH_COLORSTACK then
                 handle_colorstack(n)       -- see "Colour set between paragraphs"
             end
-            append_flow(node.copy(n))
+            flow_add(n)
             node.set_attribute(n, FLOW_ATTR, 1)
         end
 
@@ -1295,10 +1421,9 @@ local GLUE_PARSKIP  = 3
 local GLUE_LINESKIP, GLUE_BASELINESKIP = 1, 2
 local GLUE_ABOVEDISPLAY, GLUE_BELOWDISPLAY = 4, 5
 local GLUE_ABOVEDISPLAYSHORT, GLUE_BELOWDISPLAYSHORT = 6, 7
--- \topskip and \splittopskip: the page builder's glue at the top of a page,
--- copied with the material an output routine puts back. A pageless page has
--- no page top, so it is no space.
-local GLUE_TOPSKIP, GLUE_SPLITTOPSKIP = 10, 11
+-- (GLUE_TOPSKIP, GLUE_SPLITTOPSKIP: see "Forced page breaks: seams". At the
+-- top level capture_flow leaves both out; inside a box the walk goes into, a
+-- \splittopskip at the top of a piece \vsplit cut off is no space either.)
 
 -- A display's box width is not what it occupies. \[..\] packs at natural
 -- width and is centred by its shift, while amsmath centres an alignment by
@@ -1362,18 +1487,7 @@ local last_display = nil
 -- walked has nothing stacked yet.
 local last_depth = nil
 
--- TeX's interline glue between a depth above and a height below (§679):
--- \baselineskip less the two, or \lineskip where that leaves less than
--- \lineskiplimit; none at all when the depth is \prevdepth's -1000pt
--- (after \nointerlineskip, a rule, or at the top of a box). The viewer
--- redoes it with the same rule.
-local IGNORE_DEPTH = -65536000
-local function interline_glue(depth, height, leading)
-    if depth <= IGNORE_DEPTH then return 0 end
-    local b = (leading.bskip or 0) - depth - height
-    if b >= (leading.lskiplimit or 0) then return b end
-    return leading.lskip or 0
-end
+-- (interline_glue and IGNORE_DEPTH: see "Forced page breaks: seams")
 
 -- The viewer sets the interline glue above a line from the depth of the item
 -- it stacks above it. TeX set it from \prevdepth, which is that depth only
@@ -1666,17 +1780,6 @@ local function fixed_box(n, t)
     return s
 end
 
--- LaTeX's mark for a float or a \marginpar in vertical mode: \penalty-10004,
--- an empty \vbox{} (with its interline glue), \prevdepth put back. Its
--- output routine takes the box off again with the glue above it, so neither
--- is space.
-local function float_marker(n)
-    if n.head or (n.height or 0) ~= 0 or (n.depth or 0) ~= 0 then return false end
-    local p = n.prev
-    if p and p.id == GLUE_ID and (p.subtype == GLUE_LINESKIP or p.subtype == GLUE_BASELINESKIP) then p = p.prev end
-    return p ~= nil and p.id == PENALTY_ID and p.penalty <= -10004
-end
-
 -- A box TeX stacked that the viewer draws nothing for – a line with no ink (a
 -- paragraph with nothing visible: an empty box, a \write, a label's anchor,
 -- an empty line of verbatim, the \vadjust of a \medskip after a display), an
@@ -1852,12 +1955,6 @@ local function walk_flow(head, pending, ctx, box)
             local item = { kind = "anchorpoint" }
             item.anchor = note_dest(n, out, item)
             out[#out + 1] = item
-        elseif t == "vlist" and float_marker(n) then
-            if pending.interline then
-                pending.sp = pending.sp - pending.interline
-                table.remove(pending.parts, pending.interline_part)
-                pending.interline = nil
-            end
         elseif t == "vlist" and not node.get_attribute(n, TIKZ_PIC_ATTR) then
             -- A box of lines (a \vbox, a \vtop, a title block), walked into: its
             -- lines join the stream as the text around them. TeX set the glue
@@ -1916,7 +2013,7 @@ local function walk_flow(head, pending, ctx, box)
                 streams[#streams + 1] = { kind = "footnote", content = fn_content }
                 if id and id > 0 then footnote_index[id] = #streams end
             end
-        elseif t == "glue" and (n.subtype == GLUE_TOPSKIP or n.subtype == GLUE_SPLITTOPSKIP) then
+        elseif t == "glue" and n.subtype == GLUE_SPLITTOPSKIP then
             pending.interline = nil
         elseif t == "glue" then
             local w = set_glue_width(n, box)

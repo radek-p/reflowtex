@@ -196,69 +196,23 @@ local function strip_side_effects(head)
     return head
 end
 
--- ── what the page builder would have removed ────────────────────────────────
--- The galley is what TeX *contributed*; a paged run's output routine then
--- takes things back out of it. Two of those matter for a strip meant to
--- stand for the document:
+-- ── the ends ───────────────────────────────────────────────────────────────
+-- What a forced page break put into the galley – the empty box LaTeX sets
+-- before a request to its output routine, the \topskip glue an output
+-- routine gives back, the interline glue TeX set below them – the serializer
+-- has already left out of it, and set the next line's interline glue again
+-- (capture_flow, "Forced page breaks: seams"): the galley is the document
+-- with no page breaks.
 --
--- Floats. For every float met in vertical mode LaTeX contributes
--- `\penalty-10004`, an empty `\vbox{}` (so the output routine can find the
--- spot with \lastbox) and `\penalty-10003`; the empty box draws interline
--- glue before it, and the penalty fires the output routine, after which the
--- page builder starts a "page" with \topskip glue. Paged, all of it goes:
--- the float is moved elsewhere, the marker box removed, the page's topskip
--- is at the page top. In the galley it stays — 2 × (9.5 + 10)pt around two
--- empty figures of testmath — so here the empty box, the interline glue
--- before it, and the topskip after it are dropped. The user skips around
--- them stay, as they do in the paged run. \clearpage leaves the same
--- pair, `\vbox{}\penalty-10001`. The marker is known by that penalty after
--- it: a penalty below -10000 is a request to LaTeX's own output routine, and
--- the kernel puts an empty box before each one it makes. Any other empty box – a
--- \label's anchor, an author's \hbox{} – is part of the document, and so is
--- the glue TeX set above it.
---
--- The ends. \maketitle's `\null\vskip 2em` and \end{document}'s \clearpage
--- leave glue and an empty box before the first line and after the last;
--- paged, the top one becomes the page's \topskip and the bottom is blank
--- page. The viewer starts at its first line's ascent and ends at its last
--- depth, so the strip is trimmed to its first and last non-empty box.
-local GLUE_LINESKIP, GLUE_BASELINESKIP, GLUE_TOPSKIP = 1, 2, 10
-
+-- \maketitle's `\null\vskip 2em` and \end{document}'s \clearpage leave glue
+-- and an empty box before the first line and after the last; paged, the top
+-- one becomes the page's \topskip and the bottom is blank page. The viewer
+-- starts at its first line's ascent and ends at its last depth, so the strip
+-- is trimmed to its first and last non-empty box.
 local function empty_box(p)
     local t = ntype(p)
     return (t == "hlist" or t == "vlist") and p.head == nil
         and p.width == 0 and p.height == 0 and p.depth == 0
-end
-
-local function output_request(p)
-    return p and ntype(p) == "penalty" and p.penalty < -10000
-end
-
-local function drop_float_leftovers(nodes)
-    local drop = {}
-    for k, p in ipairs(nodes) do
-        if empty_box(p) and output_request(nodes[k + 1]) then
-            drop[k] = true
-            local q = nodes[k - 1]
-            if q and ntype(q) == "glue" and (q.subtype == GLUE_BASELINESKIP or q.subtype == GLUE_LINESKIP) then
-                drop[k - 1] = true
-            end
-            -- the topskip the page builder put after the output routine ran:
-            -- within the next few non-box nodes
-            for m = k + 1, math.min(#nodes, k + 4) do
-                local r = nodes[m]
-                local t = ntype(r)
-                if t == "hlist" or t == "vlist" then break end
-                if t == "glue" and r.subtype == GLUE_TOPSKIP then drop[m] = true; break end
-            end
-        end
-    end
-    local out, dropped = {}, 0
-    for k, p in ipairs(nodes) do
-        if drop[k] then dropped = dropped + 1 else out[#out + 1] = p end
-    end
-    if dropped > 0 then texio.write_nl(string.format("pageless: dropped %d float/marker node(s)", dropped)) end
-    return out
 end
 
 local function trim_galley(nodes)
@@ -310,7 +264,6 @@ function Pageless.ship(opts)
     -- either end copied twice, once per side, at its two partial widths.
     local nodes = {}
     for p in node.traverse(head) do nodes[#nodes + 1] = p end
-    if opts.floats ~= false then nodes = drop_float_leftovers(nodes) end
     if opts.trim ~= false then nodes = trim_galley(nodes) end
 
     -- the origin: the margin, and none of the document's offsets

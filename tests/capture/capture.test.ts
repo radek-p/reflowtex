@@ -6,7 +6,7 @@
 // web tests look at. TeX only, no browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
@@ -155,6 +155,42 @@ test('multicols text is not kept twice', async () => {
     .map(it => glyphText(d.paragraphs[it.para! - 1].nodes)).join('');
   const inBoxes = d.content.filter(it => it.kind === 'display').map(it => glyphText([it.box!])).join('');
   assert.equal((inParagraphs + inBoxes).split('Alpha').length - 1, 1);
+});
+
+// The galley the serializer copies (Serializer.flow_head(): what it walks, and
+// what the strip ships), one line per top-level node: its type, its subtype or
+// penalty, whether it is an empty box, and whether it is a \label's anchor.
+const FLOW_DUMP = join(root, 'flow-dump.lua');
+writeFileSync(FLOW_DUMP, `local f = io.open("flow.txt", "w")
+for n in node.traverse(Serializer.flow_head()) do
+  local t = node.type(n.id)
+  local empty = (t == "hlist" or t == "vlist") and n.head == nil and n.width == 0 and n.height == 0 and n.depth == 0
+  f:write(t, " ", tostring(t == "penalty" and n.penalty or n.subtype), " ", empty and "empty" or "-", " ",
+          node.get_attribute(n, 910) and "anchor" or "-", "\\n")
+end
+f:close()
+`);
+async function flowOf(body: string, preamble: string): Promise<string[]> {
+  preamble += `\n\\AddToHook{enddocument/afterlastpage}{\\directlua{dofile("${FLOW_DUMP}")}}`;
+  await capture(body, preamble);
+  return readFileSync(join(pipe.buildRoot, contentKey(body, preamble), 'flow.txt'), 'utf8').trim().split('\n');
+}
+
+test('forced page breaks leave nothing of the paging in the galley', async () => {
+  // what paging made around a break: the breaks, LaTeX's empty marker boxes
+  // before requests to its output routine, a blank page's \hbox{}, \vfil, and
+  // the \topskip glue an output routine gives back (a float's, multicol's)
+  const flow = await flowOf([
+    'Alpha gyp.\n\n\\label{a}\\newpage Bravo gyp.',
+    '\\begin{herefloat}\\rule{1cm}{1cm}\\end{herefloat}',
+    'Charlie gyp.\\clearpage Delta gyp.\\cleardoublepage Echo gyp.\\null\\newpage Foxtrot gyp.',
+    '\\begin{multicols}{2}Golf gyp.\n\n\\columnbreak Hotel gyp.\\end{multicols}',
+    '\\noindent\\begin{minipage}{5cm}India gyp.\\newpage Juliett.\\end{minipage}',
+  ].join('\n\n'), '\\usepackage{multicol}\n\\makeatletter\n\\newenvironment{herefloat}{\\@float{figure}[h]}{\\end@float}\n\\makeatother');
+  assert.deepEqual(flow.filter(l => l.startsWith('glue 10 ')), [], 'topskip glue');
+  assert.deepEqual(flow.filter(l => l.startsWith('penalty ') && Number(l.split(' ')[1]) <= -10000), [], 'forced breaks');
+  // a \label's anchor is the document's, empty or not
+  assert.deepEqual(flow.filter(l => l.includes(' empty ')), ['hlist 2 empty anchor']);
 });
 
 test('rotated text is captured', async () => {

@@ -48,6 +48,7 @@ export function allCases(): Map<string, Case> {
     const s = settings[name] ?? {};
     return [name, { ...defaults, ...s, name, target: defaults.tolerance,
       file: s.file ? join(REPO, s.file) : join(HERE, 'cases', `${name}.tex`),
+      plain_file: s.plain_file ? join(REPO, s.plain_file) : undefined,
       template: s.template ? join(REPO, s.template) : undefined } as Case];
   }));
 }
@@ -122,7 +123,8 @@ export interface PlainCheck {
 /** The strip at the case's own width against plain lualatex's PDF of the same
  *  document (build/<case>/plain/input.pdf), glyph by glyph in the order TeX
  *  shipped them, each relative to the first: where the page has a glyph, the
- *  strip must have it at the same distance from the first one. On one page TeX
+ *  strip must have it at the same distance from the first one (plain lualatex
+ *  compiles the case's `plain_file` instead, when it has one). On one page TeX
  *  sets every line as on the galley, so the document must fit on one, with
  *  nothing the page adds or the strip leaves out – no page number
  *  (\pagestyle{empty}), footnotes or floats. */
@@ -132,7 +134,7 @@ export async function againstPlain(c: Case): Promise<PlainCheck> {
   const out = join(BUILD, c.name, 'plain');
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  copyFileSync(c.file, join(out, 'input.tex'));
+  copyFileSync(c.plain_file ?? c.file, join(out, 'input.tex'));
   await runLuaLatex(out, { texinputs: [dirname(c.file)], passes: c.passes, expect: 'input.pdf', block: c.name });
   const s = traceStrip(join(strip, 'pageless.pdf')).glyphs, p = traceStrip(join(out, 'input.pdf')).glyphs;
   const r: PlainCheck = { glyphs: { strip: s.length, plain: p.length }, worst: { across: 0, down: 0 } };

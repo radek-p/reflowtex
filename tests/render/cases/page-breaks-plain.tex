@@ -1,0 +1,31 @@
+% Forced page breaks: the strip, at its own width, is to be what plain lualatex sets with the breaks taken out (cases/plain/page-breaks-plain.tex), glyph for glyph.
+\documentclass[twoside]{article}
+\pagestyle{empty}
+\begin{document}
+A paragraph before a new page, long enough to break onto a second line of the
+column, ending in a descender: gyp.
+\newpage
+A paragraph after the new page, ending gyp.
+\clearpage
+A paragraph after the clear page, long enough to break onto a second line of
+the column, ending in a descender: gyp.
+\cleardoublepage
+A paragraph after a clear double page, which made a blank page, ending gyp.
+\clearpage
+\section{A heading after a clear page}
+A paragraph under the heading, ending in a descender: gyp.
+\newpage
+\vspace{20pt}
+A paragraph after a new page and a vertical space, ending gyp.
+\newpage
+\vspace*{20pt}
+A paragraph after a new page and a starred vertical space, ending gyp.
+\null\newpage
+A paragraph after an empty page made with null and a new page, ending gyp.
+\clearpage
+\clearpage
+A paragraph after two clear pages in a row, ending with a display:
+\[ a = b_q + c \]
+\newpage
+A paragraph after a new page straight after the display, ending gyp.
+\end{document}

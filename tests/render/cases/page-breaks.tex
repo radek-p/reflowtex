@@ -1,0 +1,73 @@
+% Forced page breaks on the main vertical list, after lines with descenders: the column runs on across each as in the middle of a page. Inside boxes they act as always.
+\documentclass[twoside]{article}
+\usepackage{amsmath}
+% floats of LaTeX's own, as a package defines them (the template sets figure
+% and table in the text)
+\makeatletter
+\newenvironment{pagefloat}{\@float{figure}[p]}{\end@float}
+\newenvironment{herefloat}{\@float{figure}[h]}{\end@float}
+\makeatother
+\begin{document}
+A paragraph before a new page, long enough to break onto a second line of the
+column, ending in a descender: gyp.
+\newpage
+A paragraph after the new page, long enough to break onto a second line of the
+column, quickly, ending gyp.
+\begin{figure}[t]
+  \centering
+  \rule{3cm}{1cm}
+  \caption{A figure before a clear page, its caption ending in a descender: gyp.}
+\end{figure}
+\clearpage
+A paragraph after the clear page, long enough to break onto a second line of
+the column, ending in a descender: gyp.
+\cleardoublepage
+A paragraph after a clear double page, which made a blank page, long enough to
+break onto a second line of the column, ending gyp.
+\clearpage
+\section{A heading after a clear page}
+A paragraph under the heading, long enough to break onto a second line of the
+column, ending in a descender: gyp.
+\newpage
+\vspace{20pt}
+A paragraph after a new page and a vertical space, which the column keeps,
+ending gyp.
+\newpage
+\vspace*{20pt}
+A paragraph after a new page and a starred vertical space, ending gyp.
+\null\newpage
+A paragraph after an empty page made with null and a new page, ending gyp.
+\clearpage
+\clearpage
+A paragraph after two clear pages in a row, long enough to break onto a second
+line of the column, ending gyp.
+\begin{pagefloat}
+  \centering\rule{3cm}{1cm}
+\end{pagefloat}
+A paragraph after a float of its own page, long enough to break onto a second
+line of the column, ending gyp.
+\begin{herefloat}
+  \centering\rule{3cm}{1cm}
+\end{herefloat}
+A paragraph after a float placed here, long enough to break onto a second line
+of the column, ending with a display:
+\[ a = b_q + c \]
+\newpage
+A paragraph after a new page straight after the display, ending gyp.
+
+\noindent\begin{minipage}{200pt}
+A minipage whose first paragraph ends in a descender: gyp.
+\newpage
+Its second paragraph, after a new page inside the box, which only ends the
+paragraph there.
+\end{minipage}
+
+\noindent\parbox{200pt}{A parbox whose first paragraph ends in a
+  descender: gyp.\newpage Its second paragraph, after a new page inside it.}
+
+A paragraph after the boxes, long enough to break onto a second line of the
+column, quickly.
+
+A last paragraph, long enough to break onto a second line of the
+column, ending gyp.
+\end{document}

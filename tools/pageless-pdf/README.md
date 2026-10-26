@@ -32,12 +32,14 @@ end of the document that ships the copy. It compiles once, at the
 document's own width; `--width-extra` widens `\textwidth` through the
 template's width hook.
 
-`pageless_pdf.lua` first drops what a paged run's output routine would have
-removed – the empty box LaTeX puts before each request to its output routine
-(a float's marker, `\clearpage`'s), known by the penalty below −10000 after
-it, with its interline glue and the `\topskip` the page builder adds after
-it; any other empty box stays, with its glue – and trims the galley to
-its first and last non-empty box. It ships the rest at the end of the run as
+The copy is already the document with no page breaks in it: at a forced
+break (`\newpage`, `\clearpage`, a float's request to LaTeX's output routine)
+the serializer leaves out what paging made – the breaks, LaTeX's empty marker
+boxes, `\vfil`, `\topskip` glue – and sets the next line's interline glue from
+the line before the break, as in the middle of a page; the author's `\vspace`
+and `\vspace*` after a break are kept (`src/extract/README.md`).
+`pageless_pdf.lua` trims the galley to its first and last non-empty box.
+It ships the rest at the end of the run as
 consecutive pages of at most 16000pt (just under `\maxdimen`), cut only
 *inside* a top-level glue or kern: the glue's width is split between the end
 of one page and the start of the next, so no box moves and stacking the

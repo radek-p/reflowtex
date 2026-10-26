@@ -173,7 +173,11 @@ compile it, with plain lualatex, into `build/<case>/plain/`, and the test
 against that PDF's, each relative to the first, within what the two
 PDFs can tell apart (`PLAIN_TOLERANCE` in `render.ts`). On one page TeX sets every line as on the galley, so such a
 case fits on one page and has nothing the page adds or the strip leaves
-out: `\pagestyle{empty}`, no footnotes or floats.
+out: `\pagestyle{empty}`, no footnotes or floats. A case with a `plain_file`
+is checked against plain lualatex's PDF of that file instead: the same
+document less what the strip is not to show (`page-breaks-plain`: its page
+breaks, so that the column must run on across each as LaTeX sets the text
+with none).
 
 ## Known failures and tolerances
 

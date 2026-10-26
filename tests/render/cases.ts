@@ -35,6 +35,10 @@ export interface CaseSettings {
    *  document as LaTeX does. The document must fit on one page and have no
    *  page number (\pagestyle{empty}), footnotes or floats */
   against_plain?: boolean;
+  /** the document plain lualatex compiles for `against_plain`, from the
+   *  repository root, when it is not the case's own: the same document less
+   *  what the strip is not to show (the page breaks of page-breaks-plain) */
+  plain_file?: string;
   /** a whole document: skipped by make test-render */
   slow?: boolean;
   /** a failure on record: the case runs as an expected failure, and when it
@@ -172,4 +176,16 @@ export const cases: Record<string, CaseSettings> = {
   // every glyph of the strip off by the offsets, and the picture's labels and
   // lines off its box). Worst attained 2026-10-25.
   'page-offsets': { tex_pictures: true, tolerance: 0.013, rule_tolerance: 0.004 },
+  // Forced page breaks on the main vertical list: \newpage, \clearpage (with
+  // a float before it), \cleardoublepage making a blank page, \null\newpage,
+  // two in a row, one after a display and before a heading, LaTeX's own
+  // floats of [p] and [h], \vspace and \vspace* after a break, and \newpage
+  // inside a minipage and a \parbox. Each used to leave the next line lower
+  // in the strip by the depth of the line before the break (up to 0.59 pt
+  // off here; 1189 of 1443 glyphs past 0.7 pt). Worst attained 2026-10-26.
+  'page-breaks': { tolerance: 0.009, rule_tolerance: 0.002 },
+  // The same breaks, and the strip glyph for glyph against plain lualatex's
+  // page of the document with the breaks taken out: the column runs on across
+  // a break as in the middle of a page. Worst attained 2026-10-26.
+  'page-breaks-plain': { against_plain: true, plain_file: 'tests/render/cases/plain/page-breaks-plain.tex', tolerance: 0.009 },
 };

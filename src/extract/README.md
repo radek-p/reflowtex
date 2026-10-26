@@ -35,7 +35,23 @@ This is not implemented by setting `\vsize=\maxdimen`: that would merely move
 the automatic break to TeX's finite dimension limit. The serializer keeps an
 unmodified copy of the flow and zeroes the top-level vertical dimensions seen by
 the page builder. Explicit source breaks such as `\newpage` may still trigger a
-shipout, but they do not divide or alter the captured flow.
+shipout, but they do not divide the captured flow.
+
+A forced break (a penalty of −10000 or less: `\newpage`, `\clearpage`,
+`\cleardoublepage`, LaTeX's requests to its output routine for floats and
+multicol) still runs TeX's output routine as on paper; in the copy it is a
+*seam*, from the last visible item before it to the first one after it. In a
+seam the copy leaves out what paging made – the breaks, empty boxes (LaTeX's
+marker `\vbox{}` before an output request, a blank page's `\hbox{}`, but not a
+`\label`'s anchor), page-filling glue such as `\vfil`, `\topskip` and `\splittopskip` glue and
+interline glue – and sets the interline glue of the first item after the seam
+again, by TeX's rule, from the depth of the last one before it: the line after
+`\clearpage` stands where it would in the middle of a page. The author's glue,
+kerns and everything that draws stay. On paper TeX discards glue at the top of
+a page (a `\vspace` after `\newpage` vanishes, a `\vspace*` stays); in the
+continuous column both are kept, as the author's spacing. A break inside a box
+(a minipage, a `\parbox`) never reaches the main vertical list and acts in
+its box as always.
 
 Footnotes arrive as `ins` nodes rather than as children of the paragraph that
 contains their marker. The template gives the marker and insertion a shared id;

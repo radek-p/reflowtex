@@ -1,0 +1,30 @@
+% cases/page-breaks-plain.tex with its page breaks taken out, each a paragraph end: what the strip of that case is to be.
+\documentclass[twoside]{article}
+\pagestyle{empty}
+\begin{document}
+A paragraph before a new page, long enough to break onto a second line of the
+column, ending in a descender: gyp.
+
+A paragraph after the new page, ending gyp.
+
+A paragraph after the clear page, long enough to break onto a second line of
+the column, ending in a descender: gyp.
+
+A paragraph after a clear double page, which made a blank page, ending gyp.
+
+\section{A heading after a clear page}
+A paragraph under the heading, ending in a descender: gyp.
+
+\vspace{20pt}
+A paragraph after a new page and a vertical space, ending gyp.
+
+\vspace*{20pt}
+A paragraph after a new page and a starred vertical space, ending gyp.
+
+A paragraph after an empty page made with null and a new page, ending gyp.
+
+A paragraph after two clear pages in a row, ending with a display:
+\[ a = b_q + c \]
+
+A paragraph after a new page straight after the display, ending gyp.
+\end{document}
