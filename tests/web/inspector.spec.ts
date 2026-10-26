@@ -5,9 +5,12 @@
 import { test, expect, type WebPage } from './fixtures.ts';
 import { idle } from './web.ts';
 
-/** Open the inspector and wait for its page agent. */
+/** Open the inspector and wait for its page agent. (Its promise is awaited in
+ *  the page: handed back to the DevTools protocol as the evaluation's result,
+ *  Chromium sometimes reports it "collected" – which Playwright gives as the
+ *  page having navigated – though it settles, the panel open.) */
 async function agent(page: WebPage) {
-  await page.evaluate(() => reflowtex.inspector.open(undefined, { scroll: false }));
+  await page.evaluate(async () => { await reflowtex.inspector.open(undefined, { scroll: false }); });
   await page.waitForFunction(() => window.__rtxInspector && window.__rtxInspector.resources);
 }
 const A = (page: WebPage, fn: string, ...args: unknown[]) =>
@@ -255,7 +258,7 @@ test('the Accessibility layer overlay outlines the hidden text on the page', asy
 
 test('the details have an Accessibility tab: a box’s accessible text, with MathML or spelled out', async ({ openPage }) => {
   const page = await openPage('mathml');
-  await page.evaluate(() => reflowtex.inspector.open(document.querySelector('.latex-block[data-nodelist-b64]'), { scroll: false }));
+  await page.evaluate(async () => { await reflowtex.inspector.open(document.querySelector('.latex-block[data-nodelist-b64]'), { scroll: false }); });
   const details = page.locator('[data-rtx-ui] .details');
   const pane = details.locator('.a11y');
   await details.locator('[role="tab"][data-dtab="a11y"]').click();
