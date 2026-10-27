@@ -157,6 +157,39 @@ test('multicols text is not kept twice', async () => {
   assert.equal((inParagraphs + inBoxes).split('Alpha').length - 1, 1);
 });
 
+// Every float in the source is in the content stream, where it is written,
+// with its caption: none goes out on a page of its own, and none waits for
+// room further on. Floats of the kernel's \@float in any form, and of the
+// packages that define float types through it.
+test('every float is in the content stream where it is written, with its caption', async () => {
+  const floats: [env: string, opt: string, preamble: string][] = [
+    ['figure', '[p]', ''], ['table', '[h]', ''], ['figure', '[b]', ''], ['figure*', '', ''], ['table*', '[p]', ''],
+    // a type the class or the document makes with the kernel's \@float
+    ['listing', '[p]', '\\makeatletter\\newcounter{listing}\\def\\fps@listing{tbp}\\def\\ftype@listing{8}'
+      + '\\def\\ext@listing{lol}\\def\\fnum@listing{Listing \\thelisting}'
+      + '\\newenvironment{listing}{\\@float{listing}}{\\end@float}\\makeatother'],
+  ];
+  if (kpsewhich('float.sty')) floats.push(['program', '', '\\usepackage{float}\\newfloat{program}{tbp}{lop}'], ['table', '[H]', '']);
+  if (kpsewhich('algorithm.sty')) floats.push(['algorithm', '', '\\usepackage{algorithm}']);
+  if (kpsewhich('newfloat.sty')) floats.push(['scheme', '[p]', '\\usepackage{newfloat}\\DeclareFloatingEnvironment[placement=p]{scheme}']);
+  const preamble = [...new Set(floats.map(f => f[2]).filter(Boolean))].join('\n');
+  const words = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India', 'Juliett', 'Kilo'];
+  const body = floats.map(([env, opt], k) =>
+    `Before${words[k]} text.\n\\begin{${env}}${opt}Body${words[k]}\\caption{Caption${words[k]}}\\end{${env}}`).join('\n\n')
+    + '\n\nThe end.';
+  const d = await capture(body, preamble, 2);
+  const text = d.content.map(it => it.kind === 'paragraph' ? glyphText(d.paragraphs[it.para! - 1].nodes)
+                                   : it.kind === 'display' ? glyphText([it.box!]) : '').join(' ');
+  const once = (s: string) => text.split(s).length === 2;
+  // each once, its body and caption between the text before it and the next
+  const found = floats.map((_, k) => words[k]).filter((w, k) => {
+    const next = k + 1 < floats.length ? `Before${words[k + 1]}` : 'Theend.';
+    const [b, x, c, n] = [`Before${w}`, `Body${w}`, `Caption${w}`, next].map(s => text.indexOf(s));
+    return once(`Body${w}`) && once(`Caption${w}`) && b < x && b < c && x < n && c < n;
+  });
+  assert.deepEqual(found, floats.map((_, k) => words[k]), `floats in the source: ${floats.length}, in place in the output: ${found.length}; the stream: ${text}`);
+});
+
 // The galley the serializer copies (Serializer.flow_head(): what it walks, and
 // what the strip ships), one line per top-level node: its type, its subtype or
 // penalty, whether it is an empty box, and whether it is a \label's anchor.

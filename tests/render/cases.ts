@@ -152,8 +152,10 @@ export const cases: Record<string, CaseSettings> = {
   'missing-chars': { against_plain: true, tolerance: 0.010 },
   // The same under hyperref, whose \caption leaves its anchor alone on a line
   // after a display (28.6 pt lost) or after a full-width box and a line end
-  // (12 pt): floats, so not against plain. Worst attained 2026-10-25.
-  'blank-lines-figures': { tolerance: 0.009, rule_tolerance: 0.002 },
+  // (12 pt): floats, so not against plain. Worst attained 2026-10-25; rules
+  // 0.003 since 2026-10-27, when a float became a box in the flow (its rule
+  // 0.001 lower in the browser).
+  'blank-lines-figures': { tolerance: 0.009, rule_tolerance: 0.003 },
   // A rule and a box set in vertical mode, and a paragraph holding only a
   // rule: kept as fixed displays (they used to be dropped, with 202 glyphs
   // after them out of place). Worst attained 2026-09-26.
@@ -191,8 +193,10 @@ export const cases: Record<string, CaseSettings> = {
   // floats of [p] and [h], \vspace and \vspace* after a break, and \newpage
   // inside a minipage and a \parbox. Each used to leave the next line lower
   // in the strip by the depth of the line before the break (up to 0.59 pt
-  // off here; 1189 of 1443 glyphs past 0.7 pt). Worst attained 2026-10-26.
-  'page-breaks': { tolerance: 0.009, rule_tolerance: 0.002 },
+  // off here; 1189 of 1443 glyphs past 0.7 pt). Worst attained 2026-10-26; rules
+  // 0.005 since 2026-10-27, when the [p] and [h] floats, lost until then, came
+  // into the flow as boxes, rules and all.
+  'page-breaks': { tolerance: 0.009, rule_tolerance: 0.005 },
   // The same breaks, and the strip glyph for glyph against plain lualatex's
   // page of the document with the breaks taken out: the column runs on across
   // a break as in the middle of a page. Worst attained 2026-10-26.
@@ -213,4 +217,12 @@ export const cases: Record<string, CaseSettings> = {
   // build directory, and the build stopped. Not against plain: that compile
   // runs in a build directory too. Worst attained 2026-10-27.
   'relative-paths': { file: 'tests/render/cases/relative-paths/main.tex', tolerance: 0.010 },
+  // Floats LaTeX places itself: [p], [h], a type float's \newfloat defines,
+  // algorithm's, figure*. Each is set where it is written, as float's [H]
+  // sets one; the strip glyph for glyph against plain lualatex's page of the
+  // document with every float [H]. Those LaTeX could not place before the end
+  // of the document were lost, from the strip and the page alike (45 of 892
+  // glyphs here), and one put back after the prose that follows it. Worst
+  // attained 2026-10-27.
+  floats: { against_plain: true, plain_file: 'tests/render/cases/plain/floats.tex', tolerance: 0.009, rule_tolerance: 0.004 },
 };

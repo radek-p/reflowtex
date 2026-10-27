@@ -1,0 +1,56 @@
+% cases/floats.tex with every float [H], float's 'here, definitely', and a float's caption set as the pipeline sets it: what the strip of that case is to be.
+\documentclass{article}
+\usepackage{float}
+\usepackage{algorithm}
+\newfloat{program}{tbp}{lop}
+\floatname{program}{Program}
+% a float's caption: a paragraph, small and centred
+\makeatletter
+\long\def\@makecaption#1#2{\vskip\abovecaptionskip{\small\centering#1: #2\par}\vskip\belowcaptionskip}
+\makeatother
+\pagestyle{empty}
+\begin{document}
+A paragraph before a figure of its own page, long enough to break onto a second
+line of the column, quickly.
+\begin{figure}[H]
+  \centering
+  \rule{3cm}{1cm}
+  \caption{A figure of its own page, set where it is written.}
+\end{figure}
+A paragraph after the figure, long enough to break onto a second line of the
+column, before a table placed here.
+\begin{table}[H]
+  \centering
+  \begin{tabular}{ll}
+    left & right \\
+    gyp & quickly
+  \end{tabular}
+  \caption{A table placed here, with a caption long enough to need two lines
+    of the column, so that it is set as a paragraph.}
+\end{table}
+A paragraph before a float of a type the document defines, long enough to
+break onto a second line of the column.
+\begin{program}[H]
+  \centering
+  \rule{4cm}{0.5cm}
+  \caption{A program, a float of the document's own type.}
+\end{program}
+A paragraph before an algorithm, long enough to break onto a second line of the
+column, quickly.
+\begin{algorithm}[H]
+  \caption{An algorithm, ruled above and below its caption}
+  First step of the algorithm, long enough to break onto a second line of the
+  column, quickly.
+
+  Second step.
+\end{algorithm}
+A paragraph before a starred figure, long enough to break onto a second line of
+the column, ending gyp.
+\begin{figure}[H]
+  \centering
+  \rule{5cm}{1cm}
+  \caption{A starred figure, as wide as the text.}
+\end{figure}
+A last paragraph, after all the floats, long enough to break onto a second line
+of the column.
+\end{document}

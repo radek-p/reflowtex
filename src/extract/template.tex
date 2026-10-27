@@ -121,40 +121,63 @@
 \usepackage{mathtools}
 \usepackage{amssymb}
 
-% Reflow TeX produces a continuous, pageless document, so TeX's page-oriented
-% float placement is both unnecessary and actively harmful: the serializer
-% learns document order from the shipped vertical list, after a figure may have
-% moved ahead of the prose that introduced it. Make figures and tables
-% ordinary flow containers instead – the starred, full-width forms too: left
-% as floats on a page that never fills, they would all wait for the final
-% \clearpage and land after the last paragraph. Their captions are ordinary
-% paragraphs (rather than the direct boxes LaTeX's float machinery builds,
-% which are invisible to the paragraph content stream), while the standard
-% counter and \label semantics are retained. Placement options are accepted
-% for source compatibility and deliberately ignored.
+% Reflow TeX produces a continuous, pageless document: a float is set where it
+% is written, as float's [H] sets one. Left to LaTeX, a float waits for room on
+% a page that never fills: one that may go "here" is put back by the output
+% routine, often after the prose that follows it, and one that may not (a [p]
+% figure, a type with no h among its placements) waits for the final
+% \clearpage and goes out on a page of its own, which is shipped, not
+% captured – lost.
+%
+% Every float is begun by the kernel's \@xfloat, whatever made it: figure and
+% table and their starred forms, a class's own, float's \newfloat and
+% \restylefloat (algorithm's), newfloat's \DeclareFloatingEnvironment,
+% algorithm2e, rotating, listings. \@xfloat builds the float's box as LaTeX
+% does, and the class's or package's end of the float finishes it (float's
+% rules and caption above, say). Here \@floatpenalty is then 0, which every
+% end of a float (the kernel's, revtex's, acmart's) takes for a float it
+% cannot queue: none is queued. The box goes into the flow when the
+% environment's group closes, between \intextsep above and below; a float
+% written in a paragraph ends it. Its register goes back to the free list, as
+% the output routine would give it back. Placement options are read, as LaTeX
+% reads them, and have no effect.
 \makeatletter
-\def\reflowtex@flowfloat#1{%
+\let\reflowtex@xfloat\@xfloat
+\def\@xfloat#1[#2]{%
+  \ifinner
+    % LaTeX's "not in outer par mode" error: nothing to place
+    \expandafter\reflowtex@xfloat
+  \else
+    \aftergroup\reflowtex@placefloat
+    \expandafter\reflowtex@xfloatbox
+  \fi
+  {#1}[#2]}
+\def\reflowtex@xfloatbox#1[#2]{%
+  \reflowtex@xfloat{#1}[#2]%
+  % inside the float's box now
+  \global\@floatpenalty\z@
+  \xdef\reflowtex@floatbox{\@currbox}}
+\def\reflowtex@placefloat{%
   \par\addvspace{\intextsep}%
-  \begingroup
-  \def\@captype{#1}%
-  % no indent, as in the box LaTeX sets a float in (\@parboxrestore): a
-  % tabular* or picture \linewidth wide fills the line exactly
-  \parindent\z@
-  % spaced as LaTeX's \@makecaption spaces it: \abovecaptionskip above,
-  % \belowcaptionskip below, whatever the class set them to
-  \RenewDocumentCommand{\caption}{o m}{%
-    \refstepcounter{#1}%
-    \par\vskip\abovecaptionskip
-    {\small\centering\csname fnum@#1\endcsname: ##2\par}%
-    \vskip\belowcaptionskip}}
-\def\reflowtex@flowfloatend{\par\endgroup\addvspace{\intextsep}}
-\RenewDocumentEnvironment{figure}{O{}}{\reflowtex@flowfloat{figure}}{\reflowtex@flowfloatend}
-\@ifundefined{table}{}{%
-  \RenewDocumentEnvironment{table}{O{}}{\reflowtex@flowfloat{table}}{\reflowtex@flowfloatend}}
-\@ifundefined{figure*}{}{%
-  \RenewDocumentEnvironment{figure*}{O{}}{\reflowtex@flowfloat{figure}}{\reflowtex@flowfloatend}}
-\@ifundefined{table*}{}{%
-  \RenewDocumentEnvironment{table*}{O{}}{\reflowtex@flowfloat{table}}{\reflowtex@flowfloatend}}
+  \box\reflowtex@floatbox
+  \@cons\@freelist\reflowtex@floatbox
+  \addvspace{\intextsep}}
+% A float's caption is a paragraph, small and centred, spaced as LaTeX's
+% \@makecaption spaces it (\abovecaptionskip above, \belowcaptionskip below,
+% whatever the class set them to). LaTeX's own sets a caption shorter than
+% the line as a box as wide as it, which the viewer could not break again at
+% another width. \caption itself is the kernel's (or the class's, or the
+% caption package's): the counter, the list of figures, the label and the
+% anchor are as LaTeX makes them. Set in every float's box, [H]'s too;
+% \captionof outside a float keeps the class's.
+\let\reflowtex@floatboxreset\@floatboxreset
+\def\@floatboxreset{%
+  \reflowtex@floatboxreset
+  \let\@makecaption\reflowtex@makecaption}
+\long\def\reflowtex@makecaption#1#2{%
+  \vskip\abovecaptionskip
+  {\small\centering#1: #2\par}%
+  \vskip\belowcaptionskip}
 \makeatother
 
 % ── reflowtex node-list serializer ─────────────────────────────────────────────

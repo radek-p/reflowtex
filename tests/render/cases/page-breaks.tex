@@ -1,8 +1,7 @@
 % Forced page breaks on the main vertical list, after lines with descenders: the column runs on across each as in the middle of a page. Inside boxes they act as always.
 \documentclass[twoside]{article}
 \usepackage{amsmath}
-% floats of LaTeX's own, as a package defines them (the template sets figure
-% and table in the text)
+% floats made with LaTeX's \@float, as a package defines them
 \makeatletter
 \newenvironment{pagefloat}{\@float{figure}[p]}{\end@float}
 \newenvironment{herefloat}{\@float{figure}[h]}{\end@float}

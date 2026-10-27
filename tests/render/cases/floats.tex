@@ -1,0 +1,54 @@
+% Floats LaTeX would place itself – of its own page ([p]), here ([h]), of a type float's \newfloat defines, algorithm's, as wide as the text (figure*) – each set in the column where it is written, with its caption.
+\documentclass{article}
+\usepackage{float}
+\usepackage{algorithm}
+\newfloat{program}{tbp}{lop}
+\floatname{program}{Program}
+% one page with nothing but the text: checked against plain lualatex too
+% (cases.ts), where every float is [H]
+\pagestyle{empty}
+\begin{document}
+A paragraph before a figure of its own page, long enough to break onto a second
+line of the column, quickly.
+\begin{figure}[p]
+  \centering
+  \rule{3cm}{1cm}
+  \caption{A figure of its own page, set where it is written.}
+\end{figure}
+A paragraph after the figure, long enough to break onto a second line of the
+column, before a table placed here.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{ll}
+    left & right \\
+    gyp & quickly
+  \end{tabular}
+  \caption{A table placed here, with a caption long enough to need two lines
+    of the column, so that it is set as a paragraph.}
+\end{table}
+A paragraph before a float of a type the document defines, long enough to
+break onto a second line of the column.
+\begin{program}
+  \centering
+  \rule{4cm}{0.5cm}
+  \caption{A program, a float of the document's own type.}
+\end{program}
+A paragraph before an algorithm, long enough to break onto a second line of the
+column, quickly.
+\begin{algorithm}
+  \caption{An algorithm, ruled above and below its caption}
+  First step of the algorithm, long enough to break onto a second line of the
+  column, quickly.
+
+  Second step.
+\end{algorithm}
+A paragraph before a starred figure, long enough to break onto a second line of
+the column, ending gyp.
+\begin{figure*}
+  \centering
+  \rule{5cm}{1cm}
+  \caption{A starred figure, as wide as the text.}
+\end{figure*}
+A last paragraph, after all the floats, long enough to break onto a second line
+of the column.
+\end{document}
