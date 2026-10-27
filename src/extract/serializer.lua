@@ -1556,7 +1556,8 @@ local seen_para = {}
 -- fire that exists only to close the display group). Skip those, but retain a
 -- paragraph whose only visible node is a picture: \mypic commonly expands to
 -- exactly such a paragraph – or a rule: \noindent\rule{\textwidth}{0.4pt} is
--- a separator. A rule with no width, or no height and depth, is a strut and
+-- a separator, and so is a line of leaders (\hrulefill, \leaders\hrule\vfill
+-- in a \vbox). A rule with no width, or no height and depth, is a strut and
 -- draws nothing.
 local RUNNING = -1073741824
 local function inked_rule(n)
@@ -1569,6 +1570,7 @@ local function has_visible_nodes(nodes)
         if n.type == "rule" and inked_rule(n) then return true end
         if n.children and has_visible_nodes(n.children) then return true end
         if n.replace and has_visible_nodes(n.replace) then return true end
+        if n.leader and has_visible_nodes({ n.leader }) then return true end
     end
     return false
 end

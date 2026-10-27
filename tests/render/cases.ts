@@ -99,6 +99,14 @@ export const cases: Record<string, CaseSettings> = {
   // drawn without it. Worst attained 2026-10-25 (until then, 372 of the
   // browser's glyphs had none of TeX's within 0.7 pt).
   'inline-rules': { tolerance: 0.010, rule_tolerance: 0.001 },
+  // Rule leaders with a running height or depth: colortbl's cell colours
+  // (\columncolor, \cellcolor, \rowcolor), \leaders\vrule in boxes, and
+  // \leaders\hrule\vfill in a \vbox in a line (a running width), and a line
+  // of only \hrulefill. They were drawn with no height (the box's was not
+  // passed down), a vlist's leaders not at all, and a line whose only ink is
+  // a leader was dropped as blank. One page, so against_plain too. Worst
+  // attained 2026-10-27.
+  'colortbl-cells': { against_plain: true, tolerance: 0.009, rule_tolerance: 0.004 },
   // bbm's double-struck letters (\mathbbm), a font with only a METAFONT
   // source, drawn from METAFONT's bitmaps as outlines. Worst attained
   // 2026-10-26; all 358 glyphs found (also when they were boxes: the

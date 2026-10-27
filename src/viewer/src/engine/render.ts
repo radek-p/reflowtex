@@ -111,16 +111,19 @@ export function leaderCopies(n: GlueNode, count: number): TexNode[] {
     return n._leaderCopies;
 }
 
-export function renderLeaders(fontInfo: FontTable, sink: Sink, n: GlueNode, x: number, baselineY: number, wSp: number): void {
+/** A leader glue of an hlist, `wSp` long at x. runH/runD (sp) are the
+ *  enclosing box's height and depth, as for a rule in it (renderNodes). */
+export function renderLeaders(fontInfo: FontTable, sink: Sink, n: GlueNode, x: number, baselineY: number, wSp: number,
+                              runH: number, runD: number): void {
     const L=n.leader;
     if(!L || wSp<=0) return;
 
-    // A rule leader is not tiled: TeX simply runs the rule the whole length
-    // (\hrulefill). Running dimensions inherit from the enclosing box, which is
-    // not reachable here, so they fall back to the rule's own.
+    // A rule leader is not tiled: TeX runs the rule the whole length
+    // (\hrulefill), and a running height or depth is the enclosing box's, as
+    // for any rule in it (§626) – colortbl's cell colours are such rules.
     if(L.type==='rule'){
-        const h=(L.height===RUNNING_RULE?0:(L.height??0))*SP_TO_PX;
-        const d=(L.depth ===RUNNING_RULE?0:(L.depth ??0))*SP_TO_PX;
+        const h=(L.height===RUNNING_RULE?runH:(L.height??0))*SP_TO_PX;
+        const d=(L.depth ===RUNNING_RULE?runD:(L.depth ??0))*SP_TO_PX;
         if(h+d>0) sink.rule(L, x, baselineY-h, wSp*SP_TO_PX, h+d);
         return;
     }
@@ -164,7 +167,16 @@ export function renderVlistBody(fontInfo: FontTable, sink: Sink, n: BoxNode, vli
     for(const child of n.children){
         const y0=curY;
         if(child.type==='kern'){curY+=child.kern*SP_TO_PX;}
-        else if(child.type==='glue'){curY+=setGlue(child,vr,vfo)*SP_TO_PX;}
+        else if(child.type==='glue'){
+            // A rule leader runs the glue's length down the list, as wide as
+            // the rule – or, running, as the vlist (§635: \leaders\hrule\vfill).
+            const g=setGlue(child,vr,vfo)*SP_TO_PX, L=child.leader;
+            if(L?.type==='rule'&&g>0){
+                const rw=(L.width===RUNNING_RULE?vlistW:(L.width??0))*SP_TO_PX;
+                if(rw>0) sink.rule(L,vlistX,curY,rw,g);
+            }
+            curY+=g;
+        }
         else if(child.type==='rule'){
             const rw=(child.width===RUNNING_RULE?vlistW:child.width)*SP_TO_PX;
             const rh=(child.height+child.depth)*SP_TO_PX;
@@ -213,7 +225,7 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
                 let w=n.width;
                 if(ratio>0&&(n.stretch_order||0)===fillOrder&&n.stretch) w+=ratio*n.stretch;       // signed, as setGlue
                 else if(ratio<0&&(n.shrink_order||0)===fillOrder&&n.shrink) w+=ratio*n.shrink;
-                if(n.leader) renderLeaders(fontInfo,sink,n,x,baselineY,w);
+                if(n.leader) renderLeaders(fontInfo,sink,n,x,baselineY,w,runH,runD);
                 if(n.subtype===13) sink.space(n, x, baselineY);
                 if(sink.gap) sink.gap(n,'width',x,w*SP_TO_PX);
                 x+=w*SP_TO_PX; break;

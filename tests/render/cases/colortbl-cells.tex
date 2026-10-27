@@ -1,0 +1,25 @@
+% Rule leaders with running dimensions: colortbl paints a cell's background as \leaders\vrule\hskip, a rule as tall and deep as the cell's box (\columncolor, \cellcolor, \rowcolor); the same by hand in boxes; \leaders\hrule\vfill in a \vbox in a line, a rule as wide as the box; and a line that holds only \hrulefill.
+\documentclass{article}
+\usepackage{colortbl}
+\pagestyle{empty}
+\begin{document}
+A table whose first column is coloured, one row grey and one cell red:
+
+\begin{tabular}{|>{\columncolor{yellow}}c|c|c|}
+\hline
+Name & Kind & Step \\ \hline
+\rowcolor[gray]{0.8} Small & Solitary & 4 \\ \hline
+Large & \cellcolor{red} Popular & 6 \\ \hline
+Critical & Other & 3 \\ \hline
+\end{tabular}
+
+A box filled by hand: \hbox to 60pt{\color{blue}\leaders\vrule\hfill}\strut{}
+then words, and a filled box with its own height \hbox{\vrule height 12pt
+depth 3pt width 0pt\color{green}\leaders\vrule\hskip 40pt} with more words
+after it.
+
+A box in a line, \vbox to 24pt{\hbox to 80pt{}\color{blue}\leaders\hrule\vfill\hbox to 80pt{}}
+filled down its height, and a line of only a rule leader:
+
+\noindent\hrulefill
+\end{document}
