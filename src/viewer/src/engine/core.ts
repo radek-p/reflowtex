@@ -78,11 +78,24 @@ export function useGlyphMetrics(table: GlyphMetrics[] | null | undefined): void 
 // so it costs nothing measurable.
 export const gW = (n: TexNode): number => n.width  !== undefined ? n.width  : glyphMetrics[n.metrics! - 1].width;
 
+// A character of a virtual font that the pipeline could not keep as one glyph
+// – a ligature its packet builds from two characters, a small capital its
+// packet moves right by a little letterspacing – is a box of the character's
+// size holding the pieces where the packet puts them, and keeps the
+// character's font and code (src/pipeline/fonts/vf.ts). TeX set it as one
+// character of that font, so it protrudes and expands as that character does,
+// its pieces with it.
+export const isCharBox = (n: TexNode): boolean => n.type === 'hlist' && n.char !== undefined && n.font !== undefined;
+/** A node TeX set as one character: a glyph, or a character's box. */
+export const isChar = (n: TexNode): boolean => n.type === 'glyph' || isCharBox(n);
+/** A character's width: a glyph's, or its box's. */
+export const charW = (n: TexNode): number => n.type === 'glyph' ? gW(n) : (n.width ?? 0);
+
 // Font expansion as TeX applies it: a line's factor `er` (a fraction) stretches
-// or shrinks a glyph only if its font was given expansion limits
+// or shrinks a character only if its font was given expansion limits
 // (\expandglyphsinfont – microtype sets them on text fonts, never on math
 // fonts), and then scaled by the character's \efcode (‰; 1000 unless listed).
-// A font kern between two glyphs expands with them, by the mean of their
+// A font kern between two characters expands with them, by the mean of their
 // codes (LuaTeX's kern_stretch/kern_shrink); one of the two fonts not
 // expanding halves it, as LuaTeX averages the two fonts' limits.
 export function glyphExpandScale(fontInfo: FontTable | null | undefined, n: TexNode, er: number): number {
@@ -94,7 +107,7 @@ export function glyphExpandScale(fontInfo: FontTable | null | undefined, n: TexN
     return ef > 0 ? 1 + er * ef / 1000 : 1;
 }
 export function kernExpandScale(fontInfo: FontTable | null | undefined, l: TexNode | undefined, r: TexNode | undefined, er: number): number {
-    if (!er || !l || !r || l.type !== 'glyph' || r.type !== 'glyph') return 1;
+    if (!er || !l || !r || !isChar(l) || !isChar(r)) return 1;
     const fl = fontInfo && fontInfo[String(l.font)], fr = fontInfo && fontInfo[String(r.font)];
     const ml = fl && fl.expand ? 1 : 0, mr = fr && fr.expand ? 1 : 0;
     if (!ml && !mr) return 1;
@@ -102,14 +115,14 @@ export function kernExpandScale(fontInfo: FontTable | null | undefined, l: TexNo
     return 1 + er * ((efOf(fl, l) + efOf(fr, r)) / 2 / 1000) * ((ml + mr) / 2);
 }
 // How much of node i of `ns` a line's expansion factor er widens, as the
-// two functions above apply it when the line is drawn: a glyph's width times
-// its \efcode share, a font kern's by the mean of its neighbours', and zero
-// for anything of a font without expansion. The breaker must stretch a line
-// by exactly this much per unit of er, or a justified line is drawn short or
-// long by the difference (a document without microtype expands nothing).
+// two functions above apply it when the line is drawn: a character's width
+// times its \efcode share, a font kern's by the mean of its neighbours', and
+// zero for anything of a font without expansion. The breaker must stretch a
+// line by exactly this much per unit of er, or a justified line is drawn short
+// or long by the difference (a document without microtype expands nothing).
 export function expandableSp(fontInfo: FontTable | null | undefined, ns: TexNode[], i: number): number {
     const n = ns[i];
-    if (n.type === 'glyph') return gW(n) * (glyphExpandScale(fontInfo, n, 1) - 1);
+    if (isChar(n)) return charW(n) * (glyphExpandScale(fontInfo, n, 1) - 1);
     if (n.type === 'kern' && (n.subtype || 0) === 0)
         return n.kern * (kernExpandScale(fontInfo, ns[i - 1], ns[i + 1], 1) - 1);
     return 0;

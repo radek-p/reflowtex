@@ -1,0 +1,33 @@
+% Times through its virtual fonts under microtype, as in real papers: T1 Times
+% (times), whose ligatures ff, ffi and ffl a virtual font builds from two
+% characters, and whose small capitals are characters moved right by a little
+% letterspacing. TeX protrudes and expands each as the one character it set:
+% headings in small capitals hang their first character into the margin, and
+% justified lines widen their ligatures with their other letters. The headings
+% are short enough to stay on one line at every width tested.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage{microtype}
+\makeatletter
+\renewcommand\section{\@startsection{section}{1}{\z@}{-2.0ex plus -0.5ex minus -.2ex}%
+  {1.5ex plus 0.3ex minus 0.2ex}{\large\scshape\raggedright}}
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}{-1.8ex plus -0.5ex minus -.2ex}%
+  {0.8ex plus .2ex}{\normalsize\scshape\raggedright}}
+\makeatother
+\pagestyle{empty}
+\begin{document}
+\setcounter{section}{3}
+\section{Capability-specific failure}
+Both act on the same residual stream, so if they differ in effect they should
+differ in how they change that objective's structure. The officially affine
+offsets suffice for different effects: a sufficient, efficient and effortless
+offline baseline, whose shuffled differences affect the coefficients of
+affinity only a little, baffled no one. Afterwards the staff reshuffled the
+effective buffers, and the difficult, flawless and offbeat waffles were
+offered to the official referees as a fluffy afterthought.
+\subsection{A ladder of substitutes}
+Seven ``quoted'' words, a few commas, full stops -- and dashes -- hang into
+the margin as TeX hangs them, while the officers' different coffee offers
+differ in effect only.
+\end{document}

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { RUNNING_RULE, SP_TO_PX, gD, gH, gW, glyphExpandScale, kernExpandScale, sumWidthSp } from '../core.ts';
+import { RUNNING_RULE, SP_TO_PX, gD, gH, gW, glyphExpandScale, isCharBox, kernExpandScale, sumWidthSp } from '../core.ts';
 import { unreachable } from '../../../../shared/unreachable.ts';
 import type { FontTable, TexNode } from '../model.ts';
 import type { InkItem, LineMeta } from './types.ts';
@@ -28,7 +28,7 @@ export function lineProfile(fontInfo: FontTable, nodes: TexNode[], xStart: numbe
                     x+=w; break;
                 }
                 case 'hlist':case 'vlist':{
-                    const w=(n.width??0)*SP_TO_PX, shift=(n.shift??0)*SP_TO_PX;
+                    const w=(n.width??0)*(isCharBox(n)?glyphExpandScale(fontInfo,n,er):1)*SP_TO_PX, shift=(n.shift??0)*SP_TO_PX;
                     items.push({x1:x,x2:x+w,h:Math.max(0,(n.height??0)*SP_TO_PX-shift),d:Math.max(0,(n.depth??0)*SP_TO_PX+shift)});
                     x+=w; break;
                 }

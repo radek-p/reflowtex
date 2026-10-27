@@ -5,7 +5,7 @@
 // accessible text (runtime/a11y.ts) or replay a segment (host/inspect.ts).
 
 import {
-    RUNNING_RULE, SP_TO_PX, gW, glyphExpandScale, hlistGlueRatio, kernExpandScale, setGlue, vlistGlueRatio,
+    RUNNING_RULE, SP_TO_PX, gW, glyphExpandScale, hlistGlueRatio, isCharBox, kernExpandScale, setGlue, vlistGlueRatio,
 } from './core.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
 import type {
@@ -146,11 +146,12 @@ export function renderLeaders(fontInfo: FontTable, sink: Sink, n: GlueNode, x: n
 }
 
 // An hlist's children, set by its own glue, from its left edge x on its
-// baseline y; cut to the box when it clips.
-function renderHlist(fontInfo: FontTable, sink: Sink, n: BoxNode, x: number, y: number): void {
+// baseline y; cut to the box when it clips. `scale` widens everything in it
+// (a virtual font's character in its box, expanded with its line).
+function renderHlist(fontInfo: FontTable, sink: Sink, n: BoxNode, x: number, y: number, scale = 1): void {
     const{ratio,fillOrder}=hlistGlueRatio(n);
-    if(n.clip) sink.beginClip?.(n,x,y-n.height*SP_TO_PX,n.width*SP_TO_PX,(n.height+n.depth)*SP_TO_PX);
-    renderNodes(fontInfo,sink,n.children,x,y,ratio,0,fillOrder,n.height,n.depth);
+    if(n.clip) sink.beginClip?.(n,x,y-n.height*SP_TO_PX,n.width*scale*SP_TO_PX,(n.height+n.depth)*SP_TO_PX);
+    renderNodes(fontInfo,sink,n.children,x,y,ratio,0,fillOrder,n.height,n.depth,scale);
     if(n.clip) sink.endClip?.();
 }
 
@@ -201,9 +202,14 @@ export function renderVlistBody(fontInfo: FontTable, sink: Sink, n: BoxNode, vli
 // dimension (the RUNNING_RULE sentinel) inherits it – that is how a \vrule stretches
 // to the exact height of the \hbox it sits in (e.g. the two side edges of the amsthm
 // QED box). Without this the rule is dropped and only the top/bottom edges show.
+// `scale` widens every advance: the pieces of a virtual font's character
+// whose line expanded it (an expanded character's packet is drawn widened,
+// its moves with it).
 export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x: number, baselineY: number,
-                            ratio?: number, expandRatio?: number, fillOrder?: number, runH?: number, runD?: number): number {
+                            ratio?: number, expandRatio?: number, fillOrder?: number, runH?: number, runD?: number,
+                            scale = 1): number {
     ratio=ratio||0; expandRatio=expandRatio||0; fillOrder=fillOrder||0; runH=runH||0; runD=runD||0;
+    const k=scale*SP_TO_PX;
     for(let i=0;i<nodes.length;i++){
         const n=nodes[i], x0=x;
         switch(n.type){
@@ -214,12 +220,12 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
                 const h =(n.height===RUNNING_RULE?runH:(n.height??0));
                 const d =(n.depth ===RUNNING_RULE?runD:(n.depth ??0));
                 const hp=h*SP_TO_PX, dp=d*SP_TO_PX;
-                if(w>0&&hp+dp>0) sink.rule(n, x, baselineY-hp, w*SP_TO_PX, hp+dp);
-                x+=w*SP_TO_PX; break;
+                if(w>0&&hp+dp>0) sink.rule(n, x, baselineY-hp, w*k, hp+dp);
+                x+=w*k; break;
             }
             case 'glyph':{
                 sink.glyph(n, x, baselineY, fontInfo[String(n.font)]);
-                x+=gW(n)*glyphExpandScale(fontInfo,n,expandRatio)*SP_TO_PX; break;
+                x+=gW(n)*glyphExpandScale(fontInfo,n,expandRatio)*k; break;
             }
             case 'glue':{
                 let w=n.width;
@@ -227,14 +233,14 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
                 else if(ratio<0&&(n.shrink_order||0)===fillOrder&&n.shrink) w+=ratio*n.shrink;
                 if(n.leader) renderLeaders(fontInfo,sink,n,x,baselineY,w,runH,runD);
                 if(n.subtype===13) sink.space(n, x, baselineY);
-                if(sink.gap) sink.gap(n,'width',x,w*SP_TO_PX);
-                x+=w*SP_TO_PX; break;
+                if(sink.gap) sink.gap(n,'width',x,w*k);
+                x+=w*k; break;
             }
             case 'kern':{
                 // Expansion stretches the font's own kerns (subtype 0) with the
                 // glyphs, as an expanded font copy would; an explicit \kern,
                 // an accent kern or an italic correction keeps its width.
-                const w=n.kern*((n.subtype||0)===0?kernExpandScale(fontInfo,nodes[i-1],nodes[i+1],expandRatio):1)*SP_TO_PX;
+                const w=n.kern*((n.subtype||0)===0?kernExpandScale(fontInfo,nodes[i-1],nodes[i+1],expandRatio):1)*k;
                 if(sink.gap) sink.gap(n,'kern',x,w);
                 x+=w; break;
             }
@@ -242,7 +248,7 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
                 // The picture fills its TeX box exactly; the box is what makes
                 // it behave like any other box in text, math or an align row.
                 sink.picture(n, x, baselineY);
-                x+=n.width*SP_TO_PX; break;
+                x+=n.width*k; break;
             }
             case 'transform':{
                 // The matrix is drawing-only: TeX advanced the pen by the
@@ -254,30 +260,31 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
                 // were siblings in the parent list and their glue is set by
                 // the parent's packing.
                 sink.beginTransform(n, svgMatrixOf(n, x, baselineY));
-                x=renderNodes(fontInfo,sink,n.children,x,baselineY,ratio,expandRatio,fillOrder,runH,runD);
+                x=renderNodes(fontInfo,sink,n.children,x,baselineY,ratio,expandRatio,fillOrder,runH,runD,scale);
                 sink.endTransform();
                 break;
             }
-            case 'disc':  x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,expandRatio,0,runH,runD); break;
-            case 'wdisc': x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,0,0,runH,runD); break;
+            case 'disc':  x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,expandRatio,0,runH,runD,scale); break;
+            case 'wdisc': x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,0,0,runH,runD,scale); break;
             case 'widget':
                 if(sink.widget) sink.widget(n, x, baselineY);
-                x+=n.width*SP_TO_PX; break;
+                x+=n.width*k; break;
             case 'math':{
-                const w=n.surround*SP_TO_PX;
+                const w=n.surround*k;
                 if(sink.gap) sink.gap(n,'surround',x,w);
                 x+=w; break;
             }
             case 'hlist':{
                 if(n.aside&&sink.aside) sink.aside(n,x,baselineY);
-                renderHlist(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX);
-                x+=n.width*SP_TO_PX; break;
+                const s=scale*(isCharBox(n)?glyphExpandScale(fontInfo,n,expandRatio):1);
+                renderHlist(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX,s);
+                x+=n.width*s*SP_TO_PX; break;
             }
             case 'vlist':
                 // A vlist encountered here sits in an hlist context, where a box's
                 // shift is vertical (downward); renderVlistBody stacks its contents.
                 renderVlistBody(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX);
-                x+=n.width*SP_TO_PX; break;
+                x+=n.width*k; break;
             case 'penalty': case 'adjust': case 'local_par': break;
             default: unreachable(n, 'node');
         }

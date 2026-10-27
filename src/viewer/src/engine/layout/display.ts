@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    HL_ALIGNMENT, HL_EQUATION, RUNNING_RULE, SP_TO_PX, ZOOM, gD, gH, gW, glyphExpandScale, hlistGlueRatio, kernExpandScale, nodeWidthSp,
+    HL_ALIGNMENT, HL_EQUATION, RUNNING_RULE, SP_TO_PX, ZOOM, gD, gH, gW, glyphExpandScale, hlistGlueRatio, isCharBox, kernExpandScale, nodeWidthSp,
 } from '../core.ts';
 import { texInterlineGlue } from './lines.ts';
 import { unreachable } from '../../../../shared/unreachable.ts';
@@ -259,7 +259,7 @@ export function preDisplaySizeSp(fontInfo: FontTable, lines: Line[], lrp: LinePl
                     if (!mathOn) font = n.font;
                     anyFont = n.font; break;
                 case 'hlist': case 'vlist': case 'picture':
-                    x += (n.width ?? 0) * SP_TO_PX; found(); break;
+                    x += (n.width ?? 0) * (isCharBox(n) ? glyphExpandScale(fontInfo, n, L.er) : 1) * SP_TO_PX; found(); break;
                 case 'rule':
                     x += (n.width === RUNNING_RULE ? 0 : (n.width ?? 0)) * SP_TO_PX; found(); break;
                 case 'glue': {
