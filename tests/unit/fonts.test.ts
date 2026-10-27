@@ -75,8 +75,12 @@ test('a classic font with no outline is given boxes, with the reason, its glyphs
     const [w] = fontWarnings(d);
     assert.deepEqual(w, { level: 'warning', code: 'font-without-face', message: warnings[0],
                           details: { font: 'rtxnoface10', reason: face.kind === 'boxes' ? face.reason : '', glyphs: '3' } });
-    assert.deepEqual(wire({ ...d, warnings: [w] }).warnings, [w], 'carried on the wire as it is');
-    assert.deepEqual(wire(d).warnings, [], 'none when the transforms recorded none');
+    // the encoder adds it itself, once, after the build's own warnings; one a
+    // caller added already is not repeated
+    const other = { level: 'warning' as const, code: 'other', message: 'something else', details: { about: 'another thing' } };
+    assert.deepEqual(wire(d).warnings, [w], 'carried on the wire as it is');
+    assert.deepEqual(wire({ ...d, warnings: [other] }).warnings, [other, w]);
+    assert.deepEqual(wire({ ...d, warnings: [w] }).warnings, [w], 'once, though the caller added it');
     // (a block that sets no glyph in the font has no warning about it)
     assert.deepEqual(fontWarnings(doc({ 7: { name: 'rtxnoface10', size_sp: 655360, face: d.fonts.get('7')!.face } })), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }

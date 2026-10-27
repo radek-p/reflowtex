@@ -11,7 +11,8 @@ import { messageType } from './schema.ts';
 import { walkNodes, contentItems, type SerializerOutput, type TexNode } from './nodes.ts';
 import { faceToWire } from '../shared/font-face.ts';
 import { SchemaMismatch } from './errors.ts';
-import { missingCharWarnings } from './warnings.ts';
+import { missingCharWarnings, type Warning } from './warnings.ts';
+import { fontWarnings } from './fonts/fonts.ts';
 
 export { SchemaMismatch };
 
@@ -104,6 +105,17 @@ function prune(type: protobuf.Type, d: Record<string, unknown>, metrics: Map<Tex
   return out;
 }
 
+/** The warnings a block carries: the build's own, then those the encoder
+ *  derives from the data – one per font with no face that it sets glyphs in
+ *  (fontWarnings) and one per character TeX could not set – each left out
+ *  when the build's own already has it (a caller that added it itself). */
+function blockWarnings(data: SerializerOutput): Warning[] {
+  const own = data.warnings ?? [];
+  const has = new Set(own.map(w => `${w.code}\u0000${w.message}`));
+  const derived = [...fontWarnings(data), ...missingCharWarnings(data.missing_chars ?? [])];
+  return [...own, ...derived.filter(w => !has.has(`${w.code}\u0000${w.message}`))];
+}
+
 /** The Document message's fields from the transformed data. */
 export function documentObject(data: SerializerOutput): Record<string, unknown> {
   const { table, index } = internGlyphMetrics(data);
@@ -126,8 +138,7 @@ export function documentObject(data: SerializerOutput): Record<string, unknown> 
     anchors: data.anchors ?? [],
     slots: data.slots ?? [],
     marks: data.marks ?? [],
-    // the build's warnings, and one per character TeX could not set
-    warnings: [...(data.warnings ?? []), ...missingCharWarnings(data.missing_chars ?? [])],
+    warnings: blockWarnings(data),
     glyph_metrics: table,
   };
   return prune(messageType('Document'), doc, index, 'document');
