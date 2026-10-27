@@ -200,6 +200,15 @@ export function openFootnote(anchor: Source, pin: boolean): void {
     const block = anchor.closest(BLOCK_SELECTOR);
     const id = anchor.dataset.footnote!;
     if (!block || !renderFootnote(block, id)) return;
+    // The popover lies outside the block's element: it takes the block's
+    // theme (its nearest themed ancestor's), colour map and page colour.
+    const themed = block.closest('[data-latex-theme]');
+    if (themed) footnotePop!.setAttribute('data-latex-theme', themed.getAttribute('data-latex-theme')!);
+    else footnotePop!.removeAttribute('data-latex-theme');
+    const map = (block as HTMLElement).dataset.colorMap;
+    if (map) footnoteBody!.dataset.colorMap = map; else delete footnoteBody!.dataset.colorMap;
+    const bg = themed && getComputedStyle(block).getPropertyValue('--latex-page-bg').trim();
+    if (bg) footnotePop!.style.setProperty('--latex-page-bg', bg); else footnotePop!.style.removeProperty('--latex-page-bg');
     footnotePop!.classList.add('latex-footnote-open');
     footnotePop!.classList.toggle('latex-footnote-pinned', pin);
     positionFootnote(anchor);

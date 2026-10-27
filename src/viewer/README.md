@@ -843,11 +843,20 @@ Each change sends `reflowtex:theme` on `document`, with the state of
 `reflowtex.theme()` as its `detail`. The companion package's reading options
 are such a host.
 
-A theme can also be scoped to part of a page: `data-latex-theme="dark"` on
-any element gives the blocks inside it that theme's colours, whatever the
-page's theme is (`data-latex-theme="default"` gives them TeX's). That is how
-an example previews each theme in place. Set `--latex-page-bg` on that
-element too.
+### A theme for part of a page
+
+`data-latex-theme="T"` on any element – a pane, an example's preview – gives
+the blocks inside it theme `T`, whatever the page's theme is
+(`data-latex-theme="default"` gives them TeX's own colours). A theme's
+colours are declared on the element that carries it (`<html>` with the
+theme's class, or the element with the attribute) and reach the blocks by
+inheritance, so a block takes the theme of its **nearest** themed ancestor:
+two panes in two themes stand side by side, and one inside another wins
+inside it. A footnote's popover takes its block's theme, map and
+`--latex-page-bg`. Set `--latex-page-bg` on the element too, for tints and
+the paper. The reader's choice and the system mode (above) are the page's;
+a host themes a pane by setting the attribute.
+
 
 ### Colour maps
 

@@ -97,3 +97,28 @@ test('without the opt-in, the theme settings are neither read nor written', asyn
   await setTheme(page, 'contrast');
   expect(await themeKeys(page)).toEqual(expect.arrayContaining(['getItem reflowtex-theme', 'setItem reflowtex-theme']));
 });
+
+// A theme for part of a page: two panes, one inside the other; each block
+// takes its nearest themed ancestor's theme, and the page's stays default.
+test('two panes in two themes, by the nearest themed ancestor', async ({ openPage }) => {
+  const page = await openPage('themes', { colorScheme: 'light' });
+  await page.evaluate(() => {
+    const [a, b] = document.querySelectorAll('#lt-content > .latex-block');
+    const outer = document.createElement('div'), inner = document.createElement('div');
+    outer.id = 'outer'; outer.dataset.latexTheme = 'dark';
+    inner.id = 'inner'; inner.dataset.latexTheme = 'sepia';
+    a.before(outer); outer.append(a, inner); inner.append(b);
+  });
+  await idle(page);
+  const look = () => page.evaluate(() => {
+    const [a, b] = document.querySelectorAll('#lt-content .latex-block');
+    const text = (bl: Element) => getComputedStyle(bl.querySelector('tspan:not(.latex-link)')!).fill;
+    return { page: document.documentElement.dataset.theme, a: text(a), b: text(b),
+             link: getComputedStyle(b.querySelector('tspan.latex-link')!).fill };
+  });
+  expect(await look()).toEqual({ page: 'default', a: 'rgb(231, 229, 228)', b: 'rgb(69, 58, 38)', link: 'rgb(52, 49, 176)' });
+  // the page's theme changes; the panes keep theirs
+  await setTheme(page, 'light');
+  const l = await look();
+  expect([l.a, l.b, l.page]).toEqual(['rgb(231, 229, 228)', 'rgb(69, 58, 38)', 'light']);
+});

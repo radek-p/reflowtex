@@ -22,10 +22,10 @@ test('a block with no map: TeX black is #000000, set by no rule outside a theme'
   assert.match(text[1], /fill: var\(--latex-color-000000, #000000\)/);
   assert.doesNotMatch(sheet, /currentColor/, 'nothing falls back to the page text colour');
   // every rule that sets a colour is a theme's: a class on <html> other than
-  // default, or a scoped theme (whose default sets each one to initial)
+  // default, or data-latex-theme (whose default sets each one to initial)
   for (const [sel, body] of rules(sheet)) {
     if (!/--latex-(color-[0-9a-f]{6}|link-(color|hover-color|active-color|underline)):/.test(body)) continue;
-    assert.match(sel, /^:root(\.(?!default\b)[\w-]+ | \[data-latex-theme=)/, sel);
+    assert.match(sel, /^(:root\.(?!default\b)[\w-]+, )?\[data-latex-theme=/, sel);
     if (sel.includes('"default"')) assert.doesNotMatch(body, /:\s*(?!initial)[^;\s][^;]*;/, `${sel} sets only initial`);
   }
 });
@@ -34,15 +34,18 @@ test('the built-in map gives light, dark, sepia and contrast, links included; a 
   const maps = { site: { colors: { dark: { '#0000ff': '#99ccff' } }, links: { dark: { color: '#ff00ff' } } } };
   const sheet = css(maps);
   const at = (sel: string) => rules(sheet).find(([s]) => s === sel)?.[1] ?? '';
+  const theme = (t: string) => at(`:root.${t}, [data-latex-theme="${t}"]`);
   assert.deepEqual(mapThemes(maps), ['default', 'light', 'dark', 'sepia', 'contrast']);
-  assert.match(at(':root.light .latex-block'), /--latex-color-000000: #333333;/);
-  assert.match(at(':root.light .latex-block'), /--latex-link-underline: hover;/);
-  assert.match(at(':root.dark .latex-block'), /--latex-link-color: #9d9bff;/);
-  const site = at(':root.dark .latex-block[data-color-map="site"]');
-  assert.match(site, /--latex-color-0000ff: #99ccff;/);
-  assert.match(site, /--latex-color-000000: initial;/, "the built-in's dark is replaced, not added to");
-  assert.match(site, /--latex-link-color: #ff00ff;/);
-  assert.match(at(':root.sepia .latex-block[data-color-map="site"]'), /--latex-color-000000: #453a26;/, "a theme the map leaves out is the built-in's");
+  // on the themed element: the built-in's, as the blocks' own properties ...
+  assert.match(theme('light'), /--latex-color-000000: #333333;/);
+  assert.match(theme('light'), /--latex-link-underline: hover;/);
+  assert.match(theme('dark'), /--latex-link-color: #9d9bff;/);
+  // a named map's, under its own name, which a block naming it takes
+  assert.match(theme('dark'), /--latex-map0-color-0000ff: #99ccff;/);
+  assert.match(theme('dark'), /--latex-map0-color-000000: initial;/, "the built-in's dark is replaced, not added to");
+  assert.match(theme('dark'), /--latex-map0-link-color: #ff00ff;/);
+  assert.match(theme('sepia'), /--latex-map0-color-000000: #453a26;/, "a theme the map leaves out is the built-in's");
+  assert.match(at('.latex-block[data-color-map="site"]'), /--latex-color-0000ff: var\(--latex-map0-color-0000ff\);/);
 });
 
 const vector = (first: Vector['colours']['first']): Vector => ({
