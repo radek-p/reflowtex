@@ -9,6 +9,12 @@ import type { Line, LineMeta, LinePlacement, Segment, Segments, SegmentGeometry,
 import type { LayoutCache } from './types.ts';
 import type { Params } from '../../runtime/params.ts';
 
+// A glue's stretch order (LuaTeX's: 0 finite, 1 fi, 2 fil, 3 fill, 4 filll),
+// and the stretch of 1fil, the \leftskip or \rightskip LaTeX's \centering,
+// \raggedright and \raggedleft set (para.align says which).
+const FIL = 2;
+const FLUSH_GLUE = 65536;
+
 // ── Document → SVG element ────────────────────────────────────────────────────
 // A block is an ordered stream of paragraphs and displays (see latex.proto).
 // The two are laid out very differently but stack identically, so both are
@@ -391,8 +397,17 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
                 // slack into that fill (KP left it at ratio 0), flushing whatever
                 // follows to the right margin. This is set-once at layout: the fill
                 // stretch is a fixed measure, only the available width varies.
+                // A paragraph that is not justified has fills of its own, its
+                // \leftskip and \rightskip (LaTeX's \@flushglue, 0pt plus 1fil):
+                // a fill in the line of the same order shares the slack with
+                // them, as LaTeX's \and (plus .17fil) does between centred
+                // author blocks; one of a lower order gets none of it, one of a
+                // higher order all of it.
                 const fi = fillInfo(ln.nodes);
-                if (fi.order > 0 && fi.stretch > 0) {
+                const skipL = align === 'center' || align === 'right' ? FLUSH_GLUE : 0;
+                const skipR = align === 'center' || align === 'left' ? FLUSH_GLUE : 0;
+                const skips = fi.order === FIL ? skipL + skipR : 0;
+                if (fi.order > 0 && fi.stretch > 0 && (fi.order >= FIL || !(skipL + skipR))) {
                     // TeX packs the line with its margin kerns in it, so a
                     // protruding first or last character widens the slack by
                     // what it hangs into the margin: the fill pushes the last
@@ -404,7 +419,10 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
                     const leftKernSp  = p.useProtrusion ? (ln.leftProtrusion || 0) : 0;
                     const rightKernSp = p.useProtrusion ? (ln.rightProtrusion || 0) : 0;
                     const slackSp = availSp - (natSp - leftKernSp - rightKernSp);
-                    if (slackSp > 0) { fillRatio = slackSp / fi.stretch; fillOrder = fi.order; x0 = protX; }
+                    if (slackSp > 0) {
+                        fillRatio = slackSp / (fi.stretch + skips); fillOrder = fi.order;
+                        x0 = protX + (skips ? slackSp * skipL / (fi.stretch + skips) * SP_TO_PX : 0);
+                    }
                 }
             }
             maxRightPx = Math.max(maxRightPx, x0 + indentPx + natPx);

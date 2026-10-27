@@ -142,6 +142,13 @@ export const cases: Record<string, CaseSettings> = {
   'vbox-to': { against_plain: true, tolerance: 0.010 },
   prevdepth: { against_plain: true, tolerance: 0.009 },
   'par-newline': { against_plain: true, tolerance: 0.011 },
+  // \maketitle's author blocks joined by \and, as in real papers, too wide
+  // for one line: the browser never broke at glue of infinite stretch, so the
+  // row stayed on one line, overfull, and everything below sat higher than
+  // in TeX (501 of 541 glyphs past 0.7 pt). A line of two or three blocks
+  // then put all its slack between them, where TeX shares it with the
+  // centring skips. Worst attained 2026-10-27.
+  'title-authors': { against_plain: true, tolerance: 0.009 },
   // Characters typed raw that the font has no glyph for, as in real papers: ł,
   // Ł, ź and ﬀ in a T1 font, box drawing in Latin Modern OpenType. TeX
   // reports them missing and draws nothing (OpenType: the font's empty

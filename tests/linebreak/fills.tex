@@ -1,0 +1,35 @@
+% Paragraphs with glue of infinite stretch inside them: \hfill between two
+% boxes too wide for one line, boxes joined by \hskip 1em plus .17fil (LaTeX's
+% \and between authors), \hfill and \hfil between words (a break there, and a
+% justified line after it), a break at a penalty before an \hfill, and \\ in
+% the middle of a paragraph, whose \hfil follows a \nobreak. Each paragraph
+% is set at several measures. Captured with capture.lua into fills/
+% (README.md).
+\documentclass[12pt]{article}
+\newcommand\at[2]{{\hsize=#1\relax #2\par}}
+\newcommand\blk[1]{\hbox to #1{\vrule width #1 height 8pt depth 2pt}}
+\newcommand\rowA{\noindent\blk{250pt}\hfill\blk{250pt}}
+\newcommand\rowB{\blk{140pt}\hskip 1em plus .17fil\blk{150pt}\hskip 1em plus .17fil\blk{130pt}\hskip 1em plus .17fil\blk{120pt}}
+\newcommand\textA{The quick brown fox jumps over the lazy dog\hfill and the five boxing wizards jump quickly over the fence while sphinx of black quartz judges my vow.}
+\newcommand\textB{The quick brown fox jumps over the lazy dog\hfil and the five boxing wizards jump quickly over the fence, while the sphinx of black quartz judges my vow and the dog sleeps.}
+\newcommand\textC{The quick brown fox jumps over the lazy dog,\penalty0\hfill and the five boxing wizards jump quickly over the fence while sphinx of black quartz judges my vow.}
+\newcommand\textD{The quick brown fox jumps over the lazy dog,\\ and the five boxing wizards jump quickly over the fence\\ while sphinx of black quartz judges my vow.}
+\begin{document}
+\at{345pt}{\rowA}
+\at{520pt}{\rowA}
+\at{345pt}{\rowB}
+\at{300pt}{\rowB}
+\at{450pt}{\rowB}
+\at{150pt}{\rowB}
+\at{345pt}{\textA}
+\at{250pt}{\textA}
+\at{160pt}{\textA}
+\at{345pt}{\textB}
+\at{250pt}{\textB}
+\at{200pt}{\textB}
+\at{250pt}{\textC}
+\at{200pt}{\textC}
+\at{160pt}{\textC}
+\at{345pt}{\textD}
+\at{180pt}{\textD}
+\end{document}

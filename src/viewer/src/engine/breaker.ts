@@ -17,7 +17,7 @@ export interface BreakCandidate {
     nodeIdx: number;
     penalty: number;
     pre: Widths; post: Widths; replace: Widths;
-    leadW: number; leadS: number; leadZ: number;
+    leadW: number; leadS: number; leadZ: number; leadFill: number;
     trailW: number; trailN: number;
     cumW: number; cumS: number; cumZ: number; cumGlyphW: number; cumFS: number; cumFZ: number; cumFill: number;
     rightProtrusion: number;
@@ -195,7 +195,8 @@ export function paragraphExpansion(fontInfo: FontTable, nodes: TexNode[]): Expan
 export const PRECEDES_BREAK = new Set<string>(['glyph', 'hlist', 'vlist', 'rule', 'disc', 'wdisc', 'picture', 'widget', 'transform']);
 
 // Every candidate carries the running totals up to its node: natural width
-// (cumW), finite stretch and shrink (cumS, cumZ), infinite fills (cumFill),
+// (cumW), finite stretch and shrink (cumS, cumZ), infinite fills (cumFill:
+// how many glues of infinite stretch order),
 // *expandable* width (cumGlyphW, per unit of expansion as the renderer
 // applies it – see expandableSp) and TeX's font stretch and shrink at the
 // full expansion limit (cumFS, cumFZ); a discretionary has the same four
@@ -220,21 +221,25 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
     let cumW=0, cumS=0, cumZ=0, cumGlyphW=0, cumFS=0, cumFZ=0, cumFill=0;
     const cand = (kind: BreakCandidate['kind'], i: number, penalty: number, extra?: Partial<BreakCandidate>): BreakCandidate => ({
         kind, nodeIdx: i, penalty, pre: NONE, post: NONE, replace: NONE,
-        leadW: 0, leadS: 0, leadZ: 0, trailW: 0, trailN: 0,
+        leadW: 0, leadS: 0, leadZ: 0, leadFill: 0, trailW: 0, trailN: 0,
         cumW, cumS, cumZ, cumGlyphW, cumFS, cumFZ, cumFill,
         rightProtrusion: 0, leftProtrusion: 0, ...extra,
     });
     // What a break at node i discards after itself: glue, kerns and penalties
-    // up to the next thing that is kept.
+    // up to the next thing that is kept – an infinite fill among them too, so
+    // the next line does not count it as its own.
     const lead = (from: number) => {
-        let W = 0, S = 0, Z = 0, k = from;
+        let W = 0, S = 0, Z = 0, F = 0, k = from;
         for (; k < nodes.length; k++) {
             const m = nodes[k];
             if (m.type === 'kern') W += m.kern;
-            else if (m.type === 'glue' && m.subtype !== 15) { W += m.width; S += !m.stretch_order ? m.stretch : 0; Z += !m.shrink_order ? m.shrink : 0; }
+            else if (m.type === 'glue' && m.subtype !== 15) {
+                W += m.width; S += !m.stretch_order ? m.stretch : 0; Z += !m.shrink_order ? m.shrink : 0;
+                if (m.stretch_order) F++;
+            }
             else if (m.type !== 'penalty') break;
         }
-        return { leadW: W, leadS: S, leadZ: Z, leftProtrusion: prot(findFirstGlyph(nodes, k), true) };
+        return { leadW: W, leadS: S, leadZ: Z, leadFill: F, leftProtrusion: prot(findFirstGlyph(nodes, k), true) };
     };
     const bcs: BreakCandidates = [cand('start', -1, 0, { leftProtrusion: prot(findFirstGlyph(nodes, 0), true) })];
     bcs.expansion = adjust > 0 ? paragraphExpansion(fontInfo, nodes) : null;
@@ -259,21 +264,17 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
             bcs.push(cand('end', i, -10000, { packRightProtrusion: prot(findLastGlyph(nodes, i), false) }));
             break;
         }
-        // A mid-paragraph infinite fill (the \hfil that \\ inserts before its
-        // forced break, or an explicit \hfill) is not the end: it marks the line
-        // that contains it as "filled" (cumFill), so its slack is absorbed there
-        // rather than justified, exactly like a last line. Treating the first such
-        // fill as the end would silently drop everything after a \\.
-        if (n.type==='glue' && (n.stretch_order ?? 0)>0) {
-            cumW+=n.width; cumFill+=1;
-            continue;
-        }
         if (n.type==='glue') {
             // Glue is a legal breakpoint outside maths when what precedes it is
             // kept at a break (a character, a box, a discretionary) or is a font
-            // kern – so never after a penalty: ~ is \nobreak\ . After an explicit
-            // kern (an italic correction, \,) or a math node TeX breaks at that
-            // node instead, which drops it from the end of the line.
+            // kern – so never after a penalty: ~ is \nobreak\ , and the \hfil of
+            // \\ follows its \nobreak. After an explicit kern (an italic
+            // correction, \,) or a math node TeX breaks at that node instead,
+            // which drops it from the end of the line. Its stretch does not
+            // matter (§866): LaTeX's \and between authors is \hskip 1em plus
+            // .17fil, and a row of them too wide for the line breaks there. An
+            // infinite fill marks the line that keeps it as filled (cumFill):
+            // its slack goes to the fill, as on a last line.
             const prev = nodes[i-1];
             let ok = false, trailN = 0;
             if (!inMath && prev) {
@@ -287,6 +288,7 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
                     rightProtrusion: prot(findLastGlyph(nodes, i - trailN), false), ...lead(i) }));
             }
             cumW+=n.width; cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0;
+            if (n.stretch_order) cumFill+=1;
         } else if (n.type==='disc') {
             const pre=part(n.pre), post=part(n.post), replace=part(n.replace);
             const preGs=(n.pre||[]).filter(x=>x.type==='glyph'), postGs=(n.post||[]).filter(x=>x.type==='glyph');
@@ -451,7 +453,7 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
                 // \centering and \raggedleft set \rightskip or \leftskip to 0pt
                 // plus 1fil, so any line that fits costs nothing and TeX takes
                 // the fewest lines, hyphenating only when it must.
-                const hasFill = isEnd || p.ragged || bcJ.cumFill>bcs[i].cumFill;
+                const hasFill = isEnd || p.ragged || bcJ.cumFill>bcs[i].cumFill+bcs[i].leadFill;
                 const shortfall = expansionShortfall(lineWidthSp-m.w, m, ex);
                 let b: number, fc_j: number;
                 if (shortfall>0) {
@@ -603,7 +605,7 @@ export function setLines(bcs: BreakCandidates, breaks: Break[], nodes: TexNode[]
     const lines: Line[]=[];
     for(let k=0;k<breaks.length;k++){
         const startBC=k===0?bcs[0]:bcs[breaks[k-1].bcIdx], endBC=bcs[breaks[k].bcIdx];
-        const hasFill = endBC.kind==='end' || p.ragged || endBC.cumFill>startBC.cumFill;
+        const hasFill = endBC.kind==='end' || p.ragged || endBC.cumFill>startBC.cumFill+startBC.leadFill;
         const { ratio, expand } = packLine(bcs, startBC, endBC, lineWidthSp, p, hasFill);
         const rightProtrusion = (endBC.kind==='end' ? endBC.packRightProtrusion : endBC.rightProtrusion) || 0;
         lines.push({nodes:extractLineNodes(startBC,endBC,nodes),ratio,expand,fitness:breaks[k].fc,leftProtrusion:startBC.leftProtrusion,rightProtrusion});

@@ -1,0 +1,62 @@
+REFLOWTEX-LINEBREAK-FIXTURE 1
+CONTEXT 
+P pretolerance 100
+P tolerance 200
+P looseness 0
+P adjustspacing 0
+P adjdemerits 10000
+P protrudechars 0
+P linepenalty 10
+P lastlinefit 0
+P doublehyphendemerits 10000
+P finalhyphendemerits 5000
+P hangindent 0
+P hsize 9830400
+P hangafter 1
+P interlinepenalty 0
+P clubpenalty 150
+P widowpenalty 150
+P displaywidowpenalty 50
+P brokenpenalty 100
+P emergencystretch 0
+P hbadness 1000
+P hfuzz 6554
+P overfullrule 0
+P tracingparagraphs 0
+P lineskiplimit 0
+P prevgraf 0
+P prevdepth 131072
+P bodydirection 0
+G leftskip 0 0 0 0 0
+G rightskip 0 0 0 0 0
+G parfillskip 0 65536 2 0 0
+G baselineskip 950272 0 0 0 0
+G lineskip 65536 0 0 0 0
+A interlinepenalties 0
+A clubpenalties 0
+A widowpenalties 0
+A displaywidowpenalties 0
+SHAPE 0
+NODES
+localpar 0
+hlist 3 1179648 0 0 0 0000000000000000 0 0 0
+(
+)
+glue 0 786432 11141 2 0 0
+hlist 2 9830400 524288 131072 0 0000000000000000 0 0 0
+(
+rule 0 9830400 524288 131072 0
+)
+glue 0 786432 11141 2 0 0
+hlist 2 8519680 524288 131072 0 0000000000000000 0 0 0
+(
+rule 0 8519680 524288 131072 0
+)
+glue 0 786432 11141 2 0 0
+hlist 2 7864320 524288 131072 0 0000000000000000 0 0 0
+(
+rule 0 7864320 524288 131072 0
+)
+penalty 2 10000
+glue 15 0 65536 2 0 0
+END

@@ -1,0 +1,30 @@
+% \maketitle with three and with five authors joined by \and, each block too wide for the whole row to fit on one line: the row breaks at the \and glue (\hskip 1em plus .17fil), and each line is centred with its blocks spread as TeX spreads them.
+\documentclass{article}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\makeatletter
+% \maketitle undefines itself, \title, \author, \date and \and once used:
+% kept for the second title, which is set without \maketitle's \newpage
+\let\keptmaketitle\maketitle \let\kept@maketitle\@maketitle \let\keptand\and
+\let\kepttitle\title \let\keptauthor\author \let\keptdate\date
+\newcommand\secondtitle[2]{\let\maketitle\keptmaketitle \let\@maketitle\kept@maketitle
+  \let\and\keptand \kepttitle{#1}\keptauthor{#2}\keptdate{}%
+  {\let\newpage\relax \maketitle}\thispagestyle{empty}}
+\makeatother
+\title{A Title Set Above Three Authors}
+\author{First Author \\ Department of Computing,\\ Some University
+\and Second Author \\ Institute of Mathematics,\\ Another University
+\and Third Author \\ School of Informatics,\\ A Third University}
+\date{}
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+A paragraph after the first title, long enough to fill a line of the text width and then a few more words, so that it shows where the authors end.
+
+\secondtitle{A Second Title, Above Five Authors}{Fourth Author \\ Faculty of Sciences
+\and Fifth Author \\ Computer Laboratory
+\and Sixth Author \\ Research Centre
+\and Seventh Author \\ Mathematics Department
+\and Eighth Author \\ Theory Group}
+A paragraph after the second title, long enough to fill a line of the text width and then a few more words.
+\end{document}
