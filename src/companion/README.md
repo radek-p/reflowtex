@@ -202,14 +202,16 @@ dark })`, `.zoomBy(±1 | 0)` and `.setWidth(w)`. The themes are the viewer's
 dark, sepia and contrast, and System offers a theme for each of the system's
 modes. The page follows it through `<html>`:
 - the theme is a class (none for default) plus `data-theme`, set by the
-  viewer (`reflowtex.setTheme`, which keeps the choice);
+  viewer alone: `reading.setTheme` and `.setSystemThemes` call
+  `reflowtex.setTheme` and `reflowtex.setSystemThemes`, and the theme
+  signals follow `reflowtex:theme`;
 - the text size is `--rtx-zoom` (1 for 100%);
 - the width is `data-width`.
 
 Every change also sends a window resize, so the viewer lays the text out
-again. Choices are remembered in `localStorage` (`reflowtex-theme`,
-`reflowtex-theme-light`, `reflowtex-theme-dark`, `reflowtex-zoom`,
-`reflowtex-width`). To avoid a flash before the module
+again. Choices are remembered in `localStorage` (`reflowtex-zoom`,
+`reflowtex-width`; the theme as the viewer keeps it, on a page that asks:
+its README's Theming). To avoid a flash before the module
 loads, a page sets the saved state itself first, as the website's
 `head.html` does. The inspector's entry shows when the page has the
 inspector (`inspect={false}` hides it). The look uses `--rtx-glass`,

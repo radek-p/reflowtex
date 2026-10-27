@@ -16,9 +16,10 @@
 // (the companion draws every [data-rtx] element when it loads: mount.ts).
 //
 // How the page follows the state, so its CSS can: the theme is a class on
-// <html> (none for default) and data-theme, set by the viewer, which keeps
-// the reader's choice – a theme, or the system mode with its two themes
-// (reflowtex.setTheme, its README's Theming); the text size is --rtx-zoom on
+// <html> (none for default) and data-theme, set by the viewer alone, which
+// keeps the reader's choice – a theme, or the system mode with its two
+// themes (reflowtex.setTheme, its README's Theming): reading.setTheme and
+// setSystemThemes call it; the text size is --rtx-zoom on
 // <html> (1 = 100%); the width is data-width on <html>. Every change but the
 // theme also sends a window resize, so the viewer lays the text out again.
 // For no flash before the module has loaded, a page sets the saved state
@@ -27,7 +28,7 @@
 import { signal, useSignal, type Signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 
-const KEYS = { theme: 'reflowtex-theme', themeLight: 'reflowtex-theme-light', themeDark: 'reflowtex-theme-dark', zoom: 'reflowtex-zoom', width: 'reflowtex-width', selection: 'reflowtex-selection',
+const KEYS = { zoom: 'reflowtex-zoom', width: 'reflowtex-width', selection: 'reflowtex-selection',
     math: 'reflowtex-a11y-math' };
 const ZOOM = { min: 0.5, max: 3, step: 1.1 };
 
@@ -48,19 +49,11 @@ const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } cat
 const html = () => document.documentElement;
 const resize = () => window.dispatchEvent(new Event('resize'));
 
-// The viewer's, when the page has it: it keeps the theme (and says when it
-// changes: reflowtex:theme).
+// The theme is the viewer's (reflowtex.theme, setTheme: it applies the
+// theme and keeps the reader's choice); these signals follow it
+// (reflowtex:theme), and the setters below call it.
 const viewerTheme = () => window.reflowtex?.theme?.();
-function initialTheme(): string {
-    return viewerTheme()?.theme || html().getAttribute('data-theme') || 'default';
-}
-function initialChoice(): string {
-    return viewerTheme()?.choice || load(KEYS.theme) || html().getAttribute('data-latex-theme-choice') || SYSTEM;
-}
-function initialSystem(): { light: string; dark: string } {
-    const v = viewerTheme();
-    return { light: v?.light || load(KEYS.themeLight) || 'default', dark: v?.dark || load(KEYS.themeDark) || 'dark' };
-}
+const initialTheme = (): string => viewerTheme()?.theme || html().getAttribute('data-theme') || 'default';
 function initialZoom(): number {
     const z = parseFloat(html().style.getPropertyValue('--rtx-zoom')) || parseFloat(load(KEYS.zoom) || '');
     return z > 0 ? Math.min(ZOOM.max, Math.max(ZOOM.min, z)) : 1;
@@ -92,8 +85,8 @@ export const reading: ReadingState & { setZoom(z: number): void; selection: Sign
     math: Signal<string>; setMath(m: string): void; debug: Signal<boolean>; setDebug(on: boolean): void;
     reader: Signal<boolean>; setReader(on: boolean): void } = {
     theme: signal(initialTheme()),
-    choice: signal(initialChoice()),
-    system: signal(initialSystem()),
+    choice: signal(viewerTheme()?.choice || SYSTEM),
+    system: signal({ light: viewerTheme()?.light || 'default', dark: viewerTheme()?.dark || 'dark' }),
     zoom: signal(initialZoom()),
     width: signal(html().getAttribute('data-width') || load(KEYS.width) || 'auto'),
     // The reader's choice, else the page's default (its data-latex-selection).
@@ -104,28 +97,10 @@ export const reading: ReadingState & { setZoom(z: number): void; selection: Sign
     /** The themes a page offers (the class names its CSS styles). */
     themes: THEMES,
 
-    /** A theme, or 'system'. */
-    setTheme(t: string) {
-        const api = window.reflowtex;
-        if (api?.setTheme) { api.setTheme(t); return; }       // (it says so: the listener below)
-        // without the viewer: the theme itself, as the viewer sets it
-        save(KEYS.theme, t);
-        reading.choice!.value = t;
-        if (t === SYSTEM) { const s = reading.system!.value; t = matchMedia('(prefers-color-scheme: dark)').matches ? s.dark : s.light; }
-        const root = html();
-        for (const th of reading.themes) root.classList.remove(th.name);
-        if (t !== 'default') root.classList.add(t);
-        root.setAttribute('data-theme', t);
-        reading.theme.value = t;
-    },
-    setSystemThemes(slots: { light?: string; dark?: string }) {
-        const api = window.reflowtex;
-        if (api?.setSystemThemes) { api.setSystemThemes(slots); return; }
-        if (slots.light) save(KEYS.themeLight, slots.light);
-        if (slots.dark) save(KEYS.themeDark, slots.dark);
-        reading.system!.value = { ...reading.system!.value, ...slots };
-        if (reading.choice!.value === SYSTEM) reading.setTheme(SYSTEM);
-    },
+    /** A theme, or 'system': reflowtex.setTheme (it says so: the listener below). */
+    setTheme(t: string) { window.reflowtex?.setTheme?.(t); },
+    /** reflowtex.setSystemThemes. */
+    setSystemThemes(slots: { light?: string; dark?: string }) { window.reflowtex?.setSystemThemes?.(slots); },
     /** Larger (1), smaller (-1) or back to 100% (0). */
     zoomBy(dir: -1 | 0 | 1) {
         const z = reading.zoom.value;

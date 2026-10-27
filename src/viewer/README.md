@@ -792,6 +792,10 @@ dark. The choice and the slots are remembered in `localStorage`
 `reflowtex-theme-dark`), as the reader's other settings are, and in the
 system mode the theme follows the system as it changes.
 
+`reflowtex.setTheme` (below) is the one way the page's theme is set: the
+companion's reading options, the inspector and the vanilla page's panel all
+call it, and nothing else sets the class or the stored choice.
+
 The viewer sets the page's theme only on a page that asks for it, so a page
 that themes itself is left alone (and stays in `default` until it sets a
 class). A page asks, and gives the first values for a reader who has chosen

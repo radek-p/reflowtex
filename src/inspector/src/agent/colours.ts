@@ -83,13 +83,10 @@ function pageTheme(maps: Maps = currentMaps()): string {
 }
 export function setPageTheme(t: unknown): string {
     if (typeof t !== 'string' || !/^[\w-]+$/.test(t)) return 'a theme is a class name';
-    // the viewer's, when it has one: the reader's choice, as the page's own switcher makes it
+    // the viewer's: the reader's choice, as the page's own switcher makes it
     const api = window.reflowtex;
-    if (api?.setTheme) { api.setTheme(t); return 'ok'; }
-    const root = document.documentElement;
-    for (const n of themeNames(currentMaps())) root.classList.remove(n);
-    if (t !== 'default') root.classList.add(t as string);
-    root.setAttribute('data-theme', t as string);
+    if (!api?.setTheme) return 'this viewer cannot set the theme';
+    api.setTheme(t);
     return 'ok';
 }
 
