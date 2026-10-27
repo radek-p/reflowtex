@@ -1,0 +1,12 @@
+% CMYK colours: hyperref's default link colours with colorlinks (urlcolor is magenta, a CMYK colour in xcolor) and text in cyan and a CMYK mix. A PDF reader shows CMYK colour managed (magenta as about #ec008b); the viewer draws the plain conversion (#ff00ff).
+\documentclass{article}
+\usepackage{xcolor}
+\usepackage[colorlinks]{hyperref}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+\section{CMYK}\label{s:cmyk}
+A reference to Section~\ref{s:cmyk} and an address, \url{https://example.org/},
+in hyperref's own colours; \textcolor{cyan}{cyan words} and
+\textcolor[cmyk]{0.1,0.7,0.2,0.1}{a mix of inks}, in black text.
+\end{document}

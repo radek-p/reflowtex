@@ -21,7 +21,8 @@
 //  - rules: the viewer's rects against the strip's rules, corner by corner, at
 //    any angle;
 //  - colours: each matched glyph's fill, and each matched rule's colour,
-//    against the PDF's, exactly (as #rrggbb). The page is measured in the
+//    against the PDF's, exactly (to the 8-bit value nearest it; a CMYK
+//    colour as a PDF reader draws it, colour managed, within a step). The page is measured in the
 //    theme `default`, with no colour map, so a colour TeX drew – a link's,
 //    say – is compared as it is.
 //
@@ -74,17 +75,58 @@ function withWidths(bytes: Buffer, k: number): mupdf.Document {
   return doc;
 }
 
-/** A colour MuPDF paints with, as #rrggbb, by the conversion the serializer
- *  makes of TeX's colour operators (src/extract/serializer.lua: CMYK as
- *  1 − min(1, c + k) per channel); null for one not opaque, or in a colour
- *  space other than gray, RGB or CMYK. */
-export function hexColour(cs: mupdf.ColorSpace, c: number[], alpha: number): string | null {
+/** A colour as red, green and blue, each 0 to 1. */
+export type Rgb = [number, number, number];
+
+/** A colour the PDF paints with: gray or RGB as it is; CMYK as its four
+ *  inks, for drawnCmyk; null for one not opaque, or in another colour space. */
+export type PdfColour = { rgb: Rgb } | { cmyk: number[] } | null;
+export function pdfColour(cs: mupdf.ColorSpace, c: number[], alpha: number): PdfColour {
   if (alpha < 1) return null;
-  const h = (v: number) => Math.floor(Math.min(1, Math.max(0, v)) * 255 + 0.5).toString(16).padStart(2, '0');
-  if (cs.isGray() && c.length === 1) return '#' + h(c[0]).repeat(3);
-  if (cs.isRGB() && c.length === 3) return '#' + c.map(h).join('');
-  if (cs.isCMYK() && c.length === 4) return '#' + c.slice(0, 3).map(v => h(1 - Math.min(1, v + c[3]))).join('');
+  const v = (x: number) => Math.min(1, Math.max(0, x));
+  if (cs.isGray() && c.length === 1) return { rgb: [v(c[0]), v(c[0]), v(c[0])] };
+  if (cs.isRGB() && c.length === 3) return { rgb: [v(c[0]), v(c[1]), v(c[2])] };
+  if (cs.isCMYK() && c.length === 4) return { cmyk: c.map(v) };
   return null;
+}
+
+/** A CMYK colour as a PDF reader shows it on screen: as MuPDF draws it, colour
+ *  managed (one 8-bit RGB value; readers differ by a step or so). */
+const cmykDrawn = new Map<string, Rgb>();
+export function drawnCmyk(cmyk: number[]): Rgb {
+  const key = cmyk.join(' ');
+  let rgb = cmykDrawn.get(key);
+  if (!rgb) {
+    const pm = new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB, [0, 0, 1, 1], false);
+    pm.clear(255);
+    const device = new mupdf.DrawDevice(mupdf.Matrix.identity, pm), path = new mupdf.Path();
+    path.moveTo(0, 0); path.lineTo(1, 0); path.lineTo(1, 1); path.lineTo(0, 1); path.closePath();
+    device.fillPath(path, false, mupdf.Matrix.identity, mupdf.ColorSpace.DeviceCMYK, cmyk as [number, number, number, number], 1);
+    device.close();
+    const px = pm.getPixels();
+    cmykDrawn.set(key, rgb = [px[0] / 255, px[1] / 255, px[2] / 255]);
+  }
+  return rgb;
+}
+
+/** The colour TeX gave, and how far a drawing of it may be (8-bit steps):
+ *  gray and RGB exactly, to the nearer of the two 8-bit values about it;
+ *  CMYK as a PDF reader draws it, within a step. */
+export function texColour(c: PdfColour): { rgb: Rgb; within: number } | null {
+  if (!c) return null;
+  return 'rgb' in c ? { rgb: c.rgb, within: 0.5 } : { rgb: drawnCmyk(c.cmyk), within: 1 };
+}
+
+/** #rrggbb, rounded as the serializer rounds. */
+export const hexOf = (c: Rgb): string => '#' + c.map(x => Math.floor(x * 255 + 0.5).toString(16).padStart(2, '0')).join('');
+
+/** Whether a colour drawn as #rrggbb is TeX's: each channel within `within`
+ *  8-bit steps of it – by default one of the two values nearest it (0.7 is
+ *  178.5: #b2 and #b3 are both it, as a PDF reader and dvisvgm round it
+ *  apart). */
+export function sameColour(drawn: string, tex: Rgb, within = 0.5): boolean {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(drawn);
+  return !!m && tex.every((x, i) => Math.abs(parseInt(m[i + 1], 16) - x * 255) <= within + 1e-3);
 }
 
 /** The strip's glyph origins (pt, y down; a ligature's text-only characters
@@ -103,19 +145,19 @@ export function hexColour(cs: mupdf.ColorSpace, c: number[], alpha: number): str
  *  moves alone put each glyph, and with every width WIDTH_SCALE times its own,
  *  whole and exact; the origin with the widths as written is the first plus
  *  1/WIDTH_SCALE of the way to the second. */
-export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][]; glyphColours: (string | null)[]; ruleColours: (string | null)[] } {
+export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][]; glyphColours: PdfColour[]; ruleColours: PdfColour[] } {
   const bytes = readFileSync(pdf);
   const moves = withWidths(bytes, 0), scaled = withWidths(bytes, WIDTH_SCALE), notdef = notdefFonts(moves);
-  const rules: Pt[][] = [], ruleColours: (string | null)[] = [];
+  const rules: Pt[][] = [], ruleColours: PdfColour[] = [];
   // the device's matrix (bp, y down) taken on to pt
   const toPt = (m: mupdf.Matrix): Affine => m.map(v => v * PT_PER_BP) as Affine;
   const outline = (path: mupdf.Path) => { const o = new Outline(); path.walk(o); return o; };
   // every glyph shown, in order, and whether it is one to count
-  const trace = (doc: mupdf.Document, shapes: boolean): { at: Pt; counted: boolean; colour: string | null }[] => {
-    const shown: { at: Pt; counted: boolean; colour: string | null }[] = [];
+  const trace = (doc: mupdf.Document, shapes: boolean): { at: Pt; counted: boolean; colour: PdfColour }[] => {
+    const shown: { at: Pt; counted: boolean; colour: PdfColour }[] = [];
     const device = new mupdf.Device({
       fillText(text: mupdf.Text, ctm: mupdf.Matrix, cs: mupdf.ColorSpace, color: number[], alpha: number) {
-        const m = toPt(ctm), colour = hexColour(cs, color, alpha);
+        const m = toPt(ctm), colour = pdfColour(cs, color, alpha);
         text.walk({
           showGlyph(font: mupdf.Font, trm: mupdf.Matrix, gid: number) {
             shown.push({ at: [m[0] * trm[4] + m[2] * trm[5] + m[4], m[1] * trm[4] + m[3] * trm[5] + m[5]],
@@ -130,12 +172,12 @@ export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][]; glyphCol
       strokePath(path: mupdf.Path, stroke: mupdf.StrokeState, ctm: mupdf.Matrix, cs: mupdf.ColorSpace, color: number[], alpha: number) {
         if (!shapes) return;
         const r = strokedRule(outline(path), stroke.getLineWidth(), stroke.getLineCap() !== 0, toPt(ctm));
-        if (r) { rules.push(r); ruleColours.push(hexColour(cs, color, alpha)); }
+        if (r) { rules.push(r); ruleColours.push(pdfColour(cs, color, alpha)); }
       },
       fillPath(path: mupdf.Path, _evenOdd: boolean, ctm: mupdf.Matrix, cs: mupdf.ColorSpace, color: number[], alpha: number) {
         if (!shapes) return;
         const r = filledRule(outline(path), toPt(ctm));
-        if (r) { rules.push(r); ruleColours.push(hexColour(cs, color, alpha)); }
+        if (r) { rules.push(r); ruleColours.push(pdfColour(cs, color, alpha)); }
       },
     });
     doc.loadPage(0).run(device, mupdf.Matrix.identity);
@@ -300,10 +342,11 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
   type ColourRow = { y: number; x: number; what: string; viewer: string; tex: string };
   const colourRows: ColourRow[] = [];
   let colourCompared = 0;
-  const compareColour = (viewer: string | null, tex: string | null, row: Omit<ColourRow, 'viewer' | 'tex'>) => {
+  const compareColour = (viewer: string | null, paint: PdfColour, row: Omit<ColourRow, 'viewer' | 'tex'>) => {
+    const tex = texColour(paint);
     if (!viewer || !tex) return;
     colourCompared++;
-    if (viewer !== tex) colourRows.push({ ...row, viewer, tex });
+    if (!sameColour(viewer, tex.rgb, tex.within)) colourRows.push({ ...row, viewer, tex: hexOf(tex.rgb) });
   };
   for (const [j, i] of matched) compareColour(G[j].fill, PC[i], { y: round(G[j].y, 2), x: round(D[j][0], 2), what: G[j].text });
   for (const [r, k] of rulePairs) compareColour(r.color, RC[k], { y: round(r.y, 2), x: round(r.x + shift, 2), what: 'rule' });

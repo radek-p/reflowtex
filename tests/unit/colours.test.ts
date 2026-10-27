@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ColorSpace } from 'mupdf';
 import { problems, type Vector } from '../../tests/render/render.ts';
-import { hexColour } from '../../tools/pageless-pdf/vector-compare.ts';
+import { hexOf, pdfColour, sameColour, texColour } from '../../tools/pageless-pdf/vector-compare.ts';
 import { colorFill, colorMapCss, mapThemes } from '../../src/viewer/src/runtime/colour-css.ts';
 
 const css = (maps: Parameters<typeof colorMapCss>[0]) => colorMapCss(maps, s => s);
@@ -57,13 +57,21 @@ test('a colour other than TeX\'s is a problem', () => {
   assert.match(found[0], /1 glyphs or rules in a colour other than TeX's: "a" at y 3 in #333333, not #000000/);
 });
 
-test("MuPDF's colours as the serializer writes TeX's", () => {
+test("the PDF's colours: gray and RGB exactly, to the nearest 8-bit value; CMYK as a PDF reader draws it", () => {
   const space = (kind: 'gray' | 'rgb' | 'cmyk' | 'lab') => ({ isGray: () => kind === 'gray', isRGB: () => kind === 'rgb',
     isCMYK: () => kind === 'cmyk' }) as unknown as ColorSpace;
-  assert.equal(hexColour(space('gray'), [0], 1), '#000000');
-  assert.equal(hexColour(space('gray'), [0.5], 1), '#808080');
-  assert.equal(hexColour(space('rgb'), [0, 0, 1], 1), '#0000ff');
-  assert.equal(hexColour(space('cmyk'), [0, 1, 1, 0], 1), '#ff0000');
-  assert.equal(hexColour(space('rgb'), [1, 0, 0], 0.5), null, 'not opaque');
-  assert.equal(hexColour(space('lab'), [50, 0, 0], 1), null);
+  const hex = (...a: Parameters<typeof pdfColour>) => { const c = texColour(pdfColour(...a)); return c && hexOf(c.rgb); };
+  assert.equal(hex(space('gray'), [0], 1), '#000000');
+  assert.equal(hex(space('gray'), [0.5], 1), '#808080');
+  assert.equal(hex(space('rgb'), [0, 0, 1], 1), '#0000ff');
+  assert.equal(pdfColour(space('rgb'), [1, 0, 0], 0.5), null, 'not opaque');
+  assert.equal(pdfColour(space('lab'), [50, 0, 0], 1), null);
+  // CMYK is colour managed: magenta is not #ff00ff on screen, and white stays white
+  const magenta = texColour(pdfColour(space('cmyk'), [0, 1, 0, 0], 1))!;
+  assert.notEqual(hexOf(magenta.rgb), '#ff00ff');
+  assert.equal(hexOf(texColour(pdfColour(space('cmyk'), [0, 0, 0, 0], 1))!.rgb), '#ffffff');
+  // 0.7 is 178.5 of 255: either neighbour is it, nothing further
+  assert.ok(sameColour('#b2b2b2', [0.7, 0.7, 0.7]) && sameColour('#b3b3b3', [0.7, 0.7, 0.7]));
+  assert.ok(!sameColour('#b4b2b2', [0.7, 0.7, 0.7]));
+  assert.ok(!sameColour('#333333', [0, 0, 0]));
 });

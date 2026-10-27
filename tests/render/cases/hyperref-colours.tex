@@ -1,7 +1,8 @@
-% hyperref's colorlinks: references, URLs and citations drawn in the colours the document gives them (linkcolor, urlcolor, citecolor), the rest in TeX's black, and coloured rules – each glyph and rule compared with the PDF's colour exactly.
+% hyperref's colorlinks: references, URLs and citations drawn in the colours the document gives them (linkcolor, urlcolor, citecolor), the rest in TeX's black, and coloured rules – each glyph and rule compared with the PDF's colour exactly. RGB and gray colours only: CMYK is cmyk-colours.
 \documentclass{article}
 \usepackage{xcolor}
-\usepackage[colorlinks, linkcolor=red, urlcolor=magenta, citecolor={green!50!black}]{hyperref}
+\definecolor{urlpurple}{rgb}{0.6,0,0.6}
+\usepackage[colorlinks, linkcolor=red, urlcolor=urlpurple, citecolor={green!50!black}]{hyperref}
 % one page with nothing but the text: checked against plain lualatex too (cases.ts)
 \pagestyle{empty}
 \begin{document}
