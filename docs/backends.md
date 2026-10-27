@@ -91,6 +91,15 @@ A backend (`CaptureBackend`) has an `id`, a `name`, a `runtime`, a
   field for cannot be declared. A caller of `encodeDocument` passes the
   same as `encodeDocument(data, { pipelineOnly })`.
 
+Characters a font lacks are in `data.missing_chars` (`MissingChar`: font,
+character, how often), from which the encoder makes the block's
+`missing-char` warnings. The LuaTeX serializer records them from the node
+lists, with the stream and the text around each. A backend with no such
+hook can read them off TeX's log, which every engine writes:
+`missingCharsFromLog(log)` (`src/pipeline/backend/tex-log.ts`) reads TeX's,
+pdfTeX's, XeTeX's and LuaTeX's "Missing character" lines, warnings or
+errors, joined where TeX broke them at `max_print_line`.
+
 Glyph source positions, where a backend has them, are on glyph nodes as
 `src: { file, line, column?, length? }` (`GlyphSource`); the document's own
 text has `file: ''`, its lines counted in the content as given.
