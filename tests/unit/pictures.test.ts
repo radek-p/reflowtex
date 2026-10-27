@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DVISVGM_OPTIMIZE, bitmapPicture, convertPictures, pictureFormat, rewritePictureSvg, type Picture } from '../../src/pipeline/pictures.ts';
-import { Pipeline } from '../../src/pipeline/pipeline.ts';
+import { DEFAULT_PREAMBLE, Pipeline } from '../../src/pipeline/pipeline.ts';
 import { forEachNode, readSerializerOutput, type SerializerOutput, type TexNode } from '../../src/pipeline/nodes.ts';
 import { PictureError } from '../../src/pipeline/errors.ts';
 import { Log } from '../../src/shared/log.ts';
@@ -130,7 +130,7 @@ test('PNG and JPEG \\includegraphics through the pipeline', { skip: !hasLualatex
     // its extension.
     const content = '\\includegraphics[width=60pt]{bitmap-6x4.png} \\includegraphics[width=30pt]{bitmap-6x4.png}\n'
       + '\\includegraphics[width=30pt,height=30pt]{bitmap-6x4.png} \\includegraphics[height=20pt]{bitmap-8x8}';
-    await pipe.compile(content, '', { key: 'bitmaps' });
+    await pipe.compile(content, { kind: 'snippet', key: 'bitmaps' });
     const { pictures, nodes } = picturesOf(root, 'bitmaps');
     assert.equal(nodes.length, 4);
     assert.deepEqual(nodes.map(n => n.picture), [1, 1, 1, 2]);
@@ -169,7 +169,7 @@ test('\\includegraphics finds the file graphicx found: \\graphicspath, default e
     copyFileSync(JPEG, join(src, 'more', 'bitmap-8x8.jpg'));
     const pipe = tmpPipeline(root, [src]);
     await pipe.compile('\\includegraphics[width=30pt]{bitmap-6x4} \\includegraphics[height=20pt]{bitmap-8x8.jpg}',
-      '\\graphicspath{{figs/}{more/}}', { key: 'graphicspath' });
+      { kind: 'snippet', preamble: `${DEFAULT_PREAMBLE}\n\\graphicspath{{figs/}{more/}}`, key: 'graphicspath' });
     const { pictures, nodes } = picturesOf(root, 'graphicspath');
     assert.equal(nodes.length, 2);
     const payload = (i: number) => /href='data:(image\/\w+);base64,([^']+)'/.exec(pictures[Number(nodes[i].picture) - 1].svg)?.slice(1);
@@ -192,7 +192,7 @@ test('names relative to the document\'s directory (./, ../) find its files, as a
     writeFileSync(join(src, 'sub', 'part.tex'), 'From the part.\n');
     copyFileSync(PNG, join(root, 'doc', 'figs', 'bitmap-6x4.png'));
     const pipe = tmpPipeline(root, [src]);
-    await pipe.compile('\\input{./sub/part}\\includegraphics[width=30pt]{../figs/bitmap-6x4}', '', { key: 'relative' });
+    await pipe.compile('\\input{./sub/part}\\includegraphics[width=30pt]{../figs/bitmap-6x4}', { kind: 'snippet', key: 'relative' });
     const { pictures, nodes } = picturesOf(root, 'relative');
     assert.equal(nodes.length, 1);
     assert.match(pictures[0].svg, new RegExp(`href='data:image/png;base64,${readFileSync(PNG).toString('base64').replace(/[+/]/g, '\\$&')}'`));
@@ -204,13 +204,13 @@ test('names relative to the document\'s directory (./, ../) find its files, as a
 });
 
 test('\\includegraphics options braced whole, holding a `]`', { skip: !hasLualatex && 'lualatex not installed' }, async () => {
-  // graphicx reads the options itself (the template only watches the file it
+  // graphicx reads the options itself (the capture code only watches the file it
   // includes), with the braces round the whole list that protect a `]` in it.
   const root = mkdtempSync(join(tmpdir(), 'rtx-bitmap-braced-'));
   try {
     const pipe = tmpPipeline(root, [FIXTURES]);
-    await pipe.compile('\\includegraphics[{width=30pt,alt=Figure [1]}]{bitmap-6x4.png}', '', { key: 'braced' });
-    await pipe.compile('\\includegraphics[width=30pt,alt={Figure [1]}]{bitmap-6x4.png}', '', { key: 'inner' });
+    await pipe.compile('\\includegraphics[{width=30pt,alt=Figure [1]}]{bitmap-6x4.png}', { kind: 'snippet', key: 'braced' });
+    await pipe.compile('\\includegraphics[width=30pt,alt={Figure [1]}]{bitmap-6x4.png}', { kind: 'snippet', key: 'inner' });
     const paragraphs = (key: string) => readSerializerOutput(readFileSync(join(root, 'build', key, 'output.json'), 'utf8')).paragraphs;
     assert.equal(picturesOf(root, 'braced').nodes.length, 1);
     assert.deepEqual(paragraphs('braced'), paragraphs('inner'), 'as with the braces round the value only');
@@ -225,7 +225,7 @@ test('\\includegraphics[page=2] draws the PDF\'s second page', { skip: (!hasLual
       + '\\pagewidth=100bp \\pageheight=50bp A\\vfill\\eject \\pagewidth=40bp \\pageheight=80bp B\\bye\n');
     execFileSync('luatex', ['-interaction=nonstopmode', 'two.tex'], { cwd: root, stdio: 'ignore' });
     const pipe = tmpPipeline(root, [root]);
-    await pipe.compile('\\includegraphics[page=2]{two} \\includegraphics{two.pdf}', '', { key: 'page' });
+    await pipe.compile('\\includegraphics[page=2]{two} \\includegraphics{two.pdf}', { kind: 'snippet', key: 'page' });
     const { pictures, nodes } = picturesOf(root, 'page');
     const size = (i: number) => { const p = pictures[Number(nodes[i].picture) - 1]; return [Math.round(p.vb_w), Math.round(p.vb_h)]; };
     assert.deepEqual([size(0), size(1)], [[40, 80], [100, 50]]);
@@ -242,7 +242,7 @@ test('a PDF holding a bitmap: dvisvgm\'s <use> sized to its symbol', { skip: (!h
       + '\\begin{document}\\includegraphics[width=3cm]{bitmap-6x4.png}\\end{document}\n');
     execFileSync('lualatex', ['-interaction=nonstopmode', 'photo.tex'], { cwd: figs, stdio: 'ignore' });
     const pipe = tmpPipeline(root, [figs]);
-    await pipe.compile('\\includegraphics[width=100pt]{photo.pdf}', '', { key: 'bitmap-pdf' });
+    await pipe.compile('\\includegraphics[width=100pt]{photo.pdf}', { kind: 'snippet', key: 'bitmap-pdf' });
     const { pictures } = picturesOf(root, 'bitmap-pdf');
     assert.equal(pictures.length, 1);
     const uses = pictures[0].svg.match(/<use\b[^>]*>/g) ?? [];
@@ -258,7 +258,7 @@ test('a renamed PDF is read as the PDF it is', { skip: (!hasLualatex || !hasDvis
     // LuaTeX reads an image by its bytes, so a PDF named .png compiles
     copyFileSync(FIXTURE, join(root, 'renamed.png'));
     const pipe = tmpPipeline(root, [root]);
-    await pipe.compile('\\includegraphics[width=50pt]{renamed.png}', '', { key: 'renamed' });
+    await pipe.compile('\\includegraphics[width=50pt]{renamed.png}', { kind: 'snippet', key: 'renamed' });
     const svg = picturesOf(root, 'renamed').pictures[0].svg;
     assert.doesNotMatch(svg, /<image/);
     assert.match(svg, /<use\b/, 'drawn by dvisvgm: the labels');

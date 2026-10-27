@@ -19,15 +19,12 @@ with its own copyright and license header intact — this is a *complete, unmodi
 copy of the Work*, which the LPPL permits redistributing. We add nothing to the
 file and remove nothing from it.
 
-The demo build (`build.py`) does **not** modify the file. At build time it reads
-the pristine file and splits it into its preamble and its body as in-memory
-strings, then assembles a wrapper document: the document's own preamble is used
-verbatim (its `amsmath`/`amsthm` setup, macros, and theorem definitions), Liquid
-TeX's serializer hook from [`template.tex`](template.tex) is inserted *after* that
-preamble, and the body follows `\begin{document}`. That assembled wrapper is
-written to a throwaway, git-ignored build directory (`build/…/input.tex`) and
-compiled there — it is a transient build artifact, never committed and never
-distributed. What ships in the built site is the rendered *output* of running the
+The demo build (`build.ts`) does **not** modify the file. It compiles the
+pristine file as it is: a small driver, written to a throwaway, git-ignored build
+directory, reads reflowtex's capture code and then `testmath.tex` itself, and
+[`preamble.tex`](preamble.tex) (microtype, luamml) is read at the end of the
+document's own preamble. The driver is a transient build artifact, never committed
+and never distributed. What ships in the built site is the rendered *output* of running the
 Work (node-list data, analogous to a compiled PDF), not any `.tex` source. So the
 only `testmath.tex` that is committed or distributed is the verbatim original.
 

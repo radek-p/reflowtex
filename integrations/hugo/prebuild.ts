@@ -39,7 +39,7 @@ import { Pipeline, contentKey, toolchainHash, filesUnchanged } from '../../src/p
 import { readSerializerOutput } from '../../src/pipeline/nodes.ts';
 import { a11yLayerFromBytes } from '../../src/pipeline/a11y.ts';
 import { listBackends, formatBackends } from '../../src/pipeline/backend/registry.ts';
-import { installViewer, passesFor, REF_PASSES, schemaBase64, pyJsonDumps, jsonSorted } from '../../src/pipeline/site.ts';
+import { installViewer, schemaBase64, pyJsonDumps, jsonSorted } from '../../src/pipeline/site.ts';
 import { consoleLog } from '../../src/shared/log.ts';
 
 // Two ways to write a block:
@@ -135,7 +135,12 @@ const mdFiles = (d: string): string[] => readdirSync(d).flatMap(f => {
 const pagePath = (p: string) => relative(contentDir, p).split(sep).join('/');
 
 type Part = { weight: number; at: [string, number]; key: string; content: string; preamble: string; name: string };
-const blocks = new Map<string, { content: string; preamble: string; name: string }>();
+// A block is a snippet, set in its preamble (preamble="…"; none: the
+// pipeline's DEFAULT_PREAMBLE), unless kind="document": a complete document,
+// compiled as it is.
+type Kind = 'document' | 'snippet';
+const kindOf = (attrs: string): Kind => (attr('kind', attrs) === 'document' ? 'document' : 'snippet');
+const blocks = new Map<string, { content: string; preamble: string; name: string; kind: Kind }>();
 const filesMap: Record<string, string> = {};
 const blockPages = new Map<string, string>();
 const colorMapNames = new Set<string>();
@@ -164,7 +169,7 @@ for (const path of mdFiles(contentDir).sort((a, b) => Buffer.compare(Buffer.from
     const line = text.slice(0, m.index).split('\n').length;
     const as = attr('as', attrs);
     const name = blockName(page, line, m[2], as);
-    if (!addPart(attrs, page, m.index!, key, inner, preamble, name) && !blocks.has(key)) blocks.set(key, { content: inner, preamble, name });
+    if (!addPart(attrs, page, m.index!, key, inner, preamble, name) && !blocks.has(key)) blocks.set(key, { content: inner, preamble, name, kind: kindOf(attrs) });
     if (!blockPages.has(key)) blockPages.set(key, page);
     const cm = attr('color-map', attrs);
     if (cm) colorMapNames.add(cm);
@@ -190,7 +195,7 @@ for (const path of mdFiles(contentDir).sort((a, b) => Buffer.compare(Buffer.from
       filesMap[`${b}/${name}`] = key;
     } else {
       key = contentKey(content, preamble);
-      if (!blocks.has(key)) blocks.set(key, { content, preamble, name });
+      if (!blocks.has(key)) blocks.set(key, { content, preamble, name, kind: kindOf(attrs) });
       filesMap[name] = key;
     }
     if (!blockPages.has(key)) blockPages.set(key, page);
@@ -256,10 +261,10 @@ const current = (key: string) => {
   if (d.a11y_html !== a11yLayerFromBytes(bytes)) writeBlock(key, bytes, d.content_hash, d.inputs ?? {});
 };
 
-const stale: { key: string; content: string; preamble: string; name: string; passes: number }[] = [];
+const stale: { key: string; content: string; preamble: string; name: string; kind: Kind }[] = [];
 for (const [key, b] of blocks) {
   if (!o.force && storedHash(key) === key) { current(key); log.info('block-up-to-date', `  ${b.name} (${key}): up to date`, { name: b.name, key }); continue; }
-  stale.push({ key, ...b, passes: passesFor(b.content) });
+  stale.push({ key, ...b });
 }
 let failed = 0;
 if (stale.length) {
@@ -299,12 +304,11 @@ for (const [bname, all] of [...batches].sort((a, b) => (a[0] < b[0] ? -1 : a[0] 
     log.info('batch-up-to-date', `  batch "${bname}" (${parts.length} part(s)): up to date`, { batch: bname, parts: String(parts.length) });
     continue;
   }
-  const passes = parts.some(p => passesFor(p.content) > 1) ? REF_PASSES : 1;
-  log.info('batch-compile-start', `reflowtex: compiling batch "${bname}" (${parts.length} part(s), ${passes} pass(es))…`,
-    { batch: bname, parts: String(parts.length), passes: String(passes) });
+  log.info('batch-compile-start', `reflowtex: compiling batch "${bname}" (${parts.length} part(s))…`,
+    { batch: bname, parts: String(parts.length) });
   try {
-    const blobs = await pipe.compileBatch(parts.map(p => ({ key: p.key, content: p.content, name: p.name })), preamble,
-      { key: bhash, passes, name: `batch "${bname}"` });
+    const blobs = await pipe.compileBatch(parts.map(p => ({ key: p.key, content: p.content, name: p.name })),
+      { preamble, key: bhash, name: `batch "${bname}"` });
     for (const [key, bytes] of blobs) writeBlock(key, bytes, bhash);
     log.info('batch-compiled', `  batch "${bname}": done (${[...blobs.values()].map(b => `${b.length} bytes`).join(', ')})`, { batch: bname });
   } catch (e) {

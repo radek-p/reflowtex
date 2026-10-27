@@ -1,0 +1,18 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% Read at the end of testmath.tex's own preamble (the caller's preamble for a
+% complete document: src/pipeline/driver.ts). testmath.tex itself is
+% compiled as it is; its \DocumentMetadata{tagging=on} is the caller's
+% (testmath.tex sets none).
+%
+% Character protrusion and font expansion: loaded here (testmath.tex never
+% asks for it) so the demo shows what a microtypographically set document
+% looks like when re-broken in the browser. microtype sets \lpcode/\rpcode
+% and \expandglyphsinfont on every text font it configures, and
+% \protrudechars/\adjustspacing for the paragraph builder; the serializer
+% records all of that, so a breaker running TeX's own algorithm reproduces
+% the same lines.
+\IfPackageLoadedTF{microtype}{}{\usepackage{microtype}}
+% luamml: every formula's MathML (tagging is on). LaTeX loads luamml itself
+% only with unicode-math; testmath.tex keeps its classic Computer Modern,
+% so it is asked for here.
+\tagpdfsetup{math/mathml/luamml/load=true}

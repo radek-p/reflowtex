@@ -1,35 +1,28 @@
 # Extract – LaTeX → node list
 
-This stage turns a LaTeX snippet into `output.json`, the finished node list.
+This stage turns a LaTeX document or snippet into `output.json`, the finished node list.
 
-- **`template.tex`** wraps each snippet. It sets up the fonts, the classic
-  Computer Modern fraction geometry, the serializer, the TikZ picture capture, and
-  then substitutes two markers the pipeline fills in: the
-  caller's preamble and the snippet body. Dependencies are loaded before the
-  preamble, while wrappers that must see package redefinitions are installed
-  after it. A preamble can `\usepackage` and `\usetikzlibrary` on top and override
-  the default fonts.
+- **`reflowtex-capture.tex`** is read by the driver (`src/pipeline/driver.ts`)
+  before the document, which follows unchanged (`docs/documents.md`). It sets up
+  the font lookup, the serializer and the picture capture, and loads no package:
+  `\DocumentMetadata` may still follow, and the document's own options for the
+  packages it loads are the only ones. What needs the class runs at the end of
+  the outermost class (floats and captions); the graphics record is installed
+  when graphics is loaded (`package/graphics/after`).
+- **`reflowtex-capture-late.tex`** is read at `begindocument/before`, after the
+  document's whole preamble, as the document's own code: the wrappers that must
+  see a package's redefinitions (references, labels, footnotes, the outline, the
+  TikZ capture when TikZ is loaded, `\marginpar`), the one-column layout and the
+  width increment. Its `\AtBeginDocument` code runs after every package's.
 - **`serializer.lua`** walks LuaTeX's node list and writes `output.json`.
 
-## Placeholders
-
-The LuaTeX backend (`src/pipeline/backend/luatex.ts`) does a plain text
-substitution of two markers in `template.tex` – each is the word `PREAMBLE` or
-`CONTENT` wrapped in double percent signs. Because the replacement is literal,
-those exact tokens must appear **only** at their two real sites; the template's
-own comments deliberately avoid spelling them out.
-
-## Hooks the template installs
+## Hooks the capture installs
 
 | Hook | Purpose |
 |---|---|
 | `\directlua{dofile("serializer.lua")}` | loads the node-list exporter |
 | `\tikzpicture` / `\endtikzpicture` (wrapped) | captures the completed box to a private job-PDF page and leaves a metric-identical picture placeholder; low-level users such as `tikz-cd` work without source externalisation; only the outermost of nested pictures is captured (pgfplots nests one) |
 | `buildpage_filter` → `capture_flow` | copies main-vertical-list contributions before pagination and presents zero-height originals to the page builder, preserving document order without page boundaries |
-
-If you replace the template, preserve the serializer and picture hooks – the
-encode stage relies on them (a missing picture hook, in particular, makes
-drawings vanish with no other symptom).
 
 This is not implemented by setting `\vsize=\maxdimen`: that would merely move
 the automatic break to TeX's finite dimension limit. The serializer keeps an
@@ -54,7 +47,7 @@ continuous column both are kept, as the author's spacing. A break inside a box
 its box as always.
 
 Footnotes arrive as `ins` nodes rather than as children of the paragraph that
-contains their marker. The template gives the marker and insertion a shared id;
+contains their marker. The capture code gives the marker and insertion a shared id;
 the flow walker stores the insertion as a separate `footnotes` content stream,
 and the browser renders that stream in a tooltip/popover from the marker. It is
 not appended to the pageless main stream.

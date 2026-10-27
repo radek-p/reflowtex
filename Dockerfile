@@ -17,12 +17,12 @@
 FROM texlive/texlive:latest-basic@sha256:d54587cc7093dee8cc41c3a6317a37eb33164baf89f7ef9ad7b2f798e8997c58 AS base
 
 # ── LaTeX packages ───────────────────────────────────────────────────────────
-# src/extract/template.tex always loads mathtools, amssymb and fontspec, and
-# (for TikZ picture capture) pgf – every snippet needs these regardless of its
-# own preamble. xcolor, unicode-math and lm-math cover what this repo's own
-# examples/integrations preambles add on top (examples/demo/preamble.tex,
-# the unicode-math path template.tex documents as an alternative to the
-# legacy Type1 math route). amsmath, amscls, amsfonts, lm and luaotfload ship
+# A snippet without a preamble of its own is set in the pipeline's default
+# one (src/pipeline/driver.ts DEFAULT_PREAMBLE): article with mathtools,
+# amssymb and TikZ (pgf, for the picture capture); the repo's own preambles
+# start the same way. fontspec, xcolor, unicode-math and lm-math cover what
+# this repo's examples and integrations add on top (examples/demo/preamble.tex,
+# the unicode-math path as an alternative to the legacy Type1 math route). amsmath, amscls, amsfonts, lm and luaotfload ship
 # with scheme-basic already. dvisvgm (converts externalised TikZ pictures to
 # SVG) is a separate tlmgr package, not part of any scheme-basic install.
 # microtype is loaded by every website preamble (website/latex-preambles/).

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The LuaTeX backend: the document set in src/extract/template.tex, compiled
-// by lualatex (lualatex.ts), its node lists written by serializer.lua as
-// output.json.
+// The LuaTeX backend: the document compiled by lualatex (lualatex.ts) as it
+// is, through a driver (driver.ts) that reads the capture code first; its
+// node lists written by serializer.lua as output.json.
 //
 // A job's first capture runs in the document's own directory; each later
 // one (a wider display sample, a probe) in a directory of its own – a copy
@@ -12,31 +12,21 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readSerializerOutput } from '../nodes.ts';
 import { readMathmlFile } from '../mathml.ts';
-import { runLuaLatex } from '../lualatex.ts';
-import { DOCCLASS_RE, splitDocument, takeMetadata, withInputClass } from '../document.ts';
+import { runLuaLatex, runLuaLatexOnce } from '../lualatex.ts';
+import {
+  CALLER_PREAMBLE_FILE, CAPTURE_FILES, DEFAULT_JOBNAME, DOCUMENT_FILE, DRIVER_FILE, METADATA_PROBE_FILE,
+  checkJobname, driverTex, metadataProbeTex, snippetDocument, type DocumentMetadataOption,
+} from '../driver.ts';
 import type { Capabilities } from './capabilities.ts';
 import type { Availability, BackendOptions, BackendRuntime, CaptureBackend, CaptureDocument, CaptureJob, CaptureResult, CaptureRun, Diagnostic } from './types.ts';
 
 const SRC = fileURLToPath(new URL('../..', import.meta.url));          // src/
-export const DEFAULT_TEMPLATE = join(SRC, 'extract/template.tex');
 export const DEFAULT_SERIALIZER = join(SRC, 'extract/serializer.lua');
 /** MathML capture (src/extract/mathml.lua): the serializer loads it when it
  *  lies next to it. */
 export const MATHML_LUA = join(SRC, 'extract/mathml.lua');
 /** the companion package */
 export const LATEX_DIR = join(SRC, 'latex');
-
-export const PREAMBLE_MARK = '%%PREAMBLE%%';
-export const CONTENT_MARK = '%%CONTENT%%';
-export const WIDTH_EXTRA_MARK = '%%WIDTH-EXTRA-SP%%';
-/** Where the author's \\DocumentMetadata goes: the template's first line, as
- *  LaTeX wants it before \\documentclass. An author who enables tagging and
- *  luamml there (\\DocumentMetadata{tagging=on}, and
- *  \\tagpdfsetup{math/mathml/luamml/load=true} for classic fonts) gets LaTeX's
- *  MathML for every formula (src/pipeline/mathml.ts reads it); a document
- *  without it gets none. */
-export const METADATA_MARK = '%%DOCUMENT-METADATA%%';
-export const TEMPLATE_CLASS_RE = /^\\documentclass\b[^\n]*$/m;
 
 /** What LuaTeX does, checked by the conformance suite (tests/backends). */
 export const LUATEX_CAPABILITIES: Capabilities = {
@@ -54,42 +44,20 @@ export const LUATEX_CAPABILITIES: Capabilities = {
   shellEscape: true,
 };
 
-/** The template filled with a document: a function of the width increment.
- *  A complete document's class replaces the template's, its preamble becomes
- *  the preamble (the caller's, if any, follows), its body the content; the
- *  author's \DocumentMetadata goes to the template's top. The class line may
- *  be in a file the document inputs, from `dirs`, its own directories
- *  (withInputClass). Anything else is a snippet, set as the template's
- *  content: what TeX makes of it is TeX's to say. */
-export function fillTemplate(template: string, content: string, preamble: string, dirs: string[] = []): (widthExtraSp: number) => string {
-  let metadata = '';
-  content = withInputClass(content, dirs);
-  const doc = splitDocument(content);
-  if (doc) {
-    // (the document's own, else the caller's preamble's)
-    metadata = takeMetadata(content.slice(0, DOCCLASS_RE.exec(content)!.index))[0];
-    const [callers, rest] = takeMetadata(preamble);
-    preamble = rest;
-    metadata ||= callers;
-    const [classLine, docPreamble, body] = doc;
-    let replaced = false;
-    template = template.replace(TEMPLATE_CLASS_RE, () => { replaced = true; return classLine; });
-    preamble = (replaced ? '' : `${classLine}\n`) + docPreamble + (preamble ? `\n${preamble}` : '');
-    content = body;
-  } else {
-    [metadata, preamble] = takeMetadata(preamble);
-    // A preamble may bring its own class (a book's chapters: \documentclass{book}).
-    const m = DOCCLASS_RE.exec(preamble);
-    if (m) {
-      let replaced = false;
-      template = template.replace(TEMPLATE_CLASS_RE, () => { replaced = true; return m[0].trim(); });
-      if (replaced) preamble = preamble.slice(0, m.index) + preamble.slice(m.index + m[0].length);
-    }
-  }
-  return (widthExtraSp: number) => template
-    .replaceAll(PREAMBLE_MARK, () => preamble).replaceAll(CONTENT_MARK, () => content)
-    .replaceAll(WIDTH_EXTRA_MARK, () => String(widthExtraSp))
-    .replaceAll(METADATA_MARK, () => metadata);
+/** The caller's \DocumentMetadata, if it applies to the document in `dir`
+ *  (driver.ts): always under `force`; otherwise only when the document sets
+ *  none itself, which TeX is asked (metadataProbeTex) – the document is run
+ *  up to its class, and the kernel says. */
+export async function applicableMetadata(dir: string, document: string, m: DocumentMetadataOption | undefined,
+                                         run: { texinputs: string[]; shellEscape?: boolean }): Promise<DocumentMetadataOption | undefined> {
+  if (!m || m.force) return m;
+  const probe = 'reflowtex-metadata-probe.tex';
+  writeFileSync(join(dir, probe), metadataProbeTex(document));
+  rmSync(join(dir, METADATA_PROBE_FILE), { force: true });
+  await runLuaLatexOnce(dir, { ...run, main: probe, jobname: 'reflowtex-metadata-probe' });
+  const answer = existsSync(join(dir, METADATA_PROBE_FILE)) ? readFileSync(join(dir, METADATA_PROBE_FILE), 'utf8').trim() : '';
+  // no answer: the document never reached a class; TeX will say why in the run itself
+  return answer === '0' ? m : undefined;
 }
 
 /** The warnings in a LaTeX log: `LaTeX Warning: …`, `Package x Warning: …`,
@@ -118,17 +86,27 @@ export function logDiagnostics(log: string): Diagnostic[] {
   return out;
 }
 
+/** The document's file in `dir`: a document as it is, a snippet set in the
+ *  caller's preamble (snippetDocument); the caller's preamble for a document
+ *  beside it; the capture code copied there. */
+function writeDocument(doc: CaptureDocument): { callerPreamble?: string } {
+  writeFileSync(join(doc.dir, DOCUMENT_FILE), doc.kind === 'document' ? doc.content : snippetDocument(doc.content, doc.preamble));
+  const callerPreamble = doc.kind === 'document' ? doc.preamble.trim() : '';
+  if (callerPreamble) writeFileSync(join(doc.dir, CALLER_PREAMBLE_FILE), `${callerPreamble}\n`);
+  else rmSync(join(doc.dir, CALLER_PREAMBLE_FILE), { force: true });
+  for (const f of CAPTURE_FILES) copyFileSync(f, join(doc.dir, basename(f)));
+  return callerPreamble ? { callerPreamble: CALLER_PREAMBLE_FILE } : {};
+}
+
 export class LuaTeXBackend implements CaptureBackend {
   readonly id = 'luatex';
   readonly name = 'LuaTeX (lualatex from TeX Live)';
   readonly runtime: BackendRuntime = { kind: 'process', concurrent: true, firstRunAlone: true };
   readonly capabilities: Capabilities = LUATEX_CAPABILITIES;
-  readonly template: string;
   readonly serializer: string;
   private readonly shellEscape?: boolean;
 
   constructor(o: BackendOptions = {}) {
-    this.template = o.template ?? DEFAULT_TEMPLATE;
     this.serializer = o.serializer ?? DEFAULT_SERIALIZER;
     this.shellEscape = o.shellEscape;
   }
@@ -137,8 +115,9 @@ export class LuaTeXBackend implements CaptureBackend {
 
   async open(doc: CaptureDocument): Promise<CaptureJob> {
     const { dir } = doc;
+    const jobname = checkJobname(doc.jobname ?? DEFAULT_JOBNAME);
     mkdirSync(join(dir, 'pics'), { recursive: true });      // PGF externalisation's conventional prefix
-    const input = fillTemplate(readFileSync(this.template, 'utf8'), doc.content, doc.preamble, doc.searchDirs);
+    const { callerPreamble } = writeDocument(doc);
     // Always refreshed: a stale serializer would silently lack newer features.
     copyFileSync(this.serializer, join(dir, 'serializer.lua'));
     if (doc.mathml) copyFileSync(MATHML_LUA, join(dir, 'mathml.lua'));
@@ -148,6 +127,9 @@ export class LuaTeXBackend implements CaptureBackend {
       if (!existsSync(dst) || statSync(dst).mtimeMs < statSync(otf).mtimeMs) copyFileSync(otf, dst);
     }
     const texinputs = [LATEX_DIR, ...doc.searchDirs];
+    const metadata = await applicableMetadata(dir, DOCUMENT_FILE, doc.documentMetadata, { texinputs, shellEscape: this.shellEscape });
+    const input = (widthExtraSp: number) => driverTex({ document: DOCUMENT_FILE, widthExtraSp, callerPreamble, metadata });
+    const own = new Set([`${jobname}.pdf`, `${jobname}.log`, 'output.json', 'nodelist.pb']);
     let sampleSeq = 0;
     const sampleDir = () => {
       const d = join(dir, 'samples', String(++sampleSeq));
@@ -155,7 +137,7 @@ export class LuaTeXBackend implements CaptureBackend {
       mkdirSync(d, { recursive: true });
       for (const f of readdirSync(dir)) {
         const p = join(dir, f);
-        if (statSync(p).isFile() && !['input.pdf', 'input.log', 'output.json', 'nodelist.pb'].includes(f)) cpSync(p, join(d, f));
+        if (statSync(p).isFile() && !own.has(f)) cpSync(p, join(d, f));
       }
       return d;
     };
@@ -164,10 +146,10 @@ export class LuaTeXBackend implements CaptureBackend {
     return {
       capture: async (run: CaptureRun): Promise<CaptureResult> => {
         const d = runs++ === 0 ? dir : sampleDir();
-        writeFileSync(join(d, 'input.tex'), input(run.widthExtraSp));
-        const data = readSerializerOutput(await runLuaLatex(d, { texinputs, passes: run.passes, block: doc.label, shellEscape: this.shellEscape }));
-        const log = join(d, 'input.log');
-        return { data, dir: d, mathml: readMathmlFile(d), diagnostics: existsSync(log) ? logDiagnostics(readFileSync(log, 'utf8')) : [] };
+        writeFileSync(join(d, DRIVER_FILE), input(run.widthExtraSp));
+        const data = readSerializerOutput(await runLuaLatex(d, { texinputs, passes: run.passes, main: DRIVER_FILE, jobname, block: doc.label, shellEscape: this.shellEscape }));
+        const log = join(d, `${jobname}.log`);
+        return { data, dir: d, mathml: readMathmlFile(d, jobname), diagnostics: existsSync(log) ? logDiagnostics(readFileSync(log, 'utf8')) : [] };
       },
     };
   }

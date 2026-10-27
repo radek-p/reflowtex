@@ -1,0 +1,23 @@
+% A document whose class line is behind a conditional, as in real papers:
+% \ifnum\short=1 one class \else another, with its own setup, \fi. Then
+% graphicx and xcolor with options of the document's own, which clashed with
+% packages the capture used to load first.
+\def\short{0}
+\ifnum\short=1
+  \documentclass{amsart}
+\else
+  \documentclass[11pt]{article}
+  \newcommand\variant{the long version}
+\fi
+\usepackage[final]{graphicx}
+\usepackage[dvipsnames]{xcolor}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+\section{A heading}
+A paragraph set in the class the conditional chose, long enough to fill a
+line of the text width and then a few more words, \textcolor{OliveGreen}{in a
+named colour}: this is \variant.
+
+A second paragraph, ending with a short last line.
+\end{document}

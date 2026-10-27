@@ -49,7 +49,7 @@ export async function build(name: string): Promise<string> {
   writeFileSync(log, '');
   // a page's build-args file: more options for the build (--a11y)
   const extra = existsSync(join(src, 'build-args')) ? readFileSync(join(src, 'build-args'), 'utf8').split(/\s+/).filter(Boolean) : [];
-  await run('node', [join(REPO, 'integrations/vanilla/build.ts'), src, '-o', out, '--title', name, ...extra], log);
+  await run('node', [join(REPO, 'integrations/vanilla/build.ts'), src, '-o', out, '--title', name, '--snippet', ...extra], log);
   const page = join(out, 'index.html');
   let html = readFileSync(page, 'utf8');
   let head = existsSync(join(src, 'head.html')) ? readFileSync(join(src, 'head.html'), 'utf8') : '';

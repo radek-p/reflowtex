@@ -115,7 +115,7 @@ turning it on needs no new compilation. The companion's reading options then
 offer *Formulas for screen readers*: MathML or spoken text.
 
 The MathML is LaTeX's own. It comes where the block's author enables tagging
-and luamml – in its preamble or document, before or after the class:
+and luamml in its preamble – `\DocumentMetadata` first, the class after it:
 
 ```latex
 \DocumentMetadata{tagging=on}
@@ -163,8 +163,8 @@ the link map):
 {{</* latex batch="mybook" weight="2" file="chapter2.tex" preamble="book" */>}}
 ```
 
-All blocks of a batch share one `preamble`, which may start with its own
-`\documentclass` (e.g. `book`). It is a name from `latex-preambles/`, or a
+All blocks of a batch share one `preamble`, which starts with its
+`\documentclass` (e.g. `book`), as every block's does. It is a name from `latex-preambles/`, or a
 path to a `.tex` file relative to the site root, which may lie outside the
 site: the website's example book names `../examples/book/preamble.tex`,
 beside its chapters. Changing, adding or reordering any part

@@ -4,9 +4,9 @@
 //
 // testmath.tex is bundled verbatim (NOTICE.md – LPPL 1.3c, © American
 // Mathematical Society and the LaTeX Project). This script does not modify it:
-// it splits the file into its preamble and its body and compiles them with the
-// classic Computer Modern fonts the document was written for – no fontspec, no
-// unicode-math (see template.tex). Those 8-bit Type 1 fonts have no OpenType
+// the pipeline compiles it as it is, with the classic Computer Modern fonts the
+// document was written for – no fontspec, no unicode-math – and preamble.tex
+// (microtype, luamml) read at the end of its own preamble, with tagging on. Those 8-bit Type 1 fonts have no OpenType
 // form, so the pipeline converts them (src/pipeline/fonts/type1.ts): the demo
 // is also a stress test of that path on a dense, real amsmath document.
 //
@@ -40,18 +40,10 @@ const out = resolve(o.out!);
 const src = join(HERE, 'testmath.tex');
 if (!existsSync(src)) { console.error(`error: ${src} missing (it ships with the repo – see NOTICE.md)`); process.exit(1); }
 
-/** [preamble, body] of the file, both verbatim: the preamble from
- *  \documentclass up to \begin{document}, the body up to \end{document}. */
-function splitVerbatim(tex: string): [string, string] {
-  const c = /^[ \t]*\\documentclass/m.exec(tex), b = /^[ \t]*\\begin\{document\}[^\n]*\n/m.exec(tex), e = /^[ \t]*\\end\{document\}/m.exec(tex);
-  if (!c || !b || !e) { console.error('error: could not find \\documentclass / \\begin{document} / \\end{document}'); process.exit(1); }
-  return [tex.slice(c.index, b.index), tex.slice(b.index + b[0].length, e.index)];
-}
-const [preamble, body] = splitVerbatim(readFileSync(src, 'utf8'));
-
-const pipe = new Pipeline({ buildRoot: join(REPO, 'build/testmath-build'), fontsDir: join(out, 'fonts'), template: join(HERE, 'template.tex') });
+const pipe = new Pipeline({ buildRoot: join(REPO, 'build/testmath-build'), fontsDir: join(out, 'fonts'), searchDirs: [HERE] });
 console.log(`reflowtex: compiling testmath.tex (${PASSES} passes so cross-references resolve) …`);
-const bytes = await pipe.compile(body, preamble, { key: 'testmath', passes: PASSES, name: 'testmath.tex' });
+const bytes = await pipe.compile(readFileSync(src, 'utf8'),
+  { kind: 'document', preamble: readFileSync(join(HERE, 'preamble.tex'), 'utf8'), key: 'testmath', passes: PASSES, name: 'testmath.tex', jobname: 'testmath', documentMetadata: { keys: 'tagging=on' } });
 await pipe.finishFonts();
 console.log(`  OK (${bytes.length} bytes)`);
 

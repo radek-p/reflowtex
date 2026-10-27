@@ -1,0 +1,392 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+% reflowtex capture, read before the document.
+%
+% The pipeline compiles a driver file (src/pipeline/driver.ts) that reads
+% this file, then the document itself, unchanged: TeX chooses the class
+% (behind a conditional or in a file the document inputs, as it may be),
+% follows the inputs and expands the conditionals. Nothing here loads a
+% package or a class: LaTeX wants \DocumentMetadata before any package, and
+% the document's own options for the packages it loads must be the first
+% ones. What has to wait for the class or for a package is installed by
+% LaTeX's hooks: at the end of the class (floats and captions), when
+% graphics is loaded (the graphics record), and at \begin{document}
+% (reflowtex-capture-late.tex: everything that must see the preamble's
+% definitions).
+
+% ── The document's files, by names relative to its directory ────────────────
+% TeX runs in a build directory of its own and finds the document's files
+% through TEXINPUTS, which the build sets to the document's directories. A
+% name that starts with ./ or ../ (\input{./sections/intro},
+% \includegraphics{./figure}) TeX takes as it stands, relative to the build
+% directory, and never looks for along TEXINPUTS. LaTeX looks for a name it
+% did not find in each directory of \input@path in turn, whatever the name –
+% \input, \include, \InputIfFileExists, a class or package, and graphicx's
+% files unless the document sets \graphicspath – so TEXINPUTS's directories
+% go there too, and a relative name resolves against the document's
+% directory, as in a LaTeX run in that directory. (Backslashes and braces
+% are built with string.char so TeX does not read them; the directories are
+% printed as characters, whatever they hold.)
+\directlua{
+  local bs, open, close = string.char(92), string.char(123), string.char(125)
+  local sep = os.type == "windows" and ";" or ":"
+  local dirs = {}
+  for d in string.gmatch(os.getenv("TEXINPUTS") or "", "[^" .. sep .. "]+") do
+    d = d:gsub("/+$", "")
+    if not (d == "" or d == ".") and lfs.isdir(d) then table.insert(dirs, d .. "/") end
+  end
+  if next(dirs) then
+    tex.sprint(bs .. "expandafter" .. bs .. "def" .. bs .. "csname input@path" .. bs .. "endcsname" .. open)
+    for _, d in ipairs(dirs) do tex.sprint(open); tex.sprint(-2, d); tex.sprint(close) end
+    tex.sprint(close)
+  end
+}
+
+% ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
+% luaotfload resolves a font *by name* against a database built from several
+% locations, searched in `location_precedence` order – whose default is
+% {"system", "texmf", "local"}. On macOS, "system" means ~/Library/Fonts and
+% /Library/Fonts – regular Font Book directories any app (or a user, installing
+% a font by hand) can add to, independently of TeX Live. If a font of the same
+% name ends up there too, it can be a *different, non-identical* copy of what
+% TeX Live ships under texmf-dist (different glyph-index ordering internally,
+% despite matching filenames). Since reflowtex addresses glyphs by the index
+% LuaTeX assigns while compiling but *serves the browser the texmf-dist file*
+% (via kpsewhich, see fonts.py), a "system" font winning that lookup makes every
+% glyph index wrong – wrong enough that normalise_glyph_addressing
+% (transforms.py) treats it as a substituted glyph and PUA-rewrites it, and the
+% served font (lacking the PUA codepoints, since they were computed against a
+% different file) can't display it at all. Reordering precedence so texmf wins
+% keeps compilation and serving on the same file. This can't be set via a
+% config file shipped in the repo (luaotfload reads its config before this
+% document exists), so it's forced here, before any font is loaded. Only an
+% issue if a same-named font happens to exist outside texmf-dist too (nothing
+% to do with a stock TeX Live install), but forcing texmf first costs nothing
+% when there's no such collision.
+\directlua{
+  if fonts and fonts.names and fonts.names.set_location_precedence then
+    fonts.names.set_location_precedence({'texmf', 'system', 'local'})
+    fonts.names.flush_lookup_cache()
+  end
+}
+
+% The directive above cannot reach one font: the *default* text face,
+% \TU/lmr/m/n/10. LuaLaTeX loads it while the format is built (that is
+% where "PRELOADED" fonts come from), long before this document exists, so it
+% was resolved under the default precedence -- and NFSS keeps reusing that
+% definition for every later \selectfont. Nearly every block is set in it.
+% Drop the NFSS identifier of each OpenType face loaded so far and re-select,
+% so the default face is looked up again under the precedence just set. A
+% fresh load of any *other* face was never affected. Backslashes are built
+% with string.char so TeX does not tokenize them inside \directlua.
+\directlua{
+  local bs = string.char(92)
+  for id, f in font.each() do
+    local ident = tex.fontidentifier(id)
+    if ident and ident:sub(1, 4) == bs .. "TU/" then
+      texio.write_nl("reflowtex: re-resolving preloaded font " .. ident)
+      tex.print(bs .. "expandafter" .. bs .. "let" .. bs .. "csname "
+                .. ident:sub(2) .. bs .. "endcsname" .. bs .. "relax")
+    end
+  end
+}
+\selectfont
+
+\makeatletter
+% ── After the class ────────────────────────────────────────────────────────
+% Code for when the document's class is loaded: at the end of the outermost
+% class (a class may load another, with \LoadClass, whose end comes first).
+\newcount\reflowtex@classdepth
+\let\reflowtex@afterclass\@empty
+\def\reflowtexAfterClass#1{\g@addto@macro\reflowtex@afterclass{#1}}
+\def\reflowtex@runafterclass{%
+  \global\let\reflowtex@afterclass@run\reflowtex@afterclass
+  \global\let\reflowtex@afterclass\@empty
+  \reflowtex@afterclass@run}
+\AddToHook{class/before}{\global\advance\reflowtex@classdepth\@ne}
+\AddToHook{class/after}{%
+  \global\advance\reflowtex@classdepth\m@ne
+  \ifnum\reflowtex@classdepth=\z@ \expandafter\reflowtex@runafterclass\fi}
+\makeatother
+
+% Reflow TeX produces a continuous, pageless document: a float is set where it
+% is written, as float's [H] sets one. Left to LaTeX, a float waits for room on
+% a page that never fills: one that may go "here" is put back by the output
+% routine, often after the prose that follows it, and one that may not (a [p]
+% figure, a type with no h among its placements) waits for the final
+% \clearpage and goes out on a page of its own, which is shipped, not
+% captured – lost.
+%
+% Every float is begun by the kernel's \@xfloat, whatever made it: figure and
+% table and their starred forms, a class's own, float's \newfloat and
+% \restylefloat (algorithm's), newfloat's \DeclareFloatingEnvironment,
+% algorithm2e, rotating, listings. \@xfloat builds the float's box as LaTeX
+% does, and the class's or package's end of the float finishes it (float's
+% rules and caption above, say). Here \@floatpenalty is then 0, which every
+% end of a float (the kernel's, revtex's, acmart's) takes for a float it
+% cannot queue: none is queued. The box goes into the flow when the
+% environment's group closes, between \intextsep above and below; a float
+% written in a paragraph ends it. Its register goes back to the free list, as
+% the output routine would give it back. Placement options are read, as LaTeX
+% reads them, and have no effect.
+\makeatletter
+% The kernel's (or the class's) \@xfloat and \@floatboxreset are wrapped at
+% the end of the class.
+\def\reflowtex@newxfloat#1[#2]{%
+  \ifinner
+    % LaTeX's "not in outer par mode" error: nothing to place
+    \expandafter\reflowtex@xfloat
+  \else
+    \aftergroup\reflowtex@placefloat
+    \expandafter\reflowtex@xfloatbox
+  \fi
+  {#1}[#2]}
+\def\reflowtex@xfloatbox#1[#2]{%
+  \reflowtex@xfloat{#1}[#2]%
+  % inside the float's box now
+  \global\@floatpenalty\z@
+  \xdef\reflowtex@floatbox{\@currbox}}
+\def\reflowtex@placefloat{%
+  \par\addvspace{\intextsep}%
+  \box\reflowtex@floatbox
+  \@cons\@freelist\reflowtex@floatbox
+  \addvspace{\intextsep}}
+% A float's caption is a paragraph, small and centred, spaced as LaTeX's
+% \@makecaption spaces it (\abovecaptionskip above, \belowcaptionskip below,
+% whatever the class set them to). LaTeX's own sets a caption shorter than
+% the line as a box as wide as it, which the viewer could not break again at
+% another width. \caption itself is the kernel's (or the class's, or the
+% caption package's): the counter, the list of figures, the label and the
+% anchor are as LaTeX makes them. Set in every float's box, [H]'s too;
+% \captionof outside a float keeps the class's.
+\def\reflowtex@newfloatboxreset{%
+  \reflowtex@floatboxreset
+  \let\@makecaption\reflowtex@makecaption}
+\long\def\reflowtex@makecaption#1#2{%
+  \vskip\abovecaptionskip
+  {\small\centering#1: #2\par}%
+  \vskip\belowcaptionskip}
+\reflowtexAfterClass{%
+  \let\reflowtex@xfloat\@xfloat \let\@xfloat\reflowtex@newxfloat
+  \let\reflowtex@floatboxreset\@floatboxreset \let\@floatboxreset\reflowtex@newfloatboxreset}
+\makeatother
+
+% ── reflowtex node-list serializer ─────────────────────────────────────────────
+% Exports the finished node list as output.json (see src/extract/serializer.lua).
+\directlua{dofile("serializer.lua")}
+
+% Nothing here ships pages in the normal course: the serializer keeps the page
+% from filling. An output routine that never settles against that (a class's
+% own page grid) ships empty pages without end instead, so a run is stopped
+% at 2000 pages, with an error the pipeline reports, rather than left to run
+% for an hour. (Captured pictures ship through the primitive, uncounted. The
+% run ends from Lua: \end is not allowed inside an output routine.)
+\AddToHook{shipout/after}{%
+  \ifnum\ReadonlyShipoutCounter>2000
+    \PackageError{reflowtex}{More than 2000 pages shipped: the document's
+      output routine does not settle}{}%
+    \directlua{os.exit(1)}%
+  \fi}
+
+% ── Pictures ──────────────────────────────────────────────────────────────
+% Every picture (a TikZ picture captured, an \includegraphics recorded) is
+% numbered by this counter.
+\newcount\reflowtexPicCount
+
+% Ordinary \includegraphics images arrive as the same kind of LuaTeX image
+% rule, and likewise do not expose their filename through the node API.
+% graphicx hands every file it includes, with the name it found it under
+% (through \graphicspath, \input@path or with a default extension), to
+% \Gin@setfile. The call is wrapped here: it records that name and the PDF
+% page asked for, and stamps the image it makes with the record's id.
+% Installed when graphics is loaded (graphicx loads it), by whatever loads it
+% and with whatever options: the document's own, a class's, TikZ's.
+\makeatletter
+\def\reflowtex@Ginsetfile#1#2#3{%
+  \global\advance\reflowtexPicCount by 1
+  \directlua{Serializer.note_graphic(\the\reflowtexPicCount,
+    "\luaescapestring{#3}", "\luaescapestring{\Gin@page}")}%
+  \begingroup\attribute902=\reflowtexPicCount\relax
+    \reflowtexOrigGinSetfile{#1}{#2}{#3}%
+  \endgroup}
+\AddToHook{package/graphics/after}{%
+  \let\reflowtexOrigGinSetfile\Gin@setfile
+  \let\Gin@setfile\reflowtex@Ginsetfile}
+\makeatother
+
+% ── Companion package switch ─────────────────────────────────────────────────
+% \ifreflowtex is true only inside this extraction run. reflowtex.sty, which a
+% snippet may load, defines the same switch as *false* when it finds it
+% undefined, so one source compiles to a PDF unchanged and to a web build with
+% the web-only constructs live. Defined before the preamble so the package,
+% loaded from the preamble, sees it.
+\newif\ifreflowtex
+\reflowtextrue
+
+% Streams (\begin{webstream} in reflowtex.sty, and batch parts below)
+% are numbered by this one counter, which the package uses when it finds it.
+\newcount\reflowtexStreamCount
+
+% ── Asides ──────────────────────────────────────────────────────────────────
+% \reflowtexAside{kind}{key=value,…}{text}: `text` typeset where it stands, in
+% running text too, but kept out of the flow – a stream of `kind`, which the
+% serializer marks aside=true and the viewer shows on demand (a margin note,
+% a popover). Like a footnote's text it goes into an insertion (attribute 914
+% on the insertion, 911 on its contents); in running text it also leaves an
+% empty box where it stood (attribute 915), which flows with the text, for
+% the viewer to place the aside by. \marginpar (reflowtex-capture-late.tex) and reflowtex.sty's
+% \webaside are made of it. Parameters are taken as written: expand them first.
+\newinsert\reflowtexAsideIns
+\count\reflowtexAsideIns=0 \dimen\reflowtexAsideIns=\maxdimen \skip\reflowtexAsideIns=0pt
+\long\def\reflowtexAside#1#2#3{%
+  \global\advance\reflowtexStreamCount by 1
+  \directlua{Serializer.note_stream(\the\reflowtexStreamCount,
+    "\luaescapestring{#1}", 0, "\luaescapestring{#2}")}%
+  \begingroup
+    \ifhmode\attribute915=\reflowtexStreamCount\relax\hbox{}\attribute915=-"7FFFFFFF\fi
+    \attribute914=\reflowtexStreamCount\relax
+    \insert\reflowtexAsideIns{%
+      \attribute911=\reflowtexStreamCount\relax
+      \hsize\linewidth \parindent0pt \everypar{}#3\par}%
+  \endgroup}
+
+% ── Batch parts ──────────────────────────────────────────────────────────────
+% Pipeline.compile_batch compiles several snippets (a book's chapters) as one
+% document, joined by \reflowtexbatchpart{N}. Everything typeset after it
+% belongs to stream "batch-part" N, by a *global* attribute assignment rather
+% than an environment, so no group is opened: a \newcommand in one part is
+% still defined in the next, as in the book. The pipeline cuts the finished
+% document at these streams, one bundle per part.
+\def\reflowtexbatchpart#1{%
+  \par
+  \global\advance\reflowtexStreamCount by 1
+  \directlua{Serializer.note_stream(\the\reflowtexStreamCount, "batch-part", -1, "part=#1")}%
+  \global\attribute911=\reflowtexStreamCount\relax}
+
+% The width increment the driver sets (display sampling, the render tests);
+% applied at \begin{document} (reflowtex-capture-late.tex).
+\newdimen\reflowtexWidthExtra
+
+% Capture the finished TikZ hbox rather than scanning its source. This also
+% handles front ends such as tikz-cd, which call the low-level \tikzpicture and
+% \endtikzpicture macros and are incompatible with PGF's LaTeX source scanner.
+% A copy is shipped as a tightly-sized private PDF page; the document flow gets
+% an empty box with identical metrics and attribute 908. serializer.lua turns
+% that placeholder into a picture node referring to the private page.
+%
+% If the document enabled PGF externalisation, it is turned off first: capturing boxes
+% is the single picture path, independent of how the source was configured.
+%
+% Only the outermost picture is captured. A picture inside another – a \tikz in
+% a node's text, or the one pgfplots' axis opens inside the user's – is part of
+% the outer box, and its drawing and labels are captured with it. Captured on
+% its own, it left an empty placeholder in the outer box, which is shipped, not
+% serialized: the inner drawing was lost, and a pgfplots axis came out blank.
+\makeatletter
+% The machinery is defined here; \tikzpicture is wrapped at \begin{document}
+% (reflowtex-capture-late.tex), when the preamble has loaded TikZ, if it has.
+\newbox\reflowtexTikzBox
+\newbox\reflowtexTikzPageBox
+\newdimen\reflowtexTikzWidth
+\newdimen\reflowtexTikzHeight
+\newdimen\reflowtexTikzDepth
+\newcount\reflowtexTikzNesting
+\ExplSyntaxOn
+\cs_new_eq:NN \reflowtexPrimitiveShipout \tex_shipout:D
+\ExplSyntaxOff
+\def\reflowtex@tikzpicture{%
+  \global\advance\reflowtexTikzNesting by 1
+  \ifnum\reflowtexTikzNesting=1
+    \expandafter\reflowtexCaptureTikzpicture
+  \else
+    \expandafter\reflowtexOrigTikzpicture
+  \fi}
+\def\reflowtex@endtikzpicture{%
+  \global\advance\reflowtexTikzNesting by -1
+  \ifnum\reflowtexTikzNesting=0
+    \expandafter\reflowtexCaptureEndtikzpicture
+  \else
+    \expandafter\reflowtexOrigEndtikzpicture
+  \fi}
+\def\reflowtexCaptureTikzpicture{\reflowtexCaptureBegin\reflowtexOrigTikzpicture}
+\def\reflowtexCaptureEndtikzpicture{\reflowtexOrigEndtikzpicture\reflowtexCaptureEnd}
+% The capture itself, for anything PGF draws: \reflowtexCaptureBegin opens the
+% box, \reflowtexCaptureEnd closes it, ships it and leaves the placeholder. In
+% maths the box is a formula in the style it was begun in (LuaTeX's
+% \mathstyle), so a matrix keeps its size and its axis.
+\newif\ifreflowtexCaptureMath
+\def\reflowtexCaptureBegin{%
+  \global\advance\reflowtexPicCount by 1
+  \edef\reflowtexThisPic{\the\reflowtexPicCount}%
+  \ifmmode
+    \reflowtexCaptureMathtrue
+    \edef\reflowtexCaptureStyle{\ifcase\numexpr\mathstyle/2\relax
+      \noexpand\displaystyle\or\noexpand\textstyle\or\noexpand\scriptstyle\else\noexpand\scriptscriptstyle\fi}%
+    \setbox\reflowtexTikzBox=\hbox\bgroup$\reflowtexCaptureStyle\m@th
+  \else
+    \reflowtexCaptureMathfalse
+    \setbox\reflowtexTikzBox=\hbox\bgroup
+  \fi}
+\def\reflowtexCaptureEnd{%
+  \ifreflowtexCaptureMath$\fi
+  \egroup
+  \reflowtexTikzWidth=\wd\reflowtexTikzBox
+  \reflowtexTikzHeight=\ht\reflowtexTikzBox
+  \reflowtexTikzDepth=\dp\reflowtexTikzBox
+  \begingroup
+    \pagewidth=\reflowtexTikzWidth
+    \pageheight=\dimexpr\reflowtexTikzHeight+\reflowtexTikzDepth\relax
+    % the page is the box, wherever the document's pages are moved on the
+    % paper: by \hoffset and \voffset (a class's \advance\hoffset-1in,
+    % geometry's hoffset) or by the PDF origin
+    \hoffset=0pt
+    \voffset=0pt
+    \pdfvariable horigin=0pt
+    \pdfvariable vorigin=0pt
+    \setbox\reflowtexTikzPageBox=\vbox{%
+      \offinterlineskip
+      \hbox{\copy\reflowtexTikzBox}}%
+    % shipping runs the \writes inside the picture (an \addcontentsline in a
+    % node or a box): as LaTeX's own shipout does, \protect leaves what
+    % follows it unexpanded
+    \let\protect\noexpand
+    \reflowtexPrimitiveShipout\box\reflowtexTikzPageBox
+    \directlua{Serializer.note_captured_picture(
+      \reflowtexThisPic, status.total_pages)}%
+  \endgroup
+  % PGF places a finished picture with \leavevmode (\pgfsys@typesetpicturebox),
+  % so a picture that opens a paragraph – alone, or in a center – starts the
+  % paragraph. Here that \leavevmode ran inside the capture box above, so the
+  % placeholder has to do it itself, or it would join the vertical list
+  % outside any paragraph and never reach the page.
+  \leavevmode
+  \begingroup
+    \attribute908=\reflowtexThisPic\relax
+    \setbox\reflowtexTikzBox=\hbox to \reflowtexTikzWidth{\hss}%
+    \ht\reflowtexTikzBox=\reflowtexTikzHeight
+    \dp\reflowtexTikzBox=\reflowtexTikzDepth
+    \box\reflowtexTikzBox
+  \endgroup}
+
+% nicematrix draws with PGF too, but not in one picture: every cell has a
+% small picture of its own, remembering its place on the page (remember
+% picture), and the rules (hvlines), \Block contents, dotted lines and
+% \CodeAfter's drawing are pictures placed from those positions. Captured
+% cell by cell, each would be on a page of its own and nothing could find its
+% place; left in the text, the drawing (PDF literals) is lost. So the whole
+% environment is the picture, captured like the outermost TikZ picture (a
+% TikZ picture inside it is part of it). Its positions come from the .aux,
+% as in any document: the run is repeated until they settle (lualatex.ts).
+\def\reflowtexCaptureEnvBegin{%
+  \global\advance\reflowtexTikzNesting by 1
+  \ifnum\reflowtexTikzNesting=1 \expandafter\reflowtexCaptureBegin\fi}
+\def\reflowtexCaptureEnvEnd{%
+  \global\advance\reflowtexTikzNesting by -1
+  \ifnum\reflowtexTikzNesting=0 \expandafter\reflowtexCaptureEnd\fi}
+\def\reflowtexCaptureEnvironment#1{%
+  \AddToHook{env/#1/before}{\reflowtexCaptureEnvBegin}%
+  \AddToHook{env/#1/after}{\reflowtexCaptureEnvEnd}}
+\@for\reflowtex@env:={NiceTabular,NiceTabular*,NiceTabularX,NiceArray,NiceArrayWithDelims,%
+    NiceMatrix,pNiceMatrix,bNiceMatrix,BNiceMatrix,vNiceMatrix,VNiceMatrix,%
+    pNiceArray,bNiceArray,BNiceArray,vNiceArray,VNiceArray}\do
+  {\expandafter\reflowtexCaptureEnvironment\expandafter{\reflowtex@env}}
+\makeatother

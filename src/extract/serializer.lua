@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
--- The capture side of the pipeline, loaded by template.tex into LuaTeX: every
+-- The capture side of the pipeline, loaded by the capture code (reflowtex-capture.tex) into LuaTeX: every
 -- paragraph is recorded unbroken as TeX is about to break it, every display
 -- in its finished form, and the main vertical list in document order; at the
 -- end of the run they are written to output.json (the encoder turns that into
@@ -260,7 +260,7 @@ end
 -- ── Pictures ──────────────────────────────────────────────────────────────
 -- Ordinary \includegraphics images arrive as subtype-2 rule nodes; captured
 -- TikZ drawings arrive as empty hboxes with the same metrics as the original.
--- Neither node can name its source, so template.tex stamps a document-local id
+-- Neither node can name its source, so the capture code stamps a document-local id
 -- and records the corresponding PDF/page metadata here.
 
 local PIC_ATTR    = 902
@@ -349,7 +349,7 @@ function Serializer.note_label(id, label)
     anchor_labels[id] = clean_label(label)
 end
 
--- The document's outline (template.tex, "Outline capture"): sections from
+-- The document's outline (reflowtex-capture-late.tex, "Outline capture"): sections from
 -- \addcontentsline{toc} (level 0 from TeX: the kind names it) and
 -- theorem-like environments (level 9). `anchor` is the anchor the entry's
 -- position is marked with. Titles stay TeX source here; the encoder turns
@@ -383,7 +383,7 @@ end
 -- means the main flow. Footnotes join the same table when the flow walk meets
 -- their insertions; the walk fills `content` (see walk_flow).
 local streams = {}
-local footnote_index = {}   -- template footnote id → stream index
+local footnote_index = {}   -- the capture code's footnote id → stream index
 --
 -- `attrs` is the optional argument's key=value list, as written: split on
 -- commas, each item on its first "=", both sides trimmed. A key without a
@@ -420,7 +420,7 @@ function Serializer.note_stream(id, kind, parent, attrs)
                     parent = (parent and parent > 0) and parent or nil }
 end
 
--- What TeX had in hand when it opened a display (\everydisplay, template.tex):
+-- What TeX had in hand when it opened a display (\everydisplay, reflowtex-capture-late.tex):
 -- \predisplaysize – where the line before the display ends, +2em, or
 -- -\maxdimen when the display began its paragraph – and the four display
 -- skips in force. TeX picks the full pair when the display's left edge is at
@@ -429,7 +429,7 @@ end
 local display_notes = {}
 local current_display = nil
 local display_open = false
--- \addvspace after a display (template.tex): the least space LaTeX asked for
+-- \addvspace after a display (reflowtex-capture-late.tex): the least space LaTeX asked for
 -- while the display's own below skip was the last thing on the list, by
 -- display number. The viewer takes the larger of that and the skip it sets.
 local addvspace_min = {}
@@ -458,7 +458,7 @@ function Serializer.note_display(id)
     }
     display_open = true
 end
--- The display's math group has closed (\aftergroup, template.tex): math
+-- The display's math group has closed (\aftergroup, reflowtex-capture-late.tex): math
 -- converted from here on is the text after it.
 function Serializer.note_display_end()
     display_open = false
@@ -591,7 +591,7 @@ local function parse_matrix(data)
 end
 
 -- ── Links and destinations from hyperref ─────────────────────────────────
--- template.tex wraps \ref and its relatives, \label, \url and \href, and
+-- The capture code (reflowtex-capture-late.tex) wraps \ref and its relatives, \label, \url and \href, and
 -- stamps LINK_ATTR/ANCHOR_ATTR on what they print. Everything else hyperref
 -- links – \cite, \hyperref[label]{text}, \hyperlink/\hypertarget, and what
 -- packages build on them – is caught here, from the nodes hyperref's driver
@@ -611,7 +611,7 @@ end
 -- hyperref's own name (cite.knuth, a \hypertarget's name).
 --
 -- Both get provisional negative ids while the document is read; the final
--- ones follow the template's (resolve_hyperref).
+-- ones follow the capture code's (resolve_hyperref).
 local WH_START_LINK = WH.pdf_start_link
 local WH_END_LINK   = WH.pdf_end_link
 local WH_DEST       = WH.pdf_dest
@@ -946,7 +946,7 @@ local function serialize_nodelist(head)
 
         elseif (t == "hlist" or t == "vlist")
                 and node.get_attribute(n, TIKZ_PIC_ATTR) then
-            -- template.tex replaced a completed, non-externalised TikZ box by
+            -- the capture code replaced a completed, non-externalised TikZ box by
             -- this metric-identical placeholder after shipping a copy as a
             -- private page of the job PDF. Do not descend into the empty box;
             -- join it to that page by its document-local id.
@@ -977,7 +977,7 @@ local function serialize_nodelist(head)
                 glue_sign  = n.glue_sign,
                 glue_order = n.glue_order,
                 -- \label typesets nothing, so it has no position of its own.
-                -- template.tex leaves an empty, zero-sized box where it stood;
+                -- the capture code leaves an empty, zero-sized box where it stood;
                 -- that box flows with the text through line breaking, so where
                 -- it comes to rest is where the label belongs. No special node
                 -- kind is needed – it is an ordinary box that happens to be
@@ -1830,7 +1830,7 @@ local function walk_flow(head, pending, ctx, box)
             -- list instead of a paragraph and never reaches serialize_nodelist.
             -- Emit it into the content stream, where it lands between the two
             -- items it was written between – which is exactly the position a
-            -- section label is meant to name. (The template sets it with no
+            -- section label is meant to name. (The capture code sets it with no
             -- glue and gives \prevdepth back: TeX's spacing is as without it.)
             local out = stream_out(ctx, stream_attr(n))
             out[#out + 1] = { kind = "anchorpoint",
@@ -2008,7 +2008,7 @@ local function walk_flow(head, pending, ctx, box)
         elseif t == "ins" then
             -- A footnote is not part of the pageless main stream. Retain its
             -- fully typeset paragraphs/displays as a stream of kind "footnote"
-            -- and link it to the superscript marker stamped by template.tex
+            -- and link it to the superscript marker stamped by the capture code
             -- (see remap_footnote_refs). Keeping ContentItems (rather than
             -- flattening text) preserves inline math, colours, citations, and
             -- the ordinary browser reflow machinery.
@@ -2080,7 +2080,7 @@ local function each_node(nodes, fn)
     end
 end
 
--- The footnote marker's glyphs were serialized with the template's footnote id
+-- The footnote marker's glyphs were serialized with the capture code's footnote id
 -- (attribute 906); the wire format points them at the footnote's *stream*
 -- instead, the same reference a glyph would carry for any other stream kind.
 -- A hyperref link's provisional id (negative) becomes its final one.
@@ -2130,7 +2130,7 @@ local function max_id(t)
     return n
 end
 
--- Give the links glyphs carry their final ids, after the template's; keep
+-- Give the links glyphs carry their final ids, after the capture code's; keep
 -- the destinations some link needs – one anchor per label, and none where a
 -- \label's anchor already stands – and take the others out again.
 --
@@ -2207,7 +2207,7 @@ function Serializer.flow_head()
 end
 
 -- The id-keyed tables (links, anchors, slots) are lists on the wire: an id is
--- its entry's 1-based position. The ids come from counters in template.tex and
+-- its entry's 1-based position. The ids come from counters in the capture code and
 -- reflowtex.sty and so run 1..n; a gap (a counter stepped with nothing noted)
 -- would otherwise turn the table into a map, which the encoder cannot read,
 -- so it is filled with an empty entry, and reported.

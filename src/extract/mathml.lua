@@ -2,7 +2,7 @@
 -- Which formula is which, for the MathML LaTeX writes.
 --
 -- Loaded by serializer.lua when the pipeline puts this file next to it. The
--- MathML itself is LaTeX's: with tagging on and luamml loaded (the template's
+-- MathML itself is LaTeX's: with tagging on and luamml loaded (the document's
 -- \DocumentMetadata, \tagpdfsetup{math/mathml/luamml/load=true}), LaTeX
 -- converts every formula with luamml – amsmath alignments, cases and matrices
 -- as tables, with their intents – and writes each top-level formula to
@@ -12,7 +12,7 @@
 --
 --   * an inline formula: attribute MATHML_ATTR on its begin-math node (the
 --     serializer copies it into output.json as the node's `mathml`);
---   * a display: the template's display count against the number (output.json
+--   * a display: the capture code's display count against the number (output.json
 --     `mathml`: a list of {n, display}).
 --
 -- src/pipeline/mathml.ts reads the file and puts each formula's MathML where

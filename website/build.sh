@@ -74,13 +74,13 @@ printf '{"dir": "companion/%s"}\n' "$COMPANION_V" > "$SITE/data/companion.json"
 node "$HUGO_INT/prebuild.ts" "$SITE" --demos-dir "$DEMOS" --demos-dir "$TESTMATH" --demos-dir "$BOOK" --demos-dir "$SYMBOL" ${PREBUILD_ARGS:-}
 
 # 3. testmath.tex as a pageless PDF, for the Tools page (one page as tall as
-#    the document). Rebuilt only when the document, its template or the tool
+#    the document). Rebuilt only when the document, its preamble or the tool
 #    changed.
 PL_OUT="$SITE/.reflowtex-build/pageless-testmath"
 PL_PDF="$SITE/static/pageless/testmath.pdf"
-if [ ! -f "$PL_PDF" ] || [ -n "$(find "$TESTMATH/testmath.tex" "$TESTMATH/template.tex" "$PAGELESS" \
+if [ ! -f "$PL_PDF" ] || [ -n "$(find "$TESTMATH/testmath.tex" "$TESTMATH/preamble.tex" "$PAGELESS" \
       "$REPO/src/extract/serializer.lua" -newer "$PL_PDF" -type f 2>/dev/null | head -1)" ]; then
-  node "$PAGELESS/pageless.ts" "$TESTMATH/testmath.tex" --template "$TESTMATH/template.tex" \
+  node "$PAGELESS/pageless.ts" "$TESTMATH/testmath.tex" --preamble "$TESTMATH/preamble.tex" --document-metadata tagging=on \
       --passes 3 -o "$PL_OUT"
   mkdir -p "$(dirname "$PL_PDF")"
   cp "$PL_OUT/pageless.pdf" "$PL_PDF"
