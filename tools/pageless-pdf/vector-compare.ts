@@ -49,15 +49,20 @@ function notdefFonts(doc: mupdf.Document): Set<string> {
   return names;
 }
 
+/** A glyph of the strip's, beside its origin: its text (where the PDF maps it
+ *  to a character), its advance and its size (pt), as the viewer's are given. */
+export interface StripGlyph { text: string; w: number; size: number }
+
 /** The strip's glyph origins (pt, y down; a ligature's text-only characters
- *  left out) and its rules as four corners each. A font's .notdef is left
- *  out too: what the PDF shows for a character the font lacks (luaotfload
- *  sets it after each one TeX reports missing), it is no character's glyph,
- *  and the page draws nothing there. */
-export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
-  const doc = mupdf.Document.openDocument(readFileSync(pdf), 'application/pdf');
+ *  left out), each glyph's text, advance and size (`info`, in the same
+ *  order), and its rules as four corners each. A font's .notdef is left out
+ *  too: what the PDF shows for a character the font lacks (luaotfload sets it
+ *  after each one TeX reports missing), it is no character's glyph, and the
+ *  page draws nothing there. */
+export function traceStrip(pdf: string | Uint8Array): { glyphs: Pt[]; info: StripGlyph[]; rules: Pt[][] } {
+  const doc = mupdf.Document.openDocument(typeof pdf === 'string' ? readFileSync(pdf) : pdf, 'application/pdf');
   const page = doc.loadPage(0), notdef = notdefFonts(doc);
-  const glyphs: Pt[] = [], rules: Pt[][] = [];
+  const glyphs: Pt[] = [], info: StripGlyph[] = [], rules: Pt[][] = [];
   // the device's matrix (bp, y down) taken on to pt
   const toPt = (m: mupdf.Matrix): Affine => m.map(v => v * PT_PER_BP) as Affine;
   const outline = (path: mupdf.Path) => { const o = new Outline(); path.walk(o); return o; };
@@ -65,9 +70,13 @@ export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
     fillText(text: mupdf.Text, ctm: mupdf.Matrix) {
       const m = toPt(ctm);
       text.walk({
-        showGlyph(font: mupdf.Font, trm: mupdf.Matrix, gid: number) {
+        showGlyph(font: mupdf.Font, trm: mupdf.Matrix, gid: number, unicode: number) {
           if (gid < 0 || (gid === 0 && notdef.has(font.getName()))) return;
           glyphs.push([m[0] * trm[4] + m[2] * trm[5] + m[4], m[1] * trm[4] + m[3] * trm[5] + m[5]]);
+          // the text matrix's columns, through the device's, are the glyph's em across and up (pt)
+          const len = (a: number, b: number) => Math.hypot(m[0] * a + m[2] * b, m[1] * a + m[3] * b);
+          info.push({ text: unicode > 0 && unicode <= 0x10ffff ? String.fromCodePoint(unicode) : '',
+                      w: font.advanceGlyph(gid, 0) * len(trm[0], trm[1]), size: len(trm[2], trm[3]) });
         },
       });
     },
@@ -86,7 +95,7 @@ export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
   });
   page.run(device, mupdf.Matrix.identity);
   device.close();
-  return { glyphs, rules };
+  return { glyphs, info, rules };
 }
 
 /** The strip as SVG: MuPDF's drawing of it, vectors throughout (text as its
@@ -102,6 +111,13 @@ export function stripSvg(pdf: string): string {
   writer.close();
   const px = (bp: number) => (bp * PT_PER_BP * 2).toFixed(3);
   return buf.asString().replace(/(<svg\b[^>]*?) width="[^"]*" height="[^"]*"/, `$1 width="${px(x1 - x0)}" height="${px(y1 - y0)}"`);
+}
+
+/** A glyph of TeX's in vector.json (one no browser glyph took): where it is,
+ *  and what and how large, as the browser's glyphs are recorded, so that the
+ *  report boxes it as large as it is. */
+export function stripRecord(p: Pt, g: StripGlyph): { y: number; x: number; text: string; w: number; size: number } {
+  return { y: round(p[1], 2), x: round(p[0], 2), text: g.text, w: round(g.w, 2), size: round(g.size, 2) };
 }
 
 // ── numpy's few operations ──────────────────────────────────────────────────
@@ -129,7 +145,7 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
   const out = o.out ?? join(dirname(pdf), 'vector');
   mkdirSync(out, { recursive: true });
 
-  const { glyphs: P, rules } = traceStrip(pdf);
+  const { glyphs: P, info: PI, rules } = traceStrip(pdf);
   const dom: Dom = await dumpDom(url, { hsize, margin, waitLog: o.waitLog, screenshot: o.images ? join(out, 'viewer.png') : undefined });
   if (o.images) writeFileSync(join(out, 'strip.svg'), stripSvg(pdf));
   writeFileSync(join(out, 'dom.json'), JSON.stringify(dom));
@@ -234,11 +250,15 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
     glyphs: { strip: P.length, viewer: nInk, matched: matched.length },
     vertical: { mean: round(mean(dys), 4), sd: round(std(dys), 4), max_abs: round(Math.max(...dys.map(Math.abs)), 4), drift_per_250pt: drift },
     lines: table, lines_off: off, rules: ruleRows, rules_missing: missing,
-    matched: matched.map(([j, , dx, dy]) => ({ y: round(G[j].y, 2), x: round(D[j][0], 2), text: G[j].text, font: G[j].font, w: round(G[j].w, 2), size: round(G[j].size, 2), dx: round(dx, 3), dy: round(dy, 3) })),
+    // (tw, ts: TeX's glyph's advance and size, where they differ from the browser's enough to show in a box: the
+    // browser's w is its glyph's ink, TeX's its advance, a few hundredths apart for most)
+    matched: matched.map(([j, i, dx, dy]) => ({ y: round(G[j].y, 2), x: round(D[j][0], 2), text: G[j].text, font: G[j].font, w: round(G[j].w, 2), size: round(G[j].size, 2), dx: round(dx, 3), dy: round(dy, 3),
+      ...(Math.abs(PI[i].w - G[j].w) > 0.5 ? { tw: round(PI[i].w, 2) } : {}), ...(Math.abs(PI[i].size - G[j].size) > 0.1 ? { ts: round(PI[i].size, 2) } : {}) })),
     // what has no partner: the browser's glyphs with no glyph of TeX's near, and TeX's no browser glyph took
     viewer_unmatched: G.map((g, j) => [g, j] as const).filter(([g, j]) => g.text.trim() && !takenViewer.has(j))
       .map(([g, j]) => ({ y: round(g.y, 2), x: round(D[j][0], 2), text: g.text, w: round(g.w, 2), size: round(g.size, 2) })),
-    strip_unmatched: P.map((p, i) => [p, i] as const).filter(([, i]) => !takenStrip.has(i)).map(([p]) => ({ x: round(p[0], 2), y: round(p[1], 2) })),
+    strip_unmatched: P.map((p, i) => [p, i] as const).filter(([, i]) => !takenStrip.has(i))
+      .map(([p, i]) => stripRecord(p, PI[i])),
   };
   writeFileSync(join(out, 'vector.json'), JSON.stringify(result, null, 1));
   log(`→ ${join(out, 'vector.json')}`);
