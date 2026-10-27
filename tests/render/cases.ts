@@ -112,10 +112,15 @@ export const cases: Record<string, CaseSettings> = {
   // here). against_plain checks the compile itself. Worst attained 2026-10-25.
   'label-anchors': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.002 },
   // ae's T1 text through virtual fonts, accented letters built from two
-  // glyphs: the lines' interword spacing drifts as in other 8-bit T1 text
-  // (the same paragraph in lmodern's T1 fonts reaches 0.21). Worst attained
-  // 2026-10-25.
-  'virtual-fonts': { tolerance: 0.082 },
+  // glyphs. Worst attained 2026-10-27 (0.082 until then, when the strip's
+  // Type 1 glyphs were read by MuPDF's whole-number widths: see type1-text).
+  'virtual-fonts': { tolerance: 0.009 },
+  // Long justified lines in T1 Latin Modern, whose widths are no whole
+  // thousandths of an em, against the same text in OpenType. The strip's
+  // glyphs used to be read by MuPDF's whole-number widths, which put TeX's own
+  // lines past the margin by up to 0.19 pt at their ends while the browser's
+  // were exact. Worst attained 2026-10-27.
+  'type1-text': { tolerance: 0.010 },
   // Lines with nothing visible, as in real papers: a display followed by an
   // empty box, a \write, a \medskip or a label at an item's end, blank lines
   // in verbatim, a label left alone after a box as wide as the text. Each was
@@ -142,10 +147,9 @@ export const cases: Record<string, CaseSettings> = {
   // reports them missing and draws nothing (OpenType: the font's empty
   // .notdef); the page was refused, as no served font could draw them, and
   // the converted T1 font would have drawn its own ł. One page, so
-  // against_plain too. The worst glyphs are in the T1 paragraphs, as in other
-  // 8-bit T1 text (see virtual-fonts); the OpenType one is within 0.009.
-  // Worst attained 2026-10-26.
-  'missing-chars': { against_plain: true, tolerance: 0.180 },
+  // against_plain too. Worst attained 2026-10-27 (0.180 until then, in the T1
+  // paragraphs: see type1-text).
+  'missing-chars': { against_plain: true, tolerance: 0.010 },
   // The same under hyperref, whose \caption leaves its anchor alone on a line
   // after a display (28.6 pt lost) or after a full-width box and a line end
   // (12 pt): floats, so not against plain. Worst attained 2026-10-25.

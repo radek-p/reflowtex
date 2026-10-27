@@ -6,9 +6,9 @@
 //                                               [--window PT] [--line-tol PT] [--wait-log TEXT]
 //
 // No pixels. MuPDF (in WebAssembly) reads every glyph LuaTeX wrote into the
-// strip with its origin, and dom-dump.ts every glyph the viewer put on the page
-// (tspan x/y) in the same frame: pt from the column's margin edge, pt from the
-// top. Each viewer glyph is matched to the nearest strip glyph (within
+// strip with its origin (by each font's widths as written: traceStrip), and
+// dom-dump.ts every glyph the viewer put on the page (tspan x/y) in the same
+// frame: pt from the column's margin edge, pt from the top. Each viewer glyph is matched to the nearest strip glyph (within
 // --window; no character matching: a CM glyph's text differs between the two),
 // and the residuals say where the viewer's geometry departs from TeX's, to a
 // hundredth of a point:
@@ -49,43 +49,87 @@ function notdefFonts(doc: mupdf.Document): Set<string> {
   return names;
 }
 
+/** How much finer than its widths a simple font's widths are read: see
+ *  traceStrip. */
+const WIDTH_SCALE = 1000;
+
+/** The PDF opened with every simple font's widths (/Widths, a Type 1, TrueType
+ *  or Type 3 font's) times `k`. */
+function withWidths(bytes: Buffer, k: number): mupdf.Document {
+  const doc = mupdf.Document.openDocument(bytes, 'application/pdf'), pdf = doc.asPDF();
+  const done = new Set<number>();      // an array that two fonts share is scaled once
+  if (pdf) for (let i = 1; i < pdf.countObjects(); i++) {
+    const o = pdf.newIndirect(i).resolve();
+    if (!o.isDictionary()) continue;
+    const w = o.get('Widths');
+    if (!w.isArray()) continue;
+    if (w.isIndirect()) { if (done.has(w.asIndirect())) continue; done.add(w.asIndirect()); }
+    const a = w.resolve();
+    for (let j = 0; j < a.length; j++) a.put(j, a.get(j).asNumber() * k);
+  }
+  return doc;
+}
+
 /** The strip's glyph origins (pt, y down; a ligature's text-only characters
  *  left out) and its rules as four corners each. A font's .notdef is left
  *  out too: what the PDF shows for a character the font lacks (luaotfload
  *  sets it after each one TeX reports missing), it is no character's glyph,
- *  and the page draws nothing there. */
+ *  and the page draws nothing there.
+ *
+ *  MuPDF keeps a simple font's widths as whole thousandths of an em, and moves
+ *  the pen by them; LuaTeX writes them to a tenth (a TFM width: 444.5 for
+ *  Latin Modern's e) and places each glyph by the exact one. Read as they are,
+ *  a line of a Type 1 font gains up to half a thousandth of an em at each
+ *  glyph, 0.1 to 0.3 pt by its end. A glyph's origin is affine in the widths
+ *  before it, so the strip is read twice: with every width 0, where the pen
+ *  moves alone put each glyph, and with every width WIDTH_SCALE times its own,
+ *  whole and exact; the origin with the widths as written is the first plus
+ *  1/WIDTH_SCALE of the way to the second. */
 export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
-  const doc = mupdf.Document.openDocument(readFileSync(pdf), 'application/pdf');
-  const page = doc.loadPage(0), notdef = notdefFonts(doc);
-  const glyphs: Pt[] = [], rules: Pt[][] = [];
+  const bytes = readFileSync(pdf);
+  const moves = withWidths(bytes, 0), scaled = withWidths(bytes, WIDTH_SCALE), notdef = notdefFonts(moves);
+  const rules: Pt[][] = [];
   // the device's matrix (bp, y down) taken on to pt
   const toPt = (m: mupdf.Matrix): Affine => m.map(v => v * PT_PER_BP) as Affine;
   const outline = (path: mupdf.Path) => { const o = new Outline(); path.walk(o); return o; };
-  const device = new mupdf.Device({
-    fillText(text: mupdf.Text, ctm: mupdf.Matrix) {
-      const m = toPt(ctm);
-      text.walk({
-        showGlyph(font: mupdf.Font, trm: mupdf.Matrix, gid: number) {
-          if (gid < 0 || (gid === 0 && notdef.has(font.getName()))) return;
-          glyphs.push([m[0] * trm[4] + m[2] * trm[5] + m[4], m[1] * trm[4] + m[3] * trm[5] + m[5]]);
-        },
-      });
-    },
-    // LuaTeX strokes a rule along its centre line, lw thick, under \rotatebox
-    // through a rotating transform; a picture's straight lines and
-    // four-cornered fills are the same shapes, and count as the viewer's do
-    // (shapes.ts).
-    strokePath(path: mupdf.Path, stroke: mupdf.StrokeState, ctm: mupdf.Matrix) {
-      const r = strokedRule(outline(path), stroke.getLineWidth(), stroke.getLineCap() !== 0, toPt(ctm));
-      if (r) rules.push(r);
-    },
-    fillPath(path: mupdf.Path, _evenOdd: boolean, ctm: mupdf.Matrix) {
-      const r = filledRule(outline(path), toPt(ctm));
-      if (r) rules.push(r);
-    },
+  // every glyph shown, in order, and whether it is one to count
+  const trace = (doc: mupdf.Document, shapes: boolean): { at: Pt; counted: boolean }[] => {
+    const shown: { at: Pt; counted: boolean }[] = [];
+    const device = new mupdf.Device({
+      fillText(text: mupdf.Text, ctm: mupdf.Matrix) {
+        const m = toPt(ctm);
+        text.walk({
+          showGlyph(font: mupdf.Font, trm: mupdf.Matrix, gid: number) {
+            shown.push({ at: [m[0] * trm[4] + m[2] * trm[5] + m[4], m[1] * trm[4] + m[3] * trm[5] + m[5]],
+                         counted: !(gid < 0 || (gid === 0 && notdef.has(font.getName()))) });
+          },
+        });
+      },
+      // LuaTeX strokes a rule along its centre line, lw thick, under \rotatebox
+      // through a rotating transform; a picture's straight lines and
+      // four-cornered fills are the same shapes, and count as the viewer's do
+      // (shapes.ts).
+      strokePath(path: mupdf.Path, stroke: mupdf.StrokeState, ctm: mupdf.Matrix) {
+        if (!shapes) return;
+        const r = strokedRule(outline(path), stroke.getLineWidth(), stroke.getLineCap() !== 0, toPt(ctm));
+        if (r) rules.push(r);
+      },
+      fillPath(path: mupdf.Path, _evenOdd: boolean, ctm: mupdf.Matrix) {
+        if (!shapes) return;
+        const r = filledRule(outline(path), toPt(ctm));
+        if (r) rules.push(r);
+      },
+    });
+    doc.loadPage(0).run(device, mupdf.Matrix.identity);
+    device.close();
+    return shown;
+  };
+  const at0 = trace(moves, true), atK = trace(scaled, false);
+  if (at0.length !== atK.length) throw new Error(`${pdf}: ${at0.length} glyphs, but ${atK.length} with its widths scaled`);
+  const glyphs = at0.flatMap(({ at: [x, y], counted }, i): Pt[] => {
+    const [xk, yk] = atK[i].at;
+    return counted ? [[x + (xk - x) / WIDTH_SCALE, y + (yk - y) / WIDTH_SCALE]] : [];
   });
-  page.run(device, mupdf.Matrix.identity);
-  device.close();
   return { glyphs, rules };
 }
 

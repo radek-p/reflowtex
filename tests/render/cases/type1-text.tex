@@ -1,0 +1,33 @@
+% Long justified lines in Type 1 fonts, as in real papers: T1 Latin Modern,
+% whose widths are no whole thousandths of an em (e is 444.45), roman, italic,
+% bold and small, and the same text in Latin Modern's OpenType fonts. Each
+% glyph is where TeX put it, to the end of every line.
+\documentclass{article}
+\usepackage[T1,TU]{fontenc}
+\usepackage{lmodern}
+\begin{document}
+\fontencoding{T1}\selectfont
+Vlasov equations arise in various applications, including the social sciences,
+biology, and plasma physics; specifically, the equation appears in models for
+muscle contraction and finance, and in particle-in-cell methods for the
+numerical solution of kinetic equations. We note that our results extend to
+time-dependent coefficients without much change, and that the constants in the
+estimates depend only on the Lipschitz constants of the coefficients.
+
+\textit{In italic: the estimates of the previous section are uniform in the
+mesh size, so the scheme converges at the rate the regularity of the solution
+allows, and the constants depend only on the bounds assumed for the
+coefficients and on the final time.} \textbf{In bold: the main theorem holds
+for every finite time interval, and its proof uses nothing beyond Gronwall's
+inequality and a careful count of the terms in the expansion.}
+
+{\small A smaller size has other widths again: the harmonic series diverges,
+though very slowly, its partial sums growing like the logarithm of the number
+of terms, while its terms tend to zero, which is not enough for convergence.\par}
+
+\fontencoding{TU}\selectfont
+The same words in OpenType: Vlasov equations arise in various applications,
+including the social sciences, biology, and plasma physics; specifically, the
+equation appears in models for muscle contraction and finance, and in
+particle-in-cell methods for the numerical solution of kinetic equations.
+\end{document}
