@@ -1,0 +1,30 @@
+% Space asked for inside a paragraph: \\[len], \vspace and \smallskip mid-paragraph, \vadjust pre, and a box and a rule in a \vadjust. TeX puts it below (or above) the line it ends up in.
+\documentclass{article}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+Case A, plain text: the first line of the paragraph.\\[4pt]
+The second line, after a newline with four points.\\
+The third line, after a plain newline.\\[10pt]
+The fourth line, after a newline with ten points, and some more words so that it runs on.
+
+Case B, in a quote:
+\begin{quote}\small\ttfamily
+The first line of the quote.\\[4pt]
+The second line, after 4pt.\\
+The third line.\\[4pt]
+The fourth line, after 4pt.
+\end{quote}
+Case C, space in the middle of a paragraph: a sentence long enough to fill most of a line or two of the text.
+\vspace{6pt} And after the vspace another sentence, which the space goes below the line of. Then a few more words
+follow so that the paragraph has lines to break at every width. A lemma states something.\smallskip{} Its next
+sentence comes after a small skip, as in real papers, and the paragraph goes on for another line or so.
+
+Case D, space above a line: a paragraph with words enough to fill two lines of the text at every width it is set at,
+and here\vadjust pre{\vskip 5pt} the line this word is on gets five points above it. It goes on a little further.
+
+Case E, material that draws: words enough for a line or two at every width, and then a box\vadjust{\kern2pt\hbox{\itshape set below the line this word ends up in}}
+goes below this line, and here a rule\vadjust{\kern3pt\hrule\kern3pt} across the whole column below its line. And a box\vadjust pre{\hbox{\itshape set above the line}} goes above this line, and the paragraph goes on.
+
+The end, a plain paragraph after all of them.
+\end{document}

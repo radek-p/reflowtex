@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { SP_TO_PX, useGlyphMetrics } from '../engine/core.ts';
-import { paintCount } from '../engine/paint.ts';
+import { paintAdjusts, paintCount } from '../engine/paint.ts';
 import { renderNodes } from '../engine/render.ts';
 import { blockData } from '../runtime/blocks.ts';
 import { api } from '../runtime/page.ts';
@@ -133,6 +133,7 @@ export function replaySegment(fontInfo: BlockData['fontInfo'], cache: LayoutCach
         if (sink.line) sink.line(j, L.lines[j], x0, L.baselineYs![j]);
         renderNodes(fontInfo, s, L.lines[j].nodes, x0, L.baselineYs![j],
                     fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+        paintAdjusts(fontInfo, s, L, j, cache.layoutCtx?.columnPx ?? L.W);
     }
     return true;
 }

@@ -72,6 +72,9 @@ export interface LinePlacement { ratio: number; er: number; x0: number; fillRati
  *  TeX set the glue above it from where that is not the line above's
  *  (prevDepth; -Infinity: no glue, TeX's \prevdepth of -1000pt). */
 export interface LineMeta { bskip: number; lskip: number; lskiplimit: number; prevDepth?: number }
+/** The space a line's \vadjust material takes (px): above the line (\vadjust
+ *  pre) and below it. */
+export interface LineAdjust { above: number; below: number }
 /** A glyph's or box's extent on a line (px), for collision leading. */
 export interface InkItem { x1: number; x2: number; h: number; d: number }
 /** TeX's \predisplaysize from a line (sp) and the quad of its font. */
@@ -84,6 +87,8 @@ export interface SegmentGeometry {
     lrp: LinePlacement[];
     meta?: (LineMeta | null)[];
     gaps?: number[];
+    /** Each line's \vadjust space, where any line of a text segment has one. */
+    adjust?: LineAdjust[];
     itemStarts?: number[];
     W: number;
     /** A display's: the width its boxes need (layoutDisplaySegment), which
@@ -112,6 +117,8 @@ export interface SegmentLayout {
     meta?: (LineMeta | null)[];
     /** An alignment's own space between its rows (px). */
     gaps?: number[];
+    /** Each line's \vadjust space (px), when there is any. */
+    adjust?: LineAdjust[];
     /** The first line of each paragraph. */
     itemStarts?: number[];
     profiles?: InkItem[][];

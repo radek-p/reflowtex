@@ -15,8 +15,9 @@ import { Log } from '../../src/shared/log.ts';
 import { messageType } from '../../src/pipeline/schema.ts';
 
 type Node = { type: string; char?: number; font?: number; color?: string; link?: number; stream?: number; mathml?: unknown;
-              width?: number; children?: Node[]; replace?: Node[]; pre?: Node[]; post?: Node[] };
-type Item = { kind: string; para?: number; box?: Node; mathml?: unknown;
+              width?: number; height?: number; depth?: number; kern?: number; subtype?: number;
+              children?: Node[]; replace?: Node[]; pre?: Node[]; post?: Node[] };
+type Item = { kind: string; para?: number; box?: Node; mathml?: unknown; amount?: number;
               display_used_above?: number; display_used_below?: number; display_below?: number };
 type Output = { fonts: Record<string, unknown>; paragraphs: { nodes: Node[] }[]; content: Item[];
                 links: { label?: string; url?: string }[]; anchors: string[]; slots: unknown[];
@@ -144,6 +145,25 @@ test('a rule and a box in vertical mode are kept', async () => {
 test('an empty box in vertical mode adds nothing', async () => {
   const d = await capture('A.\n\n\\hbox{}\n\nB.');
   assert.deepEqual(d.content.filter(it => it.kind !== 'vspace').map(it => it.kind), ['paragraph', 'paragraph']);
+});
+
+// \\[len], and \vspace or \smallskip inside a paragraph, put their space in a
+// \vadjust: TeX sets it beside the line the node lands in, so the paragraph
+// carries it, and the space between items does not have it a second time.
+test('a \\vadjust is kept in its paragraph, with its height and what it draws', async () => {
+  const d = await capture(['First line.\\\\[4pt]', 'Second\\vadjust pre{\\vskip 5pt} line\\smallskip{} and',
+                           'a box\\vadjust{\\kern2pt\\hbox{Boxed.}} below, and nothing\\vadjust{}.', '', 'Next paragraph.'].join('\n'));
+  const pt = 65536;
+  const adjusts = d.paragraphs[0].nodes.filter(n => n.type === 'adjust');
+  assert.deepEqual(adjusts.map(n => [n.subtype ?? 0, n.height]), [[0, 4 * pt], [1, 5 * pt], [0, 3 * pt], [0, adjusts[3].height], [0, 0]]);
+  const [kern, box] = adjusts[3].children!;
+  assert.equal(kern.kern, 2 * pt);
+  assert.equal(glyphText([box]), 'Boxed.');
+  assert.equal(adjusts[3].height, 2 * pt + box.height! + box.depth!);
+  assert.ok([0, 1, 2, 4].every(i => !adjusts[i].children), 'space alone has no list');
+  // nothing of it between the two paragraphs: no box, and only \parskip
+  assert.deepEqual(d.content.filter(it => it.kind !== 'vspace').map(it => it.kind), ['paragraph', 'paragraph']);
+  assert.deepEqual(d.content.filter(it => it.kind === 'vspace').map(it => it.amount ?? 0).filter(a => a !== 0), []);
 });
 
 test('multicols text is not kept twice', async () => {

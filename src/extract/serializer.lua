@@ -285,6 +285,9 @@ local ASIDE_MARK_ATTR    = 915 -- the empty box a \webaside leaves where it stoo
 -- A \webid / \webclass (reflowtex.sty): every glyph typeset inside carries
 -- the mark's number (the innermost; its classes include the outer ones').
 local MARK_ATTR          = 916
+-- The vertical material of a paragraph's \vadjust (see "adjust" below), on
+-- every node of its list: the paragraph's number.
+local VADJUST_ATTR       = 917
 -- MathML (mathml.lua, when the pipeline put it here): an inline formula's
 -- number in LaTeX's MathML file, on its begin-math node; each display's.
 local MathML = lfs.isfile("mathml.lua") and dofile("mathml.lua") or nil
@@ -570,6 +573,7 @@ local RULE_ID       = node.id("rule")
 local GLUE_ID       = node.id("glue")
 local PENALTY_ID    = node.id("penalty")
 local HLIST_ID      = node.id("hlist")
+local ADJUST_ID     = node.id("adjust")
 
 
 -- ── Colour set between paragraphs ─────────────────────────────────────────
@@ -1000,6 +1004,34 @@ local function serialize_nodelist(head)
                 mathml   = MathML and n.subtype == 0 and node.get_attribute(n, MathML.ATTR) or nil,
             }
 
+        elseif t == "adjust" then
+            -- \vadjust: vertical material TeX takes out of the line the node
+            -- ends up in and sets below that line (\vadjust pre: above it),
+            -- with the interline glue to the next line still taken from the
+            -- line's depth – LaTeX's \\[len], and \vspace or \smallskip
+            -- inside a paragraph. The browser breaks the lines again, so the
+            -- node keeps what it carries: its height, the glue, kerns and
+            -- boxes of its list at their natural size, and the list itself
+            -- when it has something to draw. Subtype 1 is \vadjust pre.
+            local h, draws = 0, false
+            local m = n.head
+            while m do
+                local mt = node.type(m.id)
+                if mt == "glue" then h = h + m.width
+                elseif mt == "kern" then h = h + m.kern
+                elseif mt == "hlist" or mt == "vlist" or mt == "rule" then
+                    h = h + m.height + m.depth
+                    draws = true
+                end
+                m = m.next
+            end
+            cur[#cur + 1] = {
+                type     = "adjust",
+                subtype  = n.subtype,
+                height   = h,
+                children = draws and serialize_nodelist(n.head) or nil,
+            }
+
         else
             cur[#cur + 1] = { type = t }
         end
@@ -1038,6 +1070,18 @@ local function stamp(head, idx)
         if t == "hlist" or t == "vlist" then stamp(n.head, idx)
         elseif t == "disc" then
             stamp(n.pre, idx); stamp(n.post, idx); stamp(n.replace, idx)
+        end
+    end
+end
+
+-- A \vadjust's list is set apart from the paragraph's lines: TeX moves it
+-- onto the vertical list beside the line the node lands in, and the walk of
+-- that list leaves it to the paragraph (see carried_by_line). Only those at
+-- the paragraph's top level move; one inside a box stays in the box.
+local function mark_adjusts(head, idx)
+    for n in node.traverse_id(ADJUST_ID, head) do
+        if n.head then
+            for m in node.traverse(n.head) do node.set_attribute(m, VADJUST_ATTR, idx) end
         end
     end
 end
@@ -1178,6 +1222,7 @@ local function capture_paragraph(head, groupcode)
     end
     if colors then restore_colors(colors) end
     stamp(head, idx)
+    mark_adjusts(head, idx)
     -- The captured copy above already holds every \label marker at its exact
     -- position, so the markers have done their job and are now taken back out
     -- of the list TeX is about to break. They are boxes, and a box interrupts
@@ -1831,13 +1876,25 @@ local function stack_blank(n, t, pending)
     box_depth = (t == "rule") and IGNORE_DEPTH or (n.depth or 0)
 end
 
+-- Vertical material of a \vadjust in a paragraph the viewer sets: the
+-- paragraph's adjust node carries it, and the viewer puts it beside the line
+-- the node lands in at its width, so it is no part of the space between
+-- items. A paragraph with nothing visible is no item, and its material stays
+-- in the gap like any other (the \vadjust of a \medskip after a display).
+local function carried_by_line(n)
+    local p = node.get_attribute(n, VADJUST_ATTR)
+    return p ~= nil and all_paragraphs[p] ~= nil and has_visible_nodes(all_paragraphs[p].nodes)
+end
+
 -- `box`: the box whose list `head` is, when the walk went into one (its glue
 -- setting applies to the glue in it).
 local function walk_flow(head, pending, ctx, box)
     ctx = ctx or { out = content, base = nil }
     for n in node.traverse(head) do
         local t = node.type(n.id)
-        if (t == "hlist" or t == "vlist") and node.get_attribute(n, ANCHOR_ATTR) then
+        if carried_by_line(n) then
+            -- (left out: see carried_by_line)
+        elseif (t == "hlist" or t == "vlist") and node.get_attribute(n, ANCHOR_ATTR) then
             -- A \label written straight after \sectioning (the usual place) is
             -- executed in vertical mode, so its marker box joins the vertical
             -- list instead of a paragraph and never reaches serialize_nodelist.

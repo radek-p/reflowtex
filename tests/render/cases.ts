@@ -164,6 +164,13 @@ export const cases: Record<string, CaseSettings> = {
   // keeps it where TeX set it at the document's width.
   'eq-tag-own-line-reflow': { file: 'tests/render/cases/eq-tag-own-line.tex', widths: [-100, 85], tolerance: 0.010,
     known: 'an equation number keeps its own line, or its place beside the formula, at every width' },
+  // Space asked for inside a paragraph, as in real papers: \\[len], \vspace and
+  // \smallskip between two sentences, \vadjust pre, and a box and a rule in
+  // a \vadjust. TeX sets it below (or above) the line the request ends up in;
+  // the browser dropped the space, set the next line at the plain
+  // baselineskip and drew a box or rule in it after the paragraph (over 900
+  // glyphs more than 0.7 pt from TeX's). Worst attained 2026-10-27.
+  'newline-skip': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.002 },
   // Characters typed raw that the font has no glyph for, as in real papers: ł,
   // Ł, ź and ﬀ in a T1 font, box drawing in Latin Modern OpenType. TeX
   // reports them missing and draws nothing (OpenType: the font's empty

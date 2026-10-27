@@ -87,7 +87,7 @@ export function extentOf(g: Geometry, n: TexNode): { h: number; d: number } | nu
             return { h: (n.height || 0) * k, d: (n.depth || 0) * k };
         case 'picture': case 'widget':
             return { h: (n.height || 0) * k, d: (n.depth || 0) * k };
-        case 'glue': case 'kern': case 'penalty': case 'math': case 'disc': case 'wdisc': case 'transform': case 'local_par':
+        case 'glue': case 'kern': case 'penalty': case 'math': case 'disc': case 'wdisc': case 'transform': case 'adjust': case 'local_par':
             return null;
         default: return unreachable(n, 'node');
     }

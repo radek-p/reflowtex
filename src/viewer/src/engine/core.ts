@@ -141,7 +141,7 @@ export function nodeWidthSp(n: TexNode): number {
         // A rule in a line is a \vrule: its width is set (a running one's
         // is none), its height and depth run to the line's.
         case 'rule':                return n.width === RUNNING_RULE ? 0 : n.width;
-        case 'penalty': case 'local_par': return 0;
+        case 'penalty': case 'adjust': case 'local_par': return 0;
         default:                    return unreachable(n, 'node');
     }
 }

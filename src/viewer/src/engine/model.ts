@@ -150,6 +150,13 @@ export interface TransformNode extends NodeFields {
     type: 'transform';
     children: TexNode[];
 }
+/** \vadjust: vertical space (and boxes) set below the line the node ends up
+ *  in, or above it (subtype 1, \vadjust pre). height: its natural height
+ *  (sp); children: its list as a vertical list, when it draws something. */
+export interface AdjustNode extends NodeFields {
+    type: 'adjust';
+    height: number;
+}
 /** A node kind a serializer's raw output may still hold (a test harness
  *  feeding output.json to the layout); the encoder never writes one. */
 export interface LocalParNode extends NodeFields {
@@ -197,7 +204,7 @@ export interface WidgetDiscNode extends NodeFields {
 
 export type TexNode =
     | GlyphNode | GlueNode | KernNode | RuleNode | BoxNode | DiscNode | PenaltyNode
-    | MathNode | PictureNode | TransformNode | LocalParNode | WidgetNode | WidgetDiscNode;
+    | MathNode | PictureNode | TransformNode | AdjustNode | LocalParNode | WidgetNode | WidgetDiscNode;
 export type NodeType = TexNode['type'];
 
 // ── The document ───────────────────────────────────────────────────────────

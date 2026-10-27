@@ -45,12 +45,13 @@ interface Active { demerits: number; prev_j: number; prev_fc: number; hyphenated
 // ── Protrusion ────────────────────────────────────────────────────────────────
 
 // What LuaTeX steps over looking for the character at a line's edge
-// (cp_skipable): penalties, empty glue, a font kern or an empty one, a math
-// node without surround, an empty discretionary. An italic correction or an
-// explicit kern stops the search, so the character before it does not hang.
+// (cp_skipable): penalties, a \vadjust, empty glue, a font kern or an empty
+// one, a math node without surround, an empty discretionary. An italic
+// correction or an explicit kern stops the search, so the character before
+// it does not hang.
 export function protSkipable(n: TexNode): boolean {
     switch (n.type) {
-        case 'penalty': case 'local_par': return true;
+        case 'penalty': case 'adjust': case 'local_par': return true;
         case 'glue':    return !n.width && !n.stretch && !n.shrink;
         case 'kern':    return !n.kern || (n.subtype || 0) === 0;
         case 'math':    return !n.surround;
@@ -194,9 +195,9 @@ export function paragraphExpansion(fontInfo: FontTable, nodes: TexNode[]): Expan
 
 // ── Knuth-Plass: break candidates ────────────────────────────────────────────
 
-// Nodes after which glue is a legal breakpoint (TeX's precedes_break, plus
-// the viewer's own drawn-box kinds).
-export const PRECEDES_BREAK = new Set<string>(['glyph', 'hlist', 'vlist', 'rule', 'disc', 'wdisc', 'picture', 'widget', 'transform']);
+// Nodes after which glue is a legal breakpoint (TeX's precedes_break, which
+// a \vadjust is in, plus the viewer's own drawn-box kinds).
+export const PRECEDES_BREAK = new Set<string>(['glyph', 'hlist', 'vlist', 'rule', 'disc', 'wdisc', 'picture', 'widget', 'transform', 'adjust']);
 
 // Every candidate carries the running totals up to its node: natural width
 // (cumW), finite stretch and shrink (cumS, cumZ), infinite fills (cumFill:

@@ -102,6 +102,7 @@ export function xmlNode(n: TexNode, at: Map<TexNode, Pen> | null | undefined, in
             return;
         }
         case 'glyph': out.push(`${ind}<t${attrs([['f', n.font], ['color', n.color]])}>${esc(drawnText(n))}</t>`); return;
+        case 'adjust': out.push(`${ind}<vadjust${attrs([['pre', n.subtype === 1 ? 1 : null], ['h', num(n.height || 0)]])}/>`); return;
         case 'local_par': out.push(`${ind}<local_par/>`); return;
         default: unreachable(n, 'node');
     }

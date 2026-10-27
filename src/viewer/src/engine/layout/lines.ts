@@ -44,7 +44,7 @@ export function lineProfile(fontInfo: FontTable, nodes: TexNode[], xStart: numbe
                 // turned content, so the ink is that box's; its children
                 // advance the pen as they did before they were grouped.
                 case 'transform': x+=sumWidthSp(n.children)*SP_TO_PX; break;
-                case 'penalty': case 'local_par': break;
+                case 'penalty': case 'adjust': case 'local_par': break;
                 default: unreachable(n, 'node');
             }
         }

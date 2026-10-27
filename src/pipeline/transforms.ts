@@ -31,7 +31,7 @@ export function dropUnreferencedParagraphs(data: SerializerOutput): number {
 // renderer, and goes before encoding.
 
 export const SUPPORTED_NODE_TYPES = new Set(['glyph', 'glue', 'kern', 'rule', 'hlist', 'vlist',
-  'disc', 'penalty', 'math', 'picture', 'transform']);
+  'disc', 'penalty', 'math', 'picture', 'transform', 'adjust']);
 
 /** Remove unsupported nodes (with whatever they held); returns how many. */
 export function stripUnsupportedNodes(data: SerializerOutput): number {

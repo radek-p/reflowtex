@@ -5,7 +5,7 @@ import { HL_ALIGNMENT, IGNORE_DEPTH_SP, SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, su
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
 import { mergeWidgetRuns } from '../../host/widgets.ts';
 import type { BoxNode, ContentItem, Doc, FontTable, Paragraph, TexNode } from '../model.ts';
-import type { Line, LineMeta, LinePlacement, Segment, Segments, SegmentGeometry, TextSegment } from './types.ts';
+import type { Line, LineAdjust, LineMeta, LinePlacement, Segment, Segments, SegmentGeometry, TextSegment } from './types.ts';
 import type { LayoutCache } from './types.ts';
 import type { Params } from '../../runtime/params.ts';
 
@@ -237,6 +237,19 @@ export function paragraphAtWidth(para: Paragraph, widthSp: number, sourceWidthSp
     return memo.nodes!;
 }
 
+// The space of a line's \vadjust material (px): TeX takes it out of the line
+// it is in, wherever the line breaks fall, and sets it above the line (pre)
+// or below it, besides the interline glue, which it leaves to the depths.
+export function lineAdjust(nodes: TexNode[]): LineAdjust {
+    let above = 0, below = 0;
+    for (const n of nodes) {
+        if (n.type !== 'adjust') continue;
+        if (n.subtype === 1) above += (n.height || 0) * SP_TO_PX;
+        else below += (n.height || 0) * SP_TO_PX;
+    }
+    return { above, below };
+}
+
 // The widest box, picture or rule of a list (sp).
 function widestBoxSp(nodes: TexNode[]): number {
     let w = 0;
@@ -249,7 +262,8 @@ function widestBoxSp(nodes: TexNode[]): number {
 export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt: number, p: Params, cache: LayoutCache): SegmentGeometry {
     const widthSp  = Math.round(widthPt * 65536);
     const columnPx = widthPt * ZOOM;
-    const lines: Line[] = [], lrp: LinePlacement[] = [], meta: (LineMeta | null)[] = [];
+    const lines: Line[] = [], lrp: LinePlacement[] = [], meta: (LineMeta | null)[] = [], adjust: LineAdjust[] = [];
+    let adjusted = false;
     const itemStarts: number[] = [];            // the first line of each item (paragraph)
     // Right edge of the widest line's ink, tracked alongside the loop below.
     // columnPx-only would be wrong for a figure segment (see isFigureParagraph):
@@ -430,8 +444,12 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
             lrp.push({ ratio, er, x0: x0 + indentPx, fillRatio, fillOrder });
             meta.push(thisMeta);
             thisMeta = lineMeta;
+            const adj = lineAdjust(ln.nodes);
+            adjust.push(adj);
+            if (adj.above || adj.below) adjusted = true;
         }
     }
     return { lines, lrp, meta, itemStarts, W: Math.ceil(maxRightPx),
+             adjust: adjusted ? adjust : undefined,
              preDisplaySizeSp: preDisplaySizeSp(fontInfo, lines, lrp) };
 }

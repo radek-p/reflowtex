@@ -95,7 +95,11 @@ lines the walk takes into the stream – the paragraph item carries it as
 `prev_depth`, and the renderer applies the rule with it.
 
 Node types: `glyph`, `glue`, `kern`, `rule`, `hlist`, `vlist`, `disc`, `penalty`,
-`math`, `picture`. Children hang off `children` / `pre` / `post` / `replace` /
+`math`, `picture`, `transform`, `adjust`. An `adjust` is a paragraph's `\vadjust` (the space
+of `\\[len]`, and of `\vspace` inside a paragraph): its height, and its list when that
+draws something; the renderer sets it below the line it ends up in (above it for
+`\vadjust pre`), and the walk of the vertical list leaves it out of the space
+between items. Children hang off `children` / `pre` / `post` / `replace` /
 `leader`. The authoritative field list is the schema,
 [`../schema/latex.proto`](../schema/latex.proto).
 

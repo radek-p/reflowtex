@@ -273,7 +273,7 @@ export function preDisplaySizeSp(fontInfo: FontTable, lines: Line[], lrp: LinePl
                 // \rotatebox's matrix only groups what TeX had in the line,
                 // which counts as it did there.
                 case 'transform': walk(n.children, glueSet); break;
-                case 'penalty': case 'local_par': break;
+                case 'penalty': case 'adjust': case 'local_par': break;
                 default: unreachable(n, 'node');
             }
         }

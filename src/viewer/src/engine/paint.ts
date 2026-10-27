@@ -4,7 +4,7 @@
 // bands of its marks and of the selection.
 
 import { SP_TO_PX, useGlyphMetrics } from './core.ts';
-import { renderNodes } from './render.ts';
+import { renderNodes, renderVlistBody } from './render.ts';
 import { reconcileSink, svgEl } from './sink.ts';
 import { updateDisplayOverflowCue } from './layout/display.ts';
 import { materializeSegment } from './layout/document.ts';
@@ -12,8 +12,9 @@ import { restoreLinkStates } from '../host/links.ts';
 import { liveInfo } from '../host/marks.ts';
 import { keepSelection } from '../host/selection.ts';
 import type { FontTable, Mark } from './model.ts';
-import type { DomSegment, LayoutCache, LinePair } from './layout/types.ts';
+import type { DomSegment, LayoutCache, LinePair, SegmentLayout } from './layout/types.ts';
 import type { ElementRun, Run } from './sink.ts';
+import type { Sink } from './render.ts';
 
 export let paintCount = 0;
 
@@ -71,6 +72,7 @@ export function paintSegment(fontInfo: FontTable, cache: LayoutCache, i: number)
         const lineD = ink.reduce((m, it) => Math.max(m, it.d), 0) / SP_TO_PX;
         renderNodes(fontInfo, sink, L.lines[j].nodes, x0, L.baselineYs![j],
                     fillOrder ? fillRatio : ratio, er, fillOrder || 0, lineH, lineD);
+        paintAdjusts(fontInfo, sink, L, j, cache.layoutCtx?.columnPx ?? L.W);
         linkRuns.push(...sink.takeLinkRuns());
         markRuns.push(...sink.takeMarkRuns());
         const sel = sink.takeSelectionRun();
@@ -96,6 +98,30 @@ export function paintSegment(fontInfo: FontTable, cache: LayoutCache, i: number)
     // display carried visibly inflated space above and below.
     if (s.wrap && svg.parentNode === s.wrap) {
         updateDisplayOverflowCue(s.wrap);
+    }
+}
+
+// What a line's \vadjust material draws (a box, a rule), stacked as TeX
+// stacks it on the vertical list, from the column's left edge: below the
+// line's depth, or, for \vadjust pre, above the interline glue over the line
+// (at a segment's first line that glue is above the segment, and the
+// material sits on the line's ascent). Its space is in the layout already.
+export function paintAdjusts(fontInfo: FontTable, sink: Sink, L: SegmentLayout, j: number, columnPx: number): void {
+    const nodes = L.lines[j].nodes;
+    if (!nodes.some(n => n.type === 'adjust' && n.children?.length)) return;
+    const maxOf = (k: 'h' | 'd', i: number) => (L.profiles?.[i] ?? []).reduce((m, it) => Math.max(m, it[k]), 0);
+    const adj = (i: number) => L.adjust?.[i] ?? { above: 0, below: 0 };
+    const y = L.baselineYs![j];
+    const glue = j > 0 ? y - L.baselineYs![j - 1] - maxOf('d', j - 1) - adj(j - 1).below - adj(j).above - maxOf('h', j) : 0;
+    let above = y - maxOf('h', j) - glue - adj(j).above, below = y + maxOf('d', j);
+    for (const n of nodes) {
+        if (n.type !== 'adjust') continue;
+        const pre = n.subtype === 1;
+        if (n.children?.length) {
+            renderVlistBody(fontInfo, sink, { type: 'vlist', width: columnPx / SP_TO_PX, height: 0, depth: n.height,
+                                              children: n.children }, 0, pre ? above : below);
+        }
+        if (pre) above += (n.height || 0) * SP_TO_PX; else below += (n.height || 0) * SP_TO_PX;
     }
 }
 

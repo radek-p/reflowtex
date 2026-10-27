@@ -31,6 +31,12 @@ enum NodeType {
   math      = 8;
   picture   = 9;   // a captured TikZ box or included PDF, drawn from precompiled SVG
   transform = 10;  // \rotatebox and friends: a matrix applied to `children`
+  // \vadjust: vertical material set below the line the node ends up in
+  // (subtype 1, \vadjust pre: above it), before the interline glue to the
+  // next line, which still follows the line's depth. `height` is its natural
+  // height (sp): the glue, kerns and boxes of its list; `children` the list
+  // as a vertical list, only when it holds a box or rule to draw. No width.
+  adjust    = 11;
 }
 
 message Node {
@@ -38,19 +44,19 @@ message Node {
   optional int32    char          = 2;   // glyph: Unicode codepoint
   optional uint32   font          = 3;   // glyph: font ID
   optional int32    width         = 4;   // glue/kern/rule/hlist/vlist (glyphs use `metrics`)
-  optional int32    height        = 5;   // rule/hlist/vlist
+  optional int32    height        = 5;   // rule/hlist/vlist/adjust
   optional int32    depth         = 6;   // rule/hlist/vlist
   optional int32    stretch       = 7;   // glue
   optional int32    shrink        = 8;   // glue
   optional uint32   stretch_order = 9;   // glue (omitted when 0)
   optional uint32   shrink_order  = 10;  // glue (omitted when 0)
-  optional uint32   subtype       = 11;  // glue/disc (omitted when 0)
+  optional uint32   subtype       = 11;  // glue/disc/adjust (omitted when 0)
   optional int32    kern          = 12;  // kern: spacing amount
   optional int32    shift         = 13;  // hlist/vlist (omitted when 0)
   optional double   glue_set      = 14;  // hlist/vlist: pre-computed glue ratio
   optional uint32   glue_sign     = 15;  // hlist/vlist (omitted when 0)
   optional uint32   glue_order    = 16;  // hlist/vlist (omitted when 0)
-  repeated Node     children      = 17;  // hlist/vlist (recursive)
+  repeated Node     children      = 17;  // hlist/vlist/adjust (recursive)
   repeated Node     pre           = 18;  // disc
   repeated Node     post          = 19;  // disc
   repeated Node     replace       = 20;  // disc

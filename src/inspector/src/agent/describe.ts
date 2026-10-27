@@ -136,6 +136,7 @@ export function summary(id: number): Row {
             case 'picture': out.label = 'picture'; out.note = `${pt(n.width || 0)} × ${pt(n.height || 0)} + ${pt(n.depth || 0)}`; break;
             case 'widget': out.label = 'widget'; out.note = n.inline ? (n.inline.instance.attrs.name || n.inline.instance.kind) : ''; break;
             case 'transform': out.label = 'transform'; out.note = `[${[n.m_a ?? 1, n.m_b ?? 0, n.m_c ?? 0, n.m_d ?? 1].map(v => +(+v).toFixed(3)).join(' ')}]`; break;
+            case 'adjust': out.label = n.subtype === 1 ? 'vadjust pre' : 'vadjust'; out.note = `${pt(n.height || 0)} ${n.subtype === 1 ? 'above' : 'below'} the line`; break;
             case 'local_par': out.label = 'local_par'; break;
             default: unreachable(n, 'node');
         }

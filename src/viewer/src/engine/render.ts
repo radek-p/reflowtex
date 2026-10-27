@@ -254,7 +254,7 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
                 // shift is vertical (downward); renderVlistBody stacks its contents.
                 renderVlistBody(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX);
                 x+=n.width*SP_TO_PX; break;
-            case 'penalty': case 'local_par': break;
+            case 'penalty': case 'adjust': case 'local_par': break;
             default: unreachable(n, 'node');
         }
         // Inspection (api.inspect.replay): every node's pen position and advance.

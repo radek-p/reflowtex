@@ -243,7 +243,10 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
             lineProfile(fontInfo, ln.nodes, geom.lrp[j].x0, geom.lrp[j].ratio, geom.lrp[j].er)
         );
         const ascent     = (profiles[0] ?? []).reduce((m, it) => Math.max(m, it.h), 0);
-        const baselineYs = [ascent];
+        // A line's \vadjust space goes above it (pre) or below it, outside
+        // the interline glue, which follows the depths as if it were not there.
+        const adj = geom.adjust;
+        const baselineYs = [(adj?.[0].above ?? 0) + ascent];
         for (let j = 1; j < geom.lines.length; j++) {
             const gap = geom.gaps?.[j];
             const lm = geom.meta?.[j];
@@ -263,11 +266,12 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
                 const needed = minRequiredAdvance(profiles[j-1], profiles[j]);
                 advance = needed > minGapPx ? needed + padPx : minGapPx;
             }
+            if (adj) advance += adj[j-1].below + adj[j].above;
             baselineYs.push(baselineYs[j-1] + advance);
         }
         const firstAscent = ascent;
         const lastDepth = (profiles[profiles.length-1] ?? []).reduce((m, it) => Math.max(m, it.d), 0);
-        const H = baselineYs[baselineYs.length-1] + lastDepth;
+        const H = baselineYs[baselineYs.length-1] + lastDepth + (adj?.[adj.length-1].below ?? 0);
 
         // A segment's box spans its first ascent to its last depth, so stacking
         // segments with margin-top = gap reproduces exactly the baseline-to-
