@@ -242,6 +242,6 @@ installation on the deploy host.
 
 ## Requirements
 
-The build host needs the Reflow TeX pipeline prerequisites: `lualatex`, `gs`,
-`dvisvgm` and Node 22.18+ (with `npm ci` run in the repository). See the
+The build host needs the Reflow TeX pipeline prerequisites: `lualatex` and
+Node 22.18+ (with `npm ci` run in the repository). See the
 [top-level README](../../README.md).

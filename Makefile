@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Reflow TeX – one-command demos.
 #
-# Prerequisites on PATH: lualatex (TeX Live), gs (Ghostscript), dvisvgm, Node >= 22.18.
+# Prerequisites on PATH: lualatex (TeX Live), Node >= 22.18.
 # Node deps: installed into node_modules/ on first use – see the `node-deps` target.
 
 PORT ?= 8000
@@ -53,7 +53,7 @@ node-deps:
 
 check: node-deps
 	@ok=1; \
-	for t in lualatex kpsewhich gs dvisvgm node; do \
+	for t in lualatex kpsewhich node; do \
 	  if command -v $$t >/dev/null 2>&1; then echo "  found: $$t"; \
 	  else echo "  MISSING: $$t"; ok=0; fi; \
 	done; \

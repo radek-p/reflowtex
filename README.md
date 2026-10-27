@@ -27,7 +27,7 @@ TeX set them.
 
 ## Try it in one command
 
-The build pipeline shells out to a real TeX toolchain (LuaTeX, dvisvgm,
+The build pipeline shells out to a real TeX toolchain (LuaTeX,
 protoc, Hugo for the website) – enough moving parts that the default,
 recommended way to run it is in the provided container rather than installing
 all of that on your machine. See [local install](#local-install) below if
@@ -97,7 +97,7 @@ If you'd rather not use a container, you need the [prerequisites](#prerequisites
 below on your own machine. Then:
 
 ```sh
-make check     # confirm lualatex, dvisvgm, gs and Node are present
+make check     # confirm lualatex and Node are present
 make serve     # compile examples/demo and serve it at http://localhost:8000
 ```
 
@@ -166,12 +166,11 @@ page, follow the DOM contract in [src/viewer/README.md](src/viewer/README.md).
 The build pipeline shells out to a real TeX toolchain:
 
 - **LuaTeX** (`lualatex`) – TeX Live 2023+
-- **Ghostscript** (`gs`) – normalises ICC-coloured included PDFs before SVG conversion
-- **dvisvgm** – converts captured TikZ pages and included PDFs to SVG (an included PNG or JPEG needs no tool)
 - **Node 22.18+** – the build is TypeScript, which Node runs straight from the
   sources; its packages (`package.json`) are installed into `node_modules/` by
   `npm ci`, which every `make` target (and `website/build.sh`) does on first
-  use
+  use (among them MuPDF, which draws captured TikZ pages and included PDFs
+  as SVG)
 
 The **browser** side has no external dependency beyond the vendored
 `protobuf.min.js`. Its scripts (`latex-viewer.js`, the companion package,
