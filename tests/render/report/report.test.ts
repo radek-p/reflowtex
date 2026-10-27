@@ -4,19 +4,23 @@
 // tall – opens quickly and draws only what is near the view; the TeX side,
 // the boxes and the live page stay at the same x and y as it scrolls; a
 // short one is drawn whole, as before; and what a test says is one line above
-// the two sides, and in full in the list's Summary tab.
+// the two sides, and in full in the list's Summary tab. And a real page, a
+// long document the pipeline builds: after a jump far down, the live page
+// shows there the lines the measurement saw there.
 //
 //     node --test tests/render/report/report.test.ts      (make test-render runs it)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Server } from 'node:http';
 import { chromium, type Browser, type Page } from 'playwright';
 import { serveMounts } from '../../../tools/lib/static-server.ts';
 import { ensureBundles } from '../../../src/pipeline/bundles.ts';
+import { dumpDom, type DomGlyph } from '../../../tools/pageless-pdf/dom-dump.ts';
 import { reportScript } from './build.ts';
 import { writeIndex, writeResult } from './results.ts';
 
@@ -33,24 +37,16 @@ function makeTest(build: string, name: string, lines: number, markPt: number, hs
   const dir = join(build, name, 'w0'), heightPt = lines * LINE + 20, widthPt = hsize + 2 * MARGIN;
   mkdirSync(join(dir, 'vector'), { recursive: true });
   mkdirSync(join(dir, 'site'), { recursive: true });
-  const uses: string[] = [], matched: object[] = [];
+  const glyphs: Glyph[] = [], matched: object[] = [];
   for (let l = 0; l < lines; l++) {
     const y = 10 + l * LINE;
     for (let g = 0; g < PER_LINE; g++) {
       const x = MARGIN + g * 8;
-      uses.push(`<use data-text="a" xlink:href="#font_1_1" transform="matrix(9.96264,0,0,-9.96264,${(x * BP).toFixed(4)},${(y * BP).toFixed(4)})"/>`);
+      glyphs.push({ x, y, size: 10, text: 'a' });
       matched.push({ x, y: y + 0.3, w: 5, size: 10, text: 'a', dx: 0, dy: -0.3 });
     }
   }
-  writeFileSync(join(dir, 'vector', 'strip.svg'),
-    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="${(widthPt * 2).toFixed(3)}" height="${(heightPt * 2).toFixed(3)}" viewBox="0 0 ${(widthPt * BP).toFixed(3)} ${(heightPt * BP).toFixed(3)}">
-<defs>
-<path id="font_1_1" d="M.05 0H.5V.7H.05Z"/>
-</defs>
-<g>
-${uses.join('\n')}
-</g>
-</svg>`);
+  writeStrip(dir, widthPt, heightPt, glyphs);
   writeFileSync(join(dir, 'vector', 'vector.json'), JSON.stringify({ hsize_pt: hsize, margin_pt: MARGIN, matched,
     glyphs: { strip: matched.length, viewer: matched.length, matched: matched.length } }));
   // the page: one block, as tall as the strip (2 px per pt), and a mark in it
@@ -61,6 +57,66 @@ ${uses.join('\n')}
 </div></div></body></html>`);
   writeResult(dir, { id: name, case: name, extra: 0, status: 'fail', problems, tolerance: 0.05, target: 0.05,
                      hsize_pt: hsize, page: `${name}/w0/site` }, build);
+}
+
+interface Glyph { x: number; y: number; size: number; text: string }
+const xml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+/** A strip.svg of these glyphs (pt, on their baselines), each a box with its text. */
+function writeStrip(dir: string, widthPt: number, heightPt: number, glyphs: Glyph[]): void {
+  const uses = glyphs.map(g => `<use data-text="${xml(g.text)}" xlink:href="#font_1_1" transform="matrix(${(g.size * BP).toFixed(4)},0,0,${(-g.size * BP).toFixed(4)},${(g.x * BP).toFixed(4)},${(g.y * BP).toFixed(4)})"/>`);
+  writeFileSync(join(dir, 'vector', 'strip.svg'),
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="${(widthPt * 2).toFixed(3)}" height="${(heightPt * 2).toFixed(3)}" viewBox="0 0 ${(widthPt * BP).toFixed(3)} ${(heightPt * BP).toFixed(3)}">
+<defs>
+<path id="font_1_1" d="M.05 0H.5V.7H.05Z"/>
+</defs>
+<g>
+${uses.join('\n')}
+</g>
+</svg>`);
+}
+
+// A real page: a long document (400 parts, some 66,000 pt), built by the
+// pipeline, its viewer laying out what is far from its screen in slices of
+// idle time, by an estimate of the height until then.
+const FAR_TEX = String.raw`\newcount\partn
+\newcommand\onepart{%
+  \section{Part \the\partn}
+  Part \the\partn{} begins. The harmonic series diverges, though very slowly: its partial sums grow
+  like the logarithm of the number of terms, and part \the\partn{} says so
+  again at some length, with $\sum_{n \le N} 1/n = \ln N + \gamma + O(1/N)$
+  in it, so that the lines break differently at every width.
+  \[ \sum_{k=1}^{\the\partn} k = \frac{\the\partn\,(\the\partn+1)}{2}. \]
+  After the display, part \the\partn{} goes on, shorter.
+
+  Part \the\partn{} ends.
+  \advance\partn by 1
+  \ifnum\partn<401 \expandafter\onepart\fi}
+\partn=1
+\onepart
+`;
+/** Where the far test looks (pt), and how far either side of it. */
+const FAR_AT = 0.8, FAR_SPAN = 150;
+let farY = 0;
+/** The page built, and its result: one step, at FAR_AT of its height. */
+function buildFar(build: string): string {
+  const dir = join(build, 'far', 'w0'), src = join(build, '.far-src');
+  mkdirSync(src, { recursive: true });
+  mkdirSync(join(dir, 'vector'), { recursive: true });
+  writeFileSync(join(src, 'a-long.tex'), FAR_TEX);
+  execFileSync('node', [join(REPO, 'integrations/vanilla/build.ts'), src, '-o', join(dir, 'site'), '--title', 'far'], { cwd: REPO, stdio: 'pipe' });
+  return dir;
+}
+/** What the measurement saw on the page (dom-dump.ts), as the TeX side: the
+ *  glyphs near where the test looks (the strip of all would be some 30 MB). */
+async function measureFar(dir: string, url: string): Promise<void> {
+  const dom = await dumpDom(url, { hsize: HSIZE, margin: MARGIN });
+  farY = Math.round(dom.height * FAR_AT);
+  const near = dom.glyphs.filter((g: DomGlyph) => Math.abs(g.y - farY) < 2 * FAR_SPAN && g.text.trim());
+  writeStrip(dir, HSIZE + 2 * MARGIN, dom.height, near);
+  writeFileSync(join(dir, 'vector', 'vector.json'), JSON.stringify({ hsize_pt: HSIZE, margin_pt: MARGIN, matched: [],
+    glyphs: { strip: near.length, viewer: near.length, matched: near.length } }));
+  writeResult(dir, { id: 'far', case: 'far', extra: 0, status: 'fail', tolerance: 0.05, target: 0.05, hsize_pt: HSIZE, page: 'far/w0/site',
+    problems: [`step at browser y ${farY} (TeX y ${farY}): dy 0 → 1 (+1 pt)  "far down"`] }, dirname(dirname(dir)));
 }
 
 /** What a long document's test says, as a tool comparing whole documents
@@ -88,7 +144,10 @@ before(async () => {
   const stopped = join(build, 'stopped', 'w0');
   mkdirSync(stopped, { recursive: true });
   writeResult(stopped, { id: 'stopped', case: 'stopped', extra: 0, status: 'error', problems: [STOPPED], tolerance: 0.05, target: 0.05 }, build);
-  writeIndex(build, ['long', 'short', 'odd-width', 'said', 'stopped']);
+  const far = buildFar(build);
+  writeResult(far, { id: 'far', case: 'far', extra: 0, status: 'fail', problems: [], tolerance: 0.05, target: 0.05, hsize_pt: HSIZE,
+                     page: 'far/w0/site' }, build);
+  writeIndex(build, ['long', 'short', 'odd-width', 'said', 'stopped', 'far']);
   ensureBundles({ only: ['inspector'] });
   const page = join(build, '.page');
   mkdirSync(page);
@@ -96,6 +155,8 @@ before(async () => {
   writeFileSync(join(page, 'app.js'), reportScript());
   ({ server, url } = await serveMounts({ '/': page, '/build/': build, '/inspector/': join(REPO, 'src/inspector') }));
   browser = await chromium.launch();
+  await measureFar(far, `${url}/build/far/w0/site/index.html`);
+  writeIndex(build, ['long', 'short', 'odd-width', 'said', 'stopped', 'far']);
 });
 after(async () => {
   await browser?.close();
@@ -290,5 +351,51 @@ test('a test that stopped: its message in full above the sides', async () => {
   const page = await open('stopped', false);
   await page.waitForSelector('.headline.error');
   assert.equal(await page.locator('.headline.error .msg').textContent(), STOPPED);
+  assert.deepEqual(page.errors, []);
+});
+
+/** Both sides' lines between y0 and y1 (pt, on the stage): [baseline, text],
+ *  the TeX side's from strip.svg, the live page's from its glyphs. */
+const lines = (page: Page, y0: number, y1: number) => page.evaluate(([y0, y1]) => {
+  const group = (gs: { x: number; y: number; t: string }[]) => {
+    const by = new Map<number, { x: number; t: string }[]>();
+    for (const g of gs) if (g.y > y0 && g.y < y1) { const k = Math.round(g.y); (by.get(k) ?? by.set(k, []).get(k)!).push(g); }
+    return [...by].sort((a, b) => a[0] - b[0]).map(([k, l]) => [k, l.sort((a, b) => a.x - b.x).map(g => g.t).join('')] as [number, string]);
+  };
+  const strip = [...document.querySelectorAll<SVGUseElement>('svg.sheet use')].map(u => {
+    const m = u.transform.baseVal.consolidate()!.matrix;
+    return { x: m.e * 72.27 / 72, y: m.f * 72.27 / 72, t: u.dataset.text ?? '' };
+  });
+  // the live page: each glyph's origin, through the frame's place and scale on the stage
+  const frame = document.querySelector<HTMLIFrameElement>('iframe.page')!, f = frame.getBoundingClientRect();
+  const k = f.height / frame.offsetHeight, stage = document.querySelectorAll('.side .stage')[1].getBoundingClientRect();
+  const live = [...frame.contentDocument!.querySelectorAll<SVGTSpanElement>('.latex-block svg tspan')].flatMap(t => {
+    const x = parseFloat(t.getAttribute('x')!), y = parseFloat(t.getAttribute('y')!);
+    if (isNaN(x) || isNaN(y) || !t.textContent!.trim()) return [];
+    const p = new DOMPoint(x, y).matrixTransform(t.closest('text')!.getScreenCTM()!);
+    return [{ x: (p.x * k + f.left - stage.left) / (2 * k), y: (p.y * k + f.top - stage.top) / (2 * k), t: t.textContent! }];
+  });
+  return { tex: group(strip), live: group(live) };
+}, [y0, y1]);
+
+test('far down a long page, the live page shows the lines the measurement saw there', async () => {
+  const page = await open('far', false);
+  // at once, as a reader may: a step far down, in the Summary tab
+  await page.waitForFunction(() => document.querySelector<HTMLElement>('iframe.page')?.style.visibility === 'visible');
+  await page.click('#tab-summary');
+  await page.click('#panel-summary .srow.step');
+  // until both sides have drawn their lines there
+  const y0 = farY - FAR_SPAN, y1 = farY + FAR_SPAN;
+  await page.waitForFunction(([y0, y1]) => {
+    const frame = document.querySelector<HTMLIFrameElement>('iframe.page')!, f = frame.getBoundingClientRect();
+    const k = f.height / frame.offsetHeight, stage = document.querySelectorAll('.side .stage')[1].getBoundingClientRect();
+    const ys = [...frame.contentDocument!.querySelectorAll('.latex-block svg tspan')].map(t => (t.getBoundingClientRect().top * k + f.top - stage.top) / (2 * k));
+    return document.querySelectorAll('svg.sheet use').length > 0 && ys.filter(y => y > y0 && y < y1).length > 100;
+  }, [y0, y1]);
+  const { tex, live } = await lines(page, y0, y1);
+  assert.ok(tex.length > 10, `${tex.length} lines of TeX's near y ${farY}`);
+  // each of TeX's lines there, on the live page at the same height (to a point: a line is its baseline, rounded)
+  const off = tex.filter(([y, t]) => !live.some(([ly, lt]) => lt === t && Math.abs(ly - y) <= 1));
+  assert.deepEqual(off, [], `near y ${farY}, TeX's side has\n  ${tex.slice(0, 4).map(l => l.join(' ')).join('\n  ')}\nthe live page\n  ${live.slice(0, 4).map(l => l.join(' ')).join('\n  ')}`);
   assert.deepEqual(page.errors, []);
 });

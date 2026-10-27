@@ -38,7 +38,13 @@ interface Item { k: string; what: string; y: number; note: string; off?: number;
 type Side = 'left' | 'right';
 type Marks = ReturnType<typeof makeMarks>;
 /** What the tested page offers the report (the website's page script). */
-interface PageHooks { __setTheme?: (theme: string) => void; __zoom?: (step: number) => void }
+interface PageHooks {
+    __setTheme?: (theme: string) => void; __zoom?: (step: number) => void;
+    /** The viewer's host API, of which the report needs one call: idle() resolves once nothing more is to come. */
+    reflowtex?: { host?: { idle?: () => Promise<void> } };
+}
+/** How long the live page is waited for to settle before it is shown anyway. */
+const SETTLE_CAP_MS = 20000;
 
 const INSPECTOR = document.querySelector<HTMLMetaElement>('meta[name="rr-inspector"]')!.content;
 // (the inspector's copy of Preact, htm and Signals: src/inspector/src/vendor/preact.d.ts)
@@ -522,6 +528,11 @@ function pinPage(win: Window & PageHooks, colPx: number, marginPx: number, hsize
     // the block is given its width in pt, as dom-dump.ts gives it: its own pixel width would be rounded, and the
     // viewer would break the paragraphs at a measure TeX never used
     for (const b of doc.querySelectorAll<HTMLElement>('#lt-content > .latex-block')) b.dataset.latexWidth = String(hsizePt);
+    // laid out whole, as the measurement lays it out (dom-dump.ts: for print). Sliced, the viewer lays out what is on
+    // its screen and places the rest by an estimate of its height until a slice of idle time lays it out; the frame,
+    // only as tall as the view and scrolled to it, would show at a height whatever the estimates put there – another
+    // part of the document than TeX's at that height – until the slices are done.
+    doc.documentElement.dataset.latexLayout = 'sync';
     const css = doc.createElement('style');
     css.textContent = `:root { color-scheme: light !important }
         html, body { margin:0 !important; padding:0 !important; background: transparent !important }
@@ -622,7 +633,11 @@ function Live({ src, pane, scale, marginPt, hsizePt, colours, frameRef, onPage, 
         const f = frameRef.current!, win = f.contentWindow! as Window & PageHooks & typeof globalThis;
         pinPage(win, colPx, marginPx, hsizePt);
         pageColours(win, colours);
-        requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
+        // shown once the page is as it will stay: laid out at the pinned width (a resize settles a moment later) and
+        // with its fonts
+        const idle = win.reflowtex?.host?.idle?.() ?? Promise.resolve();
+        const cap = new Promise(done => setTimeout(done, SETTLE_CAP_MS));
+        Promise.race([idle, cap]).catch(() => {}).then(() => requestAnimationFrame(() => requestAnimationFrame(() => setReady(true))));
         // the block settles as its fonts arrive, and as the page lays out what
         // is further from its screen
         const block = win.document.querySelector('.latex-block');
