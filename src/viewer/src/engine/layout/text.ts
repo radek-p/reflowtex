@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { buildBreakCandidates, kpBreak } from '../breaker.ts';
+import { buildBreakCandidates, kpBreak, paragraphParams } from '../breaker.ts';
 import { HL_ALIGNMENT, IGNORE_DEPTH_SP, SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
 import { mergeWidgetRuns } from '../../host/widgets.ts';
@@ -328,8 +328,11 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
         // for microtypography – each font's protrusion/expansion codes and
         // the paragraph's \adjustspacing/\protrudechars – so an engine can
         // apply them as TeX did.
+        // TeX's breaking parameters, the paragraph's own where it had them
+        // (\sloppy: every bibliography)
+        const pp = paragraphParams(p, para);
         const ext = typeof window !== 'undefined' && typeof window.reflowtexBreak === 'function'
-            ? window.reflowtexBreak(nodes, availSp, p, {
+            ? window.reflowtexBreak(nodes, availSp, pp, {
                   gW, gH, gD, align,
                   bskip: para.baselineskip || 0,
                   lskip: para.lineskip || 0,
@@ -338,7 +341,7 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
                   protrudeChars: para.protrude_chars || 0,
               })
             : null;
-        for (const ln of (ext || kpBreak(bcs, nodes, availSp, justify ? p : { ...p, ragged: true }))) {
+        for (const ln of (ext || kpBreak(bcs, nodes, availSp, justify ? pp : { ...pp, ragged: true }))) {
             ln.nodes = mergeWidgetRuns(ln.nodes);
             // For non-justified modes: allow glue shrink (ratio<0) but never stretch.
             // When the line must shrink, rendering and positioning are identical to justify.

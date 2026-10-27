@@ -776,6 +776,11 @@ end
 
 -- ── Node serializer ───────────────────────────────────────────────────────
 
+-- A discretionary's penalty: \hyphenpenalty or \exhyphenpenalty, set on the
+-- node when it was made. Recorded where it is not their usual 50, which the
+-- viewer takes for one without.
+local HYPHEN_PENALTY = 50
+
 local function serialize_nodelist(head)
     local result = {}
     -- `cur` is the list being appended to: a pdf_save opens a frame that
@@ -933,6 +938,7 @@ local function serialize_nodelist(head)
             cur[#cur + 1] = {
                 type    = "disc",
                 subtype = n.subtype,
+                penalty = n.penalty ~= HYPHEN_PENALTY and n.penalty or nil,
                 pre     = sub(n.pre),
                 post    = sub(n.post),
                 replace = sub(n.replace),
@@ -1123,6 +1129,19 @@ local function skip_width(name)
     return (ok and w) or 0
 end
 
+-- The line breaker's parameters, recorded for a paragraph only where they
+-- differ from plain TeX's and LaTeX's values, which the viewer has as its
+-- defaults: \sloppy (every thebibliography, a two-column article) sets
+-- \tolerance 9999 and \emergencystretch 3em.
+local BREAK_PARAMS = {
+    { "pretolerance",           "pretolerance",         100 },
+    { "tolerance",              "tolerance",            200 },
+    { "emergency_stretch",      "emergencystretch",     0 },
+    { "line_penalty",           "linepenalty",          10 },
+    { "adj_demerits",           "adjdemerits",          10000 },
+    { "double_hyphen_demerits", "doublehyphendemerits", 10000 },
+    { "final_hyphen_demerits",  "finalhyphendemerits",  5000 },
+}
 local function capture_paragraph(head, groupcode)
     hy_open = {}                  -- a link never runs from one paragraph into the next
     -- nest 0 is the main vertical list, 1 this paragraph: deeper, it is in a box
@@ -1152,6 +1171,10 @@ local function capture_paragraph(head, groupcode)
         align  = para_align(),
         nodes  = serialize_nodelist(head),
     }
+    for _, b in ipairs(BREAK_PARAMS) do
+        local v = tex[b[2]]
+        if v ~= b[3] then all_paragraphs[idx][b[1]] = v end
+    end
     if colors then restore_colors(colors) end
     stamp(head, idx)
     -- The captured copy above already holds every \label marker at its exact

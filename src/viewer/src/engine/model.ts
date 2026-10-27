@@ -235,6 +235,13 @@ export interface Paragraph {
     adjust_spacing?: number;
     protrude_chars?: number;
     width?: number;
+    pretolerance?: number;
+    tolerance?: number;
+    emergency_stretch?: number;
+    line_penalty?: number;
+    adj_demerits?: number;
+    double_hyphen_demerits?: number;
+    final_hyphen_demerits?: number;
 }
 
 type DisplayRates = { [F in 'display_width' | 'display_indent' | 'display_shift' as `${F}_rate`]?: number };

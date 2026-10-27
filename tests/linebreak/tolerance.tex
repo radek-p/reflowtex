@@ -1,0 +1,32 @@
+% Paragraphs whose breaking depends on their own \pretolerance, \tolerance,
+% \emergencystretch, demerits and hyphenation penalties: \sloppy (as every
+% thebibliography and a two-column article set it), long unbreakable words and
+% links, TeX's third pass with \emergencystretch, \tolerance 10000, no first
+% pass. Each paragraph is set at several measures. Captured with capture.lua
+% into tolerance/ (README.md).
+\documentclass[12pt]{article}
+\usepackage{url}
+\newcommand\at[2]{{\hsize=#1\relax #2\par}}
+\newcommand\refA{Skorokhod, A.V., Basic principles and applications of probability theory, Springer,2000.}
+\newcommand\refB{S.~A. Crosby and D.~S. Wallach. Denial of service via algorithmic complexity attacks. In 12th USENIX Security Symposium. USENIX Association, 2003. URL: \url{https://www.usenix.org/conference/12th-usenix-security-symposium/denial-service-algorithmic-complexity-attacks}.}
+\newcommand\refC{Long words and identifiers such as \texttt{ReflowableDocumentSerializerConfiguration} and \texttt{paragraph\_tolerance\_parameters} leave a line little to stretch, and the line before them takes the slack.}
+\newcommand\plain{The quick brown fox jumps over the lazy dog, and the five boxing wizards jump quickly over the fence while sphinx of black quartz judges my vow.}
+\begin{document}
+\at{15.5truecm}{\sloppy\refA}
+\at{300pt}{\sloppy\refA}
+\at{200pt}{\sloppy\refA}
+\at{300pt}{\sloppy\refB}
+\at{220pt}{\sloppy\refB}
+\at{250pt}{\sloppy\refC}
+\at{180pt}{\sloppy\refC}
+\at{120pt}{\emergencystretch=1.5em \plain}
+\at{90pt}{\emergencystretch=3em \plain}
+\at{250pt}{\emergencystretch=1em \refC}
+\at{220pt}{\tolerance=200 \emergencystretch=2em \refB}
+\at{180pt}{\tolerance=10000 \refC}
+\at{120pt}{\tolerance=10000 \plain}
+\at{150pt}{\pretolerance=-1 \emergencystretch=2em \plain}
+\at{150pt}{\pretolerance=-1 \tolerance=9999 \plain}
+\at{200pt}{\linepenalty=200 \adjdemerits=0 \hyphenpenalty=500 \plain}
+\at{160pt}{\doublehyphendemerits=0 \finalhyphendemerits=0 \exhyphenpenalty=10000 \hyphenpenalty=-100 \plain\ A well-known, often-cited state-of-the-art result.}
+\end{document}

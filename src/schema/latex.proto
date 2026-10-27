@@ -54,7 +54,7 @@ message Node {
   repeated Node     pre           = 18;  // disc
   repeated Node     post          = 19;  // disc
   repeated Node     replace       = 20;  // disc
-  optional int32    penalty       = 21;  // penalty: break penalty value
+  optional int32    penalty       = 21;  // penalty: break penalty value; disc: \hyphenpenalty or \exhyphenpenalty, absent = 50
   optional int32    surround      = 22;  // math: thin-space width
   optional string   color         = 23;  // glyph/rule: CSS hex colour; absent = default text colour
   optional uint32   picture       = 24;  // picture: 1-based index into Document.pictures
@@ -274,6 +274,19 @@ message Paragraph {
   // quote environment's right margin is source_width - indent - width, and
   // the viewer keeps both margins when it re-breaks at another width.
   optional int32 width = 7;
+
+  // The line breaker's parameters as TeX had them for this paragraph:
+  // \pretolerance, \tolerance, \emergencystretch (sp), \linepenalty,
+  // \adjdemerits, \doublehyphendemerits, \finalhyphendemerits. Each only when
+  // it differs from TeX's default (100, 200, 0, 10, 10000, 10000, 5000), which
+  // the viewer takes from the block.
+  optional int32 pretolerance           = 10;
+  optional int32 tolerance              = 11;
+  optional int32 emergency_stretch      = 12;
+  optional int32 line_penalty           = 13;
+  optional int32 adj_demerits           = 14;
+  optional int32 double_hyphen_demerits = 15;
+  optional int32 final_hyphen_demerits  = 16;
 }
 
 enum ItemKind {

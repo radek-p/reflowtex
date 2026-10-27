@@ -32,6 +32,7 @@ export const DEFAULT_DOUBLE_HYPHEN_DEMERITS = 10000;
 export const DEFAULT_FINAL_HYPHEN_DEMERITS  = 5000;
 export const DEFAULT_PRETOLERANCE           = 100;
 export const DEFAULT_TOLERANCE              = 200;
+export const DEFAULT_EMERGENCY_STRETCH      = 0;      // pt
 export const DEFAULT_TOLERANCE_2            = 500;
 export const DEFAULT_EMERGENCY_TOLERANCE    = 10000;
 export const DEFAULT_LAST_LINE_MIN          = 0;      // off: TeX has no such rule

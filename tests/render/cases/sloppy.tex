@@ -1,0 +1,42 @@
+% Paragraphs broken with their own tolerances, as in real papers: a
+% bibliography (thebibliography sets \sloppy: \tolerance 9999 and
+% \emergencystretch 3em) whose entries hold long links and names that do not
+% break, a \sloppy paragraph ending in a long link, a paragraph that needs
+% \emergencystretch, and one with its own hyphenation penalties.
+\documentclass[12pt]{article}
+\usepackage{url}
+\setlength{\textwidth}{15.5truecm}
+\begin{document}
+A first paragraph at the default tolerance, long enough to fill a line of the text width and then some more words.
+
+{\sloppy Skorokhod, A.V., Basic principles and applications of probability theory, Springer,2000.\par}
+
+{\sloppy A paragraph set sloppily that ends in a long link. Denial of service via algorithmic complexity attacks. In 12th USENIX Security Symposium (USENIX Security 03). USENIX Association, 2003. URL: \url{https://www.usenix.org/conference/12th-usenix-security-symposium/denial-service-algorithmic-complexity-attacks}.\par}
+
+{\emergencystretch=2em Long words and identifiers such as \texttt{ReflowableDocumentSerializer} and \texttt{paragraph\_tolerance\_parameters} leave a line little to stretch, and the line before them takes the slack.\par}
+
+{\hyphenpenalty=10000 \exhyphenpenalty=10000 \tolerance=1000 A paragraph that does not hyphenate: its well-known, often-cited, state-of-the-art examples of extraordinarily uncomfortable typesetting are characteristically unhyphenated.\par}
+
+\begin{thebibliography}{9}
+\bibitem{a}
+S.~A. Crosby.
+\newblock Denial of service through regular expressions.
+\newblock USENIX Association, 2003.
+\newblock URL:
+  \url{https://www.usenix.org/conference/12th-usenix-security-symposium/denial-service-through-regular-expressions}.
+
+\bibitem{b}
+S.~A. Crosby and D.~S. Wallach.
+\newblock Denial of service via algorithmic complexity attacks.
+\newblock In {\em 12th USENIX Security Symposium (USENIX Security 03)}. USENIX
+  Association, 2003.
+\newblock \texttt{ReflowableDocumentSerializerConfigurationParameters}.
+
+\bibitem{c}
+A.~V. Skorokhod.
+\newblock Basic principles and applications of probability theory, Springer,2000.
+
+\bibitem{d}
+A last entry.
+\end{thebibliography}
+\end{document}

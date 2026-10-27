@@ -339,13 +339,14 @@ export function lineMetrics(a: BreakCandidate, b: BreakCandidate, p: Params): Li
     };
 }
 
-// The emergency pass (threshold 10000) admits every line, and badness is
-// capped at 10000, so every line past the cap would cost the same flat 1e8
-// demerits: the breaker could then put the one unavoidable bad line anywhere –
-// and does put it first, as a single-word line, since that lets every later
-// line be perfect. In that pass lines are therefore weighed by their real,
-// uncapped looseness, so a slightly loose line always beats a nearly empty one.
-// (TeX avoids the same flatness in practice with \emergencystretch.)
+// The viewer's last resort (data-emergency-tolerance, 10000) admits every
+// line, and badness is capped at 10000, so every line past the cap would cost
+// the same flat 1e8 demerits: the breaker could then put the one unavoidable
+// bad line anywhere – and does put it first, as a single-word line, since that
+// lets every later line be perfect. In that pass lines are therefore weighed
+// by their real, uncapped looseness, so a slightly loose line always beats a
+// nearly empty one. TeX's own passes are not: a paragraph with \tolerance
+// 10000 is broken as TeX breaks it.
 export function rawBadness(shortage: number, total: number): number {
     if (shortage === 0) return 0;
     if (total <= 0) return 1e7;
@@ -386,13 +387,24 @@ export function expansionShortfall(shortfall: number, m: LineMetrics, ex: Expans
 
 // ── KP DP (one pass) ─────────────────────────────────────────────────────────
 
+/** How a pass is run: TeX's first pass (no hyphenation of its own), its
+ *  final one, the stretch \emergencystretch adds to every line, and the
+ *  viewer's own last resort (`uncapped`). */
+export interface PassOptions { firstPass?: boolean; final?: boolean; background?: number; uncapped?: boolean }
+
 // With `final` the pass is TeX's last one (§851–§855): a start from which a
 // line has become overfull is dropped for good, and when the only start left
 // dies with nothing feasible found yet, its overfull line is taken anyway at
 // no cost (artificial demerits), so the pass always ends with a paragraph –
 // as a PDF shows it, a line sticking out rather than a very loose one.
-export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: number, firstPass: boolean, p: Params, final?: boolean):
+// `background` is stretch every line has besides its glue: TeX's third pass
+// adds \emergencystretch so (§863), for the badness only – a line is still
+// set with its own glue.
+export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: number, p: Params, o: PassOptions = {}):
         { breaks: Break[] | null; minRejectedBadness: number | null; overfull?: boolean } {
+    const { firstPass = false, final = false, background = 0, uncapped = false } = o;
+    // (TeX's threshold is at most inf_bad: every line is feasible at 10000)
+    threshold = Math.min(threshold, 10000);
     const N=bcs.length;
     const dp=Array.from({length:N},(): (Active | null)[]=>[null,null,null,null]);
     const alive=final ? dp.map(()=>[true,true,true,true]) : null;
@@ -444,7 +456,7 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
                 let b: number, fc_j: number;
                 if (shortfall>0) {
                     if (hasFill) { b=0; fc_j=2; }
-                    else { b=badness(shortfall,m.s); fc_j=b>99?0:b>12?1:2; }
+                    else { b=badness(shortfall,m.s+background); fc_j=b>99?0:b>12?1:2; }
                 } else if (shortfall<0) {
                     if (-shortfall>m.z) {                         // overfull
                         if (final) {
@@ -458,9 +470,8 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
                 } else { b=0; fc_j=2; }
                 if (b!>threshold) { if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b; continue; }
                 feasibleAtJ = true;
-                const emergency = threshold>=10000;
-                const bd = emergency&&!(hasFill&&shortfall>=0) ? rawBadness(Math.abs(shortfall),shortfall>=0?m.s:m.z) : b;
-                const lp=p.linePenalty+bd; let d=emergency ? lp*lp : (Math.abs(lp)>=10000?100000000:lp*lp);
+                const bd = uncapped&&!(hasFill&&shortfall>=0) ? rawBadness(Math.abs(shortfall),shortfall>=0?m.s+background:m.z) : b;
+                const lp=p.linePenalty+bd; let d=uncapped ? lp*lp : (Math.abs(lp)>=10000?100000000:lp*lp);
                 if(bcJ.penalty>0) d+=bcJ.penalty*bcJ.penalty;
                 else if(bcJ.penalty>-10000) d-=bcJ.penalty*bcJ.penalty;
                 if(si.hyphenated) {
@@ -477,6 +488,13 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
                 if(!dp[j][fc_j]||td<=dp[j][fc_j]!.demerits) dp[j][fc_j]={demerits:td,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc'};
             }
         }
+        // TeX keeps a break only in the fitness classes within \adjdemerits of
+        // its best (§836). No other could win, but in the final pass one
+        // that is kept is one more start in play, and decides whether an
+        // overfull line is taken from the other.
+        let best=Infinity;
+        for(let fc=0;fc<4;fc++) if(dp[j][fc]&&dp[j][fc]!.demerits<best) best=dp[j][fc]!.demerits;
+        for(let fc=0;fc<4;fc++) if(dp[j][fc]&&dp[j][fc]!.demerits>best+Math.abs(p.adjDemerits)) dp[j][fc]=null;
     }
     const endIdx=N-1; if(bcs[endIdx].kind!=='end') return {breaks:null,minRejectedBadness};
     let bestFc=-1, bestD=Infinity;
@@ -548,29 +566,40 @@ export function greedyFallback(bcs: BreakCandidates, nodes: TexNode[], lineWidth
     return breaks;
 }
 
-export function kpBreak(bcs: BreakCandidates, nodes: TexNode[], lineWidthSp: number, p: Params): Line[] {
+// TeX's passes (§863, §873): the first at \pretolerance without its own
+// hyphenation (none when it is negative), the second at \tolerance, and when
+// \emergencystretch is positive a third, at \tolerance again with that much
+// more stretch on every line. The last of them is TeX's final pass, which
+// sets an overfull line when nothing fits.
+export function kpBreakpoints(bcs: BreakCandidates, nodes: TexNode[], lineWidthSp: number, p: Params): Break[] {
     let breaks: Break[] | null=null;
     if (p.pretolerance >= 0)
-        breaks = kpPass(bcs,lineWidthSp,p.pretolerance,true,p).breaks;
-    // TeX's second pass is its final one (\emergencystretch=0): when nothing
-    // fits, it sets an overfull line. At the width TeX compiled for that is
-    // TeX's own result, but at a narrower one a reader sees words run past
-    // the right edge. So the viewer keeps the final pass's breaks unless they
-    // hold an overfull line, and then tries its gentler passes – looser
-    // tolerances, which leave a loose line instead – falling back on TeX's
-    // breaks only if those find nothing either (a word wider than the
-    // measure). data-tex-final-pass="strict" keeps TeX's breaks always, as a
-    // replay against TeX needs; "false" skips the final pass altogether.
+        breaks = kpPass(bcs,lineWidthSp,p.pretolerance,p,{ firstPass: true }).breaks;
+    // At the width TeX compiled for, its final pass is TeX's own result, but
+    // at a narrower one a reader sees words run past the right edge. So the
+    // viewer keeps the final pass's breaks unless they hold an overfull line,
+    // and then tries its gentler passes – looser tolerances, which leave a
+    // loose line instead – falling back on TeX's breaks only if those find
+    // nothing either (a word wider than the measure).
+    // data-tex-final-pass="strict" keeps TeX's breaks always, as a replay
+    // against TeX needs; "false" skips the final pass altogether.
     let texBreaks: Break[] | null=null;
-    if(!breaks) {
-        const r = kpPass(bcs,lineWidthSp,p.tolerance,false,p,!!p.texFinalPass);
+    const backgrounds = p.emergencyStretch > 0 ? [0, p.emergencyStretch] : [0];
+    for (let k=0; !breaks && k<backgrounds.length; k++) {
+        const final = !!p.texFinalPass && k === backgrounds.length-1;
+        const r = kpPass(bcs,lineWidthSp,p.tolerance,p,{ final, background: backgrounds[k] });
         if (!r.overfull || p.texFinalPass === 'strict') breaks = r.breaks;
         else texBreaks = r.breaks;
     }
-    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.tolerance2,false,p).breaks;
-    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.emergencyTolerance,false,p).breaks;
+    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.tolerance2,p).breaks;
+    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.emergencyTolerance,p,{ uncapped: true }).breaks;
     if(!breaks) breaks = texBreaks;
     if(!breaks) breaks = greedyFallback(bcs,nodes,lineWidthSp,p);
+    return breaks;
+}
+
+/** The lines of a paragraph broken at `breaks`, each with its glue set. */
+export function setLines(bcs: BreakCandidates, breaks: Break[], nodes: TexNode[], lineWidthSp: number, p: Params): Line[] {
     const lines: Line[]=[];
     for(let k=0;k<breaks.length;k++){
         const startBC=k===0?bcs[0]:bcs[breaks[k-1].bcIdx], endBC=bcs[breaks[k].bcIdx];
@@ -580,4 +609,24 @@ export function kpBreak(bcs: BreakCandidates, nodes: TexNode[], lineWidthSp: num
         lines.push({nodes:extractLineNodes(startBC,endBC,nodes),ratio,expand,fitness:breaks[k].fc,leftProtrusion:startBC.leftProtrusion,rightProtrusion});
     }
     return lines;
+}
+
+export function kpBreak(bcs: BreakCandidates, nodes: TexNode[], lineWidthSp: number, p: Params): Line[] {
+    return setLines(bcs, kpBreakpoints(bcs, nodes, lineWidthSp, p), nodes, lineWidthSp, p);
+}
+
+// A paragraph's own breaking parameters: TeX's where the serializer recorded
+// them (it records those that differ from the defaults), the block's otherwise.
+const PARAGRAPH_PARAMS = [
+    ['pretolerance', 'pretolerance'], ['tolerance', 'tolerance'], ['emergency_stretch', 'emergencyStretch'],
+    ['line_penalty', 'linePenalty'], ['adj_demerits', 'adjDemerits'],
+    ['double_hyphen_demerits', 'doubleHyphenDemerits'], ['final_hyphen_demerits', 'finalHyphenDemerits'],
+] as const;
+export function paragraphParams(p: Params, para: Partial<Paragraph>): Params {
+    let own: Params | null = null;
+    for (const [field, key] of PARAGRAPH_PARAMS) {
+        const v = para[field];
+        if (v !== undefined && v !== null) (own ??= { ...p })[key] = v;
+    }
+    return own ?? p;
 }

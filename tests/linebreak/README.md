@@ -30,9 +30,22 @@ hyphenated breaks; 150–500 pt plus the document default is a good matrix.
 Capture with and without `microtype` loaded: protrusion and expansion take
 the breaker down paths a plain document never reaches.
 
-## Status
+## Replaying
 
-Only the capture side lives here today. The runner that replays fixtures
-through the viewer's breaker (and, once it ships, through an engine's own
-line-breaking code compiled to WebAssembly) is the next step of the test
-suite; until then, fixtures are consumed by tooling outside this repository.
+`replay.ts` runs a fixture's paragraph through the viewer's breaker
+(`src/viewer/src/engine/breaker.ts`) and writes the result in the same
+format; `tests/unit/linebreak.test.ts` compares it with the `.expected` file
+for every fixture set in a directory here. The breaker chooses the breaks and
+sets each line's glue; the replay does the rest of LuaTeX's
+`post_line_break` around them – the end of each line by the kind of break,
+what a break discards, the line packed to `\hsize`, the interline glue and
+penalties. It replays what the viewer models: no `\parshape` or
+`\hangindent`, no stretch in `\leftskip` or `\rightskip`, no protrusion,
+expansion or directions; a fixture with any of them is refused.
+
+| Set | Source | What it holds |
+|---|---|---|
+| `tolerance/` | `tolerance.tex` | `\sloppy` paragraphs, long unbreakable words and links, TeX's third pass with `\emergencystretch`, `\tolerance 10000`, no first pass, the demerits and hyphenation penalties, each at several measures |
+
+A new set is a directory of fixtures captured from its source, in the CI
+image (lualatex from TeX Live).

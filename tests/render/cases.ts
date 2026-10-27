@@ -170,6 +170,9 @@ export const cases: Record<string, CaseSettings> = {
   // captured on its own and lost. Worst attained 2026-10-25 (1 of TeX's rules
   // not drawn until then: a straight line, counted on TeX's side only).
   'tikz-nested': { tex_pictures: true, tolerance: 0.009 },
+  // Paragraphs with their own tolerances (\sloppy, a bibliography,
+  // \emergencystretch) and hyphenation penalties. Worst attained 2026-10-27.
+  sloppy: { tolerance: 0.013 },
   // Fills, straight lines and arrow tips in pictures, counted alike on both
   // sides, and labels under a rotation, a scale and a mirror; at 11pt, one
   // font at two sizes, whose scaled glyph copies dvisvgm keeps out of sight
