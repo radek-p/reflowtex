@@ -291,6 +291,7 @@ local VADJUST_ATTR       = 917
 -- MathML (mathml.lua, when the pipeline put it here): an inline formula's
 -- number in LaTeX's MathML file, on its begin-math node; each display's.
 local MathML = lfs.isfile("mathml.lua") and dofile("mathml.lua") or nil
+local RULE_BOX_RESOURCE = 1
 local RULE_IMAGE  = 2
 local picture_files = {}
 local source_width = 0
@@ -570,6 +571,8 @@ local WH_RESTORE   = assert(WH.pdf_restore,   "no pdf_restore whatsit subtype")
 local WH_COLORSTACK = assert(WH.pdf_colorstack, "no pdf_colorstack whatsit subtype")
 local WHATSIT_ID    = node.id("whatsit")
 local RULE_ID       = node.id("rule")
+local HLIST_ID      = node.id("hlist")
+local VLIST_ID      = node.id("vlist")
 local GLUE_ID       = node.id("glue")
 local PENALTY_ID    = node.id("penalty")
 local HLIST_ID      = node.id("hlist")
@@ -924,6 +927,36 @@ local function serialize_nodelist(head)
                 file   = picture and picture.file or nil,
                 page   = picture and picture.page or nil,
                 externalized = picture and picture.externalized or nil,
+            }
+
+        elseif t == "rule" and n.subtype == RULE_BOX_RESOURCE then
+            -- \useboxresource: a box saved with \saveboxresource, drawn by
+            -- reference as a PDF form, which shows only what falls within the
+            -- box. The rule is sized as the box, and the box is kept by the
+            -- engine (tex.getboxresourcebox), not in the list; it is written
+            -- here as any other box, inside a box of the rule's size that cuts
+            -- what it draws to that size (`clip`). A resource used twice is
+            -- written twice. graphicx clips an included image this way (clip
+            -- with trim or viewport): the image, moved by what is trimmed, in
+            -- a box of the size left.
+            --
+            -- A box saved \immediate is written out at once and its list freed,
+            -- and the engine may then return whatever took the freed node's
+            -- place. Only a free-standing box of the rule's own size is taken
+            -- for the saved box; otherwise (that, or a use given another size,
+            -- which would scale it) the resource keeps its space and draws
+            -- nothing here.
+            local box = tex.getboxresourcebox(n.index)
+            local saved = box and (box.id == HLIST_ID or box.id == VLIST_ID)
+                and not box.prev and not box.next
+                and box.width == n.width and box.height == n.height and box.depth == n.depth
+            cur[#cur + 1] = {
+                type     = "hlist",
+                width    = n.width,
+                height   = n.height,
+                depth    = n.depth,
+                clip     = true,
+                children = saved and serialize_nodelist(box) or {},
             }
 
         elseif t == "rule" then

@@ -143,6 +143,10 @@ message Node {
   // accessible layer, the viewer's text): a virtual font's accented letter,
   // drawn as a letter and an accent, is "é" (src/pipeline/fonts/vf.ts).
   optional string actual_text = 58;
+  // hlist: what it holds is drawn only within the box, as a PDF form shows
+  // its box – a box resource (\saveboxresource, \useboxresource), as graphicx
+  // clips an included picture by.
+  optional bool clip = 59;
 }
 
 // A named placeholder in running text (\webtext{name}{default} in

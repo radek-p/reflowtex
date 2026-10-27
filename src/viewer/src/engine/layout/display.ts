@@ -21,7 +21,16 @@ export function inkExtentOf(fontInfo: FontTable, box: TexNode): { min: number; m
     // than from the node's width. Hence the full box rather than just (x, w).
     let M: Affine | null = null;
     const stack: (Affine | null)[] = [];
+    // A clipping box (a box resource) shows its content only within its own
+    // left and right edges, in the frame it was met in.
+    const clips: { x0: number; x1: number; M: Affine | null }[] = [];
     const note = (x: number, w: number, yTop: number, yBot: number) => {
+        const clip = clips.at(-1);
+        if (clip && clip.M === M) {
+            const x1 = Math.min(x + w, clip.x1);
+            x = Math.max(x, clip.x0); w = x1 - x;
+            if (w < 0) return;
+        }
         if (!M) {
             if (x < min) min = x;
             if (x + w > max) max = x + w;
@@ -37,6 +46,8 @@ export function inkExtentOf(fontInfo: FontTable, box: TexNode): { min: number; m
     renderNodes(fontInfo, {
         beginTransform(n, tf) { stack.push(M); M = affineMul(M, affineOf(tf)); },
         endTransform()        { M = stack.pop()!; },
+        beginClip(n, x, top, w) { clips.push({ x0: x, x1: x + w, M }); },
+        endClip()             { clips.pop(); },
         glyph(n, x, y) { note(x, gW(n) * SP_TO_PX, y - gH(n) * SP_TO_PX, y + gD(n) * SP_TO_PX); },
         space()        {},                    // inter-word glue is not ink
         rule(n, x, y, w, h) { note(x, w, y, y + h); },

@@ -249,6 +249,17 @@ export const cases: Record<string, CaseSettings> = {
   // build directory, and the build stopped. Not against plain: that compile
   // runs in a build directory too. Worst attained 2026-10-27.
   'relative-paths': { file: 'tests/render/cases/relative-paths/main.tex', tolerance: 0.010 },
+  // Pictures graphicx clips (clip with a trim or a viewport), beside one whole
+  // and one through a viewport unclipped. graphicx puts a clipped image in a
+  // box resource, which the page drew as a filled rule: the picture and its
+  // text lost (84 of 599 glyphs here). The text of the included page is
+  // placed by dvisvgm within 0.024 pt, the whole page's as the clipped ones'.
+  // Worst attained 2026-10-27.
+  'img-clip': { file: 'tests/render/cases/img-clip/main.tex', tolerance: 0.024 },
+  // Boxes saved with \saveboxresource, one drawn twice, one cut to a box
+  // narrower than its text: each was drawn as a filled rule, its text lost
+  // (56 of 287 glyphs). Worst attained 2026-10-27.
+  'box-resources': { tolerance: 0.010 },
   // Floats LaTeX places itself: [p], [h], a type float's \newfloat defines,
   // algorithm's, figure*. Each is set where it is written, as float's [H]
   // sets one; the strip glyph for glyph against plain lualatex's page of the

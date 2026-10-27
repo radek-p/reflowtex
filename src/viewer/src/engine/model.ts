@@ -123,6 +123,8 @@ export interface BoxNode extends NodeFields {
     height: number;
     depth: number;
     children: TexNode[];
+    /** what it holds is drawn only within the box (a box resource) */
+    clip?: boolean;
 }
 export interface DiscNode extends NodeFields {
     type: 'disc';

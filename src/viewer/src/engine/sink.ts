@@ -76,6 +76,9 @@ export function insertPictureSvg(g: SVGGElement, markup: string): void {
 // Lines 1.2 em apart keep a gap of 0.2 em between their bands.
 export const BAND_MIN = { up: 0.75, down: 0.25 };
 
+// Clip paths' ids: one per clipping box drawn, unique on the page.
+let clipIds = 0;
+
 export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Element>, stats: PaintStats, cache: LayoutCache): PaintSink {
     let textParent: SVGElement | null = null, auxParent: SVGElement | null = null;
     let lastTspan: Element | null = null, lastRect: Element | null = null;
@@ -110,6 +113,36 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
         }
     };
 
+    // A group of its own for what is drawn until closeGroup: made once
+    // (`make`), set for this paint (`set`), with its own <text> first, in the
+    // aux parent next to rules and pictures.
+    function openGroup(n: TexNode, make: (g: SVGGElement) => void, set: (g: SVGGElement) => void) {
+        let g = byNode.get(n) as SVGGElement | undefined;
+        const isNew = !g;
+        if (!g) {
+            g = svgEl('g', {});
+            const t = svgEl('text', {});
+            t.style.cssText = 'font-weight:normal;font-style:normal';
+            g.appendChild(t);
+            make(g);
+            byNode.set(n, g); stats.created++;
+        } else { stats.repositioned++; }
+        set(g);
+        place(auxParent!, lastRect, g, isNew);
+        used.add(g); lastRect = g;
+        stack.push({ textParent, auxParent, lastTspan, lastRect });
+        textParent = g.firstChild as SVGTextElement; auxParent = g;
+        // The group's own <text> is not in `used`: it lives and goes with
+        // the group. Swept on its own, it was taken out of a group that a
+        // later paint reused, empty (and g.firstChild null from then on).
+        lastTspan = null; lastRect = g.firstChild as Element;
+    }
+    function closeGroup() {
+        const s = stack.pop()!;
+        textParent = s.textParent; auxParent = s.auxParent;
+        lastTspan = s.lastTspan; lastRect = s.lastRect;
+    }
+
     function place(parent: Element, last: Element | null, el: Element, isNew: boolean) {
         const expected = last ? last.nextSibling : parent.firstChild;
         if (el !== expected) {
@@ -130,31 +163,26 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
         // its own <text>, and sits in the aux parent next to rules and
         // pictures. Nesting works because the parents are stacked.
         beginTransform(n: TexNode, tf: SvgMatrix) {
-            let g = byNode.get(n);
-            const isNew = !g;
-            if (!g) {
-                g = svgEl('g', {});
-                const t = svgEl('text', {});
-                t.style.cssText = 'font-weight:normal;font-style:normal';
-                g.appendChild(t);
-                byNode.set(n, g); stats.created++;
-            } else { stats.repositioned++; }
             const [a,b,c,d,e,f] = affineOf(tf);
-            g.setAttribute('transform', `matrix(${a} ${b} ${c} ${d} ${e} ${f})`);
-            place(auxParent!, lastRect, g, isNew);
-            used.add(g); lastRect = g;
-            stack.push({ textParent, auxParent, lastTspan, lastRect });
-            textParent = g.firstChild as SVGTextElement; auxParent = g;
-            // The group's own <text> is not in `used`: it lives and goes with
-            // the group. Swept on its own, it was taken out of a group that a
-            // later paint reused, empty (and g.firstChild null from then on).
-            lastTspan = null; lastRect = g.firstChild as Element;
+            openGroup(n, () => {}, g => g.setAttribute('transform', `matrix(${a} ${b} ${c} ${d} ${e} ${f})`));
         },
-        endTransform() {
-            const s = stack.pop()!;
-            textParent = s.textParent; auxParent = s.auxParent;
-            lastTspan = s.lastTspan; lastRect = s.lastRect;
+        endTransform: closeGroup,
+        // A box that cuts what it draws to itself (a box resource): a group
+        // as a transform's, clipped to a rectangle it holds after its <text>.
+        beginClip(n: TexNode, x: number, top: number, w: number, h: number) {
+            openGroup(n, g => {
+                const id = `latex-clip-${++clipIds}`;
+                const cp = svgEl('clipPath', { id });
+                cp.appendChild(svgEl('rect', {}));
+                g.appendChild(cp);
+                g.setAttribute('clip-path', `url(#${id})`);
+            }, g => {
+                const r = g.querySelector(':scope > clipPath > rect')!;
+                r.setAttribute('x', String(x)); r.setAttribute('y', String(top));
+                r.setAttribute('width', String(w)); r.setAttribute('height', String(h));
+            });
         },
+        endClip: closeGroup,
         glyph(n: GlyphNode, x: number, y: number, fi: ViewerFont | undefined) {
             const face: ViewerFace = fi?.face ?? { kind: 'text', family: 'serif' };
             let family: string, carrier = false;

@@ -1,0 +1,12 @@
+% The picture main.tex includes (figure.pdf): a page 200 bp by 100 bp with a
+% word near each corner and one in the middle, so that every cut graphicx
+% makes passes through text. Made with: luatex figure.tex
+\outputmode=1 \nopagenumbers \hoffset=-1in \voffset=-1in
+\pagewidth=200bp \pageheight=100bp \hsize=200bp \vsize=100bp
+\parindent=0pt \topskip=0pt \parskip=0pt
+\font\big=cmr10 at 14pt \big
+\vbox to 100bp{\vskip4bp
+  \hbox to 200bp{\hskip4bp North west\hfil North east\hskip4bp}\vfil
+  \hbox to 200bp{\hfil Middle\hfil}\vfil
+  \hbox to 200bp{\hskip4bp South west\hfil South east\hskip4bp}\vskip4bp}
+\bye

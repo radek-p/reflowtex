@@ -1,0 +1,26 @@
+% Included pictures graphicx cuts, as in real papers: one PDF page holding
+% text (figure.pdf), included whole, with clip and trim, with a viewport and
+% no clip (the whole page drawn, past its box), and with clip and a viewport,
+% scaled, inside a paragraph. The text after each shows its box's size.
+\documentclass{article}
+\usepackage{graphicx}
+\begin{document}
+A first paragraph, before any picture, long enough to fill a line of the text
+width and then a few more words.
+
+\includegraphics{figure.pdf}
+
+The page included whole, and below it the same page with clip and a trim of
+20, 30, 40 and 10 bp from its left, bottom, right and top.
+
+\includegraphics[clip, trim=20 30 40 10]{figure.pdf}
+
+The same page through a viewport but not clipped: the box is the viewport's,
+and the page is drawn whole, past it on the left and the right.
+
+\hspace*{40pt}\includegraphics[viewport=30 0 150 100]{figure.pdf}
+
+A paragraph holding the page clipped to a viewport and scaled to 60 pt,
+\includegraphics[clip, viewport=30 20 150 80, width=60pt]{figure.pdf}, with
+words after it, enough of them that the lines break again at another width.
+\end{document}

@@ -1,0 +1,20 @@
+% Boxes saved with \saveboxresource and drawn with \useboxresource: one with
+% text, drawn twice, and one narrower than its text, which a resource cuts to
+% its box as a PDF form does, so the end of its text is not drawn.
+\documentclass{article}
+\begin{document}
+\setbox0=\hbox{\itshape saved once, drawn twice}
+\saveboxresource0
+\edef\twice{\the\lastsavedboxresourceindex}
+\setbox0=\hbox{cut to forty points}
+\wd0=40pt
+\saveboxresource0
+\edef\cut{\the\lastsavedboxresourceindex}
+A paragraph with a box resource in it, \useboxresource\twice, and the same
+resource again a few words later, \useboxresource\twice, then text enough
+to break the lines again at another width.
+
+A box resource narrower than its text, [\useboxresource\cut], between
+brackets, in a paragraph long enough to fill a line and then a few more
+words after it.
+\end{document}

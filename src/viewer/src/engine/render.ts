@@ -19,6 +19,11 @@ import type {
 export interface Sink {
     beginTransform(n: TransformNode, tf: SvgMatrix): void;
     endTransform(): void;
+    /** A box that shows only what falls within it (`clip`: a box resource,
+     *  as a PDF form shows its box): its left edge, top, width and height
+     *  (px); what is drawn until endClip is cut to that rectangle. */
+    beginClip?(n: BoxNode, x: number, top: number, w: number, h: number): void;
+    endClip?(): void;
     glyph(n: GlyphNode, x: number, y: number, fi: ViewerFont | undefined): void;
     /** An interword space (glue of subtype 13). */
     space(n: GlueNode, x: number, y: number): void;
@@ -137,6 +142,15 @@ export function renderLeaders(fontInfo: FontTable, sink: Sink, n: GlueNode, x: n
     }
 }
 
+// An hlist's children, set by its own glue, from its left edge x on its
+// baseline y; cut to the box when it clips.
+function renderHlist(fontInfo: FontTable, sink: Sink, n: BoxNode, x: number, y: number): void {
+    const{ratio,fillOrder}=hlistGlueRatio(n);
+    if(n.clip) sink.beginClip?.(n,x,y-n.height*SP_TO_PX,n.width*SP_TO_PX,(n.height+n.depth)*SP_TO_PX);
+    renderNodes(fontInfo,sink,n.children,x,y,ratio,0,fillOrder,n.height,n.depth);
+    if(n.clip) sink.endClip?.();
+}
+
 // Stack a vlist's children top-to-bottom. refY is the vlist's reference baseline
 // and vlistX its left edge; both are supplied by the caller (already resolving any
 // shift for the context the vlist appears in). Split out of renderNodes so a vlist
@@ -158,8 +172,7 @@ export function renderVlistBody(fontInfo: FontTable, sink: Sink, n: BoxNode, vli
             curY+=rh;
         } else if(child.type==='hlist'){
             const cb=curY+child.height*SP_TO_PX;
-            const{ratio:hr,fillOrder:hfo}=hlistGlueRatio(child);
-            renderNodes(fontInfo,sink,child.children,vlistX+(child.shift??0)*SP_TO_PX,cb,hr,0,hfo,child.height,child.depth);
+            renderHlist(fontInfo,sink,child,vlistX+(child.shift??0)*SP_TO_PX,cb);
             curY+=(child.height+child.depth)*SP_TO_PX;
         } else if(child.type==='vlist'){
             // Inside a vlist a box's shift is horizontal; the child's own baseline
@@ -245,8 +258,7 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
             }
             case 'hlist':{
                 if(n.aside&&sink.aside) sink.aside(n,x,baselineY);
-                const{ratio:hr,fillOrder:hfo}=hlistGlueRatio(n);
-                renderNodes(fontInfo,sink,n.children,x,baselineY+(n.shift??0)*SP_TO_PX,hr,0,hfo,n.height,n.depth);
+                renderHlist(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX);
                 x+=n.width*SP_TO_PX; break;
             }
             case 'vlist':
