@@ -92,12 +92,13 @@ after the viewer.
 **Geometry first: `vector-compare.ts`.** No pixels. MuPDF's device trace
 gives every glyph and rule in the strip with its origin; `dom-dump.ts` gives
 every glyph and rule the viewer drew in the same frame, through any
-transform (`\rotatebox`) – a picture's glyphs too (TikZ labels, drawn by
-dvisvgm as `<use>` of an outline; reported as ◊ in the font "picture"). A
+transform (`\rotatebox`) – a picture's glyphs too (TikZ labels, text in an
+included PDF, drawn by MuPDF as `<use data-text>` of an outline; reported in
+the font "picture" with the character MuPDF gives it, ◊ when none). A
 rule is a stroke of one straight segment or a fill of one four-cornered
 shape with straight sides: TeX's rules, and in a picture its straight lines,
 fills and arrow tips, which the strip has from LuaTeX's PDF and the viewer
-draws as dvisvgm's paths. `shapes.ts` decides it for both sides alike. A
+draws as MuPDF's paths (both sides read by MuPDF). `shapes.ts` decides it for both sides alike. A
 glyph of a font the pipeline could give no face is a glyph on both sides
 too: the viewer draws nothing for it but a transparent text carrier in the
 space TeX gave it – a `<tspan>` at the glyph's origin, which is what is
