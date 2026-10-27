@@ -62,15 +62,54 @@ export function filledRule(o: Outline, m: Affine): Pt[] | null {
   return pts.length === 4 ? pts.map(p => apply(m, p)) : null;
 }
 
+/** SVG path data, read as its grammar says: a command is one letter; a
+ *  number is a sign, digits with at most one dot, and an exponent (`4.97e-14`);
+ *  numbers may run together where the next one cannot continue the last
+ *  (`.5.5` is .5 and .5, `1-2` is 1 and -2), and an arc's two flags are one
+ *  digit each (`a1 1 0 011 1`: flags 0 and 1, then 1). */
+const COMMAND = /[MmLlHhVvCcSsQqTtAaZz]/;
+class PathData {
+  private i = 0;
+  private readonly d: string;
+  constructor(d: string) { this.d = d; }
+  private skip(): void { while (this.i < this.d.length && /[\s,]/.test(this.d[this.i])) this.i++; }
+  done(): boolean { this.skip(); return this.i >= this.d.length; }
+  /** the command letter here, taken; null when a number (or nothing) is next */
+  command(): string | null {
+    this.skip();
+    const c = this.d[this.i];
+    if (c === undefined || !COMMAND.test(c)) return null;
+    this.i++;
+    return c;
+  }
+  number(): number {
+    this.skip();
+    const re = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
+    re.lastIndex = this.i;
+    const m = re.exec(this.d);
+    if (!m) throw new Error(this.i >= this.d.length || COMMAND.test(this.d[this.i])
+      ? `path data ends early: ${this.d.slice(0, 80)}` : `not a number at ${this.i} in path data: ${this.d.slice(0, 80)}`);
+    this.i += m[0].length;
+    return parseFloat(m[0]);
+  }
+  flag(): number {
+    this.skip();
+    const c = this.d[this.i];
+    if (c !== '0' && c !== '1') throw new Error(`path data ends early: ${this.d.slice(0, 80)}`);
+    this.i++;
+    return Number(c);
+  }
+}
+
 /** An SVG path's data (`d`) as an Outline: absolute and relative commands,
  *  with arcs and curves marking it curved. */
 export function svgOutline(d: string): Outline {
-  const o = new Outline();
-  const tokens = d.match(/[MmLlHhVvCcSsQqTtAaZz]|[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/g) ?? [];
-  let i = 0, cmd = '', x = 0, y = 0, x0 = 0, y0 = 0;
-  const num = () => { const t = tokens[i++]; if (t === undefined || /[a-z]/i.test(t)) throw new Error(`path data ends early: ${d.slice(0, 80)}`); return parseFloat(t); };
-  while (i < tokens.length) {
-    if (/[a-z]/i.test(tokens[i])) cmd = tokens[i++];
+  const o = new Outline(), p = new PathData(d);
+  const num = () => p.number();
+  let cmd = '', x = 0, y = 0, x0 = 0, y0 = 0;
+  while (!p.done()) {
+    const c = p.command();
+    if (c) cmd = c;
     else if (!cmd || cmd === 'Z' || cmd === 'z') throw new Error(`a number with no command in path data: ${d.slice(0, 80)}`);
     const rel = cmd === cmd.toLowerCase(), dx = rel ? x : 0, dy = rel ? y : 0;
     switch (cmd.toUpperCase()) {
@@ -84,7 +123,7 @@ export function svgOutline(d: string): Outline {
       case 'C': num(); num(); num(); num(); x = num() + dx; y = num() + dy; o.curveTo(0, 0, 0, 0, x, y); break;
       case 'S': case 'Q': num(); num(); x = num() + dx; y = num() + dy; o.curveTo(0, 0, 0, 0, x, y); break;
       case 'T': x = num() + dx; y = num() + dy; o.curveTo(0, 0, 0, 0, x, y); break;
-      case 'A': for (let k = 0; k < 5; k++) num(); x = num() + dx; y = num() + dy; o.curveTo(0, 0, 0, 0, x, y); break;
+      case 'A': num(); num(); num(); p.flag(); p.flag(); x = num() + dx; y = num() + dy; o.curveTo(0, 0, 0, 0, x, y); break;
       case 'Z': o.closePath(); x = x0; y = y0; break;
     }
   }

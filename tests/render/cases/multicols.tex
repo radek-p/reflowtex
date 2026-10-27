@@ -1,0 +1,32 @@
+% multicols, as in real papers: its column lines go down the main list one by one, and its output routine then puts the balanced columns back as one box. The page shows the column lines; the strip ships them once, not again in the box. A \columnbreak and two environments, between paragraphs at the text width.
+\documentclass[11pt]{article}
+\usepackage{multicol}
+% multicol breaks its paragraphs at a tolerance and an \emergencystretch of its
+% own; here they are the document's, so that the case is about the columns
+\multicoltolerance=\tolerance \multicolpretolerance=\pretolerance
+\renewcommand*\setemergencystretch[2]{}
+\begin{document}
+A first paragraph at the text width, long enough to fill a line and then some
+more words, with a descender to end on: quickly.
+
+\begin{multicols}{2}
+Text in two columns, long enough to make several lines in a column of half the
+width, so that the columns are balanced at the end of the environment.
+
+A second paragraph in the columns, with more words to set and a descender to
+end on: quickly.
+\end{multicols}
+
+A paragraph between the two environments, long enough to fill a line of the
+text width and then some more.
+
+\begin{multicols}{3}
+Three columns this time, with a short paragraph.
+\columnbreak
+
+And one after a forced column break, with a few more words to set.
+\end{multicols}
+
+A last paragraph after the columns, long enough to fill a line of the text
+width and then some more words.
+\end{document}

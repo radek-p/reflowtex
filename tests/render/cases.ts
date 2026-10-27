@@ -193,4 +193,11 @@ export const cases: Record<string, CaseSettings> = {
   // page of the document with the breaks taken out: the column runs on across
   // a break as in the middle of a page. Worst attained 2026-10-26.
   'page-breaks-plain': { against_plain: true, plain_file: 'tests/render/cases/plain/page-breaks-plain.tex', tolerance: 0.009 },
+  // multicols: the column lines go down the main list, and multicol's output
+  // routine puts the balanced columns back as one box. The page shows the
+  // lines; the strip shipped both (the browser drew 565 glyphs, TeX 859). At
+  // its own width only: at another, the page narrows the columns by the
+  // change in the text width, where TeX divides the new width among them.
+  // Worst attained 2026-10-27.
+  multicols: { widths: [0], tolerance: 0.010 },
 };

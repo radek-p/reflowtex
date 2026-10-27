@@ -132,7 +132,7 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
   mkdirSync(out, { recursive: true });
 
   const { glyphs: P, rules } = traceStrip(pdf);
-  const dom: Dom = await dumpDom(url, { hsize, margin, waitLog: o.waitLog, screenshot: o.images ? join(out, 'viewer.png') : undefined });
+  const dom: Dom = await dumpDom(url, { hsize, margin, waitLog: o.waitLog, screenshot: o.images ? join(out, 'viewer.png') : undefined, log });
   if (o.images) writeFileSync(join(out, 'strip.svg'), stripSvg(pdf));
   writeFileSync(join(out, 'dom.json'), JSON.stringify(dom));
   const G = dom.glyphs;

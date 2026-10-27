@@ -234,6 +234,73 @@ local function trim_galley(nodes)
     return out
 end
 
+-- ── text the galley has twice ──────────────────────────────────────────────
+-- multicols passes its column lines through the main vertical list, one by
+-- one, and its output routine then puts the balanced columns back as one
+-- \hbox: the galley has that text twice. The serializer's walk shows the
+-- lines and leaves out a box that holds lines of a paragraph it has already
+-- shown (holds_emitted_lines), space and all; the strip leaves out the same
+-- boxes, so both have the text once. As in the walk: a line marks its
+-- paragraph shown, a \vbox is walked into, and the boxes looked at are those
+-- shown as they are (an \hbox that is no line, display or alignment, a
+-- picture).
+local PARA_ATTR = 900
+local HL_LINE, HL_ALIGNMENT, HL_EQUATION = 1, 4, 6
+
+local function find_para(n)
+    local v = node.get_attribute(n, PARA_ATTR)
+    if v then return v end
+    local t = ntype(n)
+    if (t == "hlist" or t == "vlist") and n.head then
+        for c in node.traverse(n.head) do
+            local r = find_para(c)
+            if r then return r end
+        end
+    end
+    return nil
+end
+
+local function holds_shown_lines(n, shown)
+    for x in node.traverse(n.head) do
+        local p = node.get_attribute(x, PARA_ATTR)
+        if p and shown[p] then return true end
+        local t = ntype(x)
+        if (t == "hlist" or t == "vlist") and x.head and holds_shown_lines(x, shown) then return true end
+    end
+    return false
+end
+
+local function shown_as_is(p)
+    local t = ntype(p)
+    if node.get_attribute(p, TIKZ_PIC_ATTR) then return t == "hlist" or t == "vlist" end
+    return t == "hlist" and p.subtype ~= HL_LINE and p.subtype ~= HL_ALIGNMENT and p.subtype ~= HL_EQUATION
+end
+
+local function drop_text_twice(nodes)
+    local shown, out = {}, {}
+    local function mark(p)
+        local t = ntype(p)
+        if t == "hlist" and p.subtype == HL_LINE then
+            local para = find_para(p)
+            if para then shown[para] = true end
+        elseif t == "vlist" and p.head and not node.get_attribute(p, TIKZ_PIC_ATTR) then
+            for c in node.traverse(p.head) do mark(c) end
+        end
+    end
+    for _, p in ipairs(nodes) do
+        if shown_as_is(p) and p.head and holds_shown_lines(p, shown) then
+            -- left out
+        else
+            mark(p)
+            out[#out + 1] = p
+        end
+    end
+    if #out < #nodes then
+        texio.write_nl(string.format("pageless: left out %d box(es) holding lines already in the galley", #nodes - #out))
+    end
+    return out
+end
+
 -- ── shipping ────────────────────────────────────────────────────────────────
 
 local function relink(list)
@@ -264,6 +331,7 @@ function Pageless.ship(opts)
     -- either end copied twice, once per side, at its two partial widths.
     local nodes = {}
     for p in node.traverse(head) do nodes[#nodes + 1] = p end
+    nodes = drop_text_twice(nodes)
     if opts.trim ~= false then nodes = trim_galley(nodes) end
 
     -- the origin: the margin, and none of the document's offsets

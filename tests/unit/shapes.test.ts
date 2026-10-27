@@ -48,3 +48,23 @@ test('a fill of one four-cornered shape with straight sides is a rule', () => {
   for (const d of ['M0 0H4V2Z', 'M0 0H4V2H2L0 1Z', 'M0 0H4V2C3 3 1 3 0 2Z', 'M0 0H4V2H0ZM5 5H6V6H5Z'])
     assert.equal(filledRule(svgOutline(d), I), null, d);
 });
+
+test('SVG path data: numbers as the grammar reads them', () => {
+  const pts = (d: string) => svgOutline(d).subpaths.map(s => s.pts);
+  // an exponent, as JavaScript writes a number near zero: not a command
+  assert.deepEqual(pts('M4.973799150320701e-14 7.1H13.4V13.7H4.9Z'), [[[4.973799150320701e-14, 7.1], [13.4, 7.1], [13.4, 13.7], [4.9, 13.7]]]);
+  assert.deepEqual(pts('M1E2 2e+1L-1.5e-1 3'), [[[100, 20], [-0.15, 3]]]);
+  // numbers run together: a second dot, or a sign, starts the next one
+  assert.deepEqual(pts('M.5.5L1.5.25'), [[[.5, .5], [1.5, .25]]]);
+  assert.deepEqual(pts('M1-2L-3-4'), [[[1, -2], [-3, -4]]]);
+  assert.deepEqual(pts('M+1+2l1e1-1E1'), [[[1, 2], [11, -8]]]);
+  // commas and any white space between them
+  assert.deepEqual(pts('M 1,2\n\tL 3 , 4'), [[[1, 2], [3, 4]]]);
+  // an arc's flags are one digit each, and may run into what follows
+  assert.deepEqual(pts('M0 0a1 1 0 011 1'), [[[0, 0], [1, 1]]]);
+  assert.deepEqual(pts('M0 0A1 1 0 1,0 2,3'), [[[0, 0], [2, 3]]]);
+  // what is not a number is an error, not a command
+  assert.throws(() => svgOutline('M1 2L3x'), /not a number/);
+  assert.throws(() => svgOutline('M1 2L3'), /ends early/);
+  assert.throws(() => svgOutline('M0 0A1 1 0 2 0 1 1'), /ends early/);
+});
