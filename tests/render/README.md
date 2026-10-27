@@ -130,6 +130,18 @@ follows from test to test. If it was open, it opens again with the report,
 where it was (this browser remembers).
 **Snapshot** shows instead the screenshot the test took.
 
+A long document opens in a few seconds and scrolls freely: the report
+draws only what is near the view. The PDF side is read as text and cut
+across into bands of 500 pt (`report/bands.ts`), the boxes too; the bands
+within half a view of the view are drawn at once, those within two views
+while the page is idle, and those further away are let go. The live page
+is a frame two views tall, moved along the stage with its page scrolled
+to match, so that the viewer paints what is on its screen, as it does for
+a reader; where the page scrolls itself (a link, the inspector), the
+panes follow. Each element and box is drawn once, where it is in the
+whole, so both sides keep the same x and y. `report/report.test.ts`
+checks it on a long document made up for it (`make test-render` runs it).
+
 What it reads is written by every run: `result.json` in each width's
 folder, and `vector/strip.svg` and `vector/viewer.png` beside
 `vector.json`, in the frame `vector-compare.ts` measures in.

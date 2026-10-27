@@ -94,10 +94,10 @@ test-render-deps: node-deps
 	@npx playwright install chromium
 
 test-render: test-render-deps
-	node --test tests/render/render.test.ts
+	node --test tests/render/render.test.ts tests/render/report/report.test.ts
 
 test-render-all: test-render-deps
-	REFLOWTEX_RENDER_ALL=1 node --test tests/render/render.test.ts
+	REFLOWTEX_RENDER_ALL=1 node --test tests/render/render.test.ts tests/render/report/report.test.ts
 
 render-report: node-deps
 	node tests/render/report/serve.ts $(REPORT_PORT)

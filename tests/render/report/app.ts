@@ -15,6 +15,7 @@
 import type { ComponentChildren, RefObject } from 'preact';
 import type { Result } from './results.ts';
 import type { InspectorApi } from '../../../src/inspector/src/protocol.ts';
+import { BAND_PT, PX_PER_PT, bandsIn, cutStrip, indexBoxes, type Box, type BoxIndex, type Strip } from './bands.ts';
 
 /** What the report reads of a comparison (vector.json, written by
  *  tools/pageless-pdf/vector-compare.ts): positions in pt. */
@@ -29,8 +30,6 @@ interface Vector {
     rules?: { x?: number; y: number; w?: number; h?: number; unmatched?: boolean; off: number; dx: number; dy: number }[];
     rules_missing?: { x: number; y: number; w?: number; h?: number }[];
 }
-/** A box in pt. */
-interface Box { x: number; y: number; w: number; h: number }
 /** Something that does not match: its kind, a label, its place and note,
  *  and its box on either side. */
 interface Item { k: string; what: string; y: number; note: string; off?: number; allowed?: boolean; viewer?: Box; strip?: Box }
@@ -46,7 +45,6 @@ const { html, render, useState, useEffect, useLayoutEffect, useMemo, useRef, use
     await import(new URL(`${INSPECTOR}vendor/preact.js`, document.baseURI).href) as typeof import('../../../src/inspector/src/vendor/preact.js');
 
 const BUILD = 'build/';
-const PX_PER_PT = 2;
 const RED = '#d93025', AMBER = '#e37400', BLUE = '#0b57d0';
 
 // ── Data ───────────────────────────────────────────────────────────────────────
@@ -90,21 +88,137 @@ function mismatches(v: Vector, glyphThr: number, ruleThr: number, rulesAllowed: 
     return out.sort((a, b) => a.y - b.y || x(a) - x(b));
 }
 
-/** The boxes of one side as SVG markup, in pt: at least 3 pt across and a
- *  point clear of what they mark, so a hairline or a dot shows. */
-function boxesSvg(items: Item[], side: 'viewer' | 'strip', sel: number): string {
-    let s = '';
-    items.forEach((it, i) => {
-        const b = it[side];
-        if (!b) return;
+/** Boxes of one side as SVG markup, in pt: at least 3 pt across and a point
+ *  clear of what they mark, so a hairline or a dot shows. One path for those
+ *  in red and one for those in amber (a long document can have hundreds of
+ *  thousands: as many elements would be slow to draw), and the selected one
+ *  on top. */
+function boxesSvg(items: Item[], which: number[], side: 'viewer' | 'strip', sel: number): string {
+    let red = '', amber = '', on = '';
+    const r = (n: number) => +n.toFixed(3);
+    for (const i of which) {
+        const it = items[i], b = it[side];
+        if (!b) continue;
         const w = Math.max(b.w, 3), h = Math.max(b.h, 3);
         const x = b.x - (w - b.w) / 2 - 1, y = b.y - (h - b.h) / 2 - 1;
-        const on = i === sel;
-        const colour = on ? BLUE : it.allowed ? AMBER : RED;
-        s += `<rect x="${x}" y="${y}" width="${w + 2}" height="${h + 2}" fill="${on ? 'rgba(11,87,208,.15)' : 'none'}" stroke="${colour}"` +
-             ` stroke-width="${on ? 2.5 : 1.5}" vector-effect="non-scaling-stroke"${it.allowed ? ' stroke-dasharray="4 3"' : ''}/>`;
-    });
-    return s;
+        if (i === sel) on = `<rect x="${x}" y="${y}" width="${w + 2}" height="${h + 2}" fill="rgba(11,87,208,.15)" stroke="${BLUE}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`;
+        else if (it.allowed) amber += `M${r(x)} ${r(y)}h${r(w + 2)}v${r(h + 2)}h${r(-w - 2)}z`;
+        else red += `M${r(x)} ${r(y)}h${r(w + 2)}v${r(h + 2)}h${r(-w - 2)}z`;
+    }
+    const path = (d: string, colour: string, more = '') => (d ? `<path d="${d}" fill="none" stroke="${colour}" stroke-width="1.5" vector-effect="non-scaling-stroke"${more}/>` : '');
+    return path(red, RED) + path(amber, AMBER, ' stroke-dasharray="4 3"') + on;
+}
+
+// ── Drawing near the view only ──────────────────────────────────────────────
+// A long document's stage is tens of thousands of pt tall, and what is drawn
+// of it is what is near the pane's view. The TeX side and the boxes come in
+// bands across (bands.ts): those within NEAR views of the view are drawn at
+// once; then, while the page is idle, those within FAR, nearest first, one at
+// a time, so that a scroll finds them drawn; a band beyond FAR is let go. The
+// live page is a frame over the view and NEAR views either side, moved on in
+// one step when the view comes within NEAR_EDGE of a view of its edge (Live).
+const NEAR = .5, FAR = 2, NEAR_EDGE = .25;
+/** How long after the live page last scrolled itself it is taken to be
+ *  scrolling still (a smooth scroll moves it every frame). */
+const FOLLOWING_MS = 250;
+/** The pane's view, in the stage's pt: top, bottom, height. */
+function viewOf(p: HTMLElement, scale: number): [number, number, number] {
+    const h = Math.max(p.clientHeight, 1) / scale, v0 = p.scrollTop / scale;
+    return [v0, v0 + h, h];
+}
+/** Something to do while the page is idle (where there is no idle callback,
+ *  soon after); returns how to call it off. */
+function whenIdle(f: () => void): () => void {
+    if (typeof requestIdleCallback === 'function') { const id = requestIdleCallback(f, { timeout: 1000 }); return () => cancelIdleCallback(id); }
+    const id = setTimeout(f, 50);
+    return () => clearTimeout(id);
+}
+/** Which bands to draw, of those whose content reaches down to `bottom`
+ *  (bands.ts), on a pane at this scale; `top`: where band 0 starts on the
+ *  stage (pt). Top to bottom. */
+function useBands(pane: RefObject<HTMLElement>, scale: number, bottom: number[], top = 0): number[] {
+    const [shown, setShown] = useState<number[]>([]);
+    const cur = useRef(shown), of = useRef(bottom);
+    cur.current = shown;
+    useLayoutEffect(() => {
+        const p = pane.current;
+        if (!p) return;
+        let cancel: (() => void) | null = null;
+        const within = (n: number) => { const [v0, v1, h] = viewOf(p, scale); return bandsIn(bottom, v0 - top - h * n, v1 - top + h * n); };
+        const show = (next: number[]) => {
+            next.sort((a, b) => a - b);
+            const was = cur.current;
+            if (next.length === was.length && next.every((k, i) => k === was[i])) return;
+            cur.current = next;
+            setShown(next);
+        };
+        // one more band within FAR, the nearest, while the page is idle
+        const more = () => {
+            cancel = null;
+            const have = new Set(cur.current), [v0, v1] = viewOf(p, scale), mid = (v0 + v1) / 2 - top;
+            const want = within(FAR).filter(k => !have.has(k));
+            if (!want.length) return;
+            const k = want.reduce((a, b) => (Math.abs((b + .5) * BAND_PT - mid) < Math.abs((a + .5) * BAND_PT - mid) ? b : a));
+            show([...cur.current, k]);
+            cancel = whenIdle(more);
+        };
+        const check = () => {
+            const keep = new Set(within(FAR));
+            show([...new Set([...cur.current.filter(k => keep.has(k)), ...within(NEAR)])]);
+            cancel ??= whenIdle(more);
+        };
+        if (of.current !== bottom) { of.current = bottom; cur.current = []; }      // (other bands)
+        check();
+        p.addEventListener('scroll', check, { passive: true });
+        const ro = new ResizeObserver(check);
+        ro.observe(p);
+        return () => { p.removeEventListener('scroll', check); ro.disconnect(); cancel?.(); };
+    }, [pane.current, scale, bottom, top]);
+    // (until the effect has run for other bands, those shown before that there are not)
+    return of.current === bottom ? shown : shown.filter(k => k < bottom.length);
+}
+/** The part of the stage the live page is drawn over, in pt (top, bottom):
+ *  the view and NEAR views either side, until the view comes near its edge;
+ *  null until the pane is there. */
+function useNear(pane: RefObject<HTMLElement>, scale: number): [number, number] | null {
+    const [near, setNear] = useState<[number, number] | null>(null);
+    const cur = useRef(near);
+    cur.current = near;
+    useLayoutEffect(() => {
+        const p = pane.current;
+        if (!p) return;
+        const check = () => {
+            const [v0, v1, h] = viewOf(p, scale), n = cur.current, edge = h * NEAR_EDGE;
+            if (n && (v0 >= n[0] + edge || n[0] <= 0) && v1 <= n[1] - edge) return;
+            cur.current = [Math.max(0, v0 - h * NEAR), v1 + h * NEAR];
+            setNear(cur.current);
+        };
+        cur.current = null;
+        check();
+        p.addEventListener('scroll', check, { passive: true });
+        const ro = new ResizeObserver(check);
+        ro.observe(p);
+        return () => { p.removeEventListener('scroll', check); ro.disconnect(); };
+    }, [pane.current, scale]);
+    return near;
+}
+
+/** One side's boxes over its content: the bands of them near the view, in
+ *  the stage's pt; `at`: where the content's origin is on the stage. */
+function Boxes({ pane, items, index, side, sel, scale, stagePt, at = [0, 0] }: {
+        pane: RefObject<HTMLDivElement>; items: Item[]; index: BoxIndex; side: 'viewer' | 'strip'; sel: number; scale: number;
+        stagePt: [number, number]; at?: [number, number] }) {
+    const shown = useBands(pane, scale, index.bottom, at[1]);
+    const drawn = useMemo(() => new Map<number, string>(), [items, index]);    // each band's markup, with none selected
+    const selBand = sel >= 0 ? index.bandOf[sel] ?? -1 : -1;
+    const band = (k: number): string => {
+        if (k === selBand) return boxesSvg(items, index.bands[k], side, sel);
+        let s = drawn.get(k);
+        if (s === undefined) drawn.set(k, s = boxesSvg(items, index.bands[k], side, -1));
+        return s;
+    };
+    return html`<svg class="boxes" viewBox=${`${-at[0]} ${-at[1]} ${stagePt[0]} ${stagePt[1]}`} width=${stagePt[0] * scale} height=${stagePt[1] * scale}>
+        ${shown.map(k => html`<g key=${k} dangerouslySetInnerHTML=${{ __html: band(k) }}/>`)}</svg>`;
 }
 
 // ── Icons (the inspector's: 16px on a 20px grid) ─────────────────────────────────
@@ -363,15 +477,39 @@ function makeMarks({ scale, status }: { scale: () => number; status: () => HTMLE
     };
 }
 
-/** An image of one side, with its boxes. */
-function Sheet({ src, size, items, side, sel, scale }:
-        { src: string | null; size: [number, number] | null | false; items: Item[]; side: 'viewer' | 'strip'; sel: number; scale: number }) {
-    const svg = useMemo(() => boxesSvg(items, side, sel), [items, side, sel]);
+/** strip.svg, read and cut (cutStrip): null while it loads, false if there is none. */
+function useStrip(src: string | null): Strip | null | false {
+    const [strip, setStrip] = useState<Strip | null | false>(null);
+    useEffect(() => {
+        setStrip(null);
+        if (!src) return;
+        let live = true;
+        fetch(src, { cache: 'no-store' }).then(r => (r.ok ? r.text() : null)).then(t => { if (live) setStrip((t && cutStrip(t)) || false); },
+            () => { if (live) setStrip(false); });
+        return () => { live = false; };
+    }, [src]);
+    return strip;
+}
+
+const NONE: number[] = [];
+/** The TeX side: the strip's bands near the view. */
+function StripSheet({ strip, pane, scale }: { strip: Strip | null | false; pane: RefObject<HTMLDivElement>; scale: number }) {
+    const shown = useBands(pane, scale, strip ? strip.bottom : NONE);
+    if (strip === false) return html`<p class="empty">No image: run the test again (make test-render) to make one.</p>`;
+    if (!strip) return null;
+    return html`<svg class="sheet" viewBox=${strip.viewBox} width=${strip.size[0] * scale} height=${strip.size[1] * scale}
+            aria-hidden="true">
+        <defs dangerouslySetInnerHTML=${{ __html: strip.defs }}/>
+        ${strip.always ? html`<g dangerouslySetInnerHTML=${{ __html: strip.always }}/>` : null}
+        ${shown.map(i => html`<g key=${i} dangerouslySetInnerHTML=${{ __html: strip.bands[i] }}/>`)}
+    </svg>`;
+}
+
+/** An image of one side. */
+function Sheet({ src, size, scale }: { src: string | null; size: [number, number] | null | false; scale: number }) {
     if (size === false) return html`<p class="empty">No image: run the test again (make test-render) to make one.</p>`;
     if (!size) return null;
-    return html`<img class="sheet" src=${src!} alt="" draggable="false" style=${{ width: `${size[0] * scale}px`, height: `${size[1] * scale}px` }}/>
-        <svg class="boxes" viewBox=${`0 0 ${size[0]} ${size[1]}`} width=${size[0] * scale} height=${size[1] * scale}
-            dangerouslySetInnerHTML=${{ __html: svg }}/>`;
+    return html`<img class="sheet" src=${src!} alt="" draggable="false" style=${{ width: `${size[0] * scale}px`, height: `${size[1] * scale}px` }}/>`;
 }
 
 // What dom-dump.ts does to the page, so that it is laid out as it was
@@ -383,11 +521,11 @@ function pinPage(win: Window & PageHooks, colPx: number, marginPx: number): void
     const css = doc.createElement('style');
     css.textContent = `:root { color-scheme: light !important }
         html, body { margin:0 !important; padding:0 !important; background: transparent !important }
-        body > :not(#lt-content):not(#rr-overlay) { display:none !important }
+        body > :not(#lt-content) { display:none !important }
         #lt-content > :not(.latex-block) { display:none !important }
         #lt-content { max-width:none !important; width:${colPx}px !important; margin:0 !important; padding:0 ${marginPx}px !important; background: var(--latex-page-bg, #fff) !important }
         .latex-block { margin:0 !important; width:${colPx}px !important }
-        #rr-overlay { position:absolute; pointer-events:none; overflow:visible; z-index:2147483646 }
+        html { overflow: hidden !important; overflow-anchor: none !important }
         html, html * { cursor: default !important }
         html, html * { user-select: none !important; -webkit-user-select: none !important; -webkit-user-drag: none !important }`;
     doc.head.appendChild(css);
@@ -413,50 +551,85 @@ function pageColours(win: (Window & PageHooks) | null | undefined, mode: string)
     style.textContent = tex ? 'html { color: #000 !important; --latex-page-bg: #fff !important }' : '';
 }
 
-/** The page itself, as the test measured it: live, for the inspector. As tall
- *  as the stage and scaled to it, so it never scrolls on its own – the pane
- *  does. `onPage(win, block)` when it is ready; `onHeight(pt)` as it settles. */
-function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, colours, frameRef, onPage, onHeight }: {
-        src: string; items: Item[]; sel: number; scale: number; stagePt: [number, number]; marginPt: number; hsizePt: number; colours: string;
-        frameRef: RefObject<HTMLIFrameElement>; onPage: (win: Window, block: Element | null) => void; onHeight: (pt: number) => void }) {
+/** The page itself, as the test measured it: live, for the inspector. Scaled
+ *  to the stage, and only as tall as the part of it near the pane's view
+ *  (useNear): the frame sits there on the stage, its page scrolled to the same
+ *  place, so that the page draws what a reader's would – what is on its screen
+ *  and near it – not a whole long document at once. It never scrolls on its
+ *  own: the pane does, and the frame follows; where the page scrolls itself (a
+ *  link, the inspector showing a node), the pane follows it. `onPage(win,
+ *  block)` when it is ready; `onPlace(at, height)`: where the block's origin
+ *  is on the stage, and its height (pt), as it settles. */
+function Live({ src, pane, scale, marginPt, hsizePt, colours, frameRef, onPage, onPlace }: {
+        src: string; pane: RefObject<HTMLDivElement>; scale: number; marginPt: number; hsizePt: number; colours: string;
+        frameRef: RefObject<HTMLIFrameElement>; onPage: (win: Window, block: Element | null) => void;
+        onPlace: (at: [number, number], height: number) => void }) {
     // hidden until pinned: the page as it loads (its header and title, its own
     // layout) is not the page the test measured
     const [ready, setReady] = useState(false);
     const colPx = Math.round(hsizePt * PX_PER_PT), marginPx = Math.round(marginPt * PX_PER_PT);
+    const k = scale / PX_PER_PT;
+    const near = useNear(pane, scale);
+    const shown = useRef(0);                                   // the page's scroll, in its px, as set here
     const place = useCallback(() => {
-        const win = frameRef.current?.contentWindow, doc = win?.document;
-        const block = doc?.querySelector('.latex-block');
+        const win = frameRef.current?.contentWindow;
+        const block = win?.document.querySelector('.latex-block');
         if (!block) return;
-        let svg = doc!.getElementById('rr-overlay') as SVGSVGElement | null;
-        if (!svg) { svg = doc!.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.id = 'rr-overlay'; doc!.body.appendChild(svg); }
         const r = block.getBoundingClientRect();
-        const wPt = (colPx + 2 * marginPx) / PX_PER_PT, hPt = r.height / PX_PER_PT;
-        Object.assign(svg.style, { left: `${r.left + win!.scrollX - marginPx}px`, top: `${r.top + win!.scrollY}px` });
-        svg.setAttribute('width', String(wPt * PX_PER_PT)); svg.setAttribute('height', String(hPt * PX_PER_PT));
-        svg.setAttribute('viewBox', `0 0 ${wPt} ${hPt}`);
-        svg.innerHTML = boxesSvg(items, 'viewer', sel);
-        onHeight(hPt);
-    }, [items, sel, colPx, marginPx]);
-    useEffect(place, [place]);
+        onPlace([(r.left + win!.scrollX - marginPx) / PX_PER_PT, (r.top + win!.scrollY) / PX_PER_PT], r.height / PX_PER_PT);
+    }, [marginPx, onPlace]);
+    const kNow = useRef(k), followed = useRef(-Infinity);
+    kNow.current = k;
+    /** Where the page has scrolled itself (a link, the inspector showing a
+     *  node): the frame moves as far, and the pane with it. Whether it had. */
+    const follow = (): boolean => {
+        const f = frameRef.current, win = f?.contentWindow;
+        if (!f || !win) return false;
+        const y = win.scrollY, d = y - shown.current;
+        if (!d) return false;
+        shown.current = y;
+        followed.current = performance.now();
+        f.style.top = `${y * kNow.current}px`;
+        if (pane.current) pane.current.scrollTop += d * kNow.current;
+        return true;
+    };
+    // the frame over the part near the view, and its page scrolled to it: in
+    // one go, so that nothing moves (at the end of the page, the page scrolls
+    // less, and the frame sits as far up) – unless the page is scrolling
+    // itself (a smooth scroll to a link's target), which the pane follows,
+    // and which a scroll from here would stop
+    useLayoutEffect(() => {
+        const f = frameRef.current, win = f?.contentWindow;
+        if (!f || !near) return;
+        f.style.height = `${Math.ceil((near[1] - near[0]) * PX_PER_PT)}px`;
+        let y = 0;
+        if (win && ready) {
+            if (follow() || performance.now() - followed.current < FOLLOWING_MS) return;
+            win.scrollTo(0, Math.floor(near[0] * PX_PER_PT));
+            y = win.scrollY;
+            // (the page paints what is now on its screen: the viewer looks again on a resize)
+            if (y !== shown.current) win.dispatchEvent(new Event('resize'));
+        }
+        shown.current = y;
+        f.style.top = `${y * k}px`;
+    }, [near?.[0], near?.[1], k, ready]);
     useEffect(() => pageColours(frameRef.current?.contentWindow, colours), [colours]);
     const onLoad = () => {
-        const win = frameRef.current!.contentWindow! as Window & PageHooks & typeof globalThis;
+        const f = frameRef.current!, win = f.contentWindow! as Window & PageHooks & typeof globalThis;
         pinPage(win, colPx, marginPx);
         pageColours(win, colours);
         requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
-        requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
-        // the block settles as its fonts arrive
+        // the block settles as its fonts arrive, and as the page lays out what
+        // is further from its screen
         const block = win.document.querySelector('.latex-block');
         if (block) new win.ResizeObserver(() => place()).observe(block);
         setTimeout(place, 300);
+        win.addEventListener('scroll', follow, { passive: true });
         onPage(win, block);
     };
-    const k = scale / PX_PER_PT;
-    return html`<iframe class="page" ref=${frameRef} src=${src} title="The reflowed page" onLoad=${onLoad} scrolling="no"
-        style=${{ width: `${colPx + 2 * marginPx}px`, height: `${stagePt[1] * PX_PER_PT}px`, transform: `scale(${k})`,
-                 visibility: ready ? 'visible' : 'hidden' }}/>`;
+    return html`<iframe class="page" ref=${frameRef} src=${src} title="The reflowed page" onLoad=${onLoad}
+        style=${{ width: `${colPx + 2 * marginPx}px`, transform: `scale(${k})`, visibility: ready ? 'visible' : 'hidden' }}/>`;
 }
-
 
 // ── Side by side, or stacked ────────────────────────────────────────────────
 // A pane loses its heading's height and its padding across (report.css).
@@ -492,6 +665,7 @@ function App() {
     const [sel, setSel] = useState(-1);
     const [fitScale, setFitScale] = useState(1);
     const [liveH, setLiveH] = useState(0);
+    const [liveAt, setLiveAt] = useState<[number, number]>([0, 0]);
     const [autoDir, setAutoDir] = useState('row');
     const left = useRef<HTMLDivElement>(null), right = useRef<HTMLDivElement>(null), frame = useRef<HTMLIFrameElement>(null);
     const compare = useRef<HTMLDivElement>(null);
@@ -521,7 +695,7 @@ function App() {
     const go = (i: number) => { const t = results[(i + results.length) % results.length]; if (t) location.hash = encodeURIComponent(t.id); };
 
     useEffect(() => {
-        setVec(null); setSel(-1); setLiveH(0);
+        setVec(null); setSel(-1); setLiveH(0); setLiveAt([0, 0]);
         if (!r || r.status === 'error') return;
         getJson<Vector>(`${BUILD}${r.dir}/vector/vector.json`).then(setVec, e => setVec({ error: String(e) }));
     }, [r?.id, r?.at]);
@@ -531,12 +705,20 @@ function App() {
     const setGlyphThr = (n: number) => setThr({ ...thr, [r.id]: [n, ruleThr] });
     const setRuleThr = (n: number) => setThr({ ...thr, [r.id]: [glyphThr, n] });
     const items = useMemo(() => (vec && !vec.error ? mismatches(vec, glyphThr, ruleThr, r?.rules_missing ?? 0) : []), [vec, glyphThr, ruleThr]);
+    const index = useMemo(() => ({ strip: indexBoxes(items.map(it => it.strip)), viewer: indexBoxes(items.map(it => it.viewer)) }), [items]);
+    const onPlace = useCallback((at: [number, number], h: number) => {
+        setLiveH(h);
+        setLiveAt(was => (was[0] === at[0] && was[1] === at[1] ? was : at));
+    }, []);
 
     const stamp = r ? `?t=${encodeURIComponent(r.at)}` : '';
     const vdir = r ? `${BUILD}${r.dir}/vector/` : '';
     const noVec = !r ? null : r.status === 'error' ? 'The test stopped before a comparison: see above.' : vec?.error ? `No comparison: ${vec.error}` : null;
-    const stripSrc = r && !noVec ? `${vdir}strip.svg${stamp}` : null, viewerSrc = r && !noVec ? `${vdir}viewer.png${stamp}` : null;
-    const stripSize = useImageSize(stripSrc), viewerSize = useImageSize(viewerSrc);
+    // (the snapshot only when it is shown: the live page is shown where there is one)
+    const stripSrc = r && !noVec ? `${vdir}strip.svg${stamp}` : null;
+    const viewerSrc = r && !noVec && (mode !== 'live' || !r.page) ? `${vdir}viewer.png${stamp}` : null;
+    const strip = useStrip(stripSrc), viewerSize = useImageSize(viewerSrc);
+    const stripSize = strip ? strip.size : strip;
 
     // the page's width in pt: the column and a margin either side; the stage's
     // height: the longer side's, and a tail
@@ -571,12 +753,20 @@ function App() {
     useEffect(() => marks.draw());
     const stage: [number, number] = [stagePt[0] * scale, stagePt[1] * scale];
 
-    // Scrolling together: the same x and y on both, the stages being alike.
+    // Scrolling together: the same x and y on both, the stages being alike. A
+    // side's scroll made here to follow the other is not passed back: by the
+    // time its event comes, the other may have moved on (the live page, say,
+    // scrolled itself).
+    const echo = useRef(new Map<Element, [number, number]>());
     const follow = (from: RefObject<HTMLDivElement>, to: RefObject<HTMLDivElement>) => () => {
         if (!lock || !from.current || !to.current) return;
-        const a = from.current, b = to.current;
-        if (b.scrollTop !== a.scrollTop) b.scrollTop = a.scrollTop;
-        if (b.scrollLeft !== a.scrollLeft) b.scrollLeft = a.scrollLeft;
+        const a = from.current, b = to.current, was = echo.current.get(a);
+        echo.current.delete(a);
+        if (was && was[0] === a.scrollTop && was[1] === a.scrollLeft) return;
+        if (b.scrollTop === a.scrollTop && b.scrollLeft === a.scrollLeft) return;
+        b.scrollTop = a.scrollTop;
+        b.scrollLeft = a.scrollLeft;
+        echo.current.set(b, [b.scrollTop, b.scrollLeft]);
     };
     const onLeft = follow(left, right), onRight = follow(right, left);
     useEffect(() => { if (lock) onLeft(); }, [lock]);
@@ -695,7 +885,8 @@ function App() {
                 <section class="side">
                     <h2><span class="title">TeX · pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></span></h2>
                     ${empty ?? html`<${Pane} paneRef=${left} onScroll=${onLeft} stage=${stage} stagePt=${stagePt} side="left" marks=${marks}>
-                        <${Sheet} src=${stripSrc} size=${stripSize} items=${items} side="strip" sel=${sel} scale=${scale}/><//>`}
+                        <${StripSheet} strip=${strip} pane=${left} scale=${scale}/>
+                        <${Boxes} pane=${left} items=${items} index=${index.strip} side="strip" sel=${sel} scale=${scale} stagePt=${stagePt}/><//>`}
                 </section>
                 <section class="side">
                     <h2><span class="title">Browser · reflowed</span>
@@ -703,9 +894,11 @@ function App() {
                             onChange=${setSide} options=${[['live', 'Live page'], ['snapshot', 'Snapshot']]}/></h2>
                     ${empty ?? html`<${Pane} paneRef=${right} onScroll=${onRight} stage=${stage} stagePt=${stagePt} side="right" marks=${marks}>
                         ${mode === 'live' && liveSrc
-                            ? html`<${Live} key=${`${r.id}|${r.at}`} src=${liveSrc} items=${items} sel=${sel} scale=${scale} stagePt=${stagePt}
-                                marginPt=${marginPt} hsizePt=${hsizePt} colours=${colours} frameRef=${frame} onPage=${onPage} onHeight=${setLiveH}/>`
-                            : html`<${Sheet} src=${viewerSrc} size=${viewerSize} items=${items} side="viewer" sel=${sel} scale=${scale}/>`}<//>`}
+                            ? html`<${Live} key=${`${r.id}|${r.at}`} src=${liveSrc} pane=${right} scale=${scale}
+                                marginPt=${marginPt} hsizePt=${hsizePt} colours=${colours} frameRef=${frame} onPage=${onPage} onPlace=${onPlace}/>`
+                            : html`<${Sheet} src=${viewerSrc} size=${viewerSize} scale=${scale}/>`}
+                        <${Boxes} pane=${right} items=${items} index=${index.viewer} side="viewer" sel=${sel} scale=${scale} stagePt=${stagePt}
+                            at=${mode === 'live' && liveSrc ? liveAt : undefined}/><//>`}
                 </section>
             </div>
             <section class="list">

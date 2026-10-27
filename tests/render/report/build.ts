@@ -1,22 +1,25 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The report page's script: app.ts, as the browser runs it (app.js, an ES
-// module beside index.html). Built when the report is served (serve.ts) and
-// for the website (website/build.sh), so nothing generated is committed.
+// module beside index.html, with bands.ts in it). Built when the report is
+// served (serve.ts) and for the website (website/build.sh), so nothing
+// generated is committed.
 //
 //     node tests/render/report/build.ts <out.js>
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { transformSync } from 'esbuild';
+import { buildSync } from 'esbuild';
 
 const APP = fileURLToPath(new URL('app.ts', import.meta.url));
 
-/** app.ts with its types taken out: one module, as written (its imports are
- *  types only; Preact comes from the inspector's folder at run time). */
+/** app.ts with its types taken out and the report's own modules it imports
+ *  (bands.ts) put in: one module, not minified (its other imports are types
+ *  only; Preact comes from the inspector's folder at run time). */
 export function reportScript(): string {
-  return transformSync(readFileSync(APP, 'utf8'), {
-    loader: 'ts', format: 'esm', charset: 'utf8', sourcefile: 'app.ts', legalComments: 'none',
-  }).code;
+  return buildSync({
+    entryPoints: [APP], bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022',
+    charset: 'utf8', legalComments: 'none',
+  }).outputFiles[0].text;
 }
 
 if (import.meta.main) {
