@@ -104,3 +104,30 @@ test('live text in a face that failed to load settles: measured once, the viewer
   expect(page.errors.some(e => /no-such-font\.otf/.test(e))).toBe(true);
   page.errors.length = 0;
 });
+
+test('a font that failed to load and is given again: failed no more, and the log says so', async ({ openPage }) => {
+  const page = await openPage('live', { route: [`**/${FILE}`, r => r.fulfill({ status: 404 })] });
+  page.errors.length = 0;                               // (the 404 is the point)
+  const failure = await page.evaluate(() => (window as W).reflowtex.host.log.records().filter((r: { code: string }) => r.code === 'font-load-failed').at(-1));
+  expect(failure?.details.files.split(', '), 'the record names the file, as host.fonts takes it').toContain(FILE);
+  expect(failure?.details.fonts.split(', ')).toContain('lmroman10-regular');
+  const bar = page.locator('.latex-notice');
+  await expect(bar.locator('p[data-code="font-load-failed"]')).toBeVisible();
+  // the file can be had now: the same URL again is fetched again
+  await page.context().unroute(`**/${FILE}`);
+  const r = await page.evaluate(async ({ FILE, FAMILY }) => {
+    const w = window as W;
+    const url = w.reflowtex.inspect.faces().find((f: { family: string }) => f.family === FAMILY)?.url;
+    const took = await w.reflowtex.host.fonts.provide(FILE, url);
+    await w.reflowtex.inspect.idle();
+    return { took, loaded: w.reflowtex.host.fonts.loaded(FILE),
+      records: w.reflowtex.host.log.records().filter((r: { code: string }) => r.code.startsWith('font-load'))
+        .map((r: { level: string; code: string; details: Record<string, string> }) => ({ level: r.level, code: r.code, details: r.details })) };
+  }, { FILE, FAMILY });
+  expect(r.took).toBe(true);
+  expect(r.loaded).toBe(true);
+  expect(r.records.at(-1)).toEqual({ level: 'info', code: 'font-loaded-after-failure', details: { font: 'lmroman10-regular', file: FILE } });
+  // the reader is told no more
+  await expect(bar).toBeHidden();
+  expect(await bar.locator('p[data-code="font-load-failed"]').count()).toBe(0);
+});
