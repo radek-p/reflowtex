@@ -108,6 +108,8 @@ export function stripSvg(pdf: string): string {
 const mean = (a: number[]) => a.reduce((s, x) => s + x, 0) / a.length;
 const std = (a: number[]) => { const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))); };
 const median = (a: number[]) => { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+/** the largest of a list of any length (Math.max(...a) overflows the stack past about 120 000) */
+const maxOf = (a: number[]) => a.reduce((m, x) => Math.max(m, x), -Infinity);
 /** first index i with s[i] >= v (numpy.searchsorted, side='left') */
 const searchsorted = (s: number[], v: number) => { let lo = 0, hi = s.length; while (lo < hi) { const m = (lo + hi) >> 1; if (s[m] < v) lo = m + 1; else hi = m; } return lo; };
 /** the slope of the least-squares line (numpy.polyfit(x, y, 1)[0]) */
@@ -160,12 +162,12 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
 
   // vertical: the drift, as the median dy per 250 pt of height
   const drift: (number | null)[] = [];
-  for (let e0 = 0; e0 < Math.max(...ys) + 250 - 250; e0 += 250) {
+  for (let e0 = 0; e0 < maxOf(ys); e0 += 250) {
     const s = dys.filter((_, k) => ys[k] >= e0 && ys[k] < e0 + 250);
     drift.push(s.length > 10 ? round(median(s), 3) : null);
   }
   const shown = drift.filter(d => d !== null);
-  log(`vertical (strip − viewer, pt): mean ${mean(dys).toFixed(3)}, sd ${std(dys).toFixed(3)}, largest ${Math.max(...dys.map(Math.abs)).toFixed(3)}; ` +
+  log(`vertical (strip − viewer, pt): mean ${mean(dys).toFixed(3)}, sd ${std(dys).toFixed(3)}, largest ${maxOf(dys.map(Math.abs)).toFixed(3)}; ` +
       `drift per 250 pt: ${JSON.stringify(shown.slice(0, 8))} … ${JSON.stringify(shown.slice(-3))}`);
 
   // horizontal, per line (glyphs sharing a baseline): offset at the start, slope along it
@@ -232,7 +234,7 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
   const result = {
     hsize_pt: hsize, margin_pt: margin, window_pt: win,
     glyphs: { strip: P.length, viewer: nInk, matched: matched.length },
-    vertical: { mean: round(mean(dys), 4), sd: round(std(dys), 4), max_abs: round(Math.max(...dys.map(Math.abs)), 4), drift_per_250pt: drift },
+    vertical: { mean: round(mean(dys), 4), sd: round(std(dys), 4), max_abs: round(maxOf(dys.map(Math.abs)), 4), drift_per_250pt: drift },
     lines: table, lines_off: off, rules: ruleRows, rules_missing: missing,
     matched: matched.map(([j, , dx, dy]) => ({ y: round(G[j].y, 2), x: round(D[j][0], 2), text: G[j].text, font: G[j].font, w: round(G[j].w, 2), size: round(G[j].size, 2), dx: round(dx, 3), dy: round(dy, 3) })),
     // what has no partner: the browser's glyphs with no glyph of TeX's near, and TeX's no browser glyph took

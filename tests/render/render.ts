@@ -158,9 +158,10 @@ export function serve(): Promise<{ url: string; server: Server }> {
  *  matched rule – the farthest one of its corners is from TeX's (null when the
  *  browser drew no rules). */
 export function worst(v: Vector): [number, number | null] {
-  const g = Math.max(0, ...v.matched.map(m => Math.max(Math.abs(m.dx), Math.abs(m.dy))));
+  // (a loop, not Math.max(...list): a long document has more glyphs than the stack has room for arguments)
+  const g = v.matched.reduce((w, m) => Math.max(w, Math.abs(m.dx), Math.abs(m.dy)), 0);
   const rs = v.rules.filter(r => r.off !== undefined).map(r => r.off!);
-  return [g, rs.length ? Math.max(...rs) : null];
+  return [g, rs.length ? rs.reduce((w, x) => Math.max(w, x), -Infinity) : null];
 }
 
 const f3 = (x: number) => x.toFixed(3);

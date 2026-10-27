@@ -163,7 +163,7 @@ export async function stripTiles(out: string, sid: string, cdir: string, vecPath
   }
   const lines: { max_abs_dx: number }[] = vec.lines, g = vec.glyphs;
   const matched: { dx: number; dy: number }[] = vec.matched;
-  const largest = (f: (m: { dx: number; dy: number }) => number) => (matched.length ? Math.max(...matched.map(f)) : null);
+  const largest = (f: (m: { dx: number; dy: number }) => number) => (matched.length ? matched.reduce((m, x) => Math.max(m, f(x)), -Infinity) : null);
   return {
     id: sid, hsize_pt: coarse.report.hsize_pt, margin_pt: coarse.report.margin_pt, ppp,
     fine_factor: fine ? fineFactor : null, width_px: W, tile_rows: th, tiles,
