@@ -250,15 +250,6 @@ export function lineAdjust(nodes: TexNode[]): LineAdjust {
     return { above, below };
 }
 
-// The widest box, picture or rule of a list (sp).
-function widestBoxSp(nodes: TexNode[]): number {
-    let w = 0;
-    for (const n of nodes) {
-        if (n.type === 'hlist' || n.type === 'vlist' || n.type === 'picture' || n.type === 'rule') w = Math.max(w, n.width || 0);
-    }
-    return w;
-}
-
 export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt: number, p: Params, cache: LayoutCache): SegmentGeometry {
     const widthSp  = Math.round(widthPt * 65536);
     const columnPx = widthPt * ZOOM;
@@ -323,12 +314,12 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
         const rightSp  = (cache.sourceWidthSp! > 0 && para.width! > 0)
             ? Math.max(0, cache.sourceWidthSp! - indentSp - para.width!) : 0;
         // A figure paragraph (a picture, a table, a framed box – no running
-        // text) scrolls whole when it is wider than the column, so it is broken
-        // against its widest box when that is wider: each box stays whole, and
-        // the lines break where TeX's do (a box as wide as the column, then a
-        // space and a label's anchor, makes a second line, an empty one).
-        const availSp  = Math.max(1, widthSp - indentSp - rightSp,
-                                  seg.isFigure ? widestBoxSp(nodes) : 0);
+        // text) is broken against the column like any other, as TeX breaks it:
+        // a box wider than the column cannot fit, so TeX's final pass sets it
+        // on an overfull line of its own, after an empty first line (a list
+        // item's label, centre's), with \lineskip between the two. The line
+        // is then wider than the column, and the segment scrolls whole.
+        const availSp  = Math.max(1, widthSp - indentSp - rightSp);
         const availPx  = columnPx - indentPx - rightSp * SP_TO_PX;
 
         // Pluggable breaker. A page may install an alternative paragraph

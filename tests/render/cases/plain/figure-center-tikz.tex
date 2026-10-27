@@ -1,0 +1,43 @@
+% cases/figure-center-tikz.tex with every float [H], float's 'here, definitely', and a float's caption set as the pipeline sets it: what the strip of that case is to be.
+\documentclass[11pt]{article}
+\usepackage{tikz}
+\usepackage{float}
+% a float's caption: a paragraph, small and centred
+\makeatletter
+\long\def\@makecaption#1#2{\vskip\abovecaptionskip{\small\centering#1: #2\par}\vskip\belowcaptionskip}
+\makeatother
+\pagestyle{empty}
+\newcommand\testpicture[1]{%
+  \begin{tikzpicture}
+    \useasboundingbox (0,0) rectangle (#1,2cm);
+    \draw (0.2,0.2) rectangle (2,1.8);
+    \node at (1.1,1) {$a_1$};
+    \node[anchor=east] at (#1,1) {right};
+  \end{tikzpicture}}
+\begin{document}
+A paragraph before the first figure, long enough to break onto a second line
+of the column, quickly.
+\begin{figure}[H]
+\begin{center}
+  \testpicture{360.525pt}
+\end{center}
+\caption{A picture a little wider than the text, in center.}
+\end{figure}
+A paragraph after the first figure, long enough to break onto a second line
+of the column, before the next one.
+\begin{figure}[H]
+\begin{center}
+  \testpicture{330pt}
+\end{center}
+\caption{A picture narrower than the text, in center.}
+\end{figure}
+A paragraph after the second figure, long enough to break onto a second line
+of the column, before the last one.
+\begin{figure}[H]
+  \centering
+  \testpicture{360.525pt}
+  \caption{A picture a little wider than the text, centred with centering.}
+\end{figure}
+A last paragraph, after all the figures, long enough to break onto a second
+line of the column.
+\end{document}
