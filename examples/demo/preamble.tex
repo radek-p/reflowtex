@@ -3,11 +3,16 @@
 % every formula's MathML (with classic fonts LaTeX loads luamml only when
 % asked). Reflow TeX reads it for screen readers.
 \DocumentMetadata{tagging=on}
+% the setup a snippet is set in: class and packages (the pipeline adds none)
+\documentclass{article}
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{tikz}
 \tagpdfsetup{math/mathml/luamml/load=true}
-% Reflow TeX demo preamble – prepended to every snippet in this directory.
+% Reflow TeX demo preamble – the setup every snippet in this directory is set in.
 %
 % It shows that a preamble can load packages, TikZ libraries, and macros on top
-% of the template (which loads tikz itself, before this preamble). \usetikzlibrary
+% of the setup above (which loads tikz first). \usetikzlibrary
 % here is what makes that ordering matter.
 \usepackage{xcolor}
 \usepackage{tikz-cd}

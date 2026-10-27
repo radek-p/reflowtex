@@ -26,7 +26,7 @@ test('Hugo blocks carry the accessible layer when the site asks', { skip: (!hasH
     writeFileSync(join(site, 'layouts/_default/single.html'), '{{ .Content }}');
     // the first block's author enables luamml (its preamble), the second's not
     mkdirSync(join(site, 'latex-preambles'), { recursive: true });
-    writeFileSync(join(site, 'latex-preambles/luamml.tex'), '\\DocumentMetadata{tagging=on}\n\\tagpdfsetup{math/mathml/luamml/load=true}\n');
+    writeFileSync(join(site, 'latex-preambles/luamml.tex'), '\\DocumentMetadata{tagging=on}\n\\documentclass{article}\n\\tagpdfsetup{math/mathml/luamml/load=true}\n');
     writeFileSync(join(site, 'content/a.md'), '---\ntitle: A\n---\n{{< latex preamble="luamml" >}}Let $x^2$ be big.{{< /latex >}}\n\n'
       + '{{< latex >}}And $y$ without.{{< /latex >}}\n\n{{< latex a11y="false" >}}Not this one.{{< /latex >}}\n');
     const prebuild = () => execFileSync('node', [join(REPO, 'integrations/hugo/prebuild.ts'), site], { stdio: 'pipe' });
