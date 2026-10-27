@@ -204,4 +204,8 @@ export const cases: Record<string, CaseSettings> = {
   // change in the text width, where TeX divides the new width among them.
   // Worst attained 2026-10-27.
   multicols: { widths: [0], tolerance: 0.010 },
+  // A document whose class line is in a file it inputs (\input{preamble}, as
+  // in real papers): it was refused as not a complete document. Worst attained
+  // 2026-10-27.
+  'class-in-input': { file: 'tests/render/cases/class-in-input/main.tex', against_plain: true, tolerance: 0.010 },
 };

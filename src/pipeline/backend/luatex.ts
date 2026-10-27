@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { readSerializerOutput } from '../nodes.ts';
 import { readMathmlFile } from '../mathml.ts';
 import { runLuaLatex } from '../lualatex.ts';
-import { DOCCLASS_RE, splitDocument, takeMetadata } from '../document.ts';
+import { DOCCLASS_RE, splitDocument, takeMetadata, withInputClass } from '../document.ts';
 import type { Capabilities } from './capabilities.ts';
 import type { Availability, BackendOptions, BackendRuntime, CaptureBackend, CaptureDocument, CaptureJob, CaptureResult, CaptureRun, Diagnostic } from './types.ts';
 
@@ -57,9 +57,13 @@ export const LUATEX_CAPABILITIES: Capabilities = {
 /** The template filled with a document: a function of the width increment.
  *  A complete document's class replaces the template's, its preamble becomes
  *  the preamble (the caller's, if any, follows), its body the content; the
- *  author's \DocumentMetadata goes to the template's top. */
-export function fillTemplate(template: string, content: string, preamble: string): (widthExtraSp: number) => string {
+ *  author's \DocumentMetadata goes to the template's top. The class line may
+ *  be in a file the document inputs, from `dirs`, its own directories
+ *  (withInputClass). Anything else is a snippet, set as the template's
+ *  content: what TeX makes of it is TeX's to say. */
+export function fillTemplate(template: string, content: string, preamble: string, dirs: string[] = []): (widthExtraSp: number) => string {
   let metadata = '';
+  content = withInputClass(content, dirs);
   const doc = splitDocument(content);
   if (doc) {
     // (the document's own, else the caller's preamble's)
@@ -134,7 +138,7 @@ export class LuaTeXBackend implements CaptureBackend {
   async open(doc: CaptureDocument): Promise<CaptureJob> {
     const { dir } = doc;
     mkdirSync(join(dir, 'pics'), { recursive: true });      // PGF externalisation's conventional prefix
-    const input = fillTemplate(readFileSync(this.template, 'utf8'), doc.content, doc.preamble);
+    const input = fillTemplate(readFileSync(this.template, 'utf8'), doc.content, doc.preamble, doc.searchDirs);
     // Always refreshed: a stale serializer would silently lack newer features.
     copyFileSync(this.serializer, join(dir, 'serializer.lua'));
     if (doc.mathml) copyFileSync(MATHML_LUA, join(dir, 'mathml.lua'));

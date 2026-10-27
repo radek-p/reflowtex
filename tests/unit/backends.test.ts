@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -248,6 +248,22 @@ test('the LuaTeX template filled: a complete document\'s class, preamble and met
   const doc = '\\DocumentMetadata{tagging=on}\n\\documentclass{book}\n\\usepackage{x}\n\\begin{document}\nBody.\n\\end{document}\n';
   assert.equal(fillTemplate(t, doc, '\\usepackage{y}')(5),
     '\\DocumentMetadata{tagging=on}\n\\documentclass{book}\n\n\\usepackage{x}\n\n\\usepackage{y}\n\\begin{document}5\nBody.\n\n\\end{document}');
+});
+
+test('the LuaTeX template filled: a class line in a file the document inputs, as TeX reads it', () => {
+  // As in real papers: the main file inputs a preamble of its own (which may
+  // input another), and the class line is there.
+  const t = '\\documentclass{article}\n%%PREAMBLE%%\n\\begin{document}\n%%CONTENT%%\n\\end{document}';
+  const dir = tmp();
+  mkdirSync(join(dir, 'setup'));
+  writeFileSync(join(dir, 'setup', 'preamble.tex'), '% the setup\n\\input{setup/class}\n\\usepackage{x}\n');
+  writeFileSync(join(dir, 'setup', 'class.tex'), '\\documentclass[11pt]{book}\n');
+  writeFileSync(join(dir, 'macros.tex'), '\\newcommand\\m{m}\n');
+  const doc = '\\input{setup/preamble} % comment\n\\input macros\n\\begin{document}\nBody.\n\\end{document}\n';
+  assert.equal(fillTemplate(t, doc, '', [dir])(0),
+    '\\documentclass[11pt]{book}\n\n\\usepackage{x}\n\\input macros\n\n\\begin{document}\nBody.\n\n\\end{document}');
+  // a file not among the document's own, or a line that is not alone, is left to TeX
+  assert.equal(fillTemplate(t, doc, '', [])(0), `\\documentclass{article}\n\n\\begin{document}\n${doc}\n\\end{document}`);
 });
 
 // ── The integrations' CLIs ───────────────────────────────────────────────────
