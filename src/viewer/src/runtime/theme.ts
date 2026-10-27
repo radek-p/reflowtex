@@ -5,14 +5,19 @@
 // colour maps' rules key on (colour.ts) and a page's own CSS can too. The
 // reader chooses a theme, or `system`: then one theme while the system is in
 // light mode and another while it is dark – the two slots, `light` and `dark`.
-// The choice and the slots are remembered (localStorage), as the reader's
-// other settings are; the page gives their first values on <html>:
+// This is the one place the page's theme is set and kept: the companion's
+// reading options, the inspector and a page's own switcher call it.
+//
+// On a page that asks for the reader's settings, the choice and the slots
+// are remembered (localStorage), as the reader's other settings are; the page
+// asks, and gives their first values, on <html>:
 //
 //   <html data-latex-theme-choice="system" data-latex-theme-light="default" data-latex-theme-dark="dark">
 //
-// The viewer sets the page's theme only on a page that asks: one with
-// data-latex-theme-choice, or whose script calls reflowtex.setTheme. A page
-// that themes itself (sets the class itself) is left alone.
+// or with reflowtex.rememberTheme(). Anywhere else nothing is read or
+// written: a host keeps its own settings and calls setTheme, which only
+// applies the theme. The viewer sets the page's theme only once asked (the
+// attribute, or a call); a page that themes itself is left alone.
 import { api } from './page.ts';
 import { DEFAULT_THEME } from './builtin-colour-maps.ts';
 import { mapThemes } from './colour.ts';
@@ -38,12 +43,14 @@ const save = (k: string, v: string): void => { try { localStorage.setItem(k, v);
 const root = () => document.documentElement;
 const NAME = /^[\w-]+$/;
 const valid = (t: string | null | undefined): t is string => typeof t === 'string' && NAME.test(t);
+// whether the reader's settings are kept: the page asked
+let remember = typeof document !== 'undefined' && root().hasAttribute('data-latex-theme-choice');
 const first = (k: keyof typeof KEYS): string => {
-    const v = load(KEYS[k]) ?? root().getAttribute(`data-latex-theme-${k}`);
+    const v = (remember ? load(KEYS[k]) : null) ?? root().getAttribute(`data-latex-theme-${k}`);
     return valid(v) ? v : FIRST[k];
 };
 
-let managed = typeof document !== 'undefined' && root().hasAttribute('data-latex-theme-choice');
+let managed = remember;
 const state = { choice: first('choice'), light: first('light'), dark: first('dark') };
 const darkSystem = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
 
@@ -79,7 +86,7 @@ function apply(): void {
 export function setTheme(choice: string): void {
     if (!valid(choice)) throw new TypeError(`setTheme: a theme's name or 'system', not ${JSON.stringify(choice)}`);
     state.choice = choice;
-    save(KEYS.choice, choice);
+    if (remember) save(KEYS.choice, choice);
     managed = true;
     apply();
 }
@@ -91,7 +98,20 @@ export function setSystemThemes(slots: { light?: string; dark?: string }): void 
         if (t === undefined) continue;
         if (!valid(t) || t === SYSTEM) throw new TypeError(`setSystemThemes: ${k} is a theme's name, not ${JSON.stringify(t)}`);
         state[k] = t;
-        save(KEYS[k], t);
+        if (remember) save(KEYS[k], t);
+    }
+    managed = true;
+    apply();
+}
+
+/** Keep the reader's settings on this page from now on (as
+ *  data-latex-theme-choice asks at load): the ones remembered are read and
+ *  applied, and every change is remembered. */
+export function rememberTheme(): void {
+    remember = true;
+    for (const k of ['choice', 'light', 'dark'] as const) {
+        const v = load(KEYS[k]);
+        if (valid(v)) state[k] = v;
     }
     managed = true;
     apply();
@@ -104,3 +124,4 @@ api.theme = theme;
 api.themes = themes;
 api.setTheme = setTheme;
 api.setSystemThemes = setSystemThemes;
+api.rememberTheme = rememberTheme;

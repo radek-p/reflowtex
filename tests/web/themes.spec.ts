@@ -73,3 +73,27 @@ test('the system mode: one theme while the system is light, another while it is 
   await idle(page);
   expect((await colours(page)).theme).toBe('dark');
 });
+
+// On a page that does not ask for the reader's settings (no
+// data-latex-theme-choice: the Hugo site's), the viewer neither reads nor
+// writes them: setTheme only applies, a host keeps its own. rememberTheme()
+// asks for them.
+const watchThemeKeys = `(() => { const seen = window.__themeKeys = [];
+  for (const m of ['getItem', 'setItem', 'removeItem']) { const f = Storage.prototype[m];
+    Storage.prototype[m] = function (k, ...a) { if (String(k).startsWith('reflowtex-theme')) seen.push(m + ' ' + k); return f.call(this, k, ...a); }; } })();`;
+const themeKeys = (page: WebPage) => page.evaluate(() => (window as unknown as { __themeKeys: string[] }).__themeKeys);
+
+test('without the opt-in, the theme settings are neither read nor written', async ({ openPage }) => {
+  const page = await openPage('hugo/alpha/', { init: watchThemeKeys, colorScheme: 'light' });
+  expect(await page.evaluate(() => document.documentElement.hasAttribute('data-latex-theme-choice'))).toBe(false);
+  await setTheme(page, 'dark');
+  await page.evaluate(() => window.reflowtex!.setSystemThemes!({ light: 'sepia' }));
+  await setTheme(page, 'system');
+  expect(await page.evaluate(() => [document.documentElement.className.trim(), document.documentElement.dataset.theme]),
+    'applied all the same').toEqual(['sepia', 'sepia']);
+  expect(await themeKeys(page), 'storage untouched').toEqual([]);
+  // asked for: read, then written
+  await page.evaluate(() => window.reflowtex!.rememberTheme!());
+  await setTheme(page, 'contrast');
+  expect(await themeKeys(page)).toEqual(expect.arrayContaining(['getItem reflowtex-theme', 'setItem reflowtex-theme']));
+});

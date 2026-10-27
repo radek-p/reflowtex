@@ -708,11 +708,16 @@ export interface ReflowTeX {
     theme?(): ThemeState;
     /** The themes on offer: default, then the colour maps'. */
     themes?(): string[];
-    /** Choose a theme, or 'system'; remembered. */
+    /** Choose a theme, or 'system'; applied to the page, and remembered
+     *  where the page keeps the reader's settings (rememberTheme). */
     setTheme?(choice: string): void;
     /** The themes the system mode shows while the system is light, and
-     *  while it is dark; remembered. */
+     *  while it is dark; remembered as setTheme's choice is. */
     setSystemThemes?(slots: { light?: string; dark?: string }): void;
+    /** Keep the reader's theme settings on this page (localStorage), as
+     *  data-latex-theme-choice on <html> asks: without either, nothing is
+     *  read or written, and setTheme only applies. */
+    rememberTheme?(): void;
     /** For tools: the viewer's own state (the README's Inspecting). Not
      *  part of this contract: its shape may change between versions (its
      *  `version` says which). */

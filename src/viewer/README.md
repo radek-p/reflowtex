@@ -572,8 +572,9 @@ everything a page draws:
   island's, map by map.
 - **The reader's theme**: `reflowtex.theme()`, `reflowtex.themes()`,
   `reflowtex.setTheme(choice)` (a theme, or `'system'`) and
-  `reflowtex.setSystemThemes({ light, dark })`, remembered, with
-  `reflowtex:theme` on `document`; see Theming.
+  `reflowtex.setSystemThemes({ light, dark })` and
+  `reflowtex.rememberTheme()`, with `reflowtex:theme` on `document`; see
+  Theming.
 
 ## Streams
 
@@ -787,23 +788,27 @@ operating system or the browser) is in light mode and another while it is
 dark – the two *slots*, `light` and `dark`. For a reader who has chosen
 nothing the viewer starts in the system mode with `default` in the light
 slot and `dark` in the dark one: TeX's own colours unless the system is
-dark. The choice and the slots are remembered in `localStorage`
-(`reflowtex-theme`: a theme or `system`; `reflowtex-theme-light`,
-`reflowtex-theme-dark`), as the reader's other settings are, and in the
-system mode the theme follows the system as it changes.
+dark. In the system mode the theme follows the system as it changes.
 
 `reflowtex.setTheme` (below) is the one way the page's theme is set: the
 companion's reading options, the inspector and the vanilla page's panel all
 call it, and nothing else sets the class or the stored choice.
 
-The viewer sets the page's theme only on a page that asks for it, so a page
-that themes itself is left alone (and stays in `default` until it sets a
-class). A page asks, and gives the first values for a reader who has chosen
-nothing, with attributes on `<html>`:
+The viewer sets the page's theme only once asked, so a page that themes
+itself is left alone (and stays in `default` until it sets a class). A page
+that wants the *reader's* settings asks, and gives the first values for a
+reader who has chosen nothing, with attributes on `<html>`:
 
 ```html
 <html data-latex-theme-choice="system" data-latex-theme-light="default" data-latex-theme-dark="dark">
 ```
+
+or by calling `reflowtex.rememberTheme()`. Only then are the choice and the
+slots remembered in `localStorage` (`reflowtex-theme`: a theme or `system`;
+`reflowtex-theme-light`, `reflowtex-theme-dark`), as the reader's other
+settings are. Without it the viewer neither reads nor writes those keys: a
+host that keeps its own settings (an editor, a CMS plugin) calls
+`reflowtex.setTheme`, which then only applies the theme.
 
 The viewer applies the theme when its script runs. A page that styles its
 own background per theme sets the class itself before the first paint, from
@@ -830,8 +835,9 @@ drives it through `window.reflowtex`:
 |---|---|
 | `reflowtex.theme()` | `{ choice, theme, light, dark }`: the reader's choice (a theme or `'system'`), the theme shown now, and the two slots |
 | `reflowtex.themes()` | the themes on offer: `default`, then the colour maps' (`light`, `dark`, `sepia`, `contrast`, and any theme a page's map adds) |
-| `reflowtex.setTheme(choice)` | a theme's name or `'system'`; remembered, applied at once |
-| `reflowtex.setSystemThemes({ light, dark })` | either slot or both; remembered, applied at once when the choice is `system` |
+| `reflowtex.setTheme(choice)` | a theme's name or `'system'`; applied at once (it also makes the viewer set the page's theme from then on), and remembered on a page that keeps the reader's settings |
+| `reflowtex.setSystemThemes({ light, dark })` | either slot or both; applied at once when the choice is `system`; remembered as above |
+| `reflowtex.rememberTheme()` | keep the reader's settings on this page from now on, as `data-latex-theme-choice` asks at load: the remembered choice and slots are read and applied |
 
 Each change sends `reflowtex:theme` on `document`, with the state of
 `reflowtex.theme()` as its `detail`. The companion package's reading options
