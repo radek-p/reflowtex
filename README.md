@@ -133,7 +133,7 @@ snippets come from anywhere but you, read
 
 | Path | What it is |
 |---|---|
-| [`src/extract/`](src/extract/) | LuaTeX serializer + the wrapper template (LaTeX → `output.json`) |
+| [`src/extract/`](src/extract/) | LuaTeX serializer + the capture code the driver reads (LaTeX → `output.json`) |
 | [`src/schema/latex.proto`](src/schema/latex.proto) | the node-list schema – the single source of truth |
 | [`src/latex/`](src/latex/) | `reflowtex.sty`, the companion package for documents written for the web (accordions of collapsible panes, web-only text, streams) |
 | [`src/pipeline/`](src/pipeline/) | the build pipeline (TypeScript, on Node): compiling, transforms, protobuf encoder, font handling |
@@ -153,7 +153,7 @@ The simplest path is the **vanilla** integration – a directory of `.tex` snipp
 becomes a self-contained static site:
 
 ```sh
-node integrations/vanilla/build.ts my-snippets/ -o site/
+node integrations/vanilla/build.ts my-snippets/ --snippet -o site/
 open site/index.html                 # self-contained – works straight off disk
 ```
 

@@ -32,7 +32,7 @@ Below is the AMS sample paper \texttt{testmath.tex} as a pageless PDF,
 The pipeline already keeps the galley: before the page builder sees
 anything, the serializer copies each item \TeX{} adds to the main vertical
 list, with its real dimensions. \texttt{pageless.ts} compiles the document
-the way the pipeline does, inside the extraction template, and adds two
+the way the pipeline does, as it is, with the capture code read first, and adds two
 things: \texttt{pageless\_pdf.lua}, which at the end of the run ships that
 copy as a few pages of up to 16\,000\,pt (the largest a \TeX{} dimension
 allows), and \texttt{stack.ts}, which stacks those pages into one.
@@ -57,8 +57,11 @@ node tools/pageless-pdf/pageless.ts paper.tex -o out/
 {{< latex preamble="about" >}}
 \noindent Options: \texttt{--passes N} (2 by default; a document with
 references needs 2 or 3), \texttt{--margin} (white either side of the
-column, 36\,pt by default), \texttt{--template} (the extraction template;
-\texttt{testmath.tex} has its own), and \texttt{--width-extra} (added to the
+column, 36\,pt by default), \texttt{--preamble} (more preamble, read at
+the end of the document's own; \texttt{testmath.tex} has one),
+\texttt{--document-metadata} (\verb|\DocumentMetadata| keys, for a document that
+sets none), \texttt{--snippet} (the file is a snippet, set in
+\texttt{--preamble}), and \texttt{--width-extra} (added to the
 document's \verb|\textwidth|, to typeset it wider than its own column).
 
 \section*{Comparing with the browser}

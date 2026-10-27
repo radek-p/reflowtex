@@ -24,7 +24,9 @@ what lets a paragraph reflow without giving up fidelity.
 
 ### 1. Extract (`src/extract`)
 
-`template.tex` wraps each snippet and loads `serializer.lua`, which copies LuaTeX's
+A driver (`src/pipeline/driver.ts`) reads the capture code (`reflowtex-capture.tex`)
+and then the document as it is, or a snippet set in the caller's preamble
+(`docs/documents.md`). The capture code loads `serializer.lua`, which copies LuaTeX's
 main-vertical-list contributions before pagination and writes `output.json`:
 paragraphs and display boxes as trees of glyph/glue/kern/rule/hlist/vlist/…
 nodes, plus a font table. A completed TikZ box is copied to a tightly sized
@@ -35,14 +37,14 @@ renderer and are not reproduced individually. Only the outermost picture is
 captured: a picture inside another (a `\tikz` in a node, the one a pgfplots axis
 opens) is drawn as part of the outer one. A `nicematrix` environment (its
 rules, `\Block`s and dotted lines are PGF pictures placed from the positions its
-cells record in the `.aux`) is captured the same way, whole, and the snippet
-gets a second pass (`site.ts` `passesFor`).
+cells record in the `.aux`) is captured the same way, whole; the run is
+repeated while what TeX reads back changes.
 
-The template loads the serializer and TikZ before substituting the caller's
-preamble, so the preamble can add packages and TikZ libraries on top. It installs
-the final picture and footnote wrappers after the preamble, ensuring package
-redefinitions are observed. Fonts and the classic Computer Modern fraction
-geometry are defaults a preamble can override.
+The capture code loads no package: the document's own options for the
+packages it loads are the only ones. What has to wait for the class, for
+graphics or for the preamble installs itself through LaTeX's hooks; the
+picture, reference and footnote wrappers are installed at `\begin{document}`,
+after every package's redefinitions.
 
 The extraction stream is genuinely pageless rather than a `\maxdimen`-tall
 page. The serializer retains a copy with the real geometry while zeroing only
@@ -147,7 +149,7 @@ Buffers gives that plus a compact wire form. See [binary-format.md](binary-forma
 - **`src/` never imports from `integrations/`.** The core knows nothing about any
   site generator. Integrations depend only on `src/`.
 - **One snippet → one `build/<hash>/` directory.** Intermediate artefacts
-  (`input.tex`, the lualatex run, `output.json`, `nodelist.pb`) are kept so a
+  (the driver, the lualatex run, `output.json`, `nodelist.pb`) are kept so a
   rebuild can skip unchanged snippets and so failures are inspectable.
 - **Everything is reproducible from source**, so generated data (compiled blocks,
   provisioned fonts) is safe to `.gitignore` – though committing it lets a site
