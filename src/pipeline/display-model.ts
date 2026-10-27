@@ -219,25 +219,6 @@ export function attachModel(oldest: SerializerOutput, previous: SerializerOutput
   return oldest;
 }
 
-/** attachModel with the document of record fixed to `first`, the sample at
- *  the document's own width, when that sample failed the affine check and the
- *  stable triple was found further up: the slopes of the stable pair go onto
- *  every display whose tree has the same shape at the document's width; one
- *  whose shape differs keeps its geometry (it renders as TeX set it). Returns
- *  the document and the number of displays left fixed. */
-export function anchorModel(first: SerializerOutput, previous: SerializerOutput, newest: SerializerOutput): [SerializerOutput, number] {
-  const dx = sourceWidth(newest) - sourceWidth(previous);
-  const [f, o, n] = [first, previous, newest].map(displayItems);
-  let fixed = 0;
-  for (let i = 0; i < Math.min(f.length, o.length, n.length); i++) {
-    if (topologyError(f[i].box!, o[i].box!, `display[${i}].box`)) { fixed++; continue; }
-    attachItem(f[i], o[i], n[i], dx);
-  }
-  attachParagraphRates(first, previous, newest);
-  first.display_model = true;
-  return [first, fixed];
-}
-
 // ── A display set another way at the document's width ───────────────────────
 // Such a display (amsmath moved its tag, or had no room to centre the body)
 // gets two forms: its tree at the document's width, and the stable pair's own
@@ -277,28 +258,34 @@ function fontRemap(first: SerializerOutput, other: SerializerOutput): Map<string
   return remap;
 }
 
-/** Give each display of `first` (already anchored by anchorModel) that
- *  disagrees with the stable pair a wide form. `probe(width)` compiles the
- *  document at that \textwidth. Returns [displays given a wide form,
- *  compilations made]. */
-export async function wideVariants(first: SerializerOutput, previous: SerializerOutput, newest: SerializerOutput,
-                                   probe: (width: number) => Promise<SerializerOutput | null>): Promise<[number, number]> {
+/** attachModel with the document of record fixed to `first`, the sample at
+ *  the document's own width, when that sample failed the affine check and the
+ *  stable triple was found further up: the slopes of the stable pair go onto
+ *  every display whose tree has the same shape at the document's width; one
+ *  whose shape differs keeps its geometry (it renders as TeX set it), and
+ *  each display that disagrees with the stable pair gets a wide form.
+ *  `probe(width, floor)` compiles the document at that \textwidth, or (TeX
+ *  failing there) at one in (floor, width], a width already compiled below
+ *  it: the output's source_width says which. Every probe is made before
+ *  `first` is changed, so one that rejects leaves it as it was. Returns
+ *  [displays given a wide form, compilations made]. */
+export async function anchorModel(first: SerializerOutput, previous: SerializerOutput, newest: SerializerOutput,
+                                  probe: (width: number, floor: number) => Promise<SerializerOutput>): Promise<[number, number]> {
   const x0 = sourceWidth(first), xb = sourceWidth(previous), xc = sourceWidth(newest);
   const dx = xc - xb;
   const firsts = displayItems(first), prevs = displayItems(previous), news = displayItems(newest);
-  if (!(firsts.length === prevs.length && prevs.length === news.length)) return [0, 0];
-  const todo = firsts.map((_, i) => i).filter(i =>
-    !displayAgrees(firsts[i], prevs[i], news[i], x0, xb, xc) && !some([prevs[i].box!], n => n.type === 'picture'));
-  if (!todo.length) return [0, 0];
+  const todo = firsts.length === prevs.length && prevs.length === news.length
+    ? firsts.map((_, i) => i).filter(i => !displayAgrees(firsts[i], prevs[i], news[i], x0, xb, xc) && !some([prevs[i].box!], n => n.type === 'picture'))
+    : [];
   // A probe is the whole document compiled again, tens of megabytes on a long
   // one, and the search reads only its display items: they are taken here,
   // and the output goes with this call. (No width is probed twice: each lies
   // strictly inside an open interval, which then ends at it.)
   let compiled = 0;
-  const sample = async (w: number): Promise<ContentItem[] | null> => {
+  const sample = async (w: number, floor: number): Promise<[number, ContentItem[]]> => {
     compiled++;
-    const d = await probe(w);
-    return d && displayItems(d);
+    const d = await probe(w, floor);
+    return [sourceWidth(d), displayItems(d)];
   };
   // The switch lies in (lo, hi]: at lo the display is set the narrow way, at
   // hi on the wide law. All displays are bisected together, sharing
@@ -308,9 +295,8 @@ export async function wideVariants(first: SerializerOutput, previous: Serializer
   for (;;) {
     const open = todo.filter(i => hi.get(i)! - lo.get(i)! > WIDE_RESOLUTION_SP);
     if (!open.length) break;
-    const w = Math.floor((lo.get(open[0])! + hi.get(open[0])!) / 2);
-    const items = await sample(w);
-    const counts = items !== null && items.length === firsts.length;
+    const [w, items] = await sample(Math.floor((lo.get(open[0])! + hi.get(open[0])!) / 2), lo.get(open[0])!);
+    const counts = items.length === firsts.length;
     for (const i of open) {
       if (!(lo.get(i)! < w && w < hi.get(i)!)) continue;
       if (counts && displayAgrees(items[i], prevs[i], news[i], w, xb, xc)) hi.set(i, w);
@@ -320,7 +306,11 @@ export async function wideVariants(first: SerializerOutput, previous: Serializer
       }
     }
   }
-  const remap = fontRemap(first, previous);
+  for (let i = 0; i < Math.min(firsts.length, prevs.length, news.length); i++)
+    if (!topologyError(firsts[i].box!, prevs[i].box!, `display[${i}].box`)) attachItem(firsts[i], prevs[i], news[i], dx);
+  attachParagraphRates(first, previous, newest);
+  first.display_model = true;
+  const remap = todo.length ? fontRemap(first, previous) : new Map<string, string>();
   for (const i of todo) {
     const item = firsts[i], prevItem = prevs[i], newItem = news[i];
     const wide = structuredClone(prevItem);

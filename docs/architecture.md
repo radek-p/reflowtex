@@ -77,6 +77,20 @@ alignment environments, and package-defined displays whose finished topology is
 stable. The accepted tree stores sparse derivatives only for fields that vary, and marks
 which of them are *gaps* – a glue's set width, a kern, a math node's surround –
 as opposed to box widths, which are whatever their contents came to.
+If TeX fails at one of the wider widths (a sample, or a compilation that
+finds where a display changes form) while the document compiles at its own,
+that compilation is taken instead at the widest width that compiles between
+the last width that did and it, found by bisection to 4 pt (at most five more
+compilations for a sample), and the log gets a warning
+(`display-sample-replaced`) naming the width that failed, TeX's first error and
+the width used. When no width above the widest sample compiles, that width is
+the ceiling (`display-sample-ceiling`): the samples still needed are taken
+between the document's width and it, and the viewer extrapolates the law
+past it as past any widest sample. Only when the document's own width is the
+one that compiles (or no law holds below the ceiling) does sampling end
+with no display model, so its displays stay at that width
+(`display-sample-failed`). An error at the document's own width still stops
+the build.
 
 At runtime each gap that stayed nonnegative across the accepted samples is
 classified by where the ink around it falls. A gap with ink on both sides is

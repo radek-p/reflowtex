@@ -14,7 +14,14 @@ export class BuildError extends Error {
 
 /** TeX failed, or reported an error it carried on past (nonstopmode): the
  *  node list would be a repaired document, not the one written. */
-export class TexError extends BuildError {}
+export class TexError extends BuildError {
+  /** TeX's first error message (its `! …` line), when the log has one. */
+  texError?: string;
+  constructor(message: string, block?: string, texError?: string) {
+    super(message, block);
+    this.texError = texError;
+  }
+}
 /** A picture could not be converted (a missing file, an unsupported format,
  *  Ghostscript or dvisvgm failing). */
 export class PictureError extends BuildError {}

@@ -21,7 +21,7 @@ type Item = { kind: string; para?: number; box?: Node; mathml?: unknown; amount?
               display_used_above?: number; display_used_below?: number; display_below?: number };
 type Output = { fonts: Record<string, unknown>; paragraphs: { nodes: Node[] }[]; content: Item[];
                 links: { label?: string; url?: string }[]; anchors: string[]; slots: unknown[];
-                source_width: number };
+                source_width: number; display_model?: boolean };
 
 // Nothing is fetched while tests run: the image's lualatex wrapper installs
 // no missing package (docker/lualatex-autoinstall.sh); what the tests need is
@@ -30,7 +30,8 @@ type Output = { fonts: Record<string, unknown>; paragraphs: { nodes: Node[] }[];
 process.env.REFLOWTEX_NO_AUTOINSTALL ??= '1';
 
 const root = mkdtempSync(join(tmpdir(), 'reflowtex-capture-'));
-const pipe = new Pipeline({ buildRoot: join(root, 'build'), fontsDir: join(root, 'fonts'), log: new Log('pipeline') });
+const pipeLog = new Log('pipeline');
+const pipe = new Pipeline({ buildRoot: join(root, 'build'), fontsDir: join(root, 'fonts'), log: pipeLog });
 
 /** A snippet's output.json, as the pipeline leaves it; compiled once per run.
  *  LuaTeX reports an error inside a callback as a warning and goes on without
@@ -795,4 +796,26 @@ test('an \\addcontentsline in a tcolorbox is written as LaTeX writes it', { skip
   const aux = auxOf(body, preamble);
   assert.ok(aux.split('\n').includes(ENTRY), aux);
   assert.ok(!aux.includes('\0'));
+});
+
+// ── A display TeX fails at a wider measure only ─────────────────────────────
+// The display model compiles the document again at wider measures. A package
+// may fail at one of them (its arithmetic overflowing at a width the author
+// never used) where the document itself compiles: that sample is taken at the
+// widest width below it that compiles, and the log names the width that
+// failed, TeX's error and the width used.
+
+test('a display TeX fails above a width only: the sample is taken below it, with a warning', async () => {
+  const preamble = '\\newdimen\\owntextwidth\n\\AtBeginDocument{\\global\\owntextwidth=\\textwidth}';
+  const body = 'Text before.\n\\[ \\ifdim\\textwidth>\\dimexpr\\owntextwidth+200pt\\relax \\errmessage{Too wide}\\fi x = 1 \\]\nText after.';
+  const d = await capture(body, preamble);
+  assert.equal(d.content.filter(it => it.kind === 'display').length, 1);
+  assert.equal(d.display_model, true, 'the displays are modelled');
+  const key = contentKey(body, preamble);
+  const own = d.source_width / 65536;
+  const mine = pipeLog.records().filter(r => r.details.block === `${key} (${key})`);
+  // +256 pt fails; (128, 256) pt bisected to 4 pt: 192, 224, 208, 200, 204
+  assert.deepEqual(mine.filter(r => r.level === 'warning').map(r => [r.code, r.details.failed, r.details.error, r.details.used]),
+    [['display-sample-replaced', String(own + 256), '! Too wide.', String(own + 200)]]);
+  assert.deepEqual(mine.filter(r => r.code === 'display-model-stable').map(r => r.details.widths), [`${own}, ${own + 128}, ${own + 200}`]);
 });

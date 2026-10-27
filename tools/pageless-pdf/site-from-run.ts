@@ -66,7 +66,7 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
     let k = 0;
     const modelled = await sampleDisplays({ data, dir: build }, {
       at: extraSp => compileAt(extraSp, String(++k)),
-      probe: extraSp => compileAt(extraSp, `w${extraSp}`).then(s => s.data, () => null),
+      probe: extraSp => compileAt(extraSp, `w${extraSp}`).then(s => s.data),
       label: basename(build), log: pipelineLog,
     });
     if (modelled.dir !== build) log(`  warning: the display model is anchored at a wider run than the strip's (${modelled.dir})`);

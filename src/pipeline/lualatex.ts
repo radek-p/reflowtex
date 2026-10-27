@@ -84,19 +84,20 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<s
     if (opts.settle !== false && n > 0 && after === before) break;
     before = after;
   }
+  const texLog = existsSync(log) ? readFileSync(log, 'utf8') : result!.stdout;
+  const errors = texLog.split('\n').filter(l => l.startsWith('! '));
   if (!existsSync(expect)) {
-    let detail = (existsSync(log) ? readFileSync(log, 'utf8') : result!.stdout).slice(-3000);
+    let detail = texLog.slice(-3000);
     // stderr is where a lualatex wrapper says what it tried (the container's
     // lazy package install)
     if (result!.stderr.trim()) detail += `\n--- stderr ---\n${result!.stderr.slice(-2000)}`;
     const status = result!.signal ? `killed by ${result!.signal}` : `exit code ${result!.code}`;
-    throw new TexError(`lualatex failed (${status}):\n${detail}`, opts.block);
+    throw new TexError(`lualatex failed (${status}):\n${detail}`, opts.block, errors[0]);
   }
-  const errors = readFileSync(log, 'utf8').split('\n').filter(l => l.startsWith('! '));
   if (errors.length) {
     rmSync(outputJson, { force: true });
     throw new TexError(`lualatex reported ${errors.length} error(s) (nonstopmode continued, so the node list would be ` +
-      `silently wrong):\n${[...new Set(errors)].slice(0, 10).map(e => `  ${e}`).join('\n')}\n  see ${log}`, opts.block);
+      `silently wrong):\n${[...new Set(errors)].slice(0, 10).map(e => `  ${e}`).join('\n')}\n  see ${log}`, opts.block, errors[0]);
   }
   return existsSync(outputJson) ? readFileSync(outputJson, 'utf8') : '';
 }

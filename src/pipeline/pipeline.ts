@@ -29,7 +29,7 @@ import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts
 import { kpsewhich } from './fonts/type1.ts';
 import { FontFiles, compositeTexts, resolveVirtualFonts } from './fonts/vf.ts';
 import { protoText } from './schema.ts';
-import { BackendUnavailable, BuildError, MissingCapability } from './errors.ts';
+import { BackendUnavailable, BuildError, MissingCapability, TexError } from './errors.ts';
 import { documentNeeds, supports, unmetNeeds, capabilityInfo } from './backend/capabilities.ts';
 import { createBackend, selectedBackendId } from './backend/registry.ts';
 import type { CaptureBackend, CaptureResult, Diagnostic, PictureSource } from './backend/types.ts';
@@ -358,6 +358,27 @@ function encodeBlock(data: SerializerOutput): Uint8Array {
 // taken in order and each is looked at before the next is needed, but the
 // first two wider ones are compiled at once. A text-only document compiles
 // once.
+//
+// TeX may fail at a width the author never used (a package's arithmetic
+// overflowing at a wide measure) where the document itself compiles. A
+// compilation at another width that TeX fails – a sample, or a probe for the
+// width a display changes form at – is taken instead at the widest width that
+// compiles between the last width that did and it, found by bisection to
+// RETRY_RESOLUTION_SP: at most log2(gap / 4 pt) more compilations per
+// failure – 5 for a sample, whose gap is at most a step (128 pt); a probe's is
+// at most half the interval it bisects. Widths TeX failed at are kept,
+// so a later failure above them bisects only what is left below the lowest.
+// Each replacement is logged. When no width above the widest sample
+// compiles, that sample's width is the ceiling (logged): the samples still
+// needed are taken below it, each halfway between the two the window holds
+// (the window slides up as above it), so the model is measured over the
+// widths that compile – and the viewer carries its law on past them, as past
+// any widest sample. Sampling ends only when the document's own width is the
+// one that compiles, or the two below the ceiling are too close (8 pt) to
+// measure a law between: the document keeps its own width's data with no
+// display model (its displays stay at the document's width), with a warning.
+
+const RETRY_RESOLUTION_SP = 4 * 65536;
 
 export interface Sample { data: SerializerOutput; dir: string }
 
@@ -365,36 +386,119 @@ export interface SamplingOptions<S extends Sample = Sample> {
   /** compile at the document's width + extraSp (a sample) */
   at(extraSp: number): Promise<S>;
   /** compile at the document's width + extraSp to find where a display
-   *  changes regime (display-model.ts, wideVariants) */
-  probe(extraSp: number): Promise<SerializerOutput | null>;
+   *  changes form (display-model.ts, anchorModel) */
+  probe(extraSp: number): Promise<SerializerOutput>;
   label: string;
   log: Log;
   /** named in the message when a template reports no width */
   template?: string;
 }
 
+/** TeX failed at the document's width + extraSp, and at every width tried
+ *  between the last that compiled (+ floorSp) and it. */
+class NoWiderWidth extends Error {
+  extraSp: number;
+  floorSp: number;
+  error: TexError;
+  constructor(extraSp: number, floorSp: number, error: TexError) {
+    super(error.message);
+    this.extraSp = extraSp;
+    this.floorSp = floorSp;
+    this.error = error;
+  }
+}
+
+const texErrorLine = (e: TexError): string => e.texError ?? e.message.split('\n')[0];
+
 /** The document of record with its display model: `first` (the document at
  *  its own width) with rates attached, or a wider sample's when the model
- *  had to be anchored elsewhere; whatever else a sample carries comes with it. */
+ *  had to be anchored elsewhere; whatever else a sample carries comes with
+ *  it. `first` as it is, unmodelled, when TeX fails at every width above
+ *  the document's own, or no law holds below the widths it fails at. */
 export async function sampleDisplays<S extends Sample>(first: S, o: SamplingOptions<S>): Promise<S> {
   if (!DM.wantsModel(first.data)) return first;
+  const { label, log } = o;
+  const x0 = Number(first.data.source_width);
+  const pt = (extraSp: number) => DM.pyG((x0 + extraSp) / 65536);
+  // Each compilation as it settles, holding nothing of its output; also what
+  // keeps one that fails after sampling has ended from going unhandled.
+  const settled: Promise<void>[] = [];
+  const run = <T>(p: Promise<T>): Promise<T> => { settled.push(p.then(() => {}, () => {})); return p; };
+  const sampler: SamplingOptions<S> = { ...o, at: x => run(o.at(x)), probe: x => run(o.probe(x)) };
+  const failed: number[] = [];      // the extra widths TeX failed at
+  /** What `pending` (compile(extraSp)) gives, or when TeX fails, the widest
+   *  width in (floorSp, extraSp) that compiles, with its extra width. */
+  const orBelow = async <T>(what: string, compile: (extraSp: number) => Promise<T>, extraSp: number, pending: Promise<T>,
+                            floorSp: number): Promise<[number, T]> => {
+    try { return [extraSp, await pending]; } catch (e) {
+      if (!(e instanceof TexError)) throw e;
+      failed.push(extraSp);
+      let lo = floorSp, hi = Math.min(extraSp, ...failed.filter(x => x > floorSp));
+      let best: T | undefined;
+      while (hi - lo > RETRY_RESOLUTION_SP) {
+        const mid = Math.floor((lo + hi) / 2);
+        try { best = await compile(mid); lo = mid; } catch (e2) {
+          if (!(e2 instanceof TexError)) throw e2;
+          failed.push(mid);
+          hi = mid;
+        }
+      }
+      if (best === undefined) throw new NoWiderWidth(extraSp, floorSp, e);
+      const error = texErrorLine(e);
+      log.warn('display-sample-replaced', `  ${label}: warning: TeX failed at ${pt(extraSp)} pt (${error}); the ${what} is taken at ` +
+        `${pt(lo)} pt instead, the widest that compiles below it`, { block: label, failed: pt(extraSp), error, used: pt(lo) });
+      return [lo, best];
+    }
+  };
+  const at = (extraSp: number, floorSp: number, pending: Promise<S>) => orBelow('sample', sampler.at, extraSp, pending, floorSp);
+  const probe = async (extraSp: number, floorSp: number) =>
+    (await orBelow('probe', sampler.probe, extraSp, sampler.probe(extraSp), floorSp))[1];
+  try {
+    return await modelDisplays(first, sampler, at, probe);
+  } catch (e) {
+    if (!(e instanceof NoWiderWidth)) throw e;
+    const error = texErrorLine(e.error);
+    log.warn('display-sample-failed', `  ${label}: warning: TeX failed at ${pt(e.extraSp)} pt (${error}) and at every width tried ` +
+      `above ${pt(e.floorSp)} pt; no display model, displays stay at the document's width`,
+      { block: label, failed: pt(e.extraSp), error, compiled: pt(e.floorSp) });
+    return first;
+  } finally {
+    await Promise.all(settled);    // no compilation outlives the sampling
+  }
+}
+
+/** sampleDisplays' search. `at(extraSp, floorSp, pending)` is the sample at
+ *  extraSp (`pending`: o.at(extraSp)) or the one replacing it above floorSp,
+ *  with its extra width; `probe` the same for a probe. */
+async function modelDisplays<S extends Sample>(first: S, o: SamplingOptions<S>,
+                                               at: (extraSp: number, floorSp: number, pending: Promise<S>) => Promise<[number, S]>,
+                                               probe: (extraSp: number, floorSp: number) => Promise<SerializerOutput>): Promise<S> {
   const { label } = o;
-  const ahead: Promise<S>[] = [o.at(DISPLAY_SAMPLE_STEP_SP), o.at(2 * DISPLAY_SAMPLE_STEP_SP)];
+  const widthOf = (x: Sample) => Number(x.data.source_width ?? 0);
+  const x0 = widthOf(first);
+  const pt = (extraSp: number) => DM.pyG((x0 + extraSp) / 65536);
+  const ahead: [number, Promise<S>][] = [1, 2].map(k => [k * DISPLAY_SAMPLE_STEP_SP, o.at(k * DISPLAY_SAMPLE_STEP_SP)]);
   let next = 3;
-  let samples: S[] = [];
-  for (let s: S = first; ; s = await ahead.shift()!) {
+  /** The window: up to three samples by increasing width, with their extra widths. */
+  const window: [number, S][] = [];
+  /** The widest extra width that compiles, once TeX fails at every one above it. */
+  let ceiling: number | null = null;
+  for (let entry: [number, S] = [0, first]; ;) {
+    const [, s] = entry;
     if (s !== first && !DM.wantsModel(s.data)) return s;
-    const w = Number(s.data.source_width ?? 0);
+    const w = widthOf(s);
     if (w <= 0) throw new BuildError(`display-bearing template ${o.template ?? ''} did not report a positive source width ` +
       `(is ${WIDTH_EXTRA_MARK} and the Serializer.note_source_width hook missing?)`, label);
-    if (samples.length && w <= Number(samples[samples.length - 1].data.source_width))
-      throw new BuildError(`display sample width did not increase: ${samples[samples.length - 1].data.source_width}, ${w}`, label);
-    samples.push(s);
-    if (samples.length >= 3) {
-      const [a, b, c] = samples.slice(-3);
+    // in order: wider than the window, or (below a ceiling) inside it
+    const at0 = window.findIndex(([, y]) => widthOf(y) >= w);
+    if (at0 >= 0 && (ceiling === null || at0 === 0 || widthOf(window[at0][1]) === w))
+      throw new BuildError(`display sample width did not increase: ${window.map(([, y]) => widthOf(y)).join(', ')}, ${w}`, label);
+    window.splice(at0 < 0 ? window.length : at0, 0, entry);
+    if (window.length === 3) {
+      const [a, b, c] = window.map(([, y]) => y);
       const [ok, reason] = DM.checkSamples(a.data, b.data, c.data);
       if (ok) {
-        const widths = [a, b, c].map(x => DM.pyG(Number(x.data.source_width) / 65536)).join(', ');
+        const widths = [a, b, c].map(y => DM.pyG(widthOf(y) / 65536)).join(', ');
         if (a === first) {
           o.log.info('display-model-stable', `  ${label}: display model stable at ${widths} pt`, { block: label, widths });
           return { ...a, data: DM.attachModel(a.data, b.data, c.data) };
@@ -403,19 +507,42 @@ export async function sampleDisplays<S extends Sample>(first: S, o: SamplingOpti
         // width the page must match exactly. Displays set another way there get
         // the wider regime as a second form, from the width TeX switches at –
         // found by compiling in between.
-        const [data] = DM.anchorModel(first.data, b.data, c.data);
-        const x0 = Number(first.data.source_width);
-        const [nWide, nProbes] = await DM.wideVariants(data, b.data, c.data, async wd => o.probe(wd - x0));
+        const [nWide, nProbes] = await DM.anchorModel(first.data, b.data, c.data, (wd, floor) => probe(wd - x0, floor - x0));
         o.log.info('display-model-stable', `  ${label}: display model stable at ${widths} pt, anchored at the document's ${DM.pyG(x0 / 65536)} pt` +
           (nWide ? `; ${nWide} display(s) set another way there get a wide form (${nProbes} more compilation(s) to find where)` : ''),
           { block: label, widths, anchor: DM.pyG(x0 / 65536), wide: String(nWide) });
-        return { ...first, data };
+        return first;
       }
-      const width = DM.pyG(Number(a.data.source_width) / 65536);
+      const width = DM.pyG(widthOf(a) / 65536);
       o.log.info('display-sample-rejected', `  ${label}: rejected display sample at ${width} pt: ${reason}`, { block: label, width, reason: reason ?? '' });
-      samples = samples.slice(-2);
+      window.shift();
     }
-    if (w + DISPLAY_SAMPLE_STEP_SP >= TEX_MAX_DIMEN_SP) throw new BuildError('no stable affine display topology before \\maxdimen', label);
-    if (!ahead.length) ahead.push(o.at(next++ * DISPLAY_SAMPLE_STEP_SP));
+    if (ceiling === null) {
+      // the next sample up
+      if (w + DISPLAY_SAMPLE_STEP_SP >= TEX_MAX_DIMEN_SP) throw new BuildError('no stable affine display topology before \\maxdimen', label);
+      if (!ahead.length) ahead.push([next * DISPLAY_SAMPLE_STEP_SP, o.at(next++ * DISPLAY_SAMPLE_STEP_SP)]);
+      const [extraSp, pending] = ahead.shift()!;
+      const floorSp = window[window.length - 1][0];
+      try { entry = await at(extraSp, floorSp, pending); continue; } catch (e) {
+        // Nothing above the widest sample compiles: unless that is the
+        // document's own width, the samples are taken below it from here on.
+        if (!(e instanceof NoWiderWidth) || window.length < 2) throw e;
+        ceiling = floorSp;
+        const error = texErrorLine(e.error);
+        o.log.warn('display-sample-ceiling', `  ${label}: warning: TeX fails above ${pt(ceiling)} pt (at ${pt(e.extraSp)} pt: ${error}); ` +
+          `display samples are taken below it, and the model is measured from ${pt(0)} to ${pt(ceiling)} pt`,
+          { block: label, ceiling: pt(ceiling), failed: pt(e.extraSp), error });
+      }
+    }
+    // Below the ceiling: a sample halfway between the two in the window, until
+    // they are too close to measure a law between.
+    const [[lo], [hi]] = window;
+    if (hi - lo <= 2 * RETRY_RESOLUTION_SP) {
+      o.log.warn('display-sample-failed', `  ${label}: warning: no stable display model below ${pt(hi)} pt, where TeX fails above; ` +
+        `no display model, displays stay at the document's width`, { block: label, ceiling: pt(hi) });
+      return first;
+    }
+    const mid = lo + Math.floor((hi - lo) / 2);
+    entry = await at(mid, lo, o.at(mid));
   }
 }
