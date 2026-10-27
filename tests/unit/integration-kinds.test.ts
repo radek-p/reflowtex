@@ -33,7 +33,8 @@ test('vanilla: a .tex file is a document; with --snippet, a snippet in preamble.
     writeFileSync(join(dir, 'snippets', 'a.tex'), 'A snippet in a book: \\chaptername.');
     const docs = cli(['integrations/vanilla/build.ts', join(dir, 'docs'), '-o', join(dir, 'site-docs')]);
     const snippets = cli(['integrations/vanilla/build.ts', join(dir, 'snippets'), '--snippet', '-o', join(dir, 'site-snippets')]);
-    for (const out of [docs, snippets]) assert.match(out, /compiled|done/, out);
+    assert.match(docs, /compiling 1 document\(s\)/, docs);
+    assert.match(snippets, /compiling 1 snippet\(s\)/, snippets);
     assert.match(readFileSync(join(dir, 'site-docs', 'index.html'), 'utf8'), /data-nodelist-b64=/);
     assert.match(readFileSync(join(dir, 'site-snippets', 'index.html'), 'utf8'), /data-nodelist-b64=/);
   } finally { rmSync(dir, { recursive: true, force: true }); }

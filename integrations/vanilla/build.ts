@@ -109,9 +109,9 @@ let pipe: Pipeline;
 try {
   pipe = new Pipeline({ buildRoot, fontsDir: join(out, 'fonts'), localFontsDir: localFonts, searchDirs: [srcDir], backend: o.backend, log });
 } catch (e) { log.error('build-error', `error: ${(e as Error).message}`); process.exit(1); }
-log.info('compile-start', `reflowtex: compiling ${snippets.length} snippet(s) from ${srcDir}`, { snippets: String(snippets.length), dir: srcDir });
 // a batch is made of snippets
 const kind = o.snippet || o.batch ? 'snippet' as const : 'document' as const;
+log.info('compile-start', `reflowtex: compiling ${snippets.length} ${kind}(s) from ${srcDir}`, { snippets: String(snippets.length), dir: srcDir });
 // TeX's job is named after the file (\jobname: paper for paper.tex), when
 // TeX can take the name as it is
 const jobnameOf = (name: string) => { const s = name.replace(/\.tex$/, ''); return /^[A-Za-z0-9_.+-]+$/.test(s) ? s : 'input'; };
