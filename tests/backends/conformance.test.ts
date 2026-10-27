@@ -292,7 +292,7 @@ function conformance(id: string, backend: CaptureBackend): void {
   test('the encoder takes every fixture', async () => {
     for (const k of built.keys()) {
       const { data } = await built.get(k)!;
-      assert.ok(encodeDocument(structuredClone(data)).length > 0, k);
+      assert.ok(encodeDocument(structuredClone(data), { pipelineOnly: backend.pipelineOnly }).length > 0, k);
     }
   });
 }

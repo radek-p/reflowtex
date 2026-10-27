@@ -82,6 +82,14 @@ A backend (`CaptureBackend`) has an `id`, a `name`, a `runtime`, a
   fill a cache the others would otherwise all build at once).
 - **`dispose()`** and **`job.close()`**, both optional, free what a backend
   or a job holds.
+- **`pipelineOnly`**, optional: keys the backend's captures carry for the
+  pipeline's own use that the wire format does not, by `latex.proto`
+  message name, e.g. `{ Paragraph: ['line_hint'], ContentItem: [...] }`.
+  The encoder refuses any key the schema has no field for, so that nothing
+  is dropped without a word; the keys declared here (with those the
+  pipeline keeps for itself) are left out instead. A key the message has a
+  field for cannot be declared. A caller of `encodeDocument` passes the
+  same as `encodeDocument(data, { pipelineOnly })`.
 
 Glyph source positions, where a backend has them, are on glyph nodes as
 `src: { file, line, column?, length? }` (`GlyphSource`); the document's own

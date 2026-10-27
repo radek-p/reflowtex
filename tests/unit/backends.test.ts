@@ -22,6 +22,8 @@ import {
 import { Log } from '../../src/shared/log.ts';
 import { logDiagnostics, fillTemplate } from '../../src/pipeline/backend/luatex.ts';
 import type { SerializerOutput } from '../../src/pipeline/nodes.ts';
+import { encodeDocument, SchemaMismatch } from '../../src/pipeline/encode.ts';
+import { messageType } from '../../src/pipeline/schema.ts';
 
 const REPO = new URL('../../', import.meta.url).pathname;
 const run = promisify(execFile);
@@ -143,6 +145,43 @@ test('a backend given as an object compiles through the pipeline; its diagnostic
   assert.deepEqual(b.runs, [{ widthExtraSp: 0, passes: 1 }]);
   assert.equal(b.docs[0].content, 'Text.', 'the document as written: the backend prepares it');
   assert.deepEqual(pipe.diagnostics.get('k1'), [{ severity: 'warning', message: 'from memory' }]);
+});
+
+/** output() with keys of a backend's own on its paragraph and its content item. */
+const withOwnKeys = (): SerializerOutput => {
+  const d = output();
+  Object.assign(d.paragraphs[0], { line_hint: 3 });
+  Object.assign(d.content[0], { capture_order: 7 });
+  return d;
+};
+const OWN = { Paragraph: ['line_hint'], ContentItem: ['capture_order'] };
+
+test("keys of a backend's own: refused unless declared, then left out without a word", () => {
+  assert.throws(() => encodeDocument(withOwnKeys()),
+    (e: Error) => e instanceof SchemaMismatch && /Paragraph has no field line_hint/.test(e.message));
+  assert.throws(() => encodeDocument(withOwnKeys(), { pipelineOnly: { Paragraph: ['line_hint'] } }),
+    (e: Error) => e instanceof SchemaMismatch && /ContentItem has no field capture_order/.test(e.message), 'each one declared');
+  const Document = messageType('Document');
+  const doc = Document.toObject(Document.decode(encodeDocument(withOwnKeys(), { pipelineOnly: OWN }))) as
+    { paragraphs: Record<string, unknown>[]; content: Record<string, unknown>[] };
+  assert.equal(doc.paragraphs[0].line_hint, undefined);
+  assert.equal(doc.content[0].capture_order, undefined);
+  assert.equal(doc.content[0].para, 1, 'the rest is encoded');
+  // the pipeline's own keys stay its own
+  const d = withOwnKeys();
+  Object.assign(d.paragraphs[0], { index: 1 });
+  assert.ok(encodeDocument(d, { pipelineOnly: OWN }).length > 0);
+  // a key the wire format carries cannot be declared away, nor a message it lacks
+  assert.throws(() => encodeDocument(output(), { pipelineOnly: { ContentItem: ['para'] } }),
+    (e: Error) => e instanceof SchemaMismatch && /ContentItem has a field para/.test(e.message));
+  assert.throws(() => encodeDocument(output(), { pipelineOnly: { Paragrah: ['x'] } }),
+    (e: Error) => e instanceof SchemaMismatch && /no message Paragrah/.test(e.message));
+});
+
+test("a backend declares its own keys; the pipeline leaves them out of the blocks it encodes", async () => {
+  await assert.rejects(pipeline(memoryBackend({}, withOwnKeys)).pipe.compile('Text.', '', { key: 'k' }), SchemaMismatch);
+  const b = { ...memoryBackend({}, withOwnKeys), pipelineOnly: OWN };
+  assert.ok((await pipeline(b).pipe.compile('Text.', '', { key: 'k' })).length > 0);
 });
 
 test('displays: sampled only when the backend can compile wider; else kept at the width, with a warning', async () => {

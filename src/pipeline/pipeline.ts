@@ -178,7 +178,7 @@ export class Pipeline {
   /** Compile one snippet: the bytes a page embeds. */
   async compile(content: string, preamble = '', o: CompileOptions = {}): Promise<Uint8Array> {
     const { data, dir, key } = await this.compileData(content, preamble, o);
-    const bytes = encodeDocument(data);
+    const bytes = encodeDocument(data, { pipelineOnly: this.backend.pipelineOnly });
     writeFileSync(join(dir, 'nodelist.pb'), bytes);
     this.blocks.set(key, data);
     return bytes;
@@ -207,7 +207,7 @@ export class Pipeline {
       const dir = join(this.buildRoot, p.key);
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'output.json'), writeSerializerOutput(split[i]));
-      const bytes = encodeDocument(split[i]);
+      const bytes = encodeDocument(split[i], { pipelineOnly: this.backend.pipelineOnly });
       writeFileSync(join(dir, 'nodelist.pb'), bytes);
       this.blocks.set(p.key, split[i]);
       this.inputs.set(p.key, this.inputs.get(key) ?? {});
