@@ -297,6 +297,21 @@ message Paragraph {
   optional int32 adj_demerits           = 14;
   optional int32 double_hyphen_demerits = 15;
   optional int32 final_hyphen_demerits  = 16;
+
+  // The paragraph's shape, when its lines do not all have one band: TeX's
+  // \parshape or \hangindent (a wrapped figure beside the text, a numbered
+  // heading's later lines). One entry per line, from its first, as `indent`
+  // and `width` are for the first line; the last entry holds for every line
+  // after. The first entry is `indent` and `width` again. Absent = every line
+  // has `indent` and `width`.
+  repeated LineBand shape = 17;
+}
+
+// A line's band in a shaped paragraph (sp, at Document.source_width): where
+// its text starts, and its measure, the margin skips' fixed parts taken off.
+message LineBand {
+  optional int32 indent = 1;
+  optional int32 width  = 2;
 }
 
 enum ItemKind {

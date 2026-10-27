@@ -12,9 +12,11 @@
 // glue and penalties between the lines. So a difference in the result is a
 // difference in the viewer's breaks or glue setting, or in this file.
 //
-// Only what the viewer models is replayed: no \parshape or \hangindent, no
-// stretch in \leftskip or \rightskip, no protrusion or expansion, no
-// directions. A fixture with anything else is refused with an error.
+// Only what the viewer models is replayed: no stretch in \leftskip or
+// \rightskip, no protrusion or expansion, no directions. A fixture with
+// anything else is refused with an error. A \parshape or \hangindent is given
+// to the breaker as the serializer records it: one measure per line, from the
+// paragraph's first, up to TeX's last special line (shapeOf).
 
 type Dict = Record<string, unknown>;
 /** A node as the fixture writes it: its kind, its fields in order, and the
@@ -35,8 +37,8 @@ interface Break { bcIdx: number }
 interface Line { ratio: number }
 interface Breaker {
   buildBreakCandidates(nodes: Dict[], fontInfo: Dict, para: Dict): BreakCandidate[];
-  kpBreakpoints(bcs: BreakCandidate[], nodes: Dict[], lineWidthSp: number, p: Dict): Break[];
-  setLines(bcs: BreakCandidate[], breaks: Break[], nodes: Dict[], lineWidthSp: number, p: Dict): Line[];
+  kpBreakpoints(bcs: BreakCandidate[], nodes: Dict[], measure: number | number[], p: Dict): Break[];
+  setLines(bcs: BreakCandidate[], breaks: Break[], nodes: Dict[], measure: number | number[], p: Dict): Line[];
   paragraphParams(p: Dict, para: Dict): Dict;
 }
 interface ParamsModule { paramsFromData(d: Record<string, string | undefined>, align: string): Dict }
@@ -60,6 +62,8 @@ export interface Fixture {
   nodes: FNode[];
   /** the paragraph's text before a display */
   display: boolean;
+  /** \parshape's pairs, {indent, width}; empty when there is none */
+  shape: [number, number][];
 }
 
 function parseNodes(lines: string[], at: { i: number }, close: string | null): FNode[] {
@@ -89,7 +93,8 @@ function parseNodes(lines: string[], at: { i: number }, close: string | null): F
 export function parseFixture(text: string): Fixture {
   const lines = text.split('\n');
   if (lines[0] !== 'REFLOWTEX-LINEBREAK-FIXTURE 1') throw new Error('not a line-break fixture');
-  const fx: Fixture = { P: {}, G: {}, A: {}, fonts: new Map(), chars: new Map(), nodes: [], display: lines[1] === 'CONTEXT math_shift' };
+  const fx: Fixture = { P: {}, G: {}, A: {}, fonts: new Map(), chars: new Map(), nodes: [], shape: [],
+                        display: lines[1] === 'CONTEXT math_shift' };
   let i = 1;
   for (; i < lines.length && lines[i] !== 'NODES'; i++) {
     const [tag, name, ...rest] = lines[i].split(' ');
@@ -97,7 +102,7 @@ export function parseFixture(text: string): Fixture {
     if (tag === 'P') fx.P[name] = v[0];
     else if (tag === 'G') fx.G[name] = v;
     else if (tag === 'A') fx.A[name] = v.slice(1);
-    else if (tag === 'SHAPE' && name !== '0') throw new Error('a \\parshape is not replayed');
+    else if (tag === 'SHAPE') for (let k = 0; k < Number(name); k++) fx.shape.push([v[2 * k], v[2 * k + 1]]);
     else if (tag === 'F') fx.fonts.set(Number(name), { quad: v[0], expand: v.slice(1) });
     else if (tag === 'C') {
       if (lines[i].endsWith('MISSING')) continue;
@@ -235,21 +240,47 @@ function hpack(fx: Fixture, list: FNode[], width: number, ratio: number): FNode 
   return { kind: 'hlist', f: [1, width, h, d, 0, sign, order, 0], set: glueSetBits(set), list };
 }
 
+/** The band, {indent, width}, of each line of the paragraph from its first
+ *  (line \prevgraf+1) up to the one after TeX's last special line, which
+ *  stands for every line after it (§848-849): \parshape's l-th pair, its last
+ *  for every line after; or the first |\hangafter| lines full and the rest
+ *  hung by \hangindent (\hangafter < 0: the other way round); or \hsize. */
+export function shapeOf(fx: Fixture): [number, number][] {
+  const { hsize, hangindent: hi, hangafter: ha, prevgraf } = fx.P;
+  let last: number, line: (l: number) => [number, number];
+  if (fx.shape.length) {
+    const n = fx.shape.length;
+    last = n - 1; line = l => fx.shape[Math.min(l, n) - 1];
+  } else if (hi) {
+    last = Math.abs(ha);
+    const hung: [number, number] = [hi >= 0 ? hi : 0, hsize - Math.abs(hi)], full: [number, number] = [0, hsize];
+    line = l => (l <= last) === (ha < 0) ? hung : full;
+  } else {
+    last = 0; line = () => [0, hsize];
+  }
+  const out: [number, number][] = [];
+  for (let l = prevgraf + 1; l <= Math.max(prevgraf + 1, last + 1); l++) out.push(line(l));
+  return out;
+}
+
 /** The viewer's breaks of the fixture's paragraph, set as LuaTeX sets them:
  *  the text of par-NNNN.expected. */
 export function replay(fixtureText: string): string {
   const fx = parseFixture(fixtureText);
   const P = fx.P, G = fx.G;
-  if (P.hangindent || P.looseness || P.adjustspacing || P.protrudechars || P.lastlinefit || P.bodydirection)
-    throw new Error('\\hangindent, \\looseness, \\adjustspacing, \\protrudechars, \\lastlinefit and directions are not replayed');
+  if (P.looseness || P.adjustspacing || P.protrudechars || P.lastlinefit || P.bodydirection)
+    throw new Error('\\looseness, \\adjustspacing, \\protrudechars, \\lastlinefit and directions are not replayed');
   for (const s of ['leftskip', 'rightskip'])
     if (G[s][1] || G[s][3]) throw new Error(`a \\${s} with stretch or shrink is not replayed`);
-  const measure = P.hsize - G.leftskip[0] - G.rightskip[0];
+  const shape = shapeOf(fx);
+  const band = (k: number) => shape[Math.min(k, shape.length - 1)];
+  const measures = shape.map(([, w]) => w - G.leftskip[0] - G.rightskip[0]);
+  const measure = measures.length === 1 ? measures[0] : measures;
 
   const nodes = toTexNodes(fx, fx.nodes);
   const fontInfo: Dict = {};
   for (const [id, f] of fx.fonts) fontInfo[String(id)] = { quad: f.quad, expand: null, codes: new Map() };
-  const para: Dict = { nodes, width: measure };
+  const para: Dict = { nodes, width: measures[0] };
   for (const [tex, field] of Object.entries(RECORDED)) para[field] = P[tex];
   const p = breaker.paragraphParams(params.paramsFromData({ texFinalPass: 'strict' }, 'justify'), para);
   const bcs = breaker.buildBreakCandidates(nodes, fontInfo, para);
@@ -295,7 +326,8 @@ export function replay(fixtureText: string): string {
     from = at + 1;
     line.push(glueNode(9, G.rightskip));
     if (G.leftskip.some(v => v)) line.unshift(glueNode(8, G.leftskip));
-    const box = hpack(fx, line, P.hsize, lines[k].ratio);
+    const box = hpack(fx, line, band(k)[1], lines[k].ratio);
+    box.f[4] = band(k)[0];   // shift_amount: the line's indent
 
     // append_to_vlist
     if (prevDepth > IGNORE_DEPTH) {

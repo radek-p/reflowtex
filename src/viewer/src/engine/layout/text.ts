@@ -4,7 +4,7 @@ import { buildBreakCandidates, kpBreak, paragraphParams } from '../breaker.ts';
 import { HL_ALIGNMENT, IGNORE_DEPTH_SP, SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
 import { mergeWidgetRuns } from '../../host/widgets.ts';
-import type { BoxNode, ContentItem, Doc, FontTable, Paragraph, TexNode } from '../model.ts';
+import type { BoxNode, ContentItem, Doc, FontTable, LineBand, Paragraph, TexNode } from '../model.ts';
 import type { Line, LineAdjust, LineMeta, LinePlacement, Segment, Segments, SegmentGeometry, TextSegment } from './types.ts';
 import type { LayoutCache } from './types.ts';
 import type { Params } from '../../runtime/params.ts';
@@ -250,6 +250,26 @@ export function lineAdjust(nodes: TexNode[]): LineAdjust {
     return { above, below };
 }
 
+// Where a paragraph's line is set at the reader's width: its indent and the
+// measure it is broken to (sp). A list item's indent is a fixed measure
+// (\leftmargin), so it stays put and the text column narrows around it – the
+// item's label hangs a fixed distance to the left of it, and at x0=0 would
+// sit at negative x and be clipped away. A paragraph's measure can be
+// narrower than the column on the right too: a quote environment sets \hsize
+// = \textwidth - 2\leftmargin, and a wrapped figure takes the right or left
+// of the lines beside it. That margin is what remains of the source width,
+// as fixed a measure as the left one, so it narrows the column the same way.
+// (At the source width, keeping only the left indent set a 295pt quote at
+// 320pt: a line TeX had to shrink came out at its natural width, 22pt wider
+// than in the PDF.) This is the one rule for widths other than TeX's: each
+// line keeps its distances from both edges of the column, so a wrapped
+// figure keeps its size and the number of lines beside it.
+export function lineBandAtWidth(band: LineBand, widthSp: number, sourceWidthSp: number): { indentSp: number; rightSp: number; availSp: number } {
+    const indentSp = band.indent || 0;
+    const rightSp = (sourceWidthSp > 0 && band.width! > 0) ? Math.max(0, sourceWidthSp - indentSp - band.width!) : 0;
+    return { indentSp, rightSp, availSp: widthSp - indentSp - rightSp };
+}
+
 // The widest box, picture or rule of a list (sp).
 function widestBoxSp(nodes: TexNode[]): number {
     let w = 0;
@@ -305,31 +325,18 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
             ? { ...lineMeta, prevDepth: prevDepth <= IGNORE_DEPTH_SP ? -Infinity : prevDepth * SP_TO_PX }
             : lineMeta;
 
-        // A list item's indent is a fixed measure (\leftmargin), so it stays
-        // put and the text column narrows around it. The item's label hangs a
-        // fixed distance to the left of this offset, which is precisely why
-        // the indent has to be applied – at x0=0 the label would sit at
-        // negative x and be clipped away.
-        const indentSp = para.indent || 0;
-        const indentPx = indentSp * SP_TO_PX;
-        // A paragraph's measure can be narrower than the column on the right
-        // too: a quote environment sets \hsize = \textwidth - 2\leftmargin
-        // and the serializer records that width with the left indent. The
-        // right margin is what remains of the source width, and it is as
-        // fixed a measure as the left one, so it narrows the text column the
-        // same way. (At the source width, keeping only the left indent set
-        // a 295pt quote at 320pt: a line TeX had to shrink came out at its
-        // natural width, 22pt wider than in the PDF.)
-        const rightSp  = (cache.sourceWidthSp! > 0 && para.width! > 0)
-            ? Math.max(0, cache.sourceWidthSp! - indentSp - para.width!) : 0;
+        // Each line's band at this width (lineBandAtWidth): one for every
+        // line, or one per line of a shaped paragraph, the last for every
+        // line after.
+        const bands = (para.shape && para.shape.length > 1 ? para.shape : [para])
+            .map(b => lineBandAtWidth(b, widthSp, cache.sourceWidthSp!));
         // A figure paragraph (a picture, a table, a framed box – no running
         // text) scrolls whole when it is wider than the column, so it is broken
         // against its widest box when that is wider: each box stays whole, and
         // the lines break where TeX's do (a box as wide as the column, then a
         // space and a label's anchor, makes a second line, an empty one).
-        const availSp  = Math.max(1, widthSp - indentSp - rightSp,
-                                  seg.isFigure ? widestBoxSp(nodes) : 0);
-        const availPx  = columnPx - indentPx - rightSp * SP_TO_PX;
+        const widest = seg.isFigure ? widestBoxSp(nodes) : 0;
+        const measure = bands.map(b => Math.max(1, b.availSp, widest));
 
         // Pluggable breaker. A page may install an alternative paragraph
         // breaker as window.reflowtexBreak(nodes, availSp, params, helpers)
@@ -351,8 +358,9 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
         // TeX's breaking parameters, the paragraph's own where it had them
         // (\sloppy: every bibliography)
         const pp = paragraphParams(p, para);
-        const ext = typeof window !== 'undefined' && typeof window.reflowtexBreak === 'function'
-            ? window.reflowtexBreak(nodes, availSp, pp, {
+        // (a shaped paragraph is the built-in breaker's: the hook takes one measure)
+        const ext = typeof window !== 'undefined' && typeof window.reflowtexBreak === 'function' && bands.length === 1
+            ? window.reflowtexBreak(nodes, measure[0], pp, {
                   gW, gH, gD, align,
                   bskip: para.baselineskip || 0,
                   lskip: para.lineskip || 0,
@@ -361,7 +369,11 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
                   protrudeChars: para.protrude_chars || 0,
               })
             : null;
-        for (const ln of (ext || kpBreak(bcs, nodes, availSp, justify ? pp : { ...pp, ragged: true }))) {
+        const broken = ext || kpBreak(bcs, nodes, bands.length === 1 ? measure[0] : measure, justify ? pp : { ...pp, ragged: true });
+        for (let k = 0; k < broken.length; k++) {
+            const ln = broken[k], band = bands[Math.min(k, bands.length - 1)];
+            const availSp = measure[Math.min(k, measure.length - 1)];
+            const indentPx = band.indentSp * SP_TO_PX, availPx = columnPx - indentPx - band.rightSp * SP_TO_PX;
             ln.nodes = mergeWidgetRuns(ln.nodes);
             // For non-justified modes: allow glue shrink (ratio<0) but never stretch.
             // When the line must shrink, rendering and positioning are identical to justify.

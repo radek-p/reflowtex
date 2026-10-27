@@ -167,6 +167,10 @@ export const cases: Record<string, CaseSettings> = {
   // papers (the browser added the skip: 10 pt lower after each). At the
   // document's width; worst attained 2026-10-27.
   'eq-tag-own-line': { against_plain: true, widths: [0], tolerance: 0.009 },
+  // Lines of their own measures (\hangindent, \parshape, a shape resumed
+  // after a display, wrapped section titles), at the document's width. One
+  // page, so against_plain too.
+  hangindent: { against_plain: true, widths: [0], tolerance: 0.013 },
   // The same at other widths, where a number moves beside its formula or
   // below it with the measure, as TeX decides it again (§1202): the browser
   // keeps it where TeX set it at the document's width.

@@ -819,3 +819,50 @@ test('a display TeX fails above a width only: the sample is taken below it, with
     [['display-sample-replaced', String(own + 256), '! Too wide.', String(own + 200)]]);
   assert.deepEqual(mine.filter(r => r.code === 'display-model-stable').map(r => r.details.widths), [`${own}, ${own + 128}, ${own + 200}`]);
 });
+
+// ── A paragraph's shape ─────────────────────────────────────────────────────
+// \parshape and \hangindent give a paragraph's lines their own bands. Each is
+// recorded from its first line on, up to TeX's last special line, then one
+// for every line after; a display takes the band of its own line.
+
+test('a paragraph shaped by \\hangindent or \\parshape records the band of each line', async () => {
+  const pt = 65536;
+  const body = [
+    'Plain text, one band for every line.',
+    '',
+    '\\hangindent=20pt \\hangafter=2 Two lines full, then hung.',
+    '',
+    '\\hangindent=-60pt \\hangafter=-6 Six lines short of the right edge, as beside a figure:',
+    '\\[ x = y \\]',
+    'and after the display, on line five: two more lines short, then full.',
+    '',
+    '\\parshape 3 0pt 300pt 10pt 280pt 20pt 260pt \\leftskip=3pt \\rightskip=4pt Three pairs.',
+    '',
+    '\\begin{itemize}\\item An item: one pair, every line the same.\\end{itemize}',
+  ].join('\n');
+  const d = await capture(body);
+  const h = d.source_width;
+  type Para = { indent?: number; width?: number; shape?: { indent?: number; width?: number }[] };
+  const paras = d.content.filter(i => i.kind === 'paragraph').map(i => d.paragraphs[i.para! - 1] as Para);
+  const bands = (p: Para) => p.shape?.map(b => [b.indent ?? 0, b.width ?? 0]);
+  const hung = [0, h - 60 * pt];
+  assert.equal(paras.length, 6);
+  assert.equal(bands(paras[0]), undefined);
+  assert.deepEqual([paras[0].indent ?? 0, paras[0].width], [0, h]);
+  assert.deepEqual(bands(paras[1]), [[0, h], [0, h], [20 * pt, h - 20 * pt]]);
+  assert.deepEqual(bands(paras[2]), [hung, hung, hung, hung, hung, hung, [0, h]]);
+  // resumed after the display at line 5: one line before it, then its three
+  assert.deepEqual(bands(paras[3]), [hung, hung, [0, h]]);
+  assert.deepEqual(bands(paras[4]), [[3 * pt, 293 * pt], [13 * pt, 273 * pt], [23 * pt, 253 * pt]]);
+  assert.deepEqual([paras[4].indent, paras[4].width], [3 * pt, 293 * pt]);
+  // a list item: its one pair, as indent and width
+  assert.equal(paras[5].shape, undefined);
+  assert.ok(paras[5].indent! > 0 && paras[5].width! < h);
+  // the display, on line 3 of the hung paragraph (TeX82 §1149)
+  const display = d.content.find(i => i.kind === 'display') as Item & { display_width?: number; display_indent?: number };
+  assert.deepEqual([display.display_indent, display.display_width], hung);
+  // the block's data, as the page gets it
+  const pb = readFileSync(join(pipe.buildRoot, contentKey(body, ''), 'nodelist.pb'));
+  const doc = messageType('Document').toObject(messageType('Document').decode(pb)) as { paragraphs: Para[] };
+  assert.deepEqual(doc.paragraphs.map(bands).filter(Boolean), paras.map(bands).filter(Boolean));
+});

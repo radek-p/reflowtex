@@ -40,7 +40,16 @@ export type BreakCandidates = BreakCandidate[] & { expansion?: Expansion | null;
 export interface LineMetrics { w: number; s: number; z: number; g: number; fs: number; fz: number }
 /** One chosen break: its candidate, fitness class and total demerits. */
 export interface Break { bcIdx: number; fc: number; demerits: number }
-interface Active { demerits: number; prev_j: number; prev_fc: number; hyphenated: boolean; overfull?: boolean }
+interface Active { demerits: number; prev_j: number; prev_l: number; prev_fc: number; hyphenated: boolean; overfull?: boolean }
+
+/** The measure a paragraph's lines are broken to (sp): one for every line,
+ *  or, for a shaped paragraph (\parshape, \hangindent), one per line from
+ *  its first, the last for every line after. */
+export type Measure = number | readonly number[];
+/** The measure of line k (0-based) of the paragraph. */
+export function lineWidthAt(measure: Measure, k: number): number {
+    return typeof measure === 'number' ? measure : measure[Math.min(k, measure.length - 1)];
+}
 
 // ── Protrusion ────────────────────────────────────────────────────────────────
 
@@ -421,15 +430,27 @@ export interface PassOptions { firstPass?: boolean; final?: boolean; background?
 // `background` is stretch every line has besides its glue: TeX's third pass
 // adds \emergencystretch so (§863), for the badness only – a line is still
 // set with its own glue.
-export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: number, p: Params, o: PassOptions = {}):
+//
+// A shaped paragraph's lines differ in measure, so a start is told apart by
+// the number of the line it begins as well (TeX's line_number), up to the
+// shape's last line: every line after that has the same measure, and those
+// starts are one (§835, easy_line). Lines from the starts of one number, and
+// from the last two, make one set of breaks at each place (§835, §845):
+// TeX keeps the best of them per fitness class, and their order – by line
+// number, then place (newest first before the last number), then class –
+// decides a tie, the later winning.
+export function kpPass(bcs: BreakCandidates, measure: Measure, threshold: number, p: Params, o: PassOptions = {}):
         { breaks: Break[] | null; minRejectedBadness: number | null; overfull?: boolean } {
     const { firstPass = false, final = false, background = 0, uncapped = false } = o;
     // (TeX's threshold is at most inf_bad: every line is feasible at 10000)
     threshold = Math.min(threshold, 10000);
     const N=bcs.length;
-    const dp=Array.from({length:N},(): (Active | null)[]=>[null,null,null,null]);
-    const alive=dp.map(()=>[true,true,true,true]);
-    dp[0][2]={demerits:0,prev_j:-1,prev_fc:-1,hyphenated:false};
+    // starts by line number: 0 .. L, the last for every line from the
+    // shape's last on
+    const L = typeof measure === 'number' ? 0 : measure.length - 1;
+    const dp=Array.from({length:N},()=>Array.from({length:L+1},(): (Active | null)[]=>[null,null,null,null]));
+    const alive=dp.map(ls=>ls.map(()=>[true,true,true,true]));
+    dp[0][0][2]={demerits:0,prev_j:-1,prev_l:-1,prev_fc:-1,hyphenated:false};
     let minRejectedBadness: number | null=null;
     // Font expansion enters the breaker only under \adjustspacing=2.
     const ex = (bcs.adjustSpacing ?? 0) > 1 ? bcs.expansion : null;
@@ -449,83 +470,94 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
         if (bcJ.penalty>=10000) continue;
         const isEnd = bcJ.kind==='end';
         let feasibleAtJ = false;
-        // Is (i, fc) the only start still in play for a line ending at j?
-        const onlyStart = (i: number, fc: number) => {
-            for (let k=Math.max(0,lastForced[j]);k<j;k++) for (let f=0;f<4;f++)
-                if (dp[k][f] && alive[k][f] && !(k===i && f===fc)) return false;
+        // Is (i, l, fc) the only start still in play for a line ending at j?
+        const onlyStart = (i: number, l: number, fc: number) => {
+            for (let k=Math.max(0,lastForced[j]);k<j;k++) for (let g=0;g<=L;g++) for (let f=0;f<4;f++)
+                if (dp[k][g][f] && alive[k][g][f] && !(k===i && g===l && f===fc)) return false;
             return true;
         };
-        for (let i=0;i<j;i++) {
-            if (i<lastForced[j]) continue;   // line would span a forced break
-            // Two candidates at one node (a widget's alternative splits) are
-            // one place: a line may not start and end there.
-            if (bcs[i].nodeIdx===bcJ.nodeIdx) continue;
-            let m: LineMetrics | null=null;
-            for (let fc_i=0;fc_i<4;fc_i++) {
-                const si=dp[i][fc_i]; if(!si) continue;
-                if (!alive[i][fc_i]) continue;
-                if (!m) m=lineMetrics(bcs[i],bcJ,p);
-                const hasFill = lineFilled(bcs[i], bcJ, p);
-                const shortfall = expansionShortfall(lineWidthSp-m.w, m, ex);
-                let b: number, fc_j: number;
-                if (shortfall>0) {
-                    if (hasFill) { b=0; fc_j=2; }
-                    else { b=badness(shortfall,m.s+background); fc_j=b>99?0:b>12?1:2; }
-                } else if (shortfall<0) {
-                    if (-shortfall>m.z) {                         // overfull
-                        alive[i][fc_i] = false;
-                        if (final && !feasibleAtJ && onlyStart(i, fc_i) && (!dp[j][3] || si.demerits<=dp[j][3]!.demerits))
-                            dp[j][3]={demerits:si.demerits,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc',overfull:true};
+        const metrics: (LineMetrics | null)[] = [];
+        for (let l=0;l<=L;l++) {
+            // the line from a start of number l, and the breaks it makes here
+            // (TeX puts the starts of one number before the shape's last in
+            // its list newest first, and the rest oldest first)
+            const lineWidthSp = lineWidthAt(measure, l), dpJ = dp[j][Math.min(l+1, L)];
+            for (let n=0;n<j;n++) {
+                const i = l < L ? j-1-n : n;
+                if (i<lastForced[j]) continue;   // line would span a forced break
+                // Two candidates at one node (a widget's alternative splits) are
+                // one place: a line may not start and end there.
+                if (bcs[i].nodeIdx===bcJ.nodeIdx) continue;
+                let m: LineMetrics | null=metrics[i] ?? null;
+                for (let fc_i=0;fc_i<4;fc_i++) {
+                    const si=dp[i][l][fc_i]; if(!si) continue;
+                    if (!alive[i][l][fc_i]) continue;
+                    if (!m) m=metrics[i]=lineMetrics(bcs[i],bcJ,p);
+                    const hasFill = lineFilled(bcs[i], bcJ, p);
+                    const shortfall = expansionShortfall(lineWidthSp-m.w, m, ex);
+                    let b: number, fc_j: number;
+                    if (shortfall>0) {
+                        if (hasFill) { b=0; fc_j=2; }
+                        else { b=badness(shortfall,m.s+background); fc_j=b>99?0:b>12?1:2; }
+                    } else if (shortfall<0) {
+                        if (-shortfall>m.z) {                         // overfull
+                            alive[i][l][fc_i] = false;
+                            if (final && !feasibleAtJ && onlyStart(i, l, fc_i) && (!dpJ[3] || si.demerits<=dpJ[3]!.demerits))
+                                dpJ[3]={demerits:si.demerits,prev_j:i,prev_l:l,prev_fc:fc_i,hyphenated:bcJ.kind==='disc',overfull:true};
+                            continue;
+                        }
+                        b=badness(-shortfall,m.z); fc_j=b>12?3:2;
+                    } else { b=0; fc_j=2; }
+                    if (b!>threshold) {
+                        if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b;
+                        // At a forced break or the end (TeX's eject penalty) the start
+                        // is dropped too, and the final pass takes the line anyway
+                        // when that start is the only one left (§851, §854): the
+                        // empty last line after \\ at a paragraph's end.
+                        if (bcJ.penalty<=-10000) {
+                            alive[i][l][fc_i] = false;
+                            if (final && !feasibleAtJ && onlyStart(i, l, fc_i) && (!dpJ[fc_j] || si.demerits<=dpJ[fc_j]!.demerits))
+                                dpJ[fc_j]={demerits:si.demerits,prev_j:i,prev_l:l,prev_fc:fc_i,hyphenated:bcJ.kind==='disc'};
+                        }
                         continue;
                     }
-                    b=badness(-shortfall,m.z); fc_j=b>12?3:2;
-                } else { b=0; fc_j=2; }
-                if (b!>threshold) {
-                    if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b;
-                    // At a forced break or the end (TeX's eject penalty) the start
-                    // is dropped too, and the final pass takes the line anyway
-                    // when that start is the only one left (§851, §854): the
-                    // empty last line after \\ at a paragraph's end.
-                    if (bcJ.penalty<=-10000) {
-                        alive[i][fc_i] = false;
-                        if (final && !feasibleAtJ && onlyStart(i, fc_i) && (!dp[j][fc_j] || si.demerits<=dp[j][fc_j]!.demerits))
-                            dp[j][fc_j]={demerits:si.demerits,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc'};
+                    feasibleAtJ = true;
+                    const bd = uncapped&&!(hasFill&&shortfall>=0) ? rawBadness(Math.abs(shortfall),shortfall>=0?m.s+background:m.z) : b;
+                    const lp=p.linePenalty+bd; let d=uncapped ? lp*lp : (Math.abs(lp)>=10000?100000000:lp*lp);
+                    if(bcJ.penalty>0) d+=bcJ.penalty*bcJ.penalty;
+                    else if(bcJ.penalty>-10000) d-=bcJ.penalty*bcJ.penalty;
+                    if(si.hyphenated) {
+                        if(bcJ.kind==='disc') d+=p.doubleHyphenDemerits;
+                        else if(isEnd) d+=p.finalHyphenDemerits;
                     }
-                    continue;
+                    if(Math.abs(fc_j-fc_i)>1) d+=p.adjDemerits;
+                    // Not TeX, and off unless a page asks for it: a last line
+                    // shorter than lastLineMin of the measure costs lastLinePenalty.
+                    if(isEnd && p.lastLineMin>0 && m.w<p.lastLineMin*lineWidthSp) d+=p.lastLinePenalty;
+                    const td=si.demerits+d;
+                    // Ties go to the later start, as in TeX (`d <= minimal_demerits`,
+                    // scanning the active list in order): the earlier lines longer.
+                    if(!dpJ[fc_j]||td<=dpJ[fc_j]!.demerits) dpJ[fc_j]={demerits:td,prev_j:i,prev_l:l,prev_fc:fc_i,hyphenated:bcJ.kind==='disc'};
                 }
-                feasibleAtJ = true;
-                const bd = uncapped&&!(hasFill&&shortfall>=0) ? rawBadness(Math.abs(shortfall),shortfall>=0?m.s+background:m.z) : b;
-                const lp=p.linePenalty+bd; let d=uncapped ? lp*lp : (Math.abs(lp)>=10000?100000000:lp*lp);
-                if(bcJ.penalty>0) d+=bcJ.penalty*bcJ.penalty;
-                else if(bcJ.penalty>-10000) d-=bcJ.penalty*bcJ.penalty;
-                if(si.hyphenated) {
-                    if(bcJ.kind==='disc') d+=p.doubleHyphenDemerits;
-                    else if(isEnd) d+=p.finalHyphenDemerits;
-                }
-                if(Math.abs(fc_j-fc_i)>1) d+=p.adjDemerits;
-                // Not TeX, and off unless a page asks for it: a last line
-                // shorter than lastLineMin of the measure costs lastLinePenalty.
-                if(isEnd && p.lastLineMin>0 && m.w<p.lastLineMin*lineWidthSp) d+=p.lastLinePenalty;
-                const td=si.demerits+d;
-                // Ties go to the later start, as in TeX (`d <= minimal_demerits`,
-                // scanning the active list in order): the earlier lines longer.
-                if(!dp[j][fc_j]||td<=dp[j][fc_j]!.demerits) dp[j][fc_j]={demerits:td,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc'};
             }
         }
         // TeX keeps a break only in the fitness classes within \adjdemerits of
         // its best (§836). No other could win, but in the final pass one
         // that is kept is one more start in play, and decides whether an
         // overfull line is taken from the other.
-        let best=Infinity;
-        for(let fc=0;fc<4;fc++) if(dp[j][fc]&&dp[j][fc]!.demerits<best) best=dp[j][fc]!.demerits;
-        for(let fc=0;fc<4;fc++) if(dp[j][fc]&&dp[j][fc]!.demerits>best+Math.abs(p.adjDemerits)) dp[j][fc]=null;
+        for (const dpJ of dp[j]) {
+            let best=Infinity;
+            for(let fc=0;fc<4;fc++) if(dpJ[fc]&&dpJ[fc]!.demerits<best) best=dpJ[fc]!.demerits;
+            for(let fc=0;fc<4;fc++) if(dpJ[fc]&&dpJ[fc]!.demerits>best+Math.abs(p.adjDemerits)) dpJ[fc]=null;
+        }
     }
     const endIdx=N-1; if(bcs[endIdx].kind!=='end') return {breaks:null,minRejectedBadness};
-    let bestFc=-1, bestD=Infinity;
-    for(let fc=0;fc<4;fc++) if(dp[endIdx][fc]&&dp[endIdx][fc]!.demerits<bestD){bestD=dp[endIdx][fc]!.demerits;bestFc=fc;}
+    // (TeX's best of all: the first of the lowest, in the active list's order)
+    let bestL=-1, bestFc=-1, bestD=Infinity;
+    for(let l=0;l<=L;l++) for(let fc=0;fc<4;fc++) { const a=dp[endIdx][l][fc]; if(a&&a.demerits<bestD){bestD=a.demerits;bestL=l;bestFc=fc;} }
     if(bestFc===-1) return {breaks:null,minRejectedBadness};
-    const breaks: Break[]=[]; let j=endIdx,fc=bestFc,overfull=false;
-    while(j>0){const a=dp[j][fc]!;breaks.push({bcIdx:j,fc,demerits:a.demerits});if(a.overfull)overfull=true;const pj=a.prev_j,pfc=a.prev_fc;j=pj;fc=pfc;}
+    const breaks: Break[]=[]; let j=endIdx,l=bestL,fc=bestFc,overfull=false;
+    while(j>0){const a=dp[j][l][fc]!;breaks.push({bcIdx:j,fc,demerits:a.demerits});if(a.overfull)overfull=true;j=a.prev_j;l=a.prev_l;fc=a.prev_fc;}
     // overfull: the final pass set a line it could not shrink to fit
     breaks.reverse(); return {breaks,minRejectedBadness,overfull};
 }
@@ -580,12 +612,12 @@ export function extractLineNodes(startBC: BreakCandidate, endBC: BreakCandidate,
     return result;
 }
 
-export function greedyFallback(bcs: BreakCandidates, nodes: TexNode[], lineWidthSp: number, p: Params): Break[] {
+export function greedyFallback(bcs: BreakCandidates, nodes: TexNode[], measure: Measure, p: Params): Break[] {
     const breaks: Break[]=[]; let s=0;
     for(let j=1;j<bcs.length;j++){
         const {w}=lineMetrics(bcs[s],bcs[j],p);
         if(bcs[j].kind==='end'){breaks.push({bcIdx:j,fc:2,demerits:0});break;}
-        if(w>lineWidthSp&&j>s+1){breaks.push({bcIdx:j-1,fc:2,demerits:0});s=j-1;}
+        if(w>lineWidthAt(measure, breaks.length)&&j>s+1){breaks.push({bcIdx:j-1,fc:2,demerits:0});s=j-1;}
     }
     return breaks;
 }
@@ -595,10 +627,10 @@ export function greedyFallback(bcs: BreakCandidates, nodes: TexNode[], lineWidth
 // \emergencystretch is positive a third, at \tolerance again with that much
 // more stretch on every line. The last of them is TeX's final pass, which
 // sets an overfull line when nothing fits.
-export function kpBreakpoints(bcs: BreakCandidates, nodes: TexNode[], lineWidthSp: number, p: Params): Break[] {
+export function kpBreakpoints(bcs: BreakCandidates, nodes: TexNode[], measure: Measure, p: Params): Break[] {
     let breaks: Break[] | null=null;
     if (p.pretolerance >= 0)
-        breaks = kpPass(bcs,lineWidthSp,p.pretolerance,p,{ firstPass: true }).breaks;
+        breaks = kpPass(bcs,measure,p.pretolerance,p,{ firstPass: true }).breaks;
     // At the width TeX compiled for, its final pass is TeX's own result, but
     // at a narrower one a reader sees words run past the right edge. So the
     // viewer keeps the final pass's breaks unless they hold an overfull line,
@@ -611,32 +643,32 @@ export function kpBreakpoints(bcs: BreakCandidates, nodes: TexNode[], lineWidthS
     const backgrounds = p.emergencyStretch > 0 ? [0, p.emergencyStretch] : [0];
     for (let k=0; !breaks && k<backgrounds.length; k++) {
         const final = !!p.texFinalPass && k === backgrounds.length-1;
-        const r = kpPass(bcs,lineWidthSp,p.tolerance,p,{ final, background: backgrounds[k] });
+        const r = kpPass(bcs,measure,p.tolerance,p,{ final, background: backgrounds[k] });
         if (!r.overfull || p.texFinalPass === 'strict') breaks = r.breaks;
         else texBreaks = r.breaks;
     }
-    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.tolerance2,p).breaks;
-    if(!breaks) breaks = kpPass(bcs,lineWidthSp,p.emergencyTolerance,p,{ uncapped: true }).breaks;
+    if(!breaks) breaks = kpPass(bcs,measure,p.tolerance2,p).breaks;
+    if(!breaks) breaks = kpPass(bcs,measure,p.emergencyTolerance,p,{ uncapped: true }).breaks;
     if(!breaks) breaks = texBreaks;
-    if(!breaks) breaks = greedyFallback(bcs,nodes,lineWidthSp,p);
+    if(!breaks) breaks = greedyFallback(bcs,nodes,measure,p);
     return breaks;
 }
 
 /** The lines of a paragraph broken at `breaks`, each with its glue set. */
-export function setLines(bcs: BreakCandidates, breaks: Break[], nodes: TexNode[], lineWidthSp: number, p: Params): Line[] {
+export function setLines(bcs: BreakCandidates, breaks: Break[], nodes: TexNode[], measure: Measure, p: Params): Line[] {
     const lines: Line[]=[];
     for(let k=0;k<breaks.length;k++){
         const startBC=k===0?bcs[0]:bcs[breaks[k-1].bcIdx], endBC=bcs[breaks[k].bcIdx];
         const hasFill = lineFilled(startBC, endBC, p);
-        const { ratio, expand } = packLine(bcs, startBC, endBC, lineWidthSp, p, hasFill);
+        const { ratio, expand } = packLine(bcs, startBC, endBC, lineWidthAt(measure, k), p, hasFill);
         const rightProtrusion = (endBC.kind==='end' ? endBC.packRightProtrusion : endBC.rightProtrusion) || 0;
         lines.push({nodes:extractLineNodes(startBC,endBC,nodes),ratio,expand,fitness:breaks[k].fc,leftProtrusion:startBC.leftProtrusion,rightProtrusion});
     }
     return lines;
 }
 
-export function kpBreak(bcs: BreakCandidates, nodes: TexNode[], lineWidthSp: number, p: Params): Line[] {
-    return setLines(bcs, kpBreakpoints(bcs, nodes, lineWidthSp, p), nodes, lineWidthSp, p);
+export function kpBreak(bcs: BreakCandidates, nodes: TexNode[], measure: Measure, p: Params): Line[] {
+    return setLines(bcs, kpBreakpoints(bcs, nodes, measure, p), nodes, measure, p);
 }
 
 // A paragraph's own breaking parameters: TeX's where the serializer recorded

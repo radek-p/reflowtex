@@ -354,7 +354,8 @@ window.reflowtexBreak = function (nodes, availSp, params, helpers) {
 
 It is called for every paragraph on every layout with the paragraph's node
 list, the available width in scaled points, the block's Knuth–Plass
-parameters, and `helpers`:
+parameters, and `helpers` – but for a paragraph whose lines differ in measure
+(`\parshape`, `\hangindent`), which the built-in breaker always breaks:
 
 - `gW/gH/gD` – glyph-metric accessors;
 - `align`, `bskip`, `lskip` – the paragraph's alignment and interline glue;

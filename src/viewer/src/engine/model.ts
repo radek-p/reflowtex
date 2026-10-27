@@ -251,6 +251,14 @@ export interface Paragraph {
     adj_demerits?: number;
     double_hyphen_demerits?: number;
     final_hyphen_demerits?: number;
+    /** each line's band where they differ (latex.proto's Paragraph.shape) */
+    shape?: LineBand[];
+}
+
+/** A line's band in a shaped paragraph: its indent and measure (sp). */
+export interface LineBand {
+    indent?: number;
+    width?: number;
 }
 
 type DisplayRates = { [F in 'display_width' | 'display_indent' | 'display_shift' as `${F}_rate`]?: number };

@@ -1,0 +1,33 @@
+% Paragraphs whose lines differ in measure: \hangindent with \hangafter
+% positive, negative and zero, hung on the left and on the right, explicit
+% \parshape (lines beside a wrapped figure, a shape shorter and one longer
+% than the paragraph), a shape with \leftskip and \rightskip, a shape resumed
+% after a display, and numbered section titles that wrap (LaTeX hangs their
+% later lines by the number's width). Each is set at several measures.
+% Captured with capture.lua into shapes/ (README.md).
+\documentclass{article}
+\newcommand\at[2]{{\hsize=#1\relax #2\par}}
+\newcommand\textA{We note that the best known methods of the two other kinds are not directly comparable in scope to the method here. They typically target more general formulations, with coefficients that may depend on the law of the process in more general ways than through one expectation. Some complexity bounds were obtained under correspondingly stronger assumptions.}
+\newcommand\textB{The quick brown fox jumps over the lazy dog, and the five boxing wizards jump quickly over the fence while sphinx of black quartz judges my vow; the job requires extra pluck and zeal from every young wage earner.}
+\begin{document}
+\at{345pt}{\hangindent=3em \hangafter=2 \textA}
+\at{250pt}{\hangindent=3em \hangafter=2 \textA}
+\at{345pt}{\hangindent=-6em \hangafter=-3 \textA}
+\at{250pt}{\hangindent=-6em \hangafter=-3 \textA}
+\at{200pt}{\hangindent=-6em \hangafter=-3 \textB}
+\at{345pt}{\hangindent=4em \hangafter=-4 \textB}
+\at{300pt}{\hangindent=2em \hangafter=0 \textA}
+\at{300pt}{\hangindent=-2em \hangafter=1 \textA}
+\at{345pt}{\parshape 4 0pt 345pt 2em 300pt 4em 260pt 1em 330pt \textA}
+\at{250pt}{\parshape 3 0pt 250pt 1em 220pt 2em 200pt \textB}
+\at{345pt}{\parshape 2 1em 320pt 0pt 345pt \textB}
+\at{345pt}{\parshape 9 0pt 230pt 0pt 230pt 0pt 230pt 0pt 230pt 0pt 230pt 0pt 230pt 0pt 230pt 0pt 230pt 0pt 345pt \textA}
+\at{345pt}{\parshape 6 115pt 230pt 115pt 230pt 115pt 230pt 115pt 230pt 115pt 230pt 0pt 345pt \textA}
+\at{300pt}{\parshape 5 0pt 200pt 0pt 200pt 0pt 200pt 0pt 200pt 0pt 300pt \textB}
+\at{345pt}{\leftskip=1em \rightskip=2em \parshape 3 0pt 345pt 3em 300pt 0pt 280pt \textA}
+\at{345pt}{\hangindent=4em \hangafter=-8 Some text before a display, long enough for one line or two of the paragraph's: \[ a^2+b^2=c^2 \] and resumed after it, where its lines are numbered on from the lines before and the display's three. \textB}
+\at{345pt}{\parshape 7 0pt 250pt 0pt 250pt 0pt 250pt 0pt 250pt 0pt 250pt 0pt 250pt 0pt 345pt Text before a display beside a figure: \[ x = y \] and after it, still beside the figure for a line or two, then across. \textB}
+\at{345pt}{\section{A section title long enough to wrap onto a second line, which hangs by the number}}
+\at{250pt}{\section{A section title long enough to wrap onto a second line, which hangs by the number}}
+\at{200pt}{\subsection{Another title, a subsection's this time, long enough to wrap onto two or three lines}}
+\end{document}
