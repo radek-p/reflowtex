@@ -514,10 +514,13 @@ function Sheet({ src, size, scale }: { src: string | null; size: [number, number
 
 // What dom-dump.ts does to the page, so that it is laid out as it was
 // measured; and transparent past its end, so the pane's pattern shows there.
-function pinPage(win: Window & PageHooks, colPx: number, marginPx: number): void {
+function pinPage(win: Window & PageHooks, colPx: number, marginPx: number, hsizePt: number): void {
     const doc = win.document;
     if (win.__setTheme) win.__setTheme('light');
     if (win.__zoom) win.__zoom(0);
+    // the block is given its width in pt, as dom-dump.ts gives it: its own pixel width would be rounded, and the
+    // viewer would break the paragraphs at a measure TeX never used
+    for (const b of doc.querySelectorAll<HTMLElement>('#lt-content > .latex-block')) b.dataset.latexWidth = String(hsizePt);
     const css = doc.createElement('style');
     css.textContent = `:root { color-scheme: light !important }
         html, body { margin:0 !important; padding:0 !important; background: transparent !important }
@@ -567,7 +570,7 @@ function Live({ src, pane, scale, marginPt, hsizePt, colours, frameRef, onPage, 
     // hidden until pinned: the page as it loads (its header and title, its own
     // layout) is not the page the test measured
     const [ready, setReady] = useState(false);
-    const colPx = Math.round(hsizePt * PX_PER_PT), marginPx = Math.round(marginPt * PX_PER_PT);
+    const colPx = hsizePt * PX_PER_PT, marginPx = marginPt * PX_PER_PT;
     const k = scale / PX_PER_PT;
     const near = useNear(pane, scale);
     const shown = useRef(0);                                   // the page's scroll, in its px, as set here
@@ -616,7 +619,7 @@ function Live({ src, pane, scale, marginPt, hsizePt, colours, frameRef, onPage, 
     useEffect(() => pageColours(frameRef.current?.contentWindow, colours), [colours]);
     const onLoad = () => {
         const f = frameRef.current!, win = f.contentWindow! as Window & PageHooks & typeof globalThis;
-        pinPage(win, colPx, marginPx);
+        pinPage(win, colPx, marginPx, hsizePt);
         pageColours(win, colours);
         requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
         // the block settles as its fonts arrive, and as the page lays out what

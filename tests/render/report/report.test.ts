@@ -22,12 +22,14 @@ import { writeIndex, writeResult } from './results.ts';
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const REPO = resolve(HERE, '../../..');
 const BP = 72 / 72.27, LINE = 12, PER_LINE = 40, HSIZE = 345, MARGIN = 36;
+// a column of no whole number of px (2 px per pt): 905.94 px, which rounds to 906, i.e. 453 pt
+const ODD_HSIZE = 452.9678955078125;
 
 /** A test's results: `lines` lines of glyphs, every glyph 0.3 pt lower in
  *  the browser than in TeX; the page a block as tall, with a mark at
- *  `markPt`. */
-function makeTest(build: string, name: string, lines: number, markPt: number): void {
-  const dir = join(build, name, 'w0'), heightPt = lines * LINE + 20, widthPt = HSIZE + 2 * MARGIN;
+ *  `markPt`; the column `hsize` pt wide. */
+function makeTest(build: string, name: string, lines: number, markPt: number, hsize = HSIZE): void {
+  const dir = join(build, name, 'w0'), heightPt = lines * LINE + 20, widthPt = hsize + 2 * MARGIN;
   mkdirSync(join(dir, 'vector'), { recursive: true });
   mkdirSync(join(dir, 'site'), { recursive: true });
   const uses: string[] = [], matched: object[] = [];
@@ -48,7 +50,7 @@ function makeTest(build: string, name: string, lines: number, markPt: number): v
 ${uses.join('\n')}
 </g>
 </svg>`);
-  writeFileSync(join(dir, 'vector', 'vector.json'), JSON.stringify({ hsize_pt: HSIZE, margin_pt: MARGIN, matched,
+  writeFileSync(join(dir, 'vector', 'vector.json'), JSON.stringify({ hsize_pt: hsize, margin_pt: MARGIN, matched,
     glyphs: { strip: matched.length, viewer: matched.length, matched: matched.length } }));
   // the page: one block, as tall as the strip (2 px per pt), and a mark in it
   writeFileSync(join(dir, 'site', 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><title>${name}</title></head><body>
@@ -57,7 +59,7 @@ ${uses.join('\n')}
 <div id="mark" style="position:absolute;left:${MARGIN * 2 + 20}px;top:${markPt * 2}px;width:40px;height:20px;background:#000"></div>
 </div></div></body></html>`);
   writeResult(dir, { id: name, case: name, extra: 0, status: 'fail', problems: [], tolerance: 0.05, target: 0.05,
-                     hsize_pt: HSIZE, page: `${name}/w0/site` }, build);
+                     hsize_pt: hsize, page: `${name}/w0/site` }, build);
 }
 
 let build = '', server: Server, url = '', browser: Browser;
@@ -65,7 +67,8 @@ before(async () => {
   build = mkdtempSync(join(tmpdir(), 'rtx-report-page-'));
   makeTest(build, 'long', 4000, 30000);
   makeTest(build, 'short', 12, 60);
-  writeIndex(build, ['long', 'short']);
+  makeTest(build, 'odd-width', 12, 60, ODD_HSIZE);
+  writeIndex(build, ['long', 'short', 'odd-width']);
   ensureBundles({ only: ['inspector'] });
   const page = join(build, '.page');
   mkdirSync(page);
@@ -193,5 +196,18 @@ test('a short document is drawn whole, as before', async () => {
   // the selected mismatch, in blue on both sides
   await page.keyboard.press('n');
   assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('svg.boxes')].map(b => b.querySelectorAll('rect[stroke="#0b57d0"]').length)), [1, 1]);
+  assert.deepEqual(page.errors, []);
+});
+
+test('the live page is laid out at TeX\'s width, not at the nearest whole pixel', async () => {
+  const page = await open('odd-width');
+  const w = await page.evaluate(() => {
+    const doc = document.querySelector<HTMLIFrameElement>('iframe.page')!.contentDocument!;
+    const b = doc.querySelector<HTMLElement>('#lt-content > .latex-block')!;
+    return { pt: b.dataset.latexWidth, px: b.getBoundingClientRect().width };
+  });
+  // the viewer breaks lines at data-latex-width; the column is as wide (to Chromium's 1/64 px)
+  assert.equal(w.pt, String(ODD_HSIZE));
+  assert.ok(Math.abs(w.px - ODD_HSIZE * 2) < 1 / 32, `the column is ${w.px} px, not ${ODD_HSIZE * 2}`);
   assert.deepEqual(page.errors, []);
 });
