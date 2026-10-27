@@ -327,7 +327,7 @@
 .rtx-reading-size [data-z="in"]  { font: 500 21px ui-serif, "New York", Georgia, serif; }
 .rtx-reading-size [data-z="reset"] { font-size: 13px; font-variant-numeric: tabular-nums; opacity: .75; }
 /* Theme: swatches with names. */
-.rtx-reading-themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.rtx-reading-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px 4px; }
 .rtx-reading-themes button { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; padding: 2px 0; }
 .rtx-reading-themes button span { opacity: .7; }
 .rtx-reading-themes button[aria-checked="true"] span { opacity: 1; font-weight: 600; }
@@ -335,11 +335,19 @@
   width: 34px; height: 34px; border-radius: 50%; box-shadow: inset 0 0 0 .5px rgb(0 0 0 / .22);
   font-family: ui-serif, "New York", Georgia, serif; font-size: 14px;
   display: grid; place-items: center; opacity: 1 !important; font-weight: 400 !important; }
+[data-t="system"]   .rtx-swatch { background: linear-gradient(135deg, #fff 50%, #1c1917 50%); color: #888; }
+[data-t="default"]  .rtx-swatch { background: #fff; color: #000; }
 [data-t="light"]    .rtx-swatch { background: #fafaf9; color: #333; }
 [data-t="dark"]     .rtx-swatch { background: #1c1917; color: #e7e5e4; }
 [data-t="sepia"]    .rtx-swatch { background: #f4ecd8; color: #453a26; }
 [data-t="contrast"] .rtx-swatch { background: #fff; color: #000; box-shadow: inset 0 0 0 1.5px #000; }
 .rtx-reading-themes button[aria-checked="true"] .rtx-swatch { outline: 2.5px solid var(--rtx-accent); outline-offset: 2.5px; }
+/* The system mode's two themes. */
+.rtx-reading-system { display: grid; gap: 6px; font-size: 12px; }
+.rtx-reading-slot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rtx-reading-slot span { opacity: .8; }
+.rtx-reading-slot select { font: inherit; color: inherit; background: var(--rtx-surface-solid, Canvas);
+  border: .5px solid color-mix(in srgb, currentColor 24%, transparent); border-radius: 7px; padding: 3px 6px; }
 /* Width and selection: a segmented control, as many columns as choices. */
 .rtx-seg {
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 2px; gap: 2px;

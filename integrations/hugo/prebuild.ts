@@ -21,6 +21,7 @@
 //     <site>/data/latex_schema.json         {schema_b64}
 //     <site>/data/latex_files.json          {"name.tex": key} for file refs and as="…"
 //     <site>/data/latex_color_maps.json     {name: <colour map>, …}
+//     <site>/data/latex_builtin_color_maps.json  the viewer's own map, {reflowtex: …}, for templates that show one
 //     <site>/data/latex_sources.json        {"name.tex": source} for show-source="true"
 //     <site>/data/latex_font_map.json       {original font file: served file}
 //     <site>/data/latex_link_map.json       {label: page that defines it}
@@ -41,6 +42,7 @@ import { a11yLayerFromBytes } from '../../src/pipeline/a11y.ts';
 import { listBackends, formatBackends } from '../../src/pipeline/backend/registry.ts';
 import { installViewer, passesFor, REF_PASSES, schemaBase64, pyJsonDumps, jsonSorted } from '../../src/pipeline/site.ts';
 import { consoleLog } from '../../src/shared/log.ts';
+import { BUILTIN_COLOR_MAPS } from '../../src/viewer/src/runtime/builtin-colour-maps.ts';
 
 // Two ways to write a block:
 //   inline     {{< latex [attrs] >}} …LaTeX… {{< /latex >}}
@@ -222,6 +224,7 @@ for (const name of [...colorMapNames].sort()) {
   catch (e) { fail(`color-map "${name}" (${f}) is not valid JSON: ${(e as Error).message}`); }
 }
 writeFileSync(join(site, 'data', 'latex_color_maps.json'), jsonSorted(colorMaps));
+writeFileSync(join(site, 'data', 'latex_builtin_color_maps.json'), jsonSorted(BUILTIN_COLOR_MAPS));
 if (!blocks.size && !batches.size) { log.info('no-blocks', 'No {{< latex >}} blocks found.'); process.exit(0); }
 
 // ── Compiling ───────────────────────────────────────────────────────────────

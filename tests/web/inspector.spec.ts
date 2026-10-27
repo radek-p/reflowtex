@@ -65,14 +65,17 @@ test('colour maps: listed, edited live, exported, imported, reset', async ({ ope
   const page = await openPage('colours');
   await agent(page);
   const d = await A(page, 'colourMaps');
-  expect(d.maps.map((m: any) => m.name)).toEqual(['test']);
+  // the page's, and the viewer's own (which no block here takes)
+  expect(d.maps.map((m: any) => m.name)).toEqual(['test', 'reflowtex']);
   const m = d.maps[0];
   expect([m.used, m.usedBy]).toEqual([1, 'block 1']);
-  expect(m.themes).toEqual(['light', 'dark']);
+  expect(m.themes).toEqual(['default', 'dark']);
   expect(m.colors.find((c: any) => c.src === '#0000ff').by.dark).toBe('#99ccff');
   expect(m.tints).toEqual([expect.objectContaining({ hex: '#ccccff', base: '#0000ff', pct: 20 })]);
   expect(await blueFill(page)).toBe('rgb(0, 0, 255)');
-  // edited live, in the page's theme (light)
+  // edited live, in the page's theme (light; the default theme takes no map)
+  expect(await A(page, 'setPageTheme', 'light')).toBe('ok');
+  expect(await blueFill(page)).toBe('rgb(0, 0, 255)');
   expect(await A(page, 'setMapColour', 'test', 'light', '#0000ff', '#008000')).toBe('ok');
   expect(await blueFill(page)).toBe('rgb(0, 128, 0)');
   const json = JSON.parse(await A(page, 'exportColourMaps'));
@@ -118,12 +121,14 @@ test("a theme's heading switches the page's theme", async ({ openPage }) => {
   const page = await openPage('colours');
   await agent(page);
   await page.locator('[data-rtx-ui] [role="tab"][data-view="col"]').click();
-  await page.locator('[data-rtx-ui] .colours th button.theme', { hasText: 'dark' }).click();
+  const map = page.locator('[data-rtx-ui] .colours .cmap').first();
+  await map.locator('th button.theme', { hasText: 'dark' }).click();
   await expect.poll(() => page.evaluate(() => [document.documentElement.classList.contains('dark'), document.documentElement.dataset.theme])).toEqual([true, 'dark']);
   expect(await blueFill(page), "the map's dark colour").toBe('rgb(153, 204, 255)');
-  await expect(page.locator('[data-rtx-ui] .colours th button.theme[aria-pressed="true"]')).toHaveText('dark');
-  await page.locator('[data-rtx-ui] .colours th button.theme', { hasText: 'light' }).click();
+  await expect(map.locator('th button.theme[aria-pressed="true"]')).toHaveText('dark');
+  await map.locator('th button.theme', { hasText: 'default' }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(false);
+  expect(await blueFill(page), "TeX's own").toBe('rgb(0, 0, 255)');
 });
 
 // The panel's own picker, not the browser's (a system dialog on a Mac):
@@ -131,6 +136,8 @@ test("a theme's heading switches the page's theme", async ({ openPage }) => {
 test('the colour picker', async ({ openPage }) => {
   const page = await openPage('colours');
   await agent(page);
+  // in the theme the map's first cell is for (the default theme takes no map)
+  expect(await A(page, 'setPageTheme', 'dark')).toBe('ok');
   await page.locator('[data-rtx-ui] [role="tab"][data-view="col"]').click();
   expect(await page.locator('[data-rtx-ui] .colours input[type="color"]').count(), "no browser pickers").toBe(0);
   await page.locator('[data-rtx-ui] .colours .ccell .pk-swatch').first().click();
@@ -146,7 +153,7 @@ test('the colour picker', async ({ openPage }) => {
   await expect.poll(() => blueFill(page)).toBe(`rgb(${r}, ${g}, ${b})`);
   await page.keyboard.press('Escape');
   await expect(picker).toHaveCount(0);
-  await expect.poll(() => blueFill(page), 'Escape puts back the colour it opened with').toBe('rgb(0, 0, 255)');
+  await expect.poll(() => blueFill(page), 'Escape puts back the colour it opened with').toBe('rgb(153, 204, 255)');
 });
 
 // In the dark theme the Colours view's buttons are the panel's, not the

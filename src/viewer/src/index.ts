@@ -13,6 +13,8 @@ import { init } from './runtime/init.ts';
 import { installHost } from './host/host.ts';
 import { SELECTION_CSS, installSelection } from './host/selection.ts';
 import { track } from './runtime/pending.ts';
+// (the reader's theme: applied as soon as the script runs, before any block)
+import './runtime/theme.ts';
 
 // The viewer's own styles: what it draws itself (margin notes, the unit
 // TeX's sizes are given in) and what is true of every control on paper. The
@@ -54,8 +56,7 @@ export function installViewerStyles(): void {
       .latex-fit-natural .latex-display::after { display: none !important; }
       @media print {
         .latex-margin { display: none; }
-        /* Controls do nothing on paper. More specific than the page's
-           .latex-block svg .latex-link colour rule, which is also !important. */
+        /* Controls do nothing on paper: over the glyph's own fill. */
         .latex-block svg .latex-link.latex-action { fill: transparent !important; }
       }
     ` + SELECTION_CSS;

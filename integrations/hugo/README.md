@@ -185,15 +185,26 @@ A block's figures (`\includegraphics` files) are recorded with it, each with
 a hash of its bytes: replacing a figure, under the same name, recompiles the
 blocks that show it.
 
-Named colour maps let blocks share a recolouring palette (see
-[src/viewer/README.md](../../src/viewer/README.md)'s Theming section for what
-they can express). Put them in `latex-color-maps/<name>.json` and reference one
-with `color-map="<name>"`:
+Colours and themes. A block draws TeX's colours exactly in the theme
+`default` (no class on `<html>`): black is `#000000`, and links look as TeX
+drew them. The viewer's built-in colour map gives the themes `light`, `dark`,
+`sepia` and `contrast` (a class on `<html>`), links included, so a site needs
+no map of its own; see [src/viewer/README.md](../../src/viewer/README.md)'s
+Theming section for the themes, the reader's choice of one (or of the system
+mode) and what a map can express. To let readers choose, put the attributes
+the viewer reads on your layout's `<html>` and set the theme before first
+paint, as that section shows; a site that never does stays in `default`.
+
+Named colour maps replace the built-in's themes. Put them in
+`latex-color-maps/<name>.json` and reference one with `color-map="<name>"`:
 
 ```markdown
 {{</* latex file="intro.tex" preamble="book" color-map="my-book-colors" */>}}
 ```
 
+A map's theme replaces the built-in's (its colours and its links
+separately); a theme it leaves out is the built-in's. A map named
+`reflowtex.json` replaces the built-in's themes it gives for every block.
 Unlike a preamble, a colour map is not part of what gets compiled; the browser
 reads it at render time. Either name it on every shortcode call that wants it
 (even several calls referencing the same `file="…"`), or make one the site's
@@ -204,10 +215,9 @@ default in your config, which every block without its own `color-map` then uses:
   latexColorMap = "site"     # latex-color-maps/site.json
 ```
 
-`prebuild.py` embeds every map in `latex-color-maps/`, so a default needs no
-other registration. This project's own website uses `site.json`, which maps
-TeX's black, red and blue (and tints of them) for the dark, sepia and contrast
-themes. It is a reasonable starting point to copy.
+`prebuild.ts` embeds every map in `latex-color-maps/`, so a default needs no
+other registration, and writes the built-in map to
+`data/latex_builtin_color_maps.json`, a starting point to copy.
 
 An inline block can register itself as a named lookup the same way a
 `file="…"` ref does, via `as="<name>"`, for a snippet with no natural `.tex`
@@ -231,6 +241,7 @@ matter keeps it out of the site) replaces what would otherwise need a whole
 | `data/latex_schema.json` | the schema the browser parses | optional |
 | `data/latex_files.json` | `file="…"` → block-hash map for the shortcode | optional |
 | `data/latex_color_maps.json` | `name` → parsed colour-map JSON, for every `color-map="…"` in use | optional |
+| `data/latex_builtin_color_maps.json` | the viewer's built-in colour map (`reflowtex`), for templates that show it | optional |
 | `static/fonts/*.otf` | provisioned fonts; the ones Reflow TeX modified are cmap-patched and subset to the site's characters (`--no-font-subset` serves them whole) | optional |
 | `static/{latex-viewer.js,protobuf.min.js}` | viewer scripts | no |
 | `static/companion/{companion.js,companion.css}` | the companion package, loaded with `params.reflowtexCompanion` | no |

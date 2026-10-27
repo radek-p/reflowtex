@@ -3,74 +3,85 @@
 import { BUILD } from './page.ts';
 import type { ColorMap } from '../host/types.ts';
 import { report } from './log.ts';
+import { BUILTIN_MAP } from './builtin-colour-maps.ts';
+import { builtin, colorMapCss, mapThemes as themesOf } from './colour-css.ts';
 
-// ── Colour maps (optional, page-supplied) ────────────────────────────────────
-// reflowtex ships no palette of its own – colour substitution is entirely
-// optional and driven by data an integration embeds on the page, so this file
-// stays document-agnostic. A block opts in with [data-color-map="<name>"],
-// naming one entry of an optional page-supplied JSON island:
+export { colorFill, linkFill } from './colour-css.ts';
+
+// ── Colour maps ──────────────────────────────────────────────────────────────
+// Every colour is drawn as TeX wrote it, through a CSS custom property named
+// after it: var(--latex-color-<hex>, <hex>). With nothing set, that is TeX's
+// own colour – black glyphs and rules are #000000, links are the colours the
+// document gave them (hyperref's colorlinks) – which is the theme `default`.
+//
+// Every other theme (a class on <html>, see theme.ts; or data-latex-theme on
+// an element, for the blocks inside it) is a colour map's: the map sets those
+// properties on the block. A map, in the page's optional JSON island
 //
 //   <script id="latex-color-maps" type="application/json">
 //     { "<name>": {
-//         "colors": { "<theme>": { "<tex-hex>": "<displayed-hex>", … }, … },
+//         "colors": { "<theme>": { "<tex-hex>": "<css colour>", … }, … },
+//         "links":  { "<theme>": { "color", "hover", "active", "underline" }, … },
 //         "tints":  { "<baked-hex>": ["<base-hex>", <percent>], … }
 //     }, … }
 //   </script>
 //
-// colors – flat per-theme substitution, keyed by the hex TeX/tikz produced;
-//   colours not listed render as-is. Each non-light theme is matched by a
-//   class name on <html> (see this file's README's Theming section); adding a
-//   theme to a map is just a new key here plus a class the page switcher sets.
-//   Rendering reads these through CSS custom properties, so a theme switch
-//   restyles already-rendered SVG with no re-render.
-//
-//   '#000000' is special: it is the DEFAULT text colour (the serializer omits
-//   colour on black glyphs, so they carry no inline fill). Mapping it in a
-//   theme recolours all default-coloured text there; leaving it unmapped
-//   falls back to the page's currentColor, which is why basic dark mode keeps
-//   working even for a block with no colour map at all. '#ffffff' is special
-//   too, but is not something a map needs to set: it always tracks
-//   --latex-page-bg (see below), because a flat white fill in a TikZ/PDF
-//   picture means "the paper", not a deliberate colour choice – true with or
-//   without a colour map, so it's a fixed default rather than map data.
-//
+// colors – per theme, the colours TeX wrote and what to draw instead; a
+//   colour a theme leaves out is drawn as TeX wrote it.
+// links – per theme, how a link is drawn: the colour of its glyphs at rest,
+//   pointed at (hover) and pressed (active), and whether a line is drawn
+//   under it while it is pointed at (underline: "hover"; "none" by default).
+//   Unset, a link keeps TeX's colours (the state before, for hover and
+//   active), and has no underline.
 // tints – colours TeX produced by mixing a base colour into the page, e.g.
 //   `red!20!white` is red at 20% over the paper. TeX resolves that to flat
 //   RGB at compile time, so what arrives is a baked hex with no trace of how
 //   it was built – and a tint of a *white* page reads wrong on a dark one.
 //   Re-deriving the mix at runtime, against whatever --latex-page-bg
 //   currently is, keeps the intent: a tint follows both its base colour and
-//   the current background. This is not the same as opacity, and must not be
+//   the current background. Not the same as opacity, and must not be
 //   reimplemented with it – these fills are opaque on purpose, masking the
-//   drawing underneath. Each entry is baked-hex: [base-hex, percent-of-base].
+//   drawing underneath. Each entry is baked-hex: [base-hex, percent-of-base];
+//   in every theme but default.
+//
+// The viewer ships one map, `reflowtex` (builtin-colour-maps.ts), with the
+// themes light, dark, sepia and contrast. A block uses it unless it names
+// another with [data-color-map="<name>"]; a named map falls back to it theme
+// by theme (a theme the map gives replaces the built-in's, colours and links
+// separately), and the page's own map named `reflowtex` replaces the
+// built-in's themes it gives. The theme `default` has no map, ever.
 //
 // --latex-page-bg is deliberately not part of this data: TeX has no notion of
 // the page's colour, so it is the *page's* responsibility (its own theme
 // CSS), not a colour map's – e.g. `:root.dark { --latex-page-bg: #0c0a09; }`
 // alongside wherever else that theme sets its background. Unset, it falls
-// back to the CSS `Canvas` system colour, so tints and the viewer's own UI
-// chrome (the display scrollbox, citation popovers) still land somewhere
-// sane with zero configuration.
-
-export function colorFill(c: string): string {
-    return `var(--latex-color-${c.slice(1)}, ${c})`;
-}
+// back to the CSS `Canvas` system colour. The built-in themes draw TeX's
+// white with it: the paper.
 
 export let colorMapsInstalled = false;
-// The maps in force (the page's island, or what setColorMaps last gave) and
-// the stylesheet made of them, rebuilt in place when they change.
-let currentMaps: Record<string, ColorMap> = {};
+// The page's maps (its island, or what setColorMaps last gave) and the
+// stylesheet made of them with the built-in, rebuilt in place when they change.
+let pageMaps: Record<string, ColorMap> = {};
 let mapStyle: HTMLStyleElement | null = null;
 
-/** The colour maps in force, as the island's JSON has them (a copy). */
-export function getColorMaps(): Record<string, ColorMap> { return JSON.parse(JSON.stringify(currentMaps)); }
+const copy = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 
-/** Replace the colour maps in force (host.setColorMaps): the page's colours
+/** The colour maps in force, as the island's JSON has them (a copy): the
+ *  built-in (`reflowtex`, with the page's of that name over it) and the
+ *  page's others. */
+export function getColorMaps(): Record<string, ColorMap> {
+    return copy({ ...pageMaps, [BUILTIN_MAP]: builtin(pageMaps) });
+}
+
+/** The themes the maps give, `default` first. */
+export const mapThemes = (): string[] => themesOf(pageMaps);
+
+/** Replace the page's colour maps (host.setColorMaps): the page's colours
  *  follow at once, with no layout – they are CSS custom properties. */
 export function setColorMaps(maps: Record<string, ColorMap> | null | undefined): void {
-    currentMaps = JSON.parse(JSON.stringify(maps || {}));
+    pageMaps = copy(maps || {});
     if (!mapStyle) { mapStyle = document.createElement('style'); document.head.appendChild(mapStyle); }
-    mapStyle.textContent = colorMapCss(currentMaps);
+    mapStyle.textContent = colorMapCss(pageMaps, CSS.escape);
 }
 
 export function installColorMaps(): void {
@@ -84,63 +95,7 @@ export function installColorMaps(): void {
     }
     // what the page gave host.setColorMaps before the first block wins over
     // the island, map by map (it was replaced by it)
-    setColorMaps({ ...maps, ...currentMaps });
+    setColorMaps({ ...maps, ...pageMaps });
     document.documentElement.setAttribute('data-latex-viewer', BUILD);
 }
 
-function colorMapCss(maps: Record<string, ColorMap>): string {
-
-    // TeX has no notion of the page's colour, so a flat white fill in a
-    // TikZ/PDF picture (the paper, not a deliberate colour choice) needs to
-    // track whatever the page's background actually is. True for every
-    // picture regardless of colour map, so – unlike the rest of this
-    // function – this is not map data: it is a fixed, unconditional default,
-    // on :root so a map's own '#ffffff' entry (if any) still wins by
-    // specificity.
-    let css = ':root { --latex-color-ffffff: var(--latex-page-bg, Canvas); }\n';
-    for (const [name, map] of Object.entries(maps)) {
-        const sel = `.latex-block[data-color-map=${JSON.stringify(name)}]`;
-        for (const [theme, entries] of Object.entries(map.colors ?? {})) {
-            const decls = Object.entries(entries)
-                .map(([src, dst]) => `  --latex-color-${src.slice(1)}: ${dst};`);
-            if (decls.length === 0) continue;
-            const scoped = theme === 'light' ? sel : `:root.${theme} ${sel}`;
-            css += scoped + ' {\n' + decls.join('\n') + '\n}\n';
-        }
-        // A theme scoped to part of the page: data-latex-theme="T" on any
-        // ancestor gives the blocks inside theme T's colours whatever the
-        // page's own theme is (a theme preview beside an example, say). Every
-        // colour any theme of this map remaps is declared, so a scoped theme
-        // also undoes the page theme's substitutions: a colour T leaves alone
-        // goes back to itself, and default text back to currentColor. The
-        // :root prefix outranks the page-theme rules above; being later wins
-        // the tie with a page-theme rule of the same specificity.
-        const allSrc = new Set<string>();
-        for (const entries of Object.values(map.colors ?? {})) for (const src of Object.keys(entries)) allSrc.add(src);
-        if (allSrc.size) {
-            const themes = new Set(['light', ...Object.keys(map.colors ?? {})]);
-            for (const theme of themes) {
-                const entries: Record<string, string> = (map.colors ?? {})[theme] ?? {};
-                const decls = [...allSrc].map(src => `  --latex-color-${src.slice(1)}: `
-                    + (entries[src] ?? (src === '#000000' ? 'currentColor' : src)) + ';');
-                css += `:root [data-latex-theme=${JSON.stringify(theme)}] ${sel} {\n` + decls.join('\n') + '\n}\n';
-            }
-        }
-        const tintDecls = Object.entries(map.tints ?? {}).map(([hex, [base, pct]]) =>
-            `  --latex-color-${hex.slice(1)}: color-mix(in srgb, `
-          + `var(--latex-color-${base.slice(1)}, ${base}) ${pct}%, `
-          + `var(--latex-page-bg, Canvas));`);
-        if (tintDecls.length) css += sel + ' {\n' + tintDecls.join('\n') + '\n}\n';
-    }
-    // Default-coloured glyphs carry no inline fill; route them through the
-    // '#000000' variable with currentColor as fallback – works with zero
-    // colour maps installed. The html prefix outranks the page's own
-    // `.latex-block svg text` rule regardless of stylesheet order.
-    //
-    // Deliberately not 'rect': rules set their fill inline, and this rule's
-    // specificity would otherwise reach inside a tikzpicture and repaint every
-    // coloured shape in the drawing as text.
-    css += 'html .latex-block svg text, html .latex-block svg tspan '
-         + '{ fill: var(--latex-color-000000, currentColor); }\n';
-    return css;
-}

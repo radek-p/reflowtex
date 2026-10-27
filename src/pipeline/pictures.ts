@@ -107,8 +107,7 @@ export function rewritePictureSvg(svg: string, prefix: string, stripPageBackgrou
   inner = inner.replace(SVG_COLOR_RE, (_, attr: string, hex: string) => {
     let digits = hex.toLowerCase();
     if (digits.length === 3) digits = [...digits].map(c => c + c).join('');
-    const fallback = digits === '000000' ? 'currentColor' : `#${digits}`;
-    return `${attr}='var(--latex-color-${digits}, ${fallback})'`;
+    return `${attr}='var(--latex-color-${digits}, #${digits})'`;
   });
   return { svg: inner.trim(), vb_w: vbW, vb_h: vbH };
 }

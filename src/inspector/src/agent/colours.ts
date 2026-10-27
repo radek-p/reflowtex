@@ -30,8 +30,10 @@ function islandMaps(): Maps {
 let originalMaps: Maps | null = null;
 function currentMaps(): Maps {
     const h = host();
-    if (originalMaps === null) originalMaps = islandMaps();
-    return h && h.colorMaps ? h.colorMaps() : islandMaps();
+    const now = h && h.colorMaps ? h.colorMaps() : islandMaps();
+    // (the viewer's, with its built-in map, as they were first seen)
+    if (originalMaps === null) originalMaps = now;
+    return now;
 }
 function applyMaps(maps: Maps): string {
     const h = host();
@@ -73,17 +75,20 @@ export const resetColourMaps = (): string => applyMaps(originalMaps === null ? i
 // README, Theming) a theme other than light is a class on <html>, which the
 // maps' rules key on; data-theme says the same for the page's own CSS. A
 // page's switcher (the companion's reading options, say) follows the change.
-const themeNames = (maps: Maps): Set<string> => new Set(['dark', 'sepia', 'contrast',
-    ...Object.values(maps).flatMap(m => Object.keys(m.colors || {}))].filter(t => t !== 'light'));
+const themeNames = (maps: Maps): Set<string> => new Set(['light', 'dark', 'sepia', 'contrast',
+    ...Object.values(maps).flatMap(m => [...Object.keys(m.colors || {}), ...Object.keys(m.links || {})])].filter(t => t !== 'default'));
 function pageTheme(maps: Maps = currentMaps()): string {
     const root = document.documentElement, a = root.getAttribute('data-theme');
-    return a || [...themeNames(maps)].find(t => root.classList.contains(t)) || 'light';
+    return a || [...themeNames(maps)].find(t => root.classList.contains(t)) || 'default';
 }
 export function setPageTheme(t: unknown): string {
     if (typeof t !== 'string' || !/^[\w-]+$/.test(t)) return 'a theme is a class name';
+    // the viewer's, when it has one: the reader's choice, as the page's own switcher makes it
+    const api = window.reflowtex;
+    if (api?.setTheme) { api.setTheme(t); return 'ok'; }
     const root = document.documentElement;
     for (const n of themeNames(currentMaps())) root.classList.remove(n);
-    if (t !== 'light') root.classList.add(t as string);
+    if (t !== 'default') root.classList.add(t as string);
     root.setAttribute('data-theme', t as string);
     return 'ok';
 }
@@ -93,7 +98,8 @@ export function colourMaps(): ColourMaps {
     const blocks = I.blocks();
     const theme = pageTheme(maps);
     const out = Object.entries(maps).map(([name, map]) => {
-        const users = blocks.filter(el => el.dataset.colorMap === name);
+        // (a block that names no map, or one the page lacks, has the built-in)
+        const users = blocks.filter(el => (el.dataset.colorMap && maps[el.dataset.colorMap] ? el.dataset.colorMap : 'reflowtex') === name);
         const probeIn = users[0] || null;
         const now = (hex: string) => {
             if (!probeIn) return null;
@@ -104,9 +110,9 @@ export function colourMaps(): ColourMaps {
             p.remove();
             return toHex(c);
         };
-        // Light first (a colour the map leaves alone is shown as TeX set it),
+        // Default first (a colour as TeX set it, as every theme the map leaves it alone in),
         // then the map's themes, and the page's own, to edit it there too.
-        const themes = [...new Set(['light', ...Object.keys(map.colors || {}), theme])];
+        const themes = [...new Set(['default', ...Object.keys(map.colors || {}), theme])];
         const srcs = [...new Set(themes.flatMap(t => Object.keys((map.colors || {})[t] || {})))].sort();
         return {
             name, themes, used: users.length, usedBy: blocksLabel(users.map(el => blocks.indexOf(el) + 1)),
