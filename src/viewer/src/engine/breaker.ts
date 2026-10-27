@@ -22,6 +22,10 @@ export interface BreakCandidate {
     cumW: number; cumS: number; cumZ: number; cumGlyphW: number; cumFS: number; cumFZ: number; cumFill: number;
     rightProtrusion: number;
     leftProtrusion: number;
+    /** A break here discards everything up to the paragraph's end: the
+     *  line after it is empty and loses \parfillskip's stretch with the rest
+     *  (TeX's break_width, §837). */
+    toEnd?: boolean;
     /** The end: the last line's right protrusion, counted when it is packed. */
     packRightProtrusion?: number;
     /** A discretionary that was in the source (\\discretionary, \\-, a hyphen). */
@@ -239,7 +243,8 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
             }
             else if (m.type !== 'penalty') break;
         }
-        return { leadW: W, leadS: S, leadZ: Z, leadFill: F, leftProtrusion: prot(findFirstGlyph(nodes, k), true) };
+        const toEnd = nodes[k]?.type === 'glue' && nodes[k].subtype === 15;
+        return { leadW: W, leadS: S, leadZ: Z, leadFill: F, leftProtrusion: prot(findFirstGlyph(nodes, k), true), ...(toEnd ? { toEnd } : {}) };
     };
     const bcs: BreakCandidates = [cand('start', -1, 0, { leftProtrusion: prot(findFirstGlyph(nodes, 0), true) })];
     bcs.expansion = adjust > 0 ? paragraphExpansion(fontInfo, nodes) : null;
@@ -387,6 +392,17 @@ export function expansionShortfall(shortfall: number, m: LineMetrics, ex: Expans
     return shortfall;
 }
 
+// A line carrying an infinite-order fill (\hfil from \\, \hfill, the
+// \parfillskip of the last line) absorbs positive slack instead of justifying:
+// badness 0. So does every line of a paragraph that is not justified
+// (p.ragged): \raggedright, \centering and \raggedleft set \rightskip or
+// \leftskip to 0pt plus 1fil, so any line that fits costs nothing and TeX
+// takes the fewest lines, hyphenating only when it must. An empty last line
+// after a break that discarded the \parfillskip has no fill (§837).
+export function lineFilled(a: BreakCandidate, b: BreakCandidate, p: Params): boolean {
+    return (b.kind === 'end' && !a.toEnd) || !!p.ragged || b.cumFill > a.cumFill + a.leadFill;
+}
+
 // ── KP DP (one pass) ─────────────────────────────────────────────────────────
 
 /** How a pass is run: TeX's first pass (no hyphenation of its own), its
@@ -397,9 +413,10 @@ export interface PassOptions { firstPass?: boolean; final?: boolean; background?
 // A start from which a line has become overfull is dropped for good, in every
 // pass (§851): a later line from it, made narrower by negative glue, is never
 // tried. With `final` the pass is TeX's last one (§854): when the only start
-// left dies with nothing feasible found yet, its overfull line is taken anyway
-// at no cost (artificial demerits), so the pass always ends with a paragraph –
-// as a PDF shows it, a line sticking out rather than a very loose one.
+// left dies with nothing feasible found yet – its line overfull, or too loose
+// at a forced break or the end – that line is taken anyway at no cost
+// (artificial demerits), so the pass always ends with a paragraph – as a PDF
+// shows it, a line sticking out rather than a very loose one.
 // `background` is stretch every line has besides its glue: TeX's third pass
 // adds \emergencystretch so (§863), for the badness only – a line is still
 // set with its own glue.
@@ -447,14 +464,7 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
                 const si=dp[i][fc_i]; if(!si) continue;
                 if (!alive[i][fc_i]) continue;
                 if (!m) m=lineMetrics(bcs[i],bcJ,p);
-                // A line carrying an infinite-order fill (\hfil from \\, \hfill,
-                // the \parfillskip of the last line) absorbs positive slack
-                // instead of justifying: badness 0. So does every line of a
-                // paragraph that is not justified (p.ragged): \raggedright,
-                // \centering and \raggedleft set \rightskip or \leftskip to 0pt
-                // plus 1fil, so any line that fits costs nothing and TeX takes
-                // the fewest lines, hyphenating only when it must.
-                const hasFill = isEnd || p.ragged || bcJ.cumFill>bcs[i].cumFill+bcs[i].leadFill;
+                const hasFill = lineFilled(bcs[i], bcJ, p);
                 const shortfall = expansionShortfall(lineWidthSp-m.w, m, ex);
                 let b: number, fc_j: number;
                 if (shortfall>0) {
@@ -469,7 +479,19 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
                     }
                     b=badness(-shortfall,m.z); fc_j=b>12?3:2;
                 } else { b=0; fc_j=2; }
-                if (b!>threshold) { if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b; continue; }
+                if (b!>threshold) {
+                    if(minRejectedBadness===null||b<minRejectedBadness) minRejectedBadness=b;
+                    // At a forced break or the end (TeX's eject penalty) the start
+                    // is dropped too, and the final pass takes the line anyway
+                    // when that start is the only one left (§851, §854): the
+                    // empty last line after \\ at a paragraph's end.
+                    if (bcJ.penalty<=-10000) {
+                        alive[i][fc_i] = false;
+                        if (final && !feasibleAtJ && onlyStart(i, fc_i) && (!dp[j][fc_j] || si.demerits<=dp[j][fc_j]!.demerits))
+                            dp[j][fc_j]={demerits:si.demerits,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc'};
+                    }
+                    continue;
+                }
                 feasibleAtJ = true;
                 const bd = uncapped&&!(hasFill&&shortfall>=0) ? rawBadness(Math.abs(shortfall),shortfall>=0?m.s+background:m.z) : b;
                 const lp=p.linePenalty+bd; let d=uncapped ? lp*lp : (Math.abs(lp)>=10000?100000000:lp*lp);
@@ -604,7 +626,7 @@ export function setLines(bcs: BreakCandidates, breaks: Break[], nodes: TexNode[]
     const lines: Line[]=[];
     for(let k=0;k<breaks.length;k++){
         const startBC=k===0?bcs[0]:bcs[breaks[k-1].bcIdx], endBC=bcs[breaks[k].bcIdx];
-        const hasFill = endBC.kind==='end' || p.ragged || endBC.cumFill>startBC.cumFill+startBC.leadFill;
+        const hasFill = lineFilled(startBC, endBC, p);
         const { ratio, expand } = packLine(bcs, startBC, endBC, lineWidthSp, p, hasFill);
         const rightProtrusion = (endBC.kind==='end' ? endBC.packRightProtrusion : endBC.rightProtrusion) || 0;
         lines.push({nodes:extractLineNodes(startBC,endBC,nodes),ratio,expand,fitness:breaks[k].fc,leftProtrusion:startBC.leftProtrusion,rightProtrusion});

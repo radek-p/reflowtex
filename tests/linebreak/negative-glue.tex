@@ -1,13 +1,16 @@
 % Paragraphs that end in negative glue, as \hspace{-1cm} before a blank line
 % sets it: TeX drops a start as soon as a line from it is overfull, in every
 % pass, so the last line's negative glue never lets an earlier start reach the
-% end. Each paragraph is set at several measures. Captured with capture.lua
-% into negative-glue/ (README.md).
+% end; and a break at that glue leaves an empty last line without the
+% \parfillskip's stretch, which TeX takes only when nothing else is left
+% (after \\ or \break at a paragraph's end too). Each paragraph is set at
+% several measures. Captured with capture.lua into negative-glue/ (README.md).
 \documentclass{article}
 \newcommand\at[2]{{\hsize=#1\relax #2\par}}
 \newcommand\textA{Some complexity bounds were obtained under correspondingly stronger assumptions. For instance, the results require variance reduction rates that, to our knowledge, have not yet been proven to hold~in~\mbox{general}.}
 \newcommand\textB{We impose Lipschitz and initial-moment assumptions on the stochastic~differential~\mbox{equation}.}
 \newcommand\plain{The quick brown fox jumps over the lazy dog, and the five boxing wizards jump quickly over the fence while sphinx of black quartz judges my vow.}
+\newcommand\textC{We note that the best known methods of the two other kinds are not directly comparable in scope to the method here. They typically target more general formulations, with coefficients that may depend on the law of the process in more general ways than through one expectation. Some complexity bounds were obtained under correspondingly stronger assumptions. For instance, the results require variance reduction rates that, to our knowledge, have not yet been proven to hold~in~\mbox{general}.}
 \begin{document}
 \at{345pt}{\textA\hspace{-1cm} }
 \at{300pt}{\textA\hspace{-1cm} }
@@ -22,4 +25,11 @@
 \at{200pt}{\plain\hspace{-2cm} }
 \at{150pt}{\plain\hspace{-2cm} }
 \at{120pt}{\plain\hspace{-2cm} }
+\at{360pt}{\textC\hspace{-1cm} }
+\at{364pt}{\textC\hspace{-1cm} }
+\at{368pt}{\textC\hspace{-1cm} }
+\at{372pt}{\textC\hspace{-1cm} }
+\at{250pt}{\plain\\}
+\at{200pt}{\plain\\}
+\at{200pt}{\plain\break}
 \end{document}
