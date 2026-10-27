@@ -5,7 +5,7 @@ import {
     DEFAULT_DISPLAY_OVERFLOW_TOLERANCE, DEFAULT_DOUBLE_HYPHEN_DEMERITS,
     DEFAULT_EMERGENCY_TOLERANCE, DEFAULT_FINAL_HYPHEN_DEMERITS, DEFAULT_LAST_LINE_MIN,
     DEFAULT_LAST_LINE_PENALTY, DEFAULT_LINE_PENALTY, DEFAULT_MAX_EXPAND, DEFAULT_MAX_SHRINK,
-    DEFAULT_MIN_GAP, DEFAULT_PAD, DEFAULT_PRETOLERANCE, DEFAULT_TOLERANCE, DEFAULT_TOLERANCE_2, DEFAULT_EMERGENCY_STRETCH,
+    DEFAULT_PRETOLERANCE, DEFAULT_TOLERANCE, DEFAULT_TOLERANCE_2, DEFAULT_EMERGENCY_STRETCH,
     DEFAULT_USE_EXPANSION, DEFAULT_USE_PROTRUSION,
 } from '../engine/core.ts';
 
@@ -26,8 +26,6 @@ export interface Params {
     lastLinePenalty: number;
     maxExpand: number;
     maxShrink: number;
-    minGapPt: number;
-    padPt: number;
     displayMinSpacePt: number;
     displayOverflowTolerancePx: number;
     useProtrusion: boolean;
@@ -75,8 +73,6 @@ export function paramsFromData(d: Record<string, string | undefined>, align: str
         lastLinePenalty:      num('lastLinePenalty',      DEFAULT_LAST_LINE_PENALTY),
         maxExpand:            num('maxExpand',            DEFAULT_MAX_EXPAND),
         maxShrink:            num('maxShrink',            DEFAULT_MAX_SHRINK),
-        minGapPt:             num('minGap',               DEFAULT_MIN_GAP),
-        padPt:                num('pad',                  DEFAULT_PAD),
         displayMinSpacePt:    num('displayMinSpace',      DEFAULT_DISPLAY_MIN_SPACE),
         displayOverflowTolerancePx:
                                num('displayOverflowTolerance', DEFAULT_DISPLAY_OVERFLOW_TOLERANCE),

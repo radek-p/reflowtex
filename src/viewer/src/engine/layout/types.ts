@@ -75,7 +75,7 @@ export interface LineMeta { bskip: number; lskip: number; lskiplimit: number; pr
 /** The space a line's \vadjust material takes (px): above the line (\vadjust
  *  pre) and below it. */
 export interface LineAdjust { above: number; below: number }
-/** A glyph's or box's extent on a line (px), for collision leading. */
+/** A glyph's or box's extent on a line (px). */
 export interface InkItem { x1: number; x2: number; h: number; d: number }
 /** TeX's \predisplaysize from a line (sp) and the quad of its font. */
 export interface PreDisplaySize { w: number; quad: number }
@@ -85,7 +85,7 @@ export interface PreDisplaySize { w: number; quad: number }
 export interface SegmentGeometry {
     lines: Line[];
     lrp: LinePlacement[];
-    meta?: (LineMeta | null)[];
+    meta?: LineMeta[];
     gaps?: number[];
     /** Each line's \vadjust space, where any line of a text segment has one. */
     adjust?: LineAdjust[];
@@ -114,7 +114,7 @@ export interface SegmentLayout {
     seg: Segment;
     lines: Line[];
     lrp?: LinePlacement[];
-    meta?: (LineMeta | null)[];
+    meta?: LineMeta[];
     /** An alignment's own space between its rows (px). */
     gaps?: number[];
     /** Each line's \vadjust space (px), when there is any. */

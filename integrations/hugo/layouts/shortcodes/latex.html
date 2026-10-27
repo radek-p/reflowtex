@@ -59,7 +59,7 @@
     plus the Knuth–Plass knobs: line-penalty, adj-demerits,
     double-hyphen-demerits, pretolerance, tolerance, tolerance2,
     emergency-tolerance, last-line-min, last-line-penalty, max-expand,
-    max-shrink, min-gap, pad, protrusion, expansion.
+    max-shrink, protrusion, expansion.
 
   Run prebuild.py before `hugo` to populate the data. */ -}}
 {{- $file := .Get "file" -}}
@@ -122,8 +122,6 @@
      {{- with .Get "last-line-penalty" }}      data-last-line-penalty="{{ . }}"{{ end }}
      {{- with .Get "max-expand" }}             data-max-expand="{{ . }}"{{ end }}
      {{- with .Get "max-shrink" }}             data-max-shrink="{{ . }}"{{ end }}
-     {{- with .Get "min-gap" }}                data-min-gap="{{ . }}"{{ end }}
-     {{- with .Get "pad" }}                    data-pad="{{ . }}"{{ end }}
      {{- with .Get "protrusion" }}             data-protrusion="{{ . }}"{{ end }}
      {{- with .Get "expansion" }}              data-expansion="{{ . }}"{{ end }}></div>
 {{- if and $a11y $data.a11y_html }}{{ $data.a11y_html | safeHTML }}{{ end }}

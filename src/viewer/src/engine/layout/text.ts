@@ -4,6 +4,7 @@ import { buildBreakCandidates, kpBreak, paragraphParams } from '../breaker.ts';
 import { HL_ALIGNMENT, IGNORE_DEPTH_SP, SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
 import { mergeWidgetRuns } from '../../host/widgets.ts';
+import { paragraphLeading } from './lines.ts';
 import type { BoxNode, ContentItem, Doc, FontTable, Paragraph, TexNode } from '../model.ts';
 import type { Line, LineAdjust, LineMeta, LinePlacement, Segment, Segments, SegmentGeometry, TextSegment } from './types.ts';
 import type { LayoutCache } from './types.ts';
@@ -176,7 +177,7 @@ export function segmentsOf(doc: Doc): Segments {
             continue;
         }
         // Consecutive paragraphs normally merge into one text segment and stack
-        // with adaptive leading. An explicit vspace before this paragraph (from
+        // with TeX's interline glue. An explicit vspace before this paragraph (from
         // \vspace, or a section heading's before/after skip) breaks that merge:
         // the paragraph starts a new segment whose gapBefore reproduces exactly
         // the space TeX asked for (segment boxes stack baseline-to-baseline).
@@ -196,7 +197,7 @@ export function segmentsOf(doc: Doc): Segments {
 }
 
 // Lay a text segment out: KP-break each paragraph at the reader's width and
-// stack the lines with the adaptive collision-based leading.
+// stack the lines with TeX's interline glue.
 // A paragraph's nodes at a measure. Boxes the pipeline found set to the
 // measure carry *_rate fields (display_model.attach_paragraph_rates); they are
 // evaluated like a display's tree, but never narrower than their floors allow –
@@ -262,7 +263,7 @@ function widestBoxSp(nodes: TexNode[]): number {
 export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt: number, p: Params, cache: LayoutCache): SegmentGeometry {
     const widthSp  = Math.round(widthPt * 65536);
     const columnPx = widthPt * ZOOM;
-    const lines: Line[] = [], lrp: LinePlacement[] = [], meta: (LineMeta | null)[] = [], adjust: LineAdjust[] = [];
+    const lines: Line[] = [], lrp: LinePlacement[] = [], meta: LineMeta[] = [], adjust: LineAdjust[] = [];
     let adjusted = false;
     const itemStarts: number[] = [];            // the first line of each item (paragraph)
     // Right edge of the widest line's ink, tracked alongside the loop below.
@@ -292,16 +293,10 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
         const align   = para.align || p.align;
         const justify = align === 'justify';
 
-        // TeX interline parameters for this paragraph (sp → px), for the LaTeX
-        // rule; a \baselineskip of 0 is one too (the lines then stand
-        // \lineskip apart). Absent (old data) falls back to adaptive leading.
-        const lineMeta = para.baselineskip != null ? {
-            bskip:      para.baselineskip  * SP_TO_PX,
-            lskip:      (para.lineskip || 0) * SP_TO_PX,
-            lskiplimit: (para.lineskiplimit || 0) * SP_TO_PX,
-        } : null;
+        // TeX interline parameters for this paragraph, for the LaTeX rule
+        const lineMeta = paragraphLeading(para);
         // and for its first line the \prevdepth TeX set the glue above from
-        let thisMeta: LineMeta | null = lineMeta && prevDepth != null
+        let thisMeta: LineMeta = prevDepth != null
             ? { ...lineMeta, prevDepth: prevDepth <= IGNORE_DEPTH_SP ? -Infinity : prevDepth * SP_TO_PX }
             : lineMeta;
 

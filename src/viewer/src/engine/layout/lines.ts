@@ -2,10 +2,10 @@
 
 import { RUNNING_RULE, SP_TO_PX, gD, gH, gW, glyphExpandScale, kernExpandScale, sumWidthSp } from '../core.ts';
 import { unreachable } from '../../../../shared/unreachable.ts';
-import type { FontTable, TexNode } from '../model.ts';
+import type { FontTable, Paragraph, TexNode } from '../model.ts';
 import type { InkItem, LineMeta } from './types.ts';
 
-// ── Adaptive line spacing ─────────────────────────────────────────────────────
+// ── Line spacing ─────────────────────────────────────────────────────────────
 
 export function lineProfile(fontInfo: FontTable, nodes: TexNode[], xStart: number, ratio: number, expandRatio: number): InkItem[] {
     const items: InkItem[]=[];
@@ -54,10 +54,15 @@ export function lineProfile(fontInfo: FontTable, nodes: TexNode[], xStart: numbe
     return items;
 }
 
-export function minRequiredAdvance(upper: InkItem[], lower: InkItem[]): number {
-    let req=0;
-    for(const u of upper){if(u.d<=0)continue; for(const l of lower){if(l.h<=0)continue; if(u.x2>l.x1&&l.x2>u.x1) req=Math.max(req,u.d+l.h);}}
-    return req;
+// A paragraph's leading as TeX broke it: \baselineskip, \lineskip and
+// \lineskiplimit (px), recorded for every paragraph; a \baselineskip of 0 is
+// one too (the lines then stand \lineskip apart).
+export function paragraphLeading(para: Paragraph): LineMeta {
+    return {
+        bskip:      (para.baselineskip || 0) * SP_TO_PX,
+        lskip:      (para.lineskip || 0) * SP_TO_PX,
+        lskiplimit: (para.lineskiplimit || 0) * SP_TO_PX,
+    };
 }
 
 // TeX's interline glue (§679), in px. Given the previous line's depth and this

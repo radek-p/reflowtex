@@ -427,22 +427,27 @@ test('a virtual font\'s accented letters read as one character each (ae: é, ï,
 });
 
 // An equation number with no room beside its formula: TeX sets it on a line of
-// its own below the formula, in place of the below-display skip (§1205). The
-// display records that; one whose number fits beside it does not.
-test('a display whose number TeX set on its own line below records it', async () => {
+// its own, below the formula (§1205) or, on the left, above it (§1203), in
+// place of the display skip there. No skip is recorded on that side; one
+// whose number fits beside its formula has both.
+test('a display whose number TeX set on its own line has no display skip on that side', async () => {
   const d = await capture([
     'Text.\\begin{equation}\\hbox to\\dimexpr\\linewidth-10pt\\relax{}\\end{equation}',
     'Text.\\begin{equation}\\hbox to.5\\linewidth{}\\end{equation}',
+    'Text.$$\\hbox to\\dimexpr\\linewidth-10pt\\relax{}\\leqno(3)$$',
     'Text.',
   ].join('\n'));
-  const displays = d.content.filter(i => i.kind === 'display') as (Item & { display_number_below?: boolean })[];
-  // the first formula, its number (a fixed box below it), the second formula
-  assert.equal(displays.length, 3);
-  assert.equal(displays[0].display_number_below, true);
-  assert.equal(displays[0].display_used_below, undefined, 'no below skip');
-  assert.equal(displays[1].display_number_below, undefined);
-  assert.equal(displays[2].display_number_below, undefined);
-  assert.ok(displays[2].display_used_below, 'the below skip');
+  const displays = d.content.filter(i => i.kind === 'display');
+  // each formula, and each number on its own line (a fixed box): below the
+  // first, above the third
+  assert.equal(displays.length, 5);
+  const [below, , fits, , above] = displays;
+  assert.notEqual(below.display_used_above, undefined, 'the above skip');
+  assert.equal(below.display_used_below, undefined, 'no below skip');
+  assert.notEqual(fits.display_used_above, undefined, 'the above skip');
+  assert.notEqual(fits.display_used_below, undefined, 'the below skip');
+  assert.equal(above.display_used_above, undefined, 'no above skip');
+  assert.notEqual(above.display_used_below, undefined, 'the below skip');
 });
 
 // newtx is in the CI image (docker/test-packages.txt); elsewhere, run where it is installed.

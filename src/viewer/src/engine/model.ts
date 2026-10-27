@@ -281,7 +281,6 @@ export interface ContentItem extends DisplayRates {
     display_lineskip?: number;
     display_lineskiplimit?: number;
     display_after_min?: number;
-    display_number_below?: boolean;
     display_wide?: ContentItem;
     display_wide_from?: number;
     display_wide_width?: number;

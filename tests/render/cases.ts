@@ -172,6 +172,11 @@ export const cases: Record<string, CaseSettings> = {
   // keeps it where TeX set it at the document's width.
   'eq-tag-own-line-reflow': { file: 'tests/render/cases/eq-tag-own-line.tex', widths: [-100, 85], tolerance: 0.010,
     known: 'an equation number keeps its own line, or its place beside the formula, at every width' },
+  // Text between the rows of an alignment (\intertext, \shortintertext), as in
+  // real papers: its display skips are \vskip's of its own, which the browser
+  // took for skips TeX left out and added again, 10 pt above the text and 10 pt
+  // more below it. At the document's width; worst attained 2026-10-27.
+  intertext: { against_plain: true, widths: [0], tolerance: 0.009, rule_tolerance: 0.004 },
   // Space asked for inside a paragraph, as in real papers: \\[len], \vspace and
   // \smallskip between two sentences, \vadjust pre, and a box and a rule in
   // a \vadjust. TeX sets it below (or above) the line the request ends up in;
