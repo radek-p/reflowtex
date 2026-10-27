@@ -19,7 +19,11 @@
 //    indentation) and the slope along it (a glue or expansion ratio that
 //    differs from TeX's);
 //  - rules: the viewer's rects against the strip's rules, corner by corner, at
-//    any angle.
+//    any angle;
+//  - colours: each matched glyph's fill, and each matched rule's colour,
+//    against the PDF's, exactly (as #rrggbb). The page is measured in the
+//    theme `default`, with no colour map, so a colour TeX drew – a link's,
+//    say – is compared as it is.
 //
 // Writes vector.json (every matched glyph's residual, the per-line table, the
 // rule table) and prints the lines that are off. Run it before compare.ts:
@@ -70,8 +74,22 @@ function withWidths(bytes: Buffer, k: number): mupdf.Document {
   return doc;
 }
 
+/** A colour MuPDF paints with, as #rrggbb, by the conversion the serializer
+ *  makes of TeX's colour operators (src/extract/serializer.lua: CMYK as
+ *  1 − min(1, c + k) per channel); null for one not opaque, or in a colour
+ *  space other than gray, RGB or CMYK. */
+export function hexColour(cs: mupdf.ColorSpace, c: number[], alpha: number): string | null {
+  if (alpha < 1) return null;
+  const h = (v: number) => Math.floor(Math.min(1, Math.max(0, v)) * 255 + 0.5).toString(16).padStart(2, '0');
+  if (cs.isGray() && c.length === 1) return '#' + h(c[0]).repeat(3);
+  if (cs.isRGB() && c.length === 3) return '#' + c.map(h).join('');
+  if (cs.isCMYK() && c.length === 4) return '#' + c.slice(0, 3).map(v => h(1 - Math.min(1, v + c[3]))).join('');
+  return null;
+}
+
 /** The strip's glyph origins (pt, y down; a ligature's text-only characters
- *  left out) and its rules as four corners each. A font's .notdef is left
+ *  left out) and its rules as four corners each, and the colour each is
+ *  painted in (hexColour). A font's .notdef is left
  *  out too: what the PDF shows for a character the font lacks (luaotfload
  *  sets it after each one TeX reports missing), it is no character's glyph,
  *  and the page draws nothing there.
@@ -85,23 +103,23 @@ function withWidths(bytes: Buffer, k: number): mupdf.Document {
  *  moves alone put each glyph, and with every width WIDTH_SCALE times its own,
  *  whole and exact; the origin with the widths as written is the first plus
  *  1/WIDTH_SCALE of the way to the second. */
-export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
+export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][]; glyphColours: (string | null)[]; ruleColours: (string | null)[] } {
   const bytes = readFileSync(pdf);
   const moves = withWidths(bytes, 0), scaled = withWidths(bytes, WIDTH_SCALE), notdef = notdefFonts(moves);
-  const rules: Pt[][] = [];
+  const rules: Pt[][] = [], ruleColours: (string | null)[] = [];
   // the device's matrix (bp, y down) taken on to pt
   const toPt = (m: mupdf.Matrix): Affine => m.map(v => v * PT_PER_BP) as Affine;
   const outline = (path: mupdf.Path) => { const o = new Outline(); path.walk(o); return o; };
   // every glyph shown, in order, and whether it is one to count
-  const trace = (doc: mupdf.Document, shapes: boolean): { at: Pt; counted: boolean }[] => {
-    const shown: { at: Pt; counted: boolean }[] = [];
+  const trace = (doc: mupdf.Document, shapes: boolean): { at: Pt; counted: boolean; colour: string | null }[] => {
+    const shown: { at: Pt; counted: boolean; colour: string | null }[] = [];
     const device = new mupdf.Device({
-      fillText(text: mupdf.Text, ctm: mupdf.Matrix) {
-        const m = toPt(ctm);
+      fillText(text: mupdf.Text, ctm: mupdf.Matrix, cs: mupdf.ColorSpace, color: number[], alpha: number) {
+        const m = toPt(ctm), colour = hexColour(cs, color, alpha);
         text.walk({
           showGlyph(font: mupdf.Font, trm: mupdf.Matrix, gid: number) {
             shown.push({ at: [m[0] * trm[4] + m[2] * trm[5] + m[4], m[1] * trm[4] + m[3] * trm[5] + m[5]],
-                         counted: !(gid < 0 || (gid === 0 && notdef.has(font.getName()))) });
+                         counted: !(gid < 0 || (gid === 0 && notdef.has(font.getName()))), colour });
           },
         });
       },
@@ -109,15 +127,15 @@ export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
       // through a rotating transform; a picture's straight lines and
       // four-cornered fills are the same shapes, and count as the viewer's do
       // (shapes.ts).
-      strokePath(path: mupdf.Path, stroke: mupdf.StrokeState, ctm: mupdf.Matrix) {
+      strokePath(path: mupdf.Path, stroke: mupdf.StrokeState, ctm: mupdf.Matrix, cs: mupdf.ColorSpace, color: number[], alpha: number) {
         if (!shapes) return;
         const r = strokedRule(outline(path), stroke.getLineWidth(), stroke.getLineCap() !== 0, toPt(ctm));
-        if (r) rules.push(r);
+        if (r) { rules.push(r); ruleColours.push(hexColour(cs, color, alpha)); }
       },
-      fillPath(path: mupdf.Path, _evenOdd: boolean, ctm: mupdf.Matrix) {
+      fillPath(path: mupdf.Path, _evenOdd: boolean, ctm: mupdf.Matrix, cs: mupdf.ColorSpace, color: number[], alpha: number) {
         if (!shapes) return;
         const r = filledRule(outline(path), toPt(ctm));
-        if (r) rules.push(r);
+        if (r) { rules.push(r); ruleColours.push(hexColour(cs, color, alpha)); }
       },
     });
     doc.loadPage(0).run(device, mupdf.Matrix.identity);
@@ -126,11 +144,12 @@ export function traceStrip(pdf: string): { glyphs: Pt[]; rules: Pt[][] } {
   };
   const at0 = trace(moves, true), atK = trace(scaled, false);
   if (at0.length !== atK.length) throw new Error(`${pdf}: ${at0.length} glyphs, but ${atK.length} with its widths scaled`);
-  const glyphs = at0.flatMap(({ at: [x, y], counted }, i): Pt[] => {
+  const kept = at0.map((g, i) => [g, i] as const).filter(([g]) => g.counted);
+  const glyphs = kept.map(([{ at: [x, y] }, i]): Pt => {
     const [xk, yk] = atK[i].at;
-    return counted ? [[x + (xk - x) / WIDTH_SCALE, y + (yk - y) / WIDTH_SCALE]] : [];
+    return [x + (xk - x) / WIDTH_SCALE, y + (yk - y) / WIDTH_SCALE];
   });
-  return { glyphs, rules };
+  return { glyphs, rules, glyphColours: kept.map(([g]) => g.colour), ruleColours };
 }
 
 /** The strip as SVG: MuPDF's drawing of it, vectors throughout (text as its
@@ -175,7 +194,7 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
   const out = o.out ?? join(dirname(pdf), 'vector');
   mkdirSync(out, { recursive: true });
 
-  const { glyphs: P, rules } = traceStrip(pdf);
+  const { glyphs: P, rules, glyphColours: PC, ruleColours: RC } = traceStrip(pdf);
   const dom: Dom = await dumpDom(url, { hsize, margin, waitLog: o.waitLog, screenshot: o.images ? join(out, 'viewer.png') : undefined, log });
   if (o.images) writeFileSync(join(out, 'strip.svg'), stripSvg(pdf));
   writeFileSync(join(out, 'dom.json'), JSON.stringify(dom));
@@ -246,6 +265,7 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
   const centre = (Q: Pt[]): Pt => [mean(Q.map(q => q[0])), mean(Q.map(q => q[1]))];
   const centres = rules.map(centre);
   const ruleRows: Record<string, unknown>[] = [], drawn = new Set<number>();
+  const rulePairs: [typeof dom.rects[number], number][] = [];
   for (const r of dom.rects) {
     if (r.w <= 0 || r.h <= 0) continue;
     const V = r.pts.map(([x, y]) => [x + shift, y] as Pt);
@@ -260,6 +280,7 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
     if (k >= 0 && bestD < 2) {
       const d = bestD;
       drawn.add(k);
+      rulePairs.push([r, k]);
       ruleRows.push({ y: round(r.y, 2), x: round(r.x + shift, 2), w: round(r.w, 2), h: round(r.h, 2), off: round(d, 3), dx: round(centres[k][0] - c[0], 3), dy: round(centres[k][1] - c[1], 3) });
     } else ruleRows.push({ y: round(r.y, 2), x: round(r.x + shift, 2), unmatched: true, w: round(r.w, 2), h: round(r.h, 2) });
   }
@@ -274,12 +295,29 @@ export async function vectorCompare(build: string, url: string, o: CompareOption
     for (const r of rm.filter(r => r.off > lineTol).sort((a, b) => b.off - a.off).slice(0, 10))
       log(`  rule at y ${r.y.toFixed(2).padStart(9)}: corners ${r.off.toFixed(2)} pt off, centre dx ${r.dx.toFixed(2)} dy ${r.dy.toFixed(2)} pt`);
   }
+  // colours: each matched glyph's and rule's, the browser's against TeX's,
+  // where both paint in a flat colour
+  type ColourRow = { y: number; x: number; what: string; viewer: string; tex: string };
+  const colourRows: ColourRow[] = [];
+  let colourCompared = 0;
+  const compareColour = (viewer: string | null, tex: string | null, row: Omit<ColourRow, 'viewer' | 'tex'>) => {
+    if (!viewer || !tex) return;
+    colourCompared++;
+    if (viewer !== tex) colourRows.push({ ...row, viewer, tex });
+  };
+  for (const [j, i] of matched) compareColour(G[j].fill, PC[i], { y: round(G[j].y, 2), x: round(D[j][0], 2), what: G[j].text });
+  for (const [r, k] of rulePairs) compareColour(r.color, RC[k], { y: round(r.y, 2), x: round(r.x + shift, 2), what: 'rule' });
+  colourRows.sort((a, b) => a.y - b.y || a.x - b.x);
+  log(`colours: ${colourCompared} compared, ${colourRows.length} differ from TeX's` +
+      (colourRows.length ? `; first: ${colourRows.slice(0, 5).map(c => `${JSON.stringify(c.what)} at y ${c.y} ${c.viewer} for ${c.tex}`).join(', ')}` : ''));
   const takenViewer = new Set(matched.map(m => m[0])), takenStrip = new Set(matched.map(m => m[1]));
   const result = {
     hsize_pt: hsize, margin_pt: margin, window_pt: win,
     glyphs: { strip: P.length, viewer: nInk, matched: matched.length },
     vertical: { mean: round(mean(dys), 4), sd: round(std(dys), 4), max_abs: round(maxOf(dys.map(Math.abs)), 4), drift_per_250pt: drift },
     lines: table, lines_off: off, rules: ruleRows, rules_missing: missing,
+    // the glyphs and rules painted in a colour other than TeX's: how many, and the first few
+    colours: { compared: colourCompared, mismatched: colourRows.length, first: colourRows.slice(0, 20) },
     matched: matched.map(([j, , dx, dy]) => ({ y: round(G[j].y, 2), x: round(D[j][0], 2), text: G[j].text, font: G[j].font, w: round(G[j].w, 2), size: round(G[j].size, 2), dx: round(dx, 3), dy: round(dy, 3) })),
     // what has no partner: the browser's glyphs with no glyph of TeX's near, and TeX's no browser glyph took
     viewer_unmatched: G.map((g, j) => [g, j] as const).filter(([g, j]) => g.text.trim() && !takenViewer.has(j))

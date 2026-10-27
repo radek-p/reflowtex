@@ -94,6 +94,7 @@ export interface Vector {
   matched: { y: number; text: string; dx: number; dy: number }[];
   rules: { y: number; off?: number; dx?: number; dy?: number; unmatched?: boolean }[];
   rules_missing: { y: number }[];
+  colours: { compared: number; mismatched: number; first: { y: number; x: number; what: string; viewer: string; tex: string }[] };
 }
 
 /** The PDF at this width against the case's page: vector.json, with strip.png and
@@ -187,5 +188,8 @@ export function problems(v: Vector, tolerance: number, ruleTolerance?: number, r
   const rulesOff = v.rules.filter(r => r.off !== undefined && r.off > rt).sort((a, b) => b.off! - a.off!);
   if (rulesOff.length) out.push(`${rulesOff.length} rules off by more than ${rt} pt: ` +
     rulesOff.slice(0, 5).map(r => `at y ${r.y} (corners ${f3(r.off!)} off; centre ${signed(r.dx!)}, ${signed(r.dy!)})`).join(', '));
+  // the page drawn in the theme `default` must have TeX's colours, exactly
+  if (v.colours.mismatched) out.push(`${v.colours.mismatched} glyphs or rules in a colour other than TeX's: ` +
+    v.colours.first.slice(0, 5).map(c => `${JSON.stringify(c.what)} at y ${c.y} in ${c.viewer}, not ${c.tex}`).join(', '));
   return out;
 }
