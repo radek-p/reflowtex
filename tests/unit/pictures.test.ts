@@ -180,6 +180,29 @@ test('\\includegraphics finds the file graphicx found: \\graphicspath, default e
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('names relative to the document\'s directory (./, ../) find its files, as a LaTeX run there does', { skip: !hasLualatex && 'lualatex not installed' }, async () => {
+  // The build runs in a directory of its own; TeX takes ./ and ../ names
+  // relative to that, and LaTeX's \input@path brings them back to the
+  // document's directory.
+  const root = mkdtempSync(join(tmpdir(), 'rtx-relative-'));
+  try {
+    const src = join(root, 'doc', 'src');
+    mkdirSync(join(src, 'sub'), { recursive: true });
+    mkdirSync(join(root, 'doc', 'figs'));
+    writeFileSync(join(src, 'sub', 'part.tex'), 'From the part.\n');
+    copyFileSync(PNG, join(root, 'doc', 'figs', 'bitmap-6x4.png'));
+    const pipe = tmpPipeline(root, [src]);
+    await pipe.compile('\\input{./sub/part}\\includegraphics[width=30pt]{../figs/bitmap-6x4}', '', { key: 'relative' });
+    const { pictures, nodes } = picturesOf(root, 'relative');
+    assert.equal(nodes.length, 1);
+    assert.match(pictures[0].svg, new RegExp(`href='data:image/png;base64,${readFileSync(PNG).toString('base64').replace(/[+/]/g, '\\$&')}'`));
+    let text = '';
+    forEachNode(readSerializerOutput(readFileSync(join(root, 'build', 'relative', 'output.json'), 'utf8')),
+      n => { if (n.type === 'glyph') text += String.fromCodePoint(Number(n.char)); });
+    assert.match(text, /Fromthepart\./, 'the part\'s text is set');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('\\includegraphics options braced whole, holding a `]`', { skip: !hasLualatex && 'lualatex not installed' }, async () => {
   // graphicx reads the options itself (the template only watches the file it
   // includes), with the braces round the whole list that protect a `]` in it.

@@ -208,4 +208,9 @@ export const cases: Record<string, CaseSettings> = {
   // in real papers): it was refused as not a complete document. Worst attained
   // 2026-10-27.
   'class-in-input': { file: 'tests/render/cases/class-in-input/main.tex', against_plain: true, tolerance: 0.010 },
+  // A document's files named relative to its directory, ./sub/part and
+  // ../ for a figure, as in real papers: TeX took such a name relative to the
+  // build directory, and the build stopped. Not against plain: that compile
+  // runs in a build directory too. Worst attained 2026-10-27.
+  'relative-paths': { file: 'tests/render/cases/relative-paths/main.tex', tolerance: 0.010 },
 };

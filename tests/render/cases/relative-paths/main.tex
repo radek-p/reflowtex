@@ -1,0 +1,16 @@
+% A document's own files named relative to its directory, as in real papers:
+% \input{./sub/part}, and figures named with ./ and ../. A LaTeX run in the
+% document's directory finds them there.
+\documentclass{article}
+\usepackage{graphicx}
+\begin{document}
+A first paragraph, in the main file, long enough to fill a line of the text
+width and then a few more words, gladly.
+
+\input{./sub/part}
+
+A figure named from the document's directory,
+\includegraphics[width=24pt]{./figs/dot}, and the same through its parent,
+\includegraphics[width=12pt]{../relative-paths/figs/dot.png}, in a paragraph
+long enough to break onto a second line.
+\end{document}

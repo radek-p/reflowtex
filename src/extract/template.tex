@@ -23,6 +23,34 @@
 % tagging on and luamml loaded there, LaTeX writes every formula's MathML,
 % which the pipeline reads (src/pipeline/mathml.ts); without, there is none.
 %%DOCUMENT-METADATA%%
+
+% ── The document's files, by names relative to its directory ────────────────
+% TeX runs in a build directory of its own and finds the document's files
+% through TEXINPUTS, which the build sets to the document's directories. A
+% name that starts with ./ or ../ (\input{./sections/intro},
+% \includegraphics{./figure}) TeX takes as it stands, relative to the build
+% directory, and never looks for along TEXINPUTS. LaTeX looks for a name it
+% did not find in each directory of \input@path in turn, whatever the name –
+% \input, \include, \InputIfFileExists, a class or package, and graphicx's
+% files unless the document sets \graphicspath – so TEXINPUTS's directories
+% go there too, and a relative name resolves against the document's
+% directory, as in a LaTeX run in that directory. (Backslashes and braces
+% are built with string.char so TeX does not read them; the directories are
+% printed as characters, whatever they hold.)
+\directlua{
+  local bs, open, close = string.char(92), string.char(123), string.char(125)
+  local sep = os.type == "windows" and ";" or ":"
+  local dirs = {}
+  for d in string.gmatch(os.getenv("TEXINPUTS") or "", "[^" .. sep .. "]+") do
+    d = d:gsub("/+$", "")
+    if not (d == "" or d == ".") and lfs.isdir(d) then table.insert(dirs, d .. "/") end
+  end
+  if next(dirs) then
+    tex.sprint(bs .. "expandafter" .. bs .. "def" .. bs .. "csname input@path" .. bs .. "endcsname" .. open)
+    for _, d in ipairs(dirs) do tex.sprint(open); tex.sprint(-2, d); tex.sprint(close) end
+    tex.sprint(close)
+  end
+}
 \documentclass{article}
 
 % ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
