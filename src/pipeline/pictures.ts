@@ -5,111 +5,142 @@
 // Each picture keeps TeX's box metrics (so it behaves as an ordinary box
 // anywhere) and gains an SVG payload the browser draws.
 //
-// An included PNG or JPEG (told by its first bytes, not its name) does not go
-// through dvisvgm: its payload is one <image> holding the file's bytes as a
-// data: URI, as wide and as tall as the image's box in TeX (in bp, with a
-// viewBox of the same size), filling it. (graphicx scales an image with a
-// transform around that box, drawn like any other.) The bytes are kept as
-// they are – neither recompressed nor resized – so a page carries each bitmap
-// whole, base64-encoded (a third larger than the file): a large photograph
-// makes a large page. Uses of one file at the same aspect ratio share one
-// payload. A bitmap is not themed: its colours are its own.
+// A PDF page – an included PDF's, or the page the capture made of a TikZ
+// picture – is drawn by MuPDF (pictures-mupdf.ts), as a PDF viewer draws it.
 //
-// Two rewrites make dvisvgm's payload safe to inline:
+// An included PNG or JPEG (told by its first bytes, not its name) is not
+// converted: its payload is one <image> holding the file's bytes as a data:
+// URI, as wide and as tall as the image's box in TeX (in bp, with a viewBox of
+// the same size), filling it. (graphicx scales an image with a transform
+// around that box, drawn like any other.) The bytes are kept as they are –
+// neither recompressed nor resized – so a page carries each bitmap whole,
+// base64-encoded (a third larger than the file): a large photograph makes a
+// large page. Uses of one file at the same aspect ratio share one payload.
+// A bitmap is not themed: its colours are its own, as are those of the
+// images inside a PDF page (shadings among them, which MuPDF draws as
+// images).
 //
-//  * ids – dvisvgm names glyph paths "g1-4855" and clip paths "cp0" and refers
-//    to them with <use> and url(#…). The names restart per file, so two
-//    pictures on one page would draw each other's glyphs and clips. Every id
-//    gets a prefix unique to its picture and its document.
+// Two rewrites make a page's SVG safe to inline:
+//
+//  * ids – MuPDF names glyph outlines "font_1_34", clip paths "clip_3", masks
+//    "mask_2" and refers to them with <use> and url(#…). The names restart
+//    per picture, so two pictures on one page would draw each other's glyphs
+//    and clips. Every id gets a prefix unique to its picture and its
+//    document.
 //  * colours – rewritten to CSS custom properties, so a theme recolours
 //    drawings as it recolours text. Black is the default text colour, and
-//    dvisvgm often omits it (SVG's initial fill is black), so the renderer sets
-//    the inherited fill on the wrapping <g> instead.
-//
-// dvisvgm draws a bitmap inside a PDF as a <symbol> with a viewBox and a
-// <use> of it with no size. A <use> of a <symbol> without width and height is
-// 100 % of the viewport – inside a block, the whole block – so each such
-// <use> gets the symbol's viewBox size, which its transform then scales.
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+//    MuPDF omits it on fills (SVG's initial fill is black), so the renderer
+//    sets the inherited fill on the wrapping <g> instead. A mask's content
+//    keeps its colours, black by default: they are not paint but how much of
+//    what the mask covers shows (a soft mask, a clip by text), and themed,
+//    a dark theme's white page would hide what the mask lets through.
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { inflateSync, constants as zlibConstants } from 'node:zlib';
 import { forEachNode, type SerializerOutput } from './nodes.ts';
 import { PictureError } from './errors.ts';
 import type { PictureSource } from './backend/types.ts';
 import { cleanSvgMarkup } from '../viewer/src/engine/safe.ts';
 
-const run = promisify(execFile);
-
-const SVG_ID_RE = /\bid='([^']+)'/g;
-const SVG_USE_RE = /(xlink:href|href)='#([^']+)'/g;
+// Attribute values in either quote: MuPDF writes "…", other sources '…'.
+const SVG_ID_RE = /(?<![\w:-])id=(["'])([^"']+)\1/g;
+const SVG_USE_RE = /((?:xlink:)?href)=(["'])#([^"']+)\2/g;
 const SVG_URL_RE = /url\(#([^)]+)\)/g;
-// dvisvgm shortens colours to 3-digit hex under --optimize (#f00), so both
-// forms are recognised, or the rewrite silently does nothing.
-const SVG_COLOR_RE = /\b(fill|stroke)='#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})'/g;
-const SVG_ROOT_RE = /<svg\b[^>]*\bviewBox='([\d.eE+-]+) ([\d.eE+-]+) ([\d.eE+-]+) ([\d.eE+-]+)'[^>]*>([\s\S]*)<\/svg>/;
-const SVG_SYMBOL_RE = /<symbol\b([^>]*)>/g;
-const SVG_USE_TAG_RE = /<use\b([^>]*)>/g;
-const SVG_VIEWBOX_RE = /\bviewBox='([\d.eE+-]+) ([\d.eE+-]+) ([\d.eE+-]+) ([\d.eE+-]+)'/;
-const SVG_PAGE_RECT_RE =/<path d='M0 0H([\d.eE+-]+)V([\d.eE+-]+)H0V0Z?'(?: fill='#(?:fff|ffffff)')?\/>\s*/g;
-
-// Every optimisation but collapse-groups. In dvisvgm 3.4.4 (Debian trixie's,
-// reading the PDF through mutool 1.25) that module drops the transform of a
-// group around a single glyph: a TikZ node label is drawn at y = -8 in a
-// picture 60 pt tall, a whole picture height above where it belongs.
-export const DVISVGM_OPTIMIZE = '--optimize=all,-collapse-groups';
+// 3-digit hex too (#f00), which an optimising writer shortens colours to.
+const SVG_COLOR_RE = /\b(fill|stroke)=(["'])#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\2/g;
+const NUM = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?';
+const SVG_ROOT_RE = new RegExp(`<svg\\b[^>]*\\bviewBox=(["'])(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})\\1[^>]*>([\\s\\S]*)<\\/svg>`);
+const RECT_PATH_RE = new RegExp(`^M\\s*(${NUM})[\\s,]+(${NUM})\\s*H\\s*(${NUM})\\s*V\\s*(${NUM})\\s*H\\s*(${NUM})\\s*(?:V\\s*(${NUM})\\s*)?Z?$`);
+const MATRIX_RE = new RegExp(`^matrix\\(\\s*(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})\\s*\\)$`);
 
 export interface Picture { svg: string; vb_w: number; vb_h: number }
 
-/** The markup inside dvisvgm's <svg>, cleaned of what could run in the page
- *  (src/viewer/src/engine/safe.ts: a document's raw SVG specials reach it as
- *  they are), ids prefixed and colours themed, with its viewBox size. */
+/** [start, end) of the element whose start tag begins at `at` in well-formed
+ *  markup: past its matching end tag, or its own end when it closes itself. */
+function elementExtent(s: string, at: number): [number, number] {
+  const tags = /<(\/?)[A-Za-z][^>]*?(\/?)>/g;
+  tags.lastIndex = at;
+  let depth = 0;
+  for (let m: RegExpExecArray | null; (m = tags.exec(s));) {
+    if (m[1]) depth--;
+    else if (!m[2]) depth++;
+    if (depth === 0) return [at, tags.lastIndex];
+  }
+  return [at, s.length];
+}
+
+/** The extents of every element named `name` (a pattern of names). */
+const extentsOf = (s: string, name: string) =>
+  [...s.matchAll(new RegExp(`<(?:${name})(?=[\\s/>])`, 'g'))].map(m => elementExtent(s, m.index));
+
+const within = (ranges: [number, number][], i: number) => ranges.some(([a, b]) => i >= a && i < b);
+
+/** Where a mask's content is: each <mask>, and each element a <use> inside one
+ *  draws (MuPDF keeps a soft mask's drawing in a group of its own). */
+function maskContent(s: string): [number, number][] {
+  const masks = extentsOf(s, 'mask');
+  const refs = new Set<string>();
+  for (const [a, b] of masks) for (const r of s.slice(a, b).matchAll(SVG_USE_RE)) refs.add(r[3]);
+  const drawn = [...s.matchAll(SVG_ID_RE)].filter(m => refs.has(m[2])).map(m => elementExtent(s, s.lastIndexOf('<', m.index)));
+  return [...masks, ...drawn];
+}
+
+const attr = (tag: string, name: string) => new RegExp(`(?<![\\w:-])${name}=(["'])([^"']*)\\1`).exec(tag)?.[2];
+
+/** Whether the <path> tag `tag` fills, in white and with no stroke, exactly
+ *  the rectangle 0 0 w h. */
+function isPageRectangle(tag: string, w: number, h: number): boolean {
+  const fill = attr(tag, 'fill')?.toLowerCase();
+  if (fill !== '#fff' && fill !== '#ffffff' && fill !== 'white') return false;
+  const stroke = attr(tag, 'stroke');
+  if (stroke !== undefined && stroke !== 'none') return false;
+  const r = RECT_PATH_RE.exec(attr(tag, 'd')?.trim() ?? '');
+  if (!r || Number(r[5]) !== Number(r[1]) || (r[6] !== undefined && Number(r[6]) !== Number(r[2]))) return false;
+  const t = attr(tag, 'transform');
+  const m = t === undefined ? [1, 0, 0, 1, 0, 0] : MATRIX_RE.exec(t.trim())?.slice(1).map(Number);
+  if (!m || m[1] !== 0 || m[2] !== 0) return false;
+  const xs = [Number(r[1]), Number(r[3])].map(x => m[0] * x + m[4]), ys = [Number(r[2]), Number(r[4])].map(y => m[3] * y + m[5]);
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-3;
+  return near(Math.min(...xs), 0) && near(Math.max(...xs), w) && near(Math.min(...ys), 0) && near(Math.max(...ys), h);
+}
+
+/** The markup inside a picture's <svg>, cleaned of what could run in the
+ *  page (src/viewer/src/engine/safe.ts: a picture may come from anyone's
+ *  document), ids prefixed and colours themed, with its viewBox size.
+ *  `stripPageBackground`: an included PDF is artwork on the host page, so
+ *  an opaque white rectangle over the whole viewBox (what Figma and
+ *  Matplotlib draw first) goes – the first one drawn, wherever it stands,
+ *  and not one inside a definition, a clip or a mask. A captured TikZ
+ *  picture keeps it: a full-size rectangle there may be content. */
 export function rewritePictureSvg(svg: string, prefix: string, stripPageBackground = false): Picture {
   const m = SVG_ROOT_RE.exec(svg);
-  if (!m) throw new PictureError('dvisvgm output has no <svg viewBox=...> root');
-  const vbW = Number(m[3]), vbH = Number(m[4]);
-  let inner = cleanSvgMarkup(m[5]);
-  // Figma exports an opaque white page rectangle (explicit white after the ICC
-  // normalisation below; no fill at all from older or raw dvisvgm output). An
-  // included PDF is artwork on the host page, so either form goes – but only
-  // when its geometry is exactly the whole viewBox, and wherever it stands
-  // (clipped PDFs put <defs> first). TikZ captures keep theirs: a full-size
-  // rectangle there may be content.
+  if (!m) throw new PictureError('the picture\'s SVG has no <svg viewBox=...> root');
+  const vbW = Number(m[4]), vbH = Number(m[5]);
+  let inner = cleanSvgMarkup(m[6]);
   if (stripPageBackground) {
-    for (const bg of inner.matchAll(SVG_PAGE_RECT_RE)) {
-      if (Math.abs(Number(bg[1]) - vbW) < 1e-6 && Math.abs(Number(bg[2]) - vbH) < 1e-6) {
-        inner = inner.slice(0, bg.index) + inner.slice(bg.index! + bg[0].length);
-        break;
-      }
+    const hidden = extentsOf(inner, 'defs|clipPath|mask|pattern|symbol|marker');
+    for (const p of inner.matchAll(/<path\b[^>]*>/g)) {
+      if (within(hidden, p.index) || !isPageRectangle(p[0], vbW, vbH)) continue;
+      const [a, b] = elementExtent(inner, p.index);
+      inner = inner.slice(0, a) + inner.slice(b).replace(/^\s*\n/, '');
+      break;
     }
   }
-  const symbolSizes = new Map<string, [string, string]>();
-  for (const [, attrs] of inner.matchAll(SVG_SYMBOL_RE)) {
-    const id = /\bid='([^']+)'/.exec(attrs)?.[1], vb = SVG_VIEWBOX_RE.exec(attrs);
-    if (id && vb) symbolSizes.set(id, [vb[3], vb[4]]);
-  }
-  if (symbolSizes.size) {
-    inner = inner.replace(SVG_USE_TAG_RE, (tag: string, attrs: string) => {
-      const ref = /(?:xlink:href|href)='#([^']+)'/.exec(attrs)?.[1];
-      const size = ref === undefined ? undefined : symbolSizes.get(ref);
-      if (!size || /\b(?:width|height)=/.test(attrs)) return tag;
-      return `<use width='${size[0]}' height='${size[1]}'${tag.slice(4)}`;
-    });
-  }
-  const ids = new Set([...inner.matchAll(SVG_ID_RE)].map(x => x[1]));
+  const ids = new Set([...inner.matchAll(SVG_ID_RE)].map(x => x[2]));
   if (ids.size) {
-    inner = inner.replace(SVG_ID_RE, (_, id) => `id='${prefix}${id}'`);
-    inner = inner.replace(SVG_USE_RE, (all, attr, id) => (ids.has(id) ? `${attr}='#${prefix}${id}'` : all));
-    inner = inner.replace(SVG_URL_RE, (all, id) => (ids.has(id) ? `url(#${prefix}${id})` : all));
+    inner = inner.replace(SVG_ID_RE, (_, q: string, id: string) => `id=${q}${prefix}${id}${q}`);
+    inner = inner.replace(SVG_USE_RE, (all, a: string, q: string, id: string) => (ids.has(id) ? `${a}=${q}#${prefix}${id}${q}` : all));
+    inner = inner.replace(SVG_URL_RE, (all, id: string) => (ids.has(id) ? `url(#${prefix}${id})` : all));
   }
-  inner = inner.replace(SVG_COLOR_RE, (_, attr: string, hex: string) => {
+  const masked = maskContent(inner);
+  inner = inner.replace(SVG_COLOR_RE, (all, a: string, q: string, hex: string, at: number) => {
+    if (within(masked, at)) return all;
     let digits = hex.toLowerCase();
     if (digits.length === 3) digits = [...digits].map(c => c + c).join('');
     const fallback = digits === '000000' ? 'currentColor' : `#${digits}`;
-    return `${attr}='var(--latex-color-${digits}, ${fallback})'`;
+    return `${a}=${q}var(--latex-color-${digits}, ${fallback})${q}`;
   });
+  // a mask's content inherits the mask's fill, not the picture's themed one
+  inner = inner.replace(/<mask\b[^>]*>/g, tag => (attr(tag, 'fill') === undefined ? `<mask fill="#000000"${tag.slice(5)}` : tag));
   return { svg: inner.trim(), vb_w: vbW, vb_h: vbH };
 }
 
@@ -155,123 +186,67 @@ export function includedPictureFiles(data: SerializerOutput): string[] {
   return [...files];
 }
 
-/** Whether a PDF paints in an ICC-based colour space – in a page's resources,
- *  or inside a compressed object stream (each Flate stream is inflated). */
-export function usesIccColour(pdf: string): boolean {
-  const data = readFileSync(pdf);
-  if (data.includes('/ICCBased')) return true;
-  for (const m of data.toString('latin1').matchAll(/stream\r?\n/g)) {
-    try {
-      // like Python's decompressobj: trailing bytes ignored, a truncated
-      // stream gives what it has
-      if (inflateSync(data.subarray(m.index! + m[0].length), { finishFlush: zlibConstants.Z_SYNC_FLUSH }).includes('/ICCBased')) return true;
-    } catch { /* not a Flate stream */ }
-  }
-  return false;
-}
-
 /** Turn every picture node into inline SVG (Document.pictures) – its PDF
  *  page, or an included PNG or JPEG as an <image>;
  *  returns how many pictures were converted. `docTag` tells this document's
  *  pictures from another's on the same page: by default the first characters
  *  of the build directory's name, which is the document's content key. A
  *  backend that makes its pictures' SVG itself passes its `source`; without
- *  one, each picture's PDF page is converted with dvisvgm. */
+ *  one, each picture's PDF page is drawn by MuPDF (pictures-mupdf.ts, loaded
+ *  here, on the first PDF page: it is server-only, and this module is not). */
 export async function convertPictures(data: SerializerOutput, buildDir: string, block?: string,
                                       docTag = basename(buildDir).replace(/[^0-9A-Za-z]/g, '').slice(0, 8),
                                       source?: PictureSource): Promise<number> {
   if (!Array.isArray(data.pictures)) data.pictures = [];
   const pictures = data.pictures as Picture[];
   const bySource = new Map<string, number>();
-  // dvisvgm 3.4 drops every ICC `scn` fill in PDFs exported by Figma: coloured
-  // shapes silently turn black. Ghostscript rewrites those paints to
-  // DeviceRGB, which dvisvgm keeps. Only a PDF that uses ICC colour goes
-  // through it: pdfwrite turns a rotation drawn with `cm` into a rotated text
-  // matrix, and dvisvgm drops text set under one (a pgfplots y label vanished).
-  const rgbPdfs = new Map<string, string>();
-  const pdfTmp = mkdtempSync(join(tmpdir(), 'picture-pdf-'));
-  const normalised = async (pdf: string) => {
-    if (!rgbPdfs.has(pdf) && !usesIccColour(pdf)) rgbPdfs.set(pdf, pdf);
-    if (!rgbPdfs.has(pdf)) {
-      const out = join(pdfTmp, `source-${rgbPdfs.size + 1}.pdf`);
-      try {
-        // -r72: at its default 720 dpi pdfwrite puts the page under a 0.1 scale,
-        // and dvisvgm folds that into coordinates and line widths but not into
-        // dash patterns – every dashed line came out ten times too long.
-        await run('gs', ['-q', '-dSAFER', '-dNOPAUSE', '-dBATCH', '-sDEVICE=pdfwrite', '-r72', '-dCompatibilityLevel=1.7',
-          '-sColorConversionStrategy=RGB', '-dProcessColorModel=/DeviceRGB', '-dUseCIEColor=false',
-          `-sOutputFile=${out}`, pdf], { cwd: buildDir });
-      } catch (e) {
-        throw new PictureError(`Ghostscript failed while normalising colours in ${pdf}:\n${String((e as { stderr?: string }).stderr ?? e).slice(-2000)}`, block);
-      }
-      if (!existsSync(out)) throw new PictureError(`Ghostscript wrote nothing for ${pdf}`, block);
-      rgbPdfs.set(pdf, out);
-    }
-    return rgbPdfs.get(pdf)!;
-  };
-
   const nodes: Record<string, unknown>[] = [];
   forEachNode(data, n => { if (n.type === 'picture') nodes.push(n); });
   let converted = 0;
-  try {
-    for (const n of nodes) {
-      const src = n.file as string | undefined;
-      const page = Math.trunc(Number(n.page ?? 1) || 1);
-      const externalized = Boolean(n.externalized), generated = Boolean(n.generated);
-      delete n.file; delete n.page; delete n.externalized; delete n.generated;
-      if (!src) throw new PictureError('a picture node has no source file – the template image hook did not record it', block);
-      let key = JSON.stringify([src, page, externalized, generated]);
-      if (!externalized && !generated) {
-        // An included file: a PNG or JPEG becomes its own <image>, whatever
-        // the backend; one picture per file and aspect ratio of its box.
-        if (!existsSync(src)) throw new PictureError(`picture source ${src} is missing`, block);
-        const bytes = readFileSync(src);
-        const format = pictureFormat(bytes);
-        if (!format && !src.toLowerCase().endsWith('.pdf'))
-          throw new PictureError(`picture source ${src} is not a PDF, PNG or JPEG file; only those can be included`, block);
-        if (format === 'png' || format === 'jpeg') {
-          const w = Number(n.width) || 0, h = (Number(n.height) || 0) + (Number(n.depth) || 0);
-          key = JSON.stringify([src, 'bitmap', w ? Number((h / w).toFixed(6)) : 0]);
-          if (!bySource.has(key)) {
-            pictures.push(bitmapPicture(bytes, format, w, h, `p${docTag}-${pictures.length + 1}-`));
-            bySource.set(key, pictures.length);          // 1-based
-            converted++;
-          }
+  for (const n of nodes) {
+    const src = n.file as string | undefined;
+    const page = Math.trunc(Number(n.page ?? 1) || 1);
+    const externalized = Boolean(n.externalized), generated = Boolean(n.generated);
+    delete n.file; delete n.page; delete n.externalized; delete n.generated;
+    if (!src) throw new PictureError('a picture node has no source file – the template image hook did not record it', block);
+    let key = JSON.stringify([src, page, externalized, generated]);
+    if (!externalized && !generated) {
+      // An included file: a PNG or JPEG becomes its own <image>, whatever
+      // the backend; one picture per file and aspect ratio of its box.
+      if (!existsSync(src)) throw new PictureError(`picture source ${src} is missing`, block);
+      const bytes = readFileSync(src);
+      const format = pictureFormat(bytes);
+      if (!format && !src.toLowerCase().endsWith('.pdf'))
+        throw new PictureError(`picture source ${src} is not a PDF, PNG or JPEG file; only those can be included`, block);
+      if (format === 'png' || format === 'jpeg') {
+        const w = Number(n.width) || 0, h = (Number(n.height) || 0) + (Number(n.depth) || 0);
+        key = JSON.stringify([src, 'bitmap', w ? Number((h / w).toFixed(6)) : 0]);
+        if (!bySource.has(key)) {
+          pictures.push(bitmapPicture(bytes, format, w, h, `p${docTag}-${pictures.length + 1}-`));
+          bySource.set(key, pictures.length);          // 1-based
+          converted++;
         }
       }
-      if (!bySource.has(key) && source) {
-        const ref = { file: src, page, externalized, generated };
-        let svg: string;
+    }
+    if (!bySource.has(key)) {
+      const ref = { file: src, page, externalized, generated };
+      let svg: string;
+      if (source) {
         try { svg = await source.svg(ref); }
         catch (e) { throw new PictureError(`the backend's picture source failed on ${src} (page ${page}): ${(e as Error).message}`, block); }
-        pictures.push(rewritePictureSvg(svg, `p${docTag}-${pictures.length + 1}-`, source.stripsBackground?.(ref) ?? (!externalized && !generated)));
-        bySource.set(key, pictures.length);          // 1-based
-        converted++;
-      }
-      if (!bySource.has(key)) {
-        let pdf: string, out: string;
-        if (generated) { pdf = join(buildDir, src); out = join(buildDir, `captured-picture-${page}.svg`); }
-        else if (externalized) { pdf = join(buildDir, `${src}.pdf`); out = join(buildDir, `${src}.svg`); }
-        else { pdf = src; out = join(buildDir, `included-${pictures.length + 1}.svg`); }
+      } else {
+        const pdf = generated ? join(buildDir, src) : externalized ? join(buildDir, `${src}.pdf`) : src;
         if (!existsSync(pdf)) throw new PictureError(`picture source ${pdf} is missing`, block);
-        const input = externalized || generated ? pdf : await normalised(pdf);
-        // --tmpdir: dvisvgm's temporary files are not namespaced per process,
-        // so concurrent conversions collide and some silently lose every glyph.
-        const tmp = mkdtempSync(join(tmpdir(), 'dvisvgm-'));
-        try {
-          await run('dvisvgm', ['--pdf', `--page=${page}`, '--no-fonts', DVISVGM_OPTIMIZE, `--tmpdir=${tmp}`, `--output=${out}`, input], { cwd: buildDir });
-        } catch (e) {
-          if (!existsSync(out)) throw new PictureError(`dvisvgm failed on ${pdf}:\n${String((e as { stderr?: string }).stderr ?? e).slice(-2000)}`, block);
-        } finally { rmSync(tmp, { recursive: true, force: true }); }
-        if (!existsSync(out)) throw new PictureError(`dvisvgm wrote nothing for ${pdf}`, block);
-        pictures.push(rewritePictureSvg(readFileSync(out, 'utf8'), `p${docTag}-${pictures.length + 1}-`, !externalized && !generated));
-        bySource.set(key, pictures.length);          // 1-based
-        converted++;
+        const { pdfPageSvg } = await import('./pictures-mupdf.ts');
+        try { svg = pdfPageSvg(readFileSync(pdf), page); }
+        catch (e) { throw new PictureError(`MuPDF could not draw page ${page} of ${pdf}: ${(e as Error).message}`, block); }
       }
-      n.picture = bySource.get(key);
+      const strip = source?.stripsBackground?.(ref) ?? (!externalized && !generated);
+      pictures.push(rewritePictureSvg(svg, `p${docTag}-${pictures.length + 1}-`, strip));
+      bySource.set(key, pictures.length);          // 1-based
+      converted++;
     }
-  } finally {
-    rmSync(pdfTmp, { recursive: true, force: true });
+    n.picture = bySource.get(key);
   }
   return converted;
 }

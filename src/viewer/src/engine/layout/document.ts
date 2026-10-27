@@ -331,8 +331,8 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
             dom.segs.push({ svg: null, box, gap, wrap: null, pairs: [], sub: null });
             continue;
         }
-        // xmlns:xlink is declared so a picture's `<use xlink:href=…>` (dvisvgm
-        // emits the xlink form) resolves once its markup is injected via innerHTML.
+        // xmlns:xlink is declared so a picture's `<use xlink:href=…>` (MuPDF
+        // writes the xlink form) resolves once its markup is injected via innerHTML.
         const svg = svgEl('svg', { xmlns:'http://www.w3.org/2000/svg', 'xmlns:xlink':'http://www.w3.org/1999/xlink' });
         // Block CSS cascade from prose containers; SVG text uses explicit per-glyph font families.
         // overflow-anchor:none keeps the browser's scroll anchor off the <svg>: its

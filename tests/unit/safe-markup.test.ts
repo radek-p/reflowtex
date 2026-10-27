@@ -32,11 +32,16 @@ test('droppedAttribute: handlers and foreign addresses go, the rest stays', () =
 
 const runs = (s: string) => /<script|foreignobject|\son[a-z]+\s*=|[\s/]on[a-z]+=|javascript|&colon;/i.test(s);
 
-test('cleanSvgMarkup: what dvisvgm writes comes back byte for byte', () => {
+test('cleanSvgMarkup: what SVG writers write comes back byte for byte', () => {
   const svg = "<defs><path id='g1-49' d='M1 2L3 4Z'/><clipPath id='cp0'><path d='M0 0H9V9H0Z'/></clipPath></defs>"
     + "<g clip-path='url(#cp0)'><use x='1' y='2' xlink:href='#g1-49'/><path d='M0 0L1 1' stroke='#f00' fill='none'/></g>"
     + "<image width='4' height='3' href='data:image/png;base64,iVBORw0KGgo='/><text x='1'>a &lt; b &amp; c</text>";
   assert.equal(cleanSvgMarkup(svg), svg);
+  // MuPDF's: double quotes, glyphs with their text, masks, images with line breaks in their data
+  const mu = '<defs>\n<g id="font_1_97">\n<mask id="mask_2">\n<image id="image_3" width="8" height="8" xlink:href="data:image/png;base64,\niVBORw0KGgo="/>\n</mask>\n'
+    + '<rect x="0" y="0" width="8" height="8" transform="matrix(.125,0,0,-.125,0,1)" mask="url(#mask_2)"/>\n</g>\n</defs>\n'
+    + '<use data-text="&#x03a9;" xlink:href="#font_1_97" transform="matrix(16,0,0,-16,20,80)" fill="#ff0000"/>';
+  assert.equal(cleanSvgMarkup(mu), mu);
 });
 
 test('cleanSvgMarkup: scripts, HTML islands, handlers and javascript: addresses go', () => {

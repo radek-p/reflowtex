@@ -157,7 +157,7 @@ it, as things stand.
 | `classicFonts` | yes | planned, with gaps: Unicode characters typed into 8-bit fonts need help from a package, and a ligature split at a hyphenation point is not formed again |
 | `protrusion` | yes | planned |
 | `fontExpansion` | yes | not planned: XeTeX has no font expansion |
-| `pictures` | yes: PDF pages converted by dvisvgm | planned: SVG made from the engine's own output, with no native tools; a few PGF features (fadings, interpolated shadings) missing at first |
+| `pictures` | yes: PDF pages drawn as SVG by MuPDF | planned: SVG made from the engine's own output, with no native tools; a few PGF features (fadings, interpolated shadings) missing at first |
 | `companion` | yes | planned: the package's notes written by TeX and read back after the run, in place of Lua |
 | `batchParts` | yes | planned |
 | `tagging` | yes (TeX Live 2026) | not planned for now: needs a LaTeX newer than the one in Tectonic's TeX bundle |
