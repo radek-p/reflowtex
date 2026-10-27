@@ -9,7 +9,11 @@ import { BUILD, build, buildHugo, names } from './web.ts';
 
 export default async function setup(): Promise<() => Promise<void>> {
   ensureBundles();
-  await Promise.all([...names().map(build), buildHugo()]);
+  // REFLOWTEX_WEB_PAGES=themes,reading,hugo builds only those (`hugo`: the
+  // Hugo site), for the specs that use them
+  const only = process.env.REFLOWTEX_WEB_PAGES?.split(',').map(s => s.trim()).filter(Boolean);
+  const want = (name: string) => !only || only.includes(name);
+  await Promise.all([...names().filter(want).map(build), ...(want('hugo') ? [buildHugo()] : [])]);
   const { url, server } = await serveDirectory(BUILD);
   process.env.REFLOWTEX_WEB_URL = url;
   return () => new Promise(ok => server.close(() => ok()));
