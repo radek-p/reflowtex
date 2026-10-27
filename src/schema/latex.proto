@@ -359,6 +359,10 @@ message ContentItem {
   // theorem's or list's \topsep) while the below skip was \lastskip: the
   // space below is the larger of the skip and this
   optional int32 display_after_min     = 28;
+  // the display's equation number had no room beside the formula, and TeX
+  // set it on a line of its own below (a fixed display after this one) in
+  // place of the below skip (§1205): the display has no below skip
+  optional bool  display_number_below  = 35;
   // A display TeX set another way at the document's width than at wider
   // ones (amsmath moved its tag, or had no room to centre the body): from
   // display_wide_from (sp of \textwidth) on, the viewer draws display_wide

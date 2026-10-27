@@ -347,9 +347,12 @@ export function displaySkipAdjust(L: SegmentLayout, prev: SegmentLayout | undefi
     }
     if (prev && prev.seg.kind === 'display' && prev.displayFull !== null && prev.displayFull !== undefined) {
         const it = prev.seg.rows[prev.seg.rows.length - 1].item;
-        // LaTeX's \addvspace below the display asks for at least display_after_min
+        // LaTeX's \addvspace below the display asks for at least display_after_min;
+        // a number TeX set on its own line below the formula takes the skip's
+        // place (§1205)
         const floor = it.display_after_min || 0;
-        const below = Math.max(prev.displayFull ? it.display_below! : it.display_below_short!, floor);
+        const skip = it.display_number_below ? 0 : prev.displayFull ? it.display_below! : it.display_below_short!;
+        const below = Math.max(skip, floor);
         delta += (below - Math.max(it.display_used_below || 0, floor)) * SP_TO_PX;
         // and the interline glue between the display and the line below,
         // redone for that line at this width: display_interline_below is the

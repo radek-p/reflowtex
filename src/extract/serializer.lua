@@ -569,6 +569,7 @@ local WHATSIT_ID    = node.id("whatsit")
 local RULE_ID       = node.id("rule")
 local GLUE_ID       = node.id("glue")
 local PENALTY_ID    = node.id("penalty")
+local HLIST_ID      = node.id("hlist")
 
 
 -- ── Colour set between paragraphs ─────────────────────────────────────────
@@ -1430,8 +1431,8 @@ end
 -- lives in the box's shift; the renderer ignores it and re-centres at the
 -- reader's width.
 --
--- Subtypes we key on (hlist): line=1, alignment=4, equation=6.
-local HL_LINE, HL_ALIGNMENT, HL_EQUATION = 1, 4, 6
+-- Subtypes we key on (hlist): line=1, alignment=4, equation=6, equation number=7.
+local HL_LINE, HL_ALIGNMENT, HL_EQUATION, HL_EQUATION_NUMBER = 1, 4, 6, 7
 -- Vertical glue subtype 0 is userskip: the glue \vskip/\vspace/\addvspace insert,
 -- and the before/after skips \@startsection puts around a section heading;
 -- 3 is \parskip; baselineskip (2) and lineskip (1) are the interline glue TeX
@@ -1505,6 +1506,18 @@ local last_box = nil
 -- the paragraph of the last line stacked
 local last_para = nil
 local last_display = nil
+
+-- Whether an equation number's box n is the one TeX set below its formula
+-- (§1205): the formula's box, a \penalty10000 and the interline glue come
+-- straight before it.
+local function number_below(n)
+    local p = n.prev
+    while p and ((p.id == GLUE_ID and (p.subtype == GLUE_BASELINESKIP or p.subtype == GLUE_LINESKIP))
+                 or (p.id == PENALTY_ID and p.penalty >= 10000)) do
+        p = p.prev
+    end
+    return p ~= nil and p.id == HLIST_ID and p.subtype == HL_EQUATION
+end
 -- The depth of the last line, display or box the flow stacked: what the
 -- viewer sets the interline glue below it from. nil while the list being
 -- walked has nothing stacked yet.
@@ -1998,7 +2011,13 @@ local function walk_flow(head, pending, ctx, box)
         elseif t == "rule" or t == "hlist" or t == "vlist" then
             -- neither a line nor a display (those are above), nor a box of
             -- lines: a captured TikZ picture set in vertical mode, a rule, a
-            -- box; see fixed_box
+            -- box; see fixed_box. An equation number with no room beside its
+            -- formula is set on a line of its own below it, in place of the
+            -- below-display skip (§1205): the display records that.
+            if t == "hlist" and n.subtype == HL_EQUATION_NUMBER and last_display
+                    and number_below(n) then
+                last_display.display_number_below = true
+            end
             local fixed, why = fixed_box(n, t)
             if fixed then
                 emit_fixed(n, fixed, pending, ctx)

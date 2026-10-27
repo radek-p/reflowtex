@@ -1,0 +1,25 @@
+% Numbered equations whose number has no room beside the formula, as in real
+% papers: TeX sets the number on a line of its own below the formula and adds
+% no \belowdisplayskip after it (the number's line takes its place). One
+% equation whose number fits, for comparison.
+\documentclass{article}
+\usepackage{amsmath,amsfonts}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+The scheme advances every particle by one step of the Euler--Maruyama method,
+\begin{equation}
+  \bar X_{n+1}^{\ell,j} = \bar X_n^{\ell,j} + b(\bar X_n^{\ell,j}, \mathbb E[R(\bar X_n^{\ell,j})])\,\Delta t_{\ell} + \sigma(\bar X_n^{\ell,j}, \mathbb E[R(\bar X_n^{\ell,j})])\,\Delta W_n^{\ell,j}, \qquad 0\le n<N,
+\end{equation}
+with the same Brownian increments on two neighbouring levels, so that the two paths stay close to each other.
+\begin{equation}
+  \bar X_{n+1} = \bar X_n + b(\bar X_n, \mathbb E[R(\bar X_n)])\,\Delta t + \sigma(\bar X_n, \mathbb E[R(\bar X_n)])\,\Delta W_n
+\end{equation}
+is the single-level scheme, whose number fits beside it. The coupled particles of the coarser level take two steps of the finer one at a time,
+\begin{equation}
+  \bar{\widetilde X}_{n+1}^{\ell,j} = \bar{\widetilde X}_n^{\ell,j} + b(\bar{\widetilde X}_n^{\ell,j}, \mathbb E[R(\bar{\widetilde X}_n^{\ell,j})])\,\Delta t_{\ell-1} + \sigma(\bar{\widetilde X}_n^{\ell,j}, \mathbb E[R(X_n)])\,\Delta \widetilde W_n^{\ell,j}, \quad n\ge0,
+\end{equation}
+and the text goes on below the number, as TeX sets it.
+
+A paragraph after it, long enough to fill one line of the text width and then some more words.
+\end{document}

@@ -154,6 +154,16 @@ export const cases: Record<string, CaseSettings> = {
   // until its final pass, and the last line's negative glue then let it reach
   // the end, one line fewer than TeX. Worst attained 2026-10-27.
   'negative-hspace-end': { against_plain: true, tolerance: 0.010 },
+  // Equation numbers with no room beside their formula, set by TeX on a line
+  // of their own below it, with no \belowdisplayskip after them, as in real
+  // papers (the browser added the skip: 10 pt lower after each). At the
+  // document's width; worst attained 2026-10-27.
+  'eq-tag-own-line': { against_plain: true, widths: [0], tolerance: 0.009 },
+  // The same at other widths, where a number moves beside its formula or
+  // below it with the measure, as TeX decides it again (§1202): the browser
+  // keeps it where TeX set it at the document's width.
+  'eq-tag-own-line-reflow': { file: 'tests/render/cases/eq-tag-own-line.tex', widths: [-100, 85], tolerance: 0.010,
+    known: 'an equation number keeps its own line, or its place beside the formula, at every width' },
   // Characters typed raw that the font has no glyph for, as in real papers: ł,
   // Ł, ź and ﬀ in a T1 font, box drawing in Latin Modern OpenType. TeX
   // reports them missing and draws nothing (OpenType: the font's empty
