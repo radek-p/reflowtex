@@ -224,3 +224,15 @@ export function themedFigurePdf(): Buffer {
     objects: [HELVETICA],
   });
 }
+
+/** A frame as Figma exports one: everything inside a clip to the page, the
+ *  page first, opaque white in an ICC colour space, then a red square. With
+ *  `page` another colour (as ICC components), the same with a page of that
+ *  colour. */
+export function figmaFramePdf(page = '1 1 1'): Buffer {
+  return onePagePdf({
+    resources: '<< /ColorSpace << /CS0 [/ICCBased 5 0 R] >> >>',
+    content: `q 0 0 200 100 re W n /CS0 cs ${page} scn 0 0 200 100 re f 1 0 0 scn 10 10 40 40 re f Q`,
+    objects: [stream('/N 3 /Alternate /DeviceRGB', iccProfile(SRGB_PRIMARIES))],
+  });
+}

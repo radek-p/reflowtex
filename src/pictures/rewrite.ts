@@ -98,8 +98,11 @@ function isPageRectangle(tag: string, w: number, h: number): boolean {
  *  `stripPageBackground`: an included PDF is artwork on the host page, so
  *  an opaque white rectangle over the whole viewBox (what Figma and
  *  Matplotlib draw first) goes – the first one drawn, wherever it stands,
- *  and not one inside a definition, a clip or a mask. A captured TikZ
- *  picture keeps it: a full-size rectangle there may be content. */
+ *  and not one inside a definition, a clip or a mask (a clipped PDF puts its
+ *  <defs> first). Only white: a rectangle with no fill is black in MuPDF's
+ *  output, which drops no colour, and a coloured or black page is content.
+ *  A captured TikZ picture keeps it: a full-size rectangle there may be
+ *  content. */
 export function rewritePictureSvg(svg: string, prefix: string, stripPageBackground = false): Picture {
   const m = SVG_ROOT_RE.exec(svg);
   if (!m) throw new Error('the picture\'s SVG has no <svg viewBox=...> root');

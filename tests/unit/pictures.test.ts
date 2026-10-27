@@ -262,6 +262,22 @@ test('a renamed PDF is read as the PDF it is', { skip: !hasLualatex && 'lualatex
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('a captured TikZ picture keeps a full-size white rectangle; an included figure loses it', async () => {
+  // the capture's page is a picture of its own (generated: a page of the
+  // build's PDF), and a white rectangle as large as it may be what it draws
+  const root = mkdtempSync(join(tmpdir(), 'rtx-page-rect-'));
+  try {
+    const { figmaFramePdf } = await import('./figure-pdfs.ts');
+    writeFileSync(join(root, 'input.pdf'), figmaFramePdf());
+    const node = (o: object) => ({ type: 'picture', width: 200 * 65781.76, height: 100 * 65781.76, depth: 0, page: 1, ...o });
+    const data = { paragraphs: [{ nodes: [node({ file: 'input.pdf', generated: true }), node({ file: join(root, 'input.pdf') })] }], content: [], streams: [] } as unknown as SerializerOutput;
+    assert.equal(await convertPictures(data, root, 'b', 'd'), 2);
+    const [captured, included] = (data.pictures as Picture[]).map(p => p.svg);
+    assert.match(captured, /d="M0 0H200V100H0Z" fill="var\(--latex-color-ffffff, #ffffff\)"/);
+    assert.doesNotMatch(included, /d="M0 0H200V100H0Z" fill=/, "only the clip has that shape now");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('a file that is neither a PDF, a PNG nor a JPEG is refused', async () => {
   const root = mkdtempSync(join(tmpdir(), 'rtx-bitmap-gif-'));
   try {

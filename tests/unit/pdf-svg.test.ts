@@ -185,6 +185,23 @@ test('a figure is themed as the page is: its white page gone, black and white to
   assert.equal(other, '<path fill="var(--latex-color-ff0000, #ff0000)" stroke="var(--latex-color-ffffff, #ffffff)"/><path fill="var(--latex-color-000000, currentColor)" stroke="var(--latex-color-0000ff, #0000ff)"/><path fill="none" stroke="url(#a)"/>');
 });
 
+test('an included figure\'s opaque white page goes, wherever it stands; a coloured one, and a captured picture\'s, stay', async () => {
+  const page = /<path [^>]*d="M0 0H200V100H0Z" fill="(?:#[0-9a-f]{6}|var\([^"]*\))"\/>/;
+  // a Figma frame: <defs> (the clip) first, the page inside the clipped group
+  const figma = await pdfPageSvg(F.figmaFramePdf(), 1);
+  assert.match(figma, /<defs>[\s\S]*<g clip-path="url\(#clip_1\)">\s*<path [^>]*d="M0 0H200V100H0Z" fill="#ffffff"\/>/);
+  const included = rewritePictureSvg(figma, 'p1-', true).svg;
+  assert.doesNotMatch(included, page, 'removed from an included figure');
+  assert.match(included, /d="M10 10H50V50H10Z" fill="var\(--latex-color-ff0000, #ff0000\)"/, 'and nothing else');
+  // a captured TikZ picture (stripPageBackground false): a full-size fill may be content
+  assert.match(rewritePictureSvg(figma, 'p1-', false).svg, page, 'kept in a captured picture');
+  // a coloured page, or a black one (MuPDF writes black as no fill), is content
+  assert.match(rewritePictureSvg(await pdfPageSvg(F.figmaFramePdf('1 1 0.8'), 1), 'p1-', true).svg, /d="M0 0H200V100H0Z" fill="var\(--latex-color-ffff[0-9a-f]{2}, #ffff[0-9a-f]{2}\)"/, "a pale yellow page stays");
+  assert.match(rewritePictureSvg(await pdfPageSvg(F.figmaFramePdf('0 0 0'), 1), 'p1-', true).svg, /d="M0 0H200V100H0Z"\/>/);
+  // white but not the whole page: kept
+  assert.match(rewritePictureSvg(await pdfPageSvg(F.themedFigurePdf(), 1), 'p1-', true).svg, /d="M30 30H50V50H30Z"/);
+});
+
 test('a page MuPDF cannot draw, or a page it does not have, fails with a reason', async () => {
   await assert.rejects(pdfPageSvg(F.indexedImagePdf(), 2), /the PDF has 1 page, not a page 2/);
   await assert.rejects(pdfPageSvg(new TextEncoder().encode('not a PDF'), 1), /./);
