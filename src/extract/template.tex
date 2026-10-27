@@ -417,6 +417,10 @@
     \setbox\reflowtexTikzPageBox=\vbox{%
       \offinterlineskip
       \hbox{\copy\reflowtexTikzBox}}%
+    % shipping runs the \writes inside the picture (an \addcontentsline in a
+    % node or a box): as LaTeX's own shipout does, \protect leaves what
+    % follows it unexpanded
+    \let\protect\noexpand
     \reflowtexPrimitiveShipout\box\reflowtexTikzPageBox
     \directlua{Serializer.note_captured_picture(
       \reflowtexThisPic, status.total_pages)}%

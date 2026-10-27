@@ -694,3 +694,33 @@ test('theorem notes: a cite with an optional argument, LaTeX\'s own theorems', a
   assert.deepEqual(theoremHeads(d), ['Proposition1([1,p.3])Cited.', 'Proposition2(Aplainnote)Plain.',
     'Proposition3()Empty.', 'Proposition4None.', 'Proposition5(a]b)Bracket.']);
 });
+
+// ── Writes inside a captured picture ────────────────────────────────────────
+// A picture is shipped on a page of its own, outside LaTeX's output routine,
+// and the \writes inside it run then. They must be written as at a page's
+// shipout, with \protect left unexpanded: an \addcontentsline in a TikZ node,
+// or in a tcolorbox (drawn as a TikZ picture: thmtools' list of theorems for
+// a theorem in a box, as in real papers), expanded \contentsline instead and
+// wrote TikZ's internals into the .aux.
+
+const ENTRY = '\\@writefile{toc}{\\contentsline {section}{An entry}{1}{}\\protected@file@percent }';
+/** The .aux of a snippet compiled once, by capture(). */
+const auxOf = (body: string, preamble: string) => readFileSync(join(pipe.buildRoot, contentKey(body, preamble), 'input.aux'), 'latin1');
+
+test('an \\addcontentsline in a TikZ node is written as LaTeX writes it', async () => {
+  const body = 'Text before.\n\\begin{tikzpicture}\\node {Inside the node.\\addcontentsline{toc}{section}{An entry}};\\end{tikzpicture}\nText after.';
+  await capture(body);
+  const aux = auxOf(body, '');
+  assert.ok(aux.split('\n').includes(ENTRY), aux);
+  assert.ok(!aux.includes('\0'));
+});
+
+const NO_TCOLORBOX = !kpsewhich('tcolorbox.sty') && 'tcolorbox is not installed';
+test('an \\addcontentsline in a tcolorbox is written as LaTeX writes it', { skip: NO_TCOLORBOX }, async () => {
+  const body = 'Text before.\n\\begin{tcolorbox}\nInside the box.\\addcontentsline{toc}{section}{An entry}\n\\end{tcolorbox}\nText after.';
+  const preamble = '\\usepackage{tcolorbox}';
+  await capture(body, preamble);
+  const aux = auxOf(body, preamble);
+  assert.ok(aux.split('\n').includes(ENTRY), aux);
+  assert.ok(!aux.includes('\0'));
+});
