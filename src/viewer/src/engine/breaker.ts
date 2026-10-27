@@ -394,10 +394,11 @@ export function expansionShortfall(shortfall: number, m: LineMetrics, ex: Expans
  *  viewer's own last resort (`uncapped`). */
 export interface PassOptions { firstPass?: boolean; final?: boolean; background?: number; uncapped?: boolean }
 
-// With `final` the pass is TeX's last one (§851–§855): a start from which a
-// line has become overfull is dropped for good, and when the only start left
-// dies with nothing feasible found yet, its overfull line is taken anyway at
-// no cost (artificial demerits), so the pass always ends with a paragraph –
+// A start from which a line has become overfull is dropped for good, in every
+// pass (§851): a later line from it, made narrower by negative glue, is never
+// tried. With `final` the pass is TeX's last one (§854): when the only start
+// left dies with nothing feasible found yet, its overfull line is taken anyway
+// at no cost (artificial demerits), so the pass always ends with a paragraph –
 // as a PDF shows it, a line sticking out rather than a very loose one.
 // `background` is stretch every line has besides its glue: TeX's third pass
 // adds \emergencystretch so (§863), for the badness only – a line is still
@@ -409,7 +410,7 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
     threshold = Math.min(threshold, 10000);
     const N=bcs.length;
     const dp=Array.from({length:N},(): (Active | null)[]=>[null,null,null,null]);
-    const alive=final ? dp.map(()=>[true,true,true,true]) : null;
+    const alive=dp.map(()=>[true,true,true,true]);
     dp[0][2]={demerits:0,prev_j:-1,prev_fc:-1,hyphenated:false};
     let minRejectedBadness: number | null=null;
     // Font expansion enters the breaker only under \adjustspacing=2.
@@ -433,7 +434,7 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
         // Is (i, fc) the only start still in play for a line ending at j?
         const onlyStart = (i: number, fc: number) => {
             for (let k=Math.max(0,lastForced[j]);k<j;k++) for (let f=0;f<4;f++)
-                if (dp[k][f] && alive![k][f] && !(k===i && f===fc)) return false;
+                if (dp[k][f] && alive[k][f] && !(k===i && f===fc)) return false;
             return true;
         };
         for (let i=0;i<j;i++) {
@@ -444,7 +445,7 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
             let m: LineMetrics | null=null;
             for (let fc_i=0;fc_i<4;fc_i++) {
                 const si=dp[i][fc_i]; if(!si) continue;
-                if (final && !alive![i][fc_i]) continue;
+                if (!alive[i][fc_i]) continue;
                 if (!m) m=lineMetrics(bcs[i],bcJ,p);
                 // A line carrying an infinite-order fill (\hfil from \\, \hfill,
                 // the \parfillskip of the last line) absorbs positive slack
@@ -461,11 +462,9 @@ export function kpPass(bcs: BreakCandidates, lineWidthSp: number, threshold: num
                     else { b=badness(shortfall,m.s+background); fc_j=b>99?0:b>12?1:2; }
                 } else if (shortfall<0) {
                     if (-shortfall>m.z) {                         // overfull
-                        if (final) {
-                            alive![i][fc_i] = false;
-                            if (!feasibleAtJ && onlyStart(i, fc_i) && (!dp[j][3] || si.demerits<=dp[j][3]!.demerits))
-                                dp[j][3]={demerits:si.demerits,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc',overfull:true};
-                        }
+                        alive[i][fc_i] = false;
+                        if (final && !feasibleAtJ && onlyStart(i, fc_i) && (!dp[j][3] || si.demerits<=dp[j][3]!.demerits))
+                            dp[j][3]={demerits:si.demerits,prev_j:i,prev_fc:fc_i,hyphenated:bcJ.kind==='disc',overfull:true};
                         continue;
                     }
                     b=badness(-shortfall,m.z); fc_j=b>12?3:2;

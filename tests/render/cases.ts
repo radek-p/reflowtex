@@ -149,6 +149,11 @@ export const cases: Record<string, CaseSettings> = {
   // then put all its slack between them, where TeX shares it with the
   // centring skips. Worst attained 2026-10-27.
   'title-authors': { against_plain: true, tolerance: 0.009 },
+  // Paragraphs ending in negative glue (\hspace{-1cm} before a blank line), as
+  // in real papers: the breaker kept a start whose line had become overfull
+  // until its final pass, and the last line's negative glue then let it reach
+  // the end, one line fewer than TeX. Worst attained 2026-10-27.
+  'negative-hspace-end': { against_plain: true, tolerance: 0.010 },
   // Characters typed raw that the font has no glyph for, as in real papers: ł,
   // Ł, ź and ﬀ in a T1 font, box drawing in Latin Modern OpenType. TeX
   // reports them missing and draws nothing (OpenType: the font's empty

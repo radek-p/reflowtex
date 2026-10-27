@@ -1,0 +1,24 @@
+% Paragraphs that end in negative glue, as real papers pull a last word in with
+% \hspace{-1cm} or \hspace{-3cm} before a blank line: TeX drops a start as soon
+% as a line from it is overfull, in every pass, so the negative glue never lets
+% an earlier start reach the end in one line less.
+\documentclass{article}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+We note that the state of the art in the latter two families is not directly comparable in scope to the method and to the present work. Some complexity bounds were obtained under correspondingly stronger assumptions. For instance, the results require variance reduction rates that, to our knowledge, have not yet been proven to hold~in~\mbox{general}.\hspace{-1cm}
+
+A paragraph after it, long enough to fill one line of the text width and then some more words.
+
+We impose Lipschitz and initial-moment assumptions on the stochastic~differential~\mbox{equation}.\hspace{-3cm}
+
+A paragraph after it, long enough to fill one line of the text width and then some more words.
+
+The quick brown fox jumps over the lazy dog, and the five boxing wizards jump quickly over the fence while sphinx of black quartz judges my vow.\hspace{-2cm}
+
+A paragraph after it, long enough to fill one line of the text width and then some more words.
+
+With our work, we hope to strengthen the foundation of these methods and reduce the degree to which their analysis is an obstacle to further development, and we believe that the methodology may apply to more general settings such as multilevel ensemble~Kalman~\mbox{filters}.\hspace{-1cm}
+
+The end.
+\end{document}

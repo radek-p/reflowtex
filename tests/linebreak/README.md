@@ -47,6 +47,7 @@ expansion or directions; a fixture with any of them is refused.
 |---|---|---|
 | `tolerance/` | `tolerance.tex` | `\sloppy` paragraphs, long unbreakable words and links, TeX's third pass with `\emergencystretch`, `\tolerance 10000`, no first pass, the demerits and hyphenation penalties, each at several measures |
 | `fills/` | `fills.tex` | glue of infinite stretch inside a paragraph: `\hfill` between boxes, boxes joined by `\hskip 1em plus .17fil` (LaTeX's `\and`), `\hfill` and `\hfil` between words, a break at a penalty before an `\hfill`, `\\` in mid-paragraph, each at several measures |
+| `negative-glue/` | `negative-glue.tex` | paragraphs ending in negative glue (`\hspace{-1cm}` before a blank line), where a start whose line has become overfull must be dropped in every pass, each at several measures |
 
 A new set is a directory of fixtures captured from its source, in the CI
 image (lualatex from TeX Live).

@@ -1,0 +1,25 @@
+% Paragraphs that end in negative glue, as \hspace{-1cm} before a blank line
+% sets it: TeX drops a start as soon as a line from it is overfull, in every
+% pass, so the last line's negative glue never lets an earlier start reach the
+% end. Each paragraph is set at several measures. Captured with capture.lua
+% into negative-glue/ (README.md).
+\documentclass{article}
+\newcommand\at[2]{{\hsize=#1\relax #2\par}}
+\newcommand\textA{Some complexity bounds were obtained under correspondingly stronger assumptions. For instance, the results require variance reduction rates that, to our knowledge, have not yet been proven to hold~in~\mbox{general}.}
+\newcommand\textB{We impose Lipschitz and initial-moment assumptions on the stochastic~differential~\mbox{equation}.}
+\newcommand\plain{The quick brown fox jumps over the lazy dog, and the five boxing wizards jump quickly over the fence while sphinx of black quartz judges my vow.}
+\begin{document}
+\at{345pt}{\textA\hspace{-1cm} }
+\at{300pt}{\textA\hspace{-1cm} }
+\at{250pt}{\textA\hspace{-1cm} }
+\at{200pt}{\textA\hspace{-1cm} }
+\at{345pt}{\textB\hspace{-3cm} }
+\at{300pt}{\textB\hspace{-3cm} }
+\at{250pt}{\textB\hspace{-3cm} }
+\at{200pt}{\textB\hspace{-3cm} }
+\at{150pt}{\textB\hspace{-3cm} }
+\at{250pt}{\plain\hspace{-2cm} }
+\at{200pt}{\plain\hspace{-2cm} }
+\at{150pt}{\plain\hspace{-2cm} }
+\at{120pt}{\plain\hspace{-2cm} }
+\end{document}

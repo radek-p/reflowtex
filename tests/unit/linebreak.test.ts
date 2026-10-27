@@ -30,6 +30,8 @@ interface Candidate { kind: string; nodeIdx: number; cumFill: number; leadFill: 
 interface Breaker {
   buildBreakCandidates(nodes: Node[], fontInfo: object, para: object): Candidate[];
   kpBreakpoints(bcs: Candidate[], nodes: Node[], lineWidthSp: number, p: object): { bcIdx: number }[];
+  kpPass(bcs: Candidate[], lineWidthSp: number, threshold: number, p: object, o?: object):
+    { breaks: { bcIdx: number }[] | null };
 }
 const VIEWER = new URL('../../src/viewer/src/', import.meta.url).href;
 const breaker: Breaker = await import(`${VIEWER}engine/breaker.ts`);
@@ -78,4 +80,27 @@ test('\\hfill between two boxes in a centred paragraph breaks where TeX does', (
   // justified, the line before the \hfill has nothing to stretch: TeX sets
   // one overfull line rather than an infinitely bad one
   assert.deepEqual(breaksOf(nodes, 345, false), [3]);
+});
+
+// A start from which a line has become overfull is dropped in every pass, not
+// only in the final one (TeX's §851). Negative glue at the paragraph's end
+// makes it matter: the line from the start to the end is narrower than the
+// one to the space before the glue, so a start kept alive would reach the end
+// in one line, which TeX never tries.
+test('a start dropped when its line is overfull, in a pass before the final one', () => {
+  const hbox = (w: number): Node => ({ type: 'hlist', width: w * PT, height: 7 * PT, depth: 0, list: [] });
+  const glueSp = (w: number, stretch = 0, shrink = 0, subtype = 0, order = 0): Node =>
+    ({ type: 'glue', subtype, width: w * PT, stretch: stretch * PT, stretch_order: order, shrink: shrink * PT, shrink_order: 0 });
+  // box 30 | glue 0 plus 40 | box 30 | glue 10 minus 2 | box 50 | glue -40 |
+  // \parfillskip, at 100 pt: from the start, the line to the -40 glue is
+  // 120 pt (overfull), the line to the end 80 pt. TeX breaks at the 10 pt
+  // glue (a line of badness 100), as the old rule did only in the final pass.
+  const nodes = [hbox(30), glueSp(0, 40), hbox(30), glueSp(10, 0, 2), hbox(50), glueSp(-40),
+                 { type: 'penalty', penalty: 10000 }, glueSp(0, 1, 0, 15, 2)];
+  const bcs = breaker.buildBreakCandidates(nodes, {}, {});
+  const p = paramsFromData({}, 'justify');
+  for (const o of [{ firstPass: true }, {}, { final: true }]) {
+    const r = breaker.kpPass(bcs, 100 * PT, 200, p, o);
+    assert.deepEqual(r.breaks?.map(b => b.bcIdx), [2, 4], JSON.stringify(o));
+  }
 });
