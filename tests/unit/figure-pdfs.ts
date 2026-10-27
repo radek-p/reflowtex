@@ -213,3 +213,14 @@ export function softMaskPdf(): Buffer {
       stream('/Type /XObject /Subtype /Form /BBox [0 0 200 100] /Group << /S /Transparency /CS /DeviceRGB >>', '0 g 0 0 100 100 re f 1 g 100 0 100 100 re f')],
   });
 }
+
+/** A figure as plotting programs write them: an opaque white page, a black
+ *  axis line, a blue square with a white one inside, a black square, and
+ *  black text (Helvetica, "Ab"). */
+export function themedFigurePdf(): Buffer {
+  return onePagePdf({
+    resources: '<< /Font << /F1 5 0 R >> >>',
+    content: '1 g 0 0 200 100 re f 0 G 1 w 10 10 m 190 10 l S 0 0 1 rg 20 20 50 50 re f 1 g 30 30 20 20 re f 0 g 150 20 30 30 re f BT /F1 12 Tf 100 50 Td (Ab) Tj ET',
+    objects: [HELVETICA],
+  });
+}

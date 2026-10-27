@@ -15,7 +15,7 @@ import { bitmapPicture, convertPictures, pictureFormat, rewritePictureSvg, type 
 import { Pipeline } from '../../src/pipeline/pipeline.ts';
 import { forEachNode, readSerializerOutput, type SerializerOutput, type TexNode } from '../../src/pipeline/nodes.ts';
 import { PictureError } from '../../src/pipeline/errors.ts';
-import { pdfPageSvg } from '../../src/pipeline/pictures-mupdf.ts';
+import { pdfPageSvg } from '../../src/pictures/pdf-svg.ts';
 import { Log } from '../../src/shared/log.ts';
 
 const FIXTURE = fileURLToPath(new URL('fixtures/tikz-node-labels.pdf', import.meta.url));
@@ -56,8 +56,8 @@ function glyphPositions(svg: string): [number, number][] {
   return out;
 }
 
-test('a TikZ node label stays inside its picture', () => {
-  const svg = pdfPageSvg(readFileSync(FIXTURE), 1);
+test('a TikZ node label stays inside its picture', async () => {
+  const { svg } = await pdfPageSvg(readFileSync(FIXTURE), 1);
   const [, , w, h] = /viewBox="([^"]*)"/.exec(svg)![1].split(' ').map(Number);
   const glyphs = glyphPositions(svg);
   assert.equal(glyphs.length, 3, 'the three labels');

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A PDF page as SVG, drawn by MuPDF's SVG writer (the `mupdf` package: the
-// library in WebAssembly, run in Node). It draws what a PDF viewer draws:
+// library in WebAssembly). It draws what a PDF viewer draws:
 // every font kind (Type 3 among them, vector or bitmap), ICC colour, every
 // kind of image, shadings (as images), tiling patterns, soft masks. Glyphs
 // come out as outlines, each a <use data-text="…"> of its outline with the
@@ -18,10 +18,40 @@
 //    time, through a device that sees each stroked glyph with that
 //    transformation, and each stroked glyph's width is set to the true one.
 //
-// This module is server-only: `mupdf` is 10 MB of WebAssembly, and nothing a
-// browser may bundle imports it statically (pictures.ts loads it with a
-// dynamic import, when a picture needs it).
-import * as mupdf from 'mupdf';
+// No Node API here, so that the pipeline (src/pipeline/pictures.ts, which
+// reads the files) and a browser (a host's worker) convert alike: bytes in,
+// strings out. MuPDF itself is loaded on the first conversion, with a dynamic
+// import – it is 10 MB of WebAssembly, and the modules that import this one
+// statically must not pull it into a bundle that has no picture to draw.
+// The package finds its .wasm beside its own module (new URL(…,
+// import.meta.url)); a host that serves it elsewhere passes `wasmUrl`, which
+// goes to the WebAssembly module's locateFile.
+//
+// The result is an object, { svg }, and the picture { svg, vb_w, vb_h }, so
+// that more can come with it (the page's text, for a text layer).
+import type * as Mupdf from 'mupdf';
+import { rewritePictureSvg, type Picture } from './rewrite.ts';
+
+export interface PdfSvgOptions {
+  /** where mupdf-wasm.wasm is served (default: beside the mupdf package's
+   *  module); read on the first conversion only */
+  wasmUrl?: string;
+}
+
+let loaded: Promise<typeof Mupdf> | null = null;
+
+/** The mupdf module, loaded once. */
+export function loadMupdf(o: PdfSvgOptions = {}): Promise<typeof Mupdf> {
+  if (!loaded) {
+    const g = globalThis as { $libmupdf_wasm_Module?: { locateFile?(name: string, prefix: string): string } };
+    if (o.wasmUrl && !g.$libmupdf_wasm_Module) {
+      const url = o.wasmUrl;
+      g.$libmupdf_wasm_Module = { locateFile: (name, prefix) => (name.endsWith('.wasm') ? url : prefix + name) };
+    }
+    loaded = import('mupdf');
+  }
+  return loaded;
+}
 
 /** Characters an XML document cannot hold, not even as a reference. */
 const xmlForbidden = (cp: number) =>
@@ -34,7 +64,7 @@ export function dropForbiddenCharRefs(svg: string): string {
 }
 
 /** sqrt(|det|): how much a matrix scales lengths, as MuPDF reckons it. */
-const expansion = (m: mupdf.Matrix) => Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+const expansion = (m: Mupdf.Matrix) => Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
 
 /** As C's %g writes a number (6 significant digits), which the writer uses. */
 const g6 = (x: number) => String(Number(x.toPrecision(6)));
@@ -45,13 +75,13 @@ const STROKED_GLYPH_RE = /(<use data-text="[^"]*" xlink:href="[^"]*" stroke-widt
  *  the order they are drawn. The writer divides the line width by the scale
  *  of the glyph's whole matrix (the text's and the page's); in the glyph's
  *  space it is the line width divided by the text's alone. */
-function strokedGlyphWidths(page: mupdf.Page): { written: number; true: number }[] {
+function strokedGlyphWidths(mupdf: typeof Mupdf, page: Mupdf.Page): { written: number; true: number }[] {
   const out: { written: number; true: number }[] = [];
   const device = new mupdf.Device({
-    strokeText(text: mupdf.Text, stroke: mupdf.StrokeState, ctm: mupdf.Matrix) {
+    strokeText(text: Mupdf.Text, stroke: Mupdf.StrokeState, ctm: Mupdf.Matrix) {
       const lw = stroke.getLineWidth(), c = expansion(ctm);
       text.walk({
-        showGlyph(_font: mupdf.Font, trm: mupdf.Matrix, glyph: number) {
+        showGlyph(_font: Mupdf.Font, trm: Mupdf.Matrix, glyph: number) {
           if (glyph < 0) return;
           const t = expansion(trm) || 1;
           out.push({ written: lw / ((t * c) || 1), true: lw / t });
@@ -67,9 +97,9 @@ function strokedGlyphWidths(page: mupdf.Page): { written: number; true: number }
 /** The stroked glyphs of `svg` (the writer's drawing of `page`) given their
  *  true line widths. A glyph is matched to the next one the device saw with
  *  the width the writer wrote; one that matches none is left as it is. */
-function fixStrokedText(svg: string, page: mupdf.Page): string {
+function fixStrokedText(mupdf: typeof Mupdf, svg: string, page: Mupdf.Page): string {
   if (!/<use data-text="[^"]*" xlink:href="[^"]*" stroke-width=/.test(svg)) return svg;
-  const widths = strokedGlyphWidths(page);
+  const widths = strokedGlyphWidths(mupdf, page);
   let k = 0;
   return svg.replace(STROKED_GLYPH_RE, (all, head: string, w: string, tail: string) => {
     const written = Number(w);
@@ -86,7 +116,8 @@ function fixStrokedText(svg: string, page: mupdf.Page): string {
 /** Page `page` (1-based) of the PDF in `bytes` as an SVG document: an <svg>
  *  root whose viewBox is the page's box (the crop box) at 0 0, in bp. Throws
  *  with MuPDF's messages when the PDF cannot be read. */
-export function pdfPageSvg(bytes: Uint8Array, page: number): string {
+export async function pdfPageSvg(bytes: Uint8Array, page: number, o: PdfSvgOptions = {}): Promise<{ svg: string }> {
+  const mupdf = await loadMupdf(o);
   const messages: string[] = [];
   mupdf.setLog((m: string) => { messages.push(m.trim()); });
   try {
@@ -100,11 +131,20 @@ export function pdfPageSvg(bytes: Uint8Array, page: number): string {
     p.run(device, mupdf.Matrix.identity);
     writer.endPage();
     writer.close();
-    return fixStrokedText(dropForbiddenCharRefs(buf.asString()), p);
+    return { svg: fixStrokedText(mupdf, dropForbiddenCharRefs(buf.asString()), p) };
   } catch (e) {
     const log = messages.length ? `\n${messages.slice(-20).join('\n')}` : '';
     throw new Error(`${(e as Error).message ?? e}${log}`);
   } finally {
     mupdf.setLog(null);
   }
+}
+
+/** Page `page` of the PDF in `bytes` as a picture to inline in a page, as
+ *  the pipeline makes it: its markup cleaned, ids prefixed with `prefix`,
+ *  colours themed (rewrite.ts), and with `stripPageBackground` (an included
+ *  figure, not a captured TikZ picture) its opaque white page rectangle gone. */
+export async function pdfPagePicture(bytes: Uint8Array, page: number, prefix: string,
+                                     o: PdfSvgOptions & { stripPageBackground?: boolean } = {}): Promise<Picture> {
+  return rewritePictureSvg((await pdfPageSvg(bytes, page, o)).svg, prefix, o.stripPageBackground ?? false);
 }

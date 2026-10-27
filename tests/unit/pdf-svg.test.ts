@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// A PDF page as SVG (pictures-mupdf.ts), then rewritten for the page
-// (pictures.ts): one small PDF for each kind of content an included figure
+// A PDF page as SVG (src/pictures/pdf-svg.ts), then rewritten for the page
+// (src/pictures/rewrite.ts): one small PDF for each kind of content an included figure
 // may hold that has been lost on the way before (figure-pdfs.ts). Images in
 // the SVG are decoded and checked pixel by pixel.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as mupdf from 'mupdf';
-import { dropForbiddenCharRefs, pdfPageSvg } from '../../src/pipeline/pictures-mupdf.ts';
-import { rewritePictureSvg } from '../../src/pipeline/pictures.ts';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { dropForbiddenCharRefs, pdfPagePicture, pdfPageSvg as pageSvg } from '../../src/pictures/pdf-svg.ts';
+import { convertPictures, type Picture } from '../../src/pipeline/pictures.ts';
+import type { SerializerOutput } from '../../src/pipeline/nodes.ts';
+import { rewritePictureSvg } from '../../src/pictures/rewrite.ts';
 import * as F from './figure-pdfs.ts';
+
+const pdfPageSvg = async (bytes: Uint8Array, page: number) => (await pageSvg(bytes, page)).svg;
 
 /** The RGB pixels of every data: image in `svg`, in order (getNumberOfComponents counts alpha). */
 function images(svg: string): { w: number; h: number; px: (x: number, y: number) => number[] }[] {
@@ -42,8 +49,8 @@ const scaleOf = (attrs: string) => {
   return Math.sqrt(Math.abs(a * d - b * c));
 };
 
-test('Type 3 text with glyphs drawn by paths (as Matplotlib writes it) is drawn, glyph by glyph', () => {
-  const svg = pdfPageSvg(F.type3VectorPdf(), 1);
+test('Type 3 text with glyphs drawn by paths (as Matplotlib writes it) is drawn, glyph by glyph', async () => {
+  const svg = await pdfPageSvg(F.type3VectorPdf(), 1);
   const g = uses(svg);
   assert.deepEqual(g.map(u => u.text), ['A', 'B']);
   assert.match(element(svg, g[0].ref), /d="M50 0H550V700H50ZM150 100V600H450V100Z"/, 'A: a square with a square hole');
@@ -57,8 +64,8 @@ test('Type 3 text with glyphs drawn by paths (as Matplotlib writes it) is drawn,
   assert.equal((pic.svg.match(/fill="var\(--latex-color-0000ff, #0000ff\)"/g) ?? []).length, 2);
 });
 
-test('Type 3 text in a bitmap font (as pdfTeX writes METAFONT\'s) is drawn: each glyph its bitmap, in the text\'s colour', () => {
-  const svg = pdfPageSvg(F.type3BitmapPdf(), 1);
+test('Type 3 text in a bitmap font (as pdfTeX writes METAFONT\'s) is drawn: each glyph its bitmap, in the text\'s colour', async () => {
+  const svg = await pdfPageSvg(F.type3BitmapPdf(), 1);
   const g = uses(svg);
   assert.equal(g.length, 2);
   for (const u of g) {
@@ -78,16 +85,16 @@ test('Type 3 text in a bitmap font (as pdfTeX writes METAFONT\'s) is drawn: each
   assert.match(pic.svg, /<use data-text="a" xlink:href="#p1-font_1_97"[^>]*fill="var\(--latex-color-ff0000, #ff0000\)"/);
 });
 
-test('a glyph named for a control character is drawn, without the character XML forbids', () => {
+test('a glyph named for a control character is drawn, without the character XML forbids', async () => {
   // a27 reads as U+001B, which MuPDF writes as a reference no XML parser takes
-  const svg = pdfPageSvg(F.type3BitmapPdf(), 1);
+  const svg = await pdfPageSvg(F.type3BitmapPdf(), 1);
   assert.doesNotMatch(svg, /&#x0*1b;/i);
   assert.deepEqual(uses(svg).map(u => u.text), ['a', ''], 'the glyph stays, with no text');
   assert.equal(dropForbiddenCharRefs('a&#x1b;b&#27;c&#x0009;&#xA;&#x3a9;&#x1d446;&#xfffe;&#xd800;&#x7;&#38;'), 'abc&#x0009;&#xA;&#x3a9;&#x1d446;&#38;');
 });
 
-test('fills in an ICC colour space come out in the profile\'s colours', () => {
-  const svg = pdfPageSvg(F.iccFillsPdf(), 1);
+test('fills in an ICC colour space come out in the profile\'s colours', async () => {
+  const svg = await pdfPageSvg(F.iccFillsPdf(), 1);
   const fills = [...svg.matchAll(/<path [^>]*fill="(#[0-9a-f]{6})"/g)].map(m => hex(m[1]));
   assert.equal(fills.length, 3, svg);
   // red, then blue in the PDF: the profile's red is sRGB's green, its blue sRGB's red
@@ -99,24 +106,24 @@ test('fills in an ICC colour space come out in the profile\'s colours', () => {
   assert.match(rewritePictureSvg(svg, 'p1-', false).svg, page);
 });
 
-test('an Indexed image is drawn with its palette\'s colours', () => {
-  const svg = pdfPageSvg(F.indexedImagePdf(), 1);
+test('an Indexed image is drawn with its palette\'s colours', async () => {
+  const svg = await pdfPageSvg(F.indexedImagePdf(), 1);
   const [img] = images(svg);
   assert.deepEqual([img.w, img.h], [2, 2]);
   assert.deepEqual([img.px(0, 0), img.px(1, 0), img.px(0, 1), img.px(1, 1)], F.INDEXED_PALETTE);
   assert.match(svg, /<g transform="matrix\(20,0,0,10,10,70\)">\s*<image id="image_1" width="2" height="2"/, 'over 40 × 20 bp at (10, 10)');
 });
 
-test('a Matplotlib heatmap (Indexed, behind PNG predictors) is drawn cell by cell', () => {
-  const svg = pdfPageSvg(F.heatmapPdf(), 1);
+test('a Matplotlib heatmap (Indexed, behind PNG predictors) is drawn cell by cell', async () => {
+  const svg = await pdfPageSvg(F.heatmapPdf(), 1);
   const [img] = images(svg);
   assert.deepEqual([img.w, img.h], [F.HEATMAP_W, F.HEATMAP_H]);
   for (let y = 0; y < F.HEATMAP_H; y++) for (let x = 0; x < F.HEATMAP_W; x++)
     assert.deepEqual(img.px(x, y), F.HEATMAP_PALETTE[F.HEATMAP_INDEX(x, y)], `cell ${x}, ${y}`);
 });
 
-test('an axial shading is drawn as a smooth fade, clipped to its area', () => {
-  const svg = pdfPageSvg(F.shadingPdf(), 1);
+test('an axial shading is drawn as a smooth fade, clipped to its area', async () => {
+  const svg = await pdfPageSvg(F.shadingPdf(), 1);
   assert.match(svg, /<clipPath id="clip_1">\s*<path [^>]*d="M10 10H110V60H10Z"/);
   const [img] = images(svg);
   const row = Array.from({ length: img.w }, (_, x) => img.px(x, Math.floor(img.h / 2)));
@@ -126,8 +133,8 @@ test('an axial shading is drawn as a smooth fade, clipped to its area', () => {
   for (let x = 1; x < row.length; x++) assert.ok(row[x][0] <= row[x - 1][0] && row[x][2] >= row[x - 1][2], `fading at ${x}`);
 });
 
-test('a tiling pattern is drawn as an SVG pattern of its cell, themed', () => {
-  const svg = pdfPageSvg(F.tilingPatternPdf(), 1);
+test('a tiling pattern is drawn as an SVG pattern of its cell, themed', async () => {
+  const svg = await pdfPageSvg(F.tilingPatternPdf(), 1);
   const pic = rewritePictureSvg(svg, 'p1-', true).svg;
   assert.match(pic, /<pattern id="p1-pattern_2" [^>]*width="10" height="10">/);
   assert.match(pic, /<rect [^>]*fill="url\(#p1-pattern_2\)" x="10" y="10" width="80" height="80"\/>/);
@@ -136,8 +143,8 @@ test('a tiling pattern is drawn as an SVG pattern of its cell, themed', () => {
   assert.match(tile, /stroke="var\(--latex-color-0000ff, #0000ff\)" d="M0 0 10 10"/);
 });
 
-test('stroked text is stroked as wide as the PDF says, under a transformation that scales it too', () => {
-  const svg = pdfPageSvg(F.strokedTextPdf(), 1);
+test('stroked text is stroked as wide as the PDF says, under a transformation that scales it too', async () => {
+  const svg = await pdfPageSvg(F.strokedTextPdf(), 1);
   const stroked = uses(svg).filter(u => /stroke-width=/.test(u.attrs));
   assert.deepEqual(stroked.map(u => u.text), ['A', 'B']);
   for (const u of stroked) {
@@ -147,8 +154,8 @@ test('stroked text is stroked as wide as the PDF says, under a transformation th
   assert.equal(uses(svg).filter(u => !/stroke=/.test(u.attrs)).length, 2, 'and filled first');
 });
 
-test('a soft mask keeps its own colours, black by default, in every theme', () => {
-  const pic = rewritePictureSvg(pdfPageSvg(F.softMaskPdf(), 1), 'p1-', false).svg;
+test('a soft mask keeps its own colours, black by default, in every theme', async () => {
+  const pic = rewritePictureSvg(await pdfPageSvg(F.softMaskPdf(), 1), 'p1-', false).svg;
   const content = element(pic, 'p1-mask_1_contents');
   assert.match(content, /d="M100 0H200V100H100Z" fill="#ffffff"/, 'white stays white: not the page\'s colour');
   assert.match(content, /d="M0 0H100V100H0Z"\/>/, 'black is written as no fill');
@@ -157,7 +164,42 @@ test('a soft mask keeps its own colours, black by default, in every theme', () =
   assert.match(pic, /<g mask="url\(#p1-mask_1\)">\s*<path [^>]*fill="var\(--latex-color-ff0000, #ff0000\)"/, 'what it masks is themed');
 });
 
-test('a page MuPDF cannot draw, or a page it does not have, fails with a reason', () => {
-  assert.throws(() => pdfPageSvg(F.indexedImagePdf(), 2), /the PDF has 1 page, not a page 2/);
-  assert.throws(() => pdfPageSvg(Buffer.from('not a PDF'), 1), /./);
+test('a figure is themed as the page is: its white page gone, black and white to the theme\'s colours', async () => {
+  const raw = await pdfPageSvg(F.themedFigurePdf(), 1);
+  assert.match(raw, /<path [^>]*d="M0 0H200V100H0Z" fill="#ffffff"\/>/, 'MuPDF draws the page white');
+  const pic = rewritePictureSvg(raw, 'p1-', true).svg;
+  assert.doesNotMatch(pic, /d="M0 0H200V100H0Z"/, 'the white page is gone');
+  // black: the stroke, by its variable, falling back to the text colour; the
+  // fills and the text, which MuPDF leaves without a fill, inherit the
+  // picture's (sink.ts sets it to the same variable)
+  assert.match(pic, /stroke="var\(--latex-color-000000, currentColor\)" d="M10 10H190"/);
+  assert.match(pic, /d="M150 20H180V50H150Z"\/>/);
+  assert.equal(uses(pic).length, 2);
+  for (const u of uses(pic)) assert.doesNotMatch(u.attrs, /fill=/);
+  // white on a colour: the page's colour (colour.ts maps it to --latex-page-bg)
+  assert.match(pic, /d="M30 30H50V50H30Z" fill="var\(--latex-color-ffffff, #ffffff\)"/);
+  assert.match(pic, /d="M20 20H70V70H20Z" fill="var\(--latex-color-0000ff, #0000ff\)"/);
+  assert.doesNotMatch(pic, /(?:fill|stroke)="#/, 'no colour left as it was');
+  // and the other ways SVG writes a colour
+  const other = rewritePictureSvg('<svg viewBox="0 0 10 10"><path fill="rgb(255, 0, 0)" stroke="white"/><path fill="black" stroke="rgb(0,0,255)"/><path fill="none" stroke="url(#a)"/></svg>', 'p-').svg;
+  assert.equal(other, '<path fill="var(--latex-color-ff0000, #ff0000)" stroke="var(--latex-color-ffffff, #ffffff)"/><path fill="var(--latex-color-000000, currentColor)" stroke="var(--latex-color-0000ff, #0000ff)"/><path fill="none" stroke="url(#a)"/>');
+});
+
+test('a page MuPDF cannot draw, or a page it does not have, fails with a reason', async () => {
+  await assert.rejects(pdfPageSvg(F.indexedImagePdf(), 2), /the PDF has 1 page, not a page 2/);
+  await assert.rejects(pdfPageSvg(new TextEncoder().encode('not a PDF'), 1), /./);
+});
+
+test('the converter on bytes gives the picture the pipeline makes of the file', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rtx-pdf-svg-'));
+  try {
+    for (const [name, make] of [['type3', F.type3BitmapPdf], ['figure', F.themedFigurePdf], ['mask', F.softMaskPdf]] as const) {
+      const file = join(dir, `${name}.pdf`), bytes = make();
+      writeFileSync(file, bytes);
+      const data = { paragraphs: [{ nodes: [{ type: 'picture', width: 200 * 65781.76, height: 100 * 65781.76, depth: 0, file, page: 1 }] }], content: [], streams: [] } as unknown as SerializerOutput;
+      await convertPictures(data, dir, 'b', 'doc');
+      const core = await pdfPagePicture(new Uint8Array(bytes), 1, 'pdoc-1-', { stripPageBackground: true });
+      assert.deepEqual((data.pictures as Picture[])[0], core, name);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

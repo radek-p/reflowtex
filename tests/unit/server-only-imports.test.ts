@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The modules a browser may bundle (the pipeline's core, run in a Web Worker
 // by an editor: pipeline.ts, nodes.ts, encode.ts, fonts/*, the schema) must
-// not import server-only tools statically: MuPDF (10 MB of WebAssembly) is
-// reached only through a dynamic import, where a picture is converted.
+// not import MuPDF statically (10 MB of WebAssembly), nor the converter that
+// loads it (src/pictures/pdf-svg.ts): it is reached only through a dynamic
+// import, where a picture is converted. The converter itself uses no Node
+// API, so that a browser converts a picture as the pipeline does.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -11,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 
 const SRC = fileURLToPath(new URL('../../src/', import.meta.url));
 const SERVER_ONLY_PACKAGES = new Set(['mupdf']);
-const SERVER_ONLY_MODULES = new Set([join(SRC, 'pipeline/pictures-mupdf.ts')]);
+const CONVERTER = join(SRC, 'pictures/pdf-svg.ts');
+const SERVER_ONLY_MODULES = new Set([CONVERTER]);
 
 /** What a module imports statically, as written: `import … from`, `export …
  *  from` and bare `import '…'`, but not `import type` (erased) nor `import()`. */
@@ -61,10 +64,20 @@ export { e } from './e.ts';\nexport type { F } from './f.ts';\nimport './g.ts';\
 
 test('the modules a browser may bundle reach neither MuPDF nor its converter', () => {
   const { modules, packages } = reachable(ENTRIES);
-  // the walk sees what it should: pictures.ts is in the graph, and the
-  // converter does import MuPDF
+  // the walk sees what it should: pictures.ts and the rewrite are in the graph
   assert.ok(modules.has(join(SRC, 'pipeline/pictures.ts')), 'pipeline.ts reaches pictures.ts');
-  assert.ok(staticImports(readFileSync([...SERVER_ONLY_MODULES][0], 'utf8')).includes('mupdf'));
+  assert.ok(modules.has(join(SRC, 'pictures/rewrite.ts')), 'pictures.ts reaches the rewrite');
+  assert.match(readFileSync(join(SRC, 'pipeline/pictures.ts'), 'utf8'), /await import\('\.\.\/pictures\/pdf-svg\.ts'\)/, 'and loads the converter itself');
   for (const m of SERVER_ONLY_MODULES) assert.ok(!modules.has(m), `${m} is imported statically by ${modules.get(m)}`);
   for (const p of SERVER_ONLY_PACKAGES) assert.ok(!packages.has(p), `${p} is imported statically by ${packages.get(p)}`);
+});
+
+test('the converter and the rewrite use no Node API', () => {
+  const { modules, packages } = reachable([CONVERTER]);
+  for (const m of modules.keys()) {
+    const code = readFileSync(m, 'utf8');
+    assert.ok(!staticImports(code).some(s => s.startsWith('node:')), `${m} imports a Node module`);
+    assert.doesNotMatch(code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, ''), /(?<![.\w])(?:Buffer|process|require|__dirname)\b/, `${m} uses a Node global`);
+  }
+  assert.deepEqual([...packages.keys()], [], 'nor a package statically: MuPDF is loaded on the first conversion');
 });
