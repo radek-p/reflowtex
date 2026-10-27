@@ -95,7 +95,8 @@ test('the Colours tab shows the maps', async ({ openPage }) => {
   const page = await openPage('colours');
   await agent(page);
   await page.locator('[data-rtx-ui] [role="tab"][data-view="col"]').click();
-  await expect(page.locator('[data-rtx-ui] .colours .cmap h3')).toContainText('test');
+  await expect(page.locator('[data-rtx-ui] .colours .cmap h3').first()).toContainText('test');
+  await expect(page.locator('[data-rtx-ui] .colours .cmap h3').nth(1), "and the viewer's own").toContainText('reflowtex');
   expect(await page.locator('[data-rtx-ui] .colours .cgrid .pk-swatch').count()).toBeGreaterThan(1);
 });
 

@@ -67,7 +67,8 @@ test("example options start from the page's theme, and theme one example", async
   const page = await openPage('hugo/alpha/');
   const opts = page.locator('figure.latex-example [data-rtx="preview-options"]');
   await opts.locator('[data-t]').first().waitFor();
-  expect(await opts.locator('[aria-checked="true"]').getAttribute('data-t')).toBe('light');
+  // (a page that sets no theme is in the default one)
+  expect(await opts.locator('[aria-checked="true"]').getAttribute('data-t')).toBe('default');
   await opts.locator('[data-t="dark"]').click();
   expect(await page.evaluate(() => [document.documentElement.getAttribute('data-theme'),
     document.querySelector('.latex-example-preview')!.getAttribute('data-latex-theme')])).toEqual([null, 'dark']);

@@ -11,7 +11,7 @@ The Basel problem asks for
 and equation~\eqref{eq:one} of Section~\ref{sec:alpha} answers it.
 {{< /latex >}}
 
-{{< latex show-source="true" themes="light,dark" >}}
+{{< latex show-source="true" themes="default,light,dark" >}}
 An example, its LaTeX beside it, with a choice of theme and text size:
 $e^{i\pi} + 1 = 0$, and the text goes on long enough to break into several
 lines when the result is made narrower by its handle.
