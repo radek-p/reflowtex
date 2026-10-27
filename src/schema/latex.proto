@@ -371,6 +371,10 @@ message ContentItem {
   // theorem's or list's \topsep) while the below skip was \lastskip: the
   // space below is the larger of the skip and this
   optional int32 display_after_min     = 28;
+  // the display opened a paragraph, and that paragraph's empty line (its
+  // indent box) stands directly above it: TeX set the interline glue above
+  // the display from that line's depth, 0, not from the item above's
+  optional bool  display_after_blank   = 36;
   // A display TeX set another way at the document's width than at wider
   // ones (amsmath moved its tag, or had no room to centre the body): from
   // display_wide_from (sp of \textwidth) on, the viewer draws display_wide

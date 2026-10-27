@@ -273,6 +273,7 @@ export interface ContentItem extends DisplayRates {
     display_used_above?: number;
     display_used_below?: number;
     display_after_line?: boolean;
+    display_after_blank?: boolean;
     display_quad?: number;
     display_interline_above?: number;
     display_interline_below?: number;

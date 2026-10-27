@@ -2050,6 +2050,10 @@ local function walk_flow(head, pending, ctx, box)
                 -- (-\maxdimen: the display opened an empty paragraph, whatever
                 -- the flow holds before it – \noindent$$ after a paragraph)
                 display_after_line  = last_box == "line" and (note == nil or note.pre_size > -1073741823),
+                -- whether the empty line of a paragraph the display opened stands
+                -- directly above it (§1145; none for a paragraph with nothing in
+                -- it): TeX set the glue above the display from that line's depth
+                display_after_blank = last_box == "blank" or nil,
                 box  = {
                     type       = "hlist",
                     subtype    = n.subtype,

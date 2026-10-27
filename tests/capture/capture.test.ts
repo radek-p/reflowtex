@@ -18,7 +18,8 @@ type Node = { type: string; char?: number; font?: number; color?: string; link?:
               width?: number; height?: number; depth?: number; kern?: number; subtype?: number;
               children?: Node[]; replace?: Node[]; pre?: Node[]; post?: Node[] };
 type Item = { kind: string; para?: number; box?: Node; mathml?: unknown; amount?: number;
-              display_used_above?: number; display_used_below?: number; display_below?: number };
+              display_used_above?: number; display_used_below?: number; display_below?: number;
+              display_after_blank?: boolean };
 type Output = { fonts: Record<string, unknown>; paragraphs: { nodes: Node[] }[]; content: Item[];
                 links: { label?: string; url?: string }[]; anchors: string[]; slots: unknown[];
                 source_width: number; display_model?: boolean };
@@ -435,19 +436,25 @@ test('a display whose number TeX set on its own line has no display skip on that
     'Text.\\begin{equation}\\hbox to\\dimexpr\\linewidth-10pt\\relax{}\\end{equation}',
     'Text.\\begin{equation}\\hbox to.5\\linewidth{}\\end{equation}',
     'Text.$$\\hbox to\\dimexpr\\linewidth-10pt\\relax{}\\leqno(3)$$',
+    'Text.', '',
+    '\\[ x \\]',
     'Text.',
   ].join('\n'));
   const displays = d.content.filter(i => i.kind === 'display');
   // each formula, and each number on its own line (a fixed box): below the
-  // first, above the third
-  assert.equal(displays.length, 5);
-  const [below, , fits, , above] = displays;
+  // first, above the third; then a display that opens a paragraph
+  assert.equal(displays.length, 6);
+  const [below, , fits, , above, opening] = displays;
   assert.notEqual(below.display_used_above, undefined, 'the above skip');
   assert.equal(below.display_used_below, undefined, 'no below skip');
   assert.notEqual(fits.display_used_above, undefined, 'the above skip');
   assert.notEqual(fits.display_used_below, undefined, 'the below skip');
   assert.equal(above.display_used_above, undefined, 'no above skip');
   assert.notEqual(above.display_used_below, undefined, 'the below skip');
+  // the glue above a formula comes from the number above it, the glue above
+  // a display that opens a paragraph from the paragraph's empty line
+  assert.equal(above.display_after_blank, undefined);
+  assert.equal(opening.display_after_blank, true);
 });
 
 // newtx is in the CI image (docker/test-packages.txt); elsewhere, run where it is installed.

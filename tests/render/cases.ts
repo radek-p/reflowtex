@@ -177,6 +177,11 @@ export const cases: Record<string, CaseSettings> = {
   // took for skips TeX left out and added again, 10 pt above the text and 10 pt
   // more below it. At the document's width; worst attained 2026-10-27.
   intertext: { against_plain: true, widths: [0], tolerance: 0.009, rule_tolerance: 0.004 },
+  // Equation numbers on the left (amsart) with no room beside their formula,
+  // set by TeX on a line of their own above it, with no \abovedisplayskip
+  // there, as in real papers. At the document's width; worst attained
+  // 2026-10-27.
+  'leqno-own-line': { against_plain: true, widths: [0], tolerance: 0.009 },
   // Space asked for inside a paragraph, as in real papers: \\[len], \vspace and
   // \smallskip between two sentences, \vadjust pre, and a box and a rule in
   // a \vadjust. TeX sets it below (or above) the line the request ends up in;

@@ -1,0 +1,24 @@
+% Equation numbers on the left (amsart's default), as in real papers: a
+% formula too wide for its number gets the number on a line of its own above
+% it, and TeX sets no \abovedisplayskip there (the number's line takes its
+% place). One equation whose number fits, for comparison.
+\documentclass{amsart}
+\begin{document}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\thispagestyle{empty}
+The scheme advances every particle by one step of the Euler--Maruyama method,
+\begin{equation}
+  X_{n+1}^{\ell,j} = X_n^{\ell,j} + b(X_n^{\ell,j}, \mathbb E[R(X_n^{\ell,j})])\,\Delta t_{\ell} + \sigma(X_n^{\ell,j}, \mathbb E[R(X_n^{\ell,j})])\,\Delta W_n^{\ell,j} + c_n + d_n + e_n,
+\end{equation}
+with the same Brownian increments on two neighbouring levels, so that the two paths stay close to each other.
+\begin{equation}
+  X_{n+1} = X_n + b(X_n)\,\Delta t + \sigma(X_n)\,\Delta W_n
+\end{equation}
+is the single-level scheme, whose number fits beside it. The coupled particles of the coarser level take two steps of the finer one at a time,
+\begin{equation}
+  \widetilde X_{n+1}^{\ell,j} = \widetilde X_n^{\ell,j} + b(\widetilde X_n^{\ell,j}, \mathbb E[R(\widetilde X_n^{\ell,j})])\,\Delta t_{\ell-1} + \sigma(\widetilde X_n^{\ell,j}, \mathbb E[R(X_n)])\,\Delta \widetilde W_n + c_n + d_n + e_n + f,
+\end{equation}
+and the text goes on below the formula, as TeX sets it.
+
+A paragraph after it, long enough to fill one line of the text width and then some more words.
+\end{document}

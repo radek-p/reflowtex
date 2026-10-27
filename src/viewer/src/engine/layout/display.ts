@@ -353,16 +353,15 @@ export function displaySkipAdjust(L: SegmentLayout, prev: SegmentLayout | undefi
                 ? { bskip: it.display_baselineskip * SP_TO_PX, lskip: (it.display_lineskip || 0) * SP_TO_PX,
                     lskiplimit: (it.display_lineskiplimit || 0) * SP_TO_PX }
                 : (prev && prev.firstMeta);
-            // A display that opened an empty paragraph (display_after_line
-            // false) had that paragraph's empty line above it, of depth 0,
-            // not the last line of the text before – when TeX set one. A
-            // paragraph with nothing in it at all (\noindent, or the indent
-            // box \@doendpe removes after a list or verbatim) gets no line
-            // (§1145), which is what \predisplaysize = -\maxdimen records;
-            // the glue above then comes from the text before, as usual.
+            // A display that opened a paragraph had that paragraph's empty
+            // line above it, of depth 0, not the item before – where TeX set
+            // one (display_after_blank): a paragraph with nothing in it at all
+            // (\noindent, or the indent box \@doendpe removes after a list or
+            // verbatim) gets no line (§1145). Otherwise the glue above comes
+            // from the item before: the text, or an equation number TeX set
+            // on a line of its own above the formula (§1203).
             if (it.display_interline_above != null && prev && meta && L.firstAscent != null) {
-                const blankLine = !it.display_after_line && it.display_pre_size !== -1073741823;
-                const depthAbove = blankLine ? 0 : prev.lastDepth;
+                const depthAbove = it.display_after_blank ? 0 : prev.lastDepth;
                 delta += texInterlineGlue(depthAbove, L.firstAscent, meta) - it.display_interline_above * SP_TO_PX;
             }
         }
