@@ -40,6 +40,11 @@ test('the built-in map gives light, dark, sepia and contrast, links included; a 
   assert.match(theme('light'), /--latex-color-000000: #333333;/);
   assert.match(theme('light'), /--latex-link-underline: hover;/);
   assert.match(theme('dark'), /--latex-link-color: #9d9bff;/);
+  // ... and the link look for the page's own CSS
+  assert.match(theme('dark'), /--latex-link-current: #9d9bff;/);
+  assert.match(theme('dark'), /--latex-link-current-hover: #c3c2ff;/);
+  assert.match(theme('dark'), /--latex-link-current-active: #c2410c;/);
+  assert.match(at('[data-latex-theme="default"]'), /--latex-link-current: initial;/);
   // a named map's, under its own name, which a block naming it takes
   assert.match(theme('dark'), /--latex-map0-color-0000ff: #99ccff;/);
   assert.match(theme('dark'), /--latex-map0-color-000000: initial;/, "the built-in's dark is replaced, not added to");

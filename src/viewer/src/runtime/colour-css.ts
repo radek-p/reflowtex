@@ -57,6 +57,18 @@ function themeDecls(map: ColorMap, theme: string, ns: string): Map<string, strin
     return d;
 }
 
+/** A theme's link look for the page's own CSS (the README's Theming): the
+ *  colour at rest, pointed at and pressed, each falling back to the one
+ *  before. */
+function currentLink(map: ColorMap, theme: string): Map<string, string> {
+    const d = new Map<string, string>(), look = theme === DEFAULT_THEME ? {} : map.links?.[theme] ?? {};
+    const hover = look.hover ?? look.color, active = look.active ?? hover;
+    if (look.color) d.set('--latex-link-current', look.color);
+    if (hover) d.set('--latex-link-current-hover', hover);
+    if (active) d.set('--latex-link-current-active', active);
+    return d;
+}
+
 /** The stylesheet of the page's maps over the built-in; `escape` makes a
  *  theme's name a CSS identifier (CSS.escape).
  *
@@ -79,7 +91,7 @@ export function colorMapCss(maps: Record<string, ColorMap>, escape: (s: string) 
     const own = new Set<string>();
     const byTheme = new Map<string, Map<string, string>>();
     for (const t of themes) {
-        const d = new Map(themeDecls(base, t, ''));
+        const d = new Map([...themeDecls(base, t, ''), ...currentLink(base, t)]);
         for (const [, m, ns] of named) for (const [p, v] of themeDecls(m, t, ns)) d.set(p, v);
         for (const p of [...themeDecls(base, t, '').keys(), ...named.flatMap(([, m, ns]) =>
             [...themeDecls(m, t, ns).keys()].map(q => q.replace(`--latex-${ns}`, '--latex-')))]) own.add(p.slice('--latex-'.length));
@@ -92,7 +104,8 @@ export function colorMapCss(maps: Record<string, ColorMap>, escape: (s: string) 
     // theme inside another undoes the outer one's, and a named map's theme
     // replaces the built-in's whole rather than adding to it.
     const props = [...own].map(p => `--latex-${p}`)
-        .concat(named.flatMap(([, , ns]) => [...own].map(p => `--latex-${ns}${p}`)));
+        .concat(named.flatMap(([, , ns]) => [...own].map(p => `--latex-${ns}${p}`)))
+        .concat(['--latex-link-current', '--latex-link-current-hover', '--latex-link-current-active']);
     for (const [t, d] of byTheme) {
         const sel = (t === DEFAULT_THEME ? [] : [`:root.${escape(t)}`]).concat(`[data-latex-theme=${JSON.stringify(t)}]`);
         css += `${sel.join(', ')} {\n${props.map(p => `  ${p}: ${d.get(p) ?? 'initial'};`).join('\n')}\n}\n`;

@@ -857,6 +857,25 @@ inside it. A footnote's popover takes its block's theme, map and
 the paper. The reader's choice and the system mode (above) are the page's;
 a host themes a pane by setting the attribute.
 
+### The link look for the page's own CSS
+
+Each themed element (`<html>` with a theme's class, or one with
+`data-latex-theme`) also carries its theme's link look, from the built-in
+map (or the page's map named `reflowtex`), for a host's own link-like marks:
+
+| Property | Value | Unset |
+|---|---|---|
+| `--latex-link-current` | the link colour at rest | in `default`, and where the theme gives none |
+| `--latex-link-current-hover` | while pointed at | `--latex-link-current`'s value |
+| `--latex-link-current-active` | while pressed | the hover colour |
+
+```css
+.my-mark { color: var(--latex-link-current, inherit); }
+.my-mark:hover { color: var(--latex-link-current-hover, inherit); }
+```
+
+In `default` they are unset, as links there have each their own colour from
+TeX, so give a fallback.
 
 ### Colour maps
 

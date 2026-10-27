@@ -100,7 +100,8 @@ test('without the opt-in, the theme settings are neither read nor written', asyn
 
 // A theme for part of a page: two panes, one inside the other; each block
 // takes its nearest themed ancestor's theme, and the page's stays default.
-test('two panes in two themes, by the nearest themed ancestor', async ({ openPage }) => {
+// Each themed element carries the theme's link look for the page's CSS.
+test('two panes in two themes, by the nearest themed ancestor; the link look as custom properties', async ({ openPage }) => {
   const page = await openPage('themes', { colorScheme: 'light' });
   await page.evaluate(() => {
     const [a, b] = document.querySelectorAll('#lt-content > .latex-block');
@@ -108,17 +109,25 @@ test('two panes in two themes, by the nearest themed ancestor', async ({ openPag
     outer.id = 'outer'; outer.dataset.latexTheme = 'dark';
     inner.id = 'inner'; inner.dataset.latexTheme = 'sepia';
     a.before(outer); outer.append(a, inner); inner.append(b);
+    const mark = document.createElement('span');
+    mark.id = 'mark'; mark.textContent = 'a mark of the host’s'; mark.style.color = 'var(--latex-link-current-hover, rgb(1, 2, 3))';
+    inner.append(mark);
   });
   await idle(page);
   const look = () => page.evaluate(() => {
     const [a, b] = document.querySelectorAll('#lt-content .latex-block');
     const text = (bl: Element) => getComputedStyle(bl.querySelector('tspan:not(.latex-link)')!).fill;
+    const prop = (sel: string, p: string) => getComputedStyle(document.querySelector(sel)!).getPropertyValue(p).trim();
     return { page: document.documentElement.dataset.theme, a: text(a), b: text(b),
-             link: getComputedStyle(b.querySelector('tspan.latex-link')!).fill };
+             link: getComputedStyle(b.querySelector('tspan.latex-link')!).fill,
+             outer: ['', '-hover', '-active'].map(s => prop('#outer', `--latex-link-current${s}`)),
+             inner: prop('#inner', '--latex-link-current'), html: prop('html', '--latex-link-current'),
+             mark: getComputedStyle(document.getElementById('mark')!).color };
   });
-  expect(await look()).toEqual({ page: 'default', a: 'rgb(231, 229, 228)', b: 'rgb(69, 58, 38)', link: 'rgb(52, 49, 176)' });
+  expect(await look()).toEqual({ page: 'default', a: 'rgb(231, 229, 228)', b: 'rgb(69, 58, 38)', link: 'rgb(52, 49, 176)',
+    outer: ['#9d9bff', '#c3c2ff', '#c2410c'], inner: '#3431b0', html: '', mark: 'rgb(37, 35, 138)' });
   // the page's theme changes; the panes keep theirs
   await setTheme(page, 'light');
   const l = await look();
-  expect([l.a, l.b, l.page]).toEqual(['rgb(231, 229, 228)', 'rgb(69, 58, 38)', 'light']);
+  expect([l.a, l.b, l.html]).toEqual(['rgb(231, 229, 228)', 'rgb(69, 58, 38)', '#2f2ccd']);
 });
