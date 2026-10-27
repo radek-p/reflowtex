@@ -38,6 +38,24 @@ rules, `\Block`s and dotted lines are PGF pictures placed from the positions its
 cells record in the `.aux`) is captured the same way, whole, and the snippet
 gets a second pass (`site.ts` `passesFor`).
 
+EPS and PostScript figures are converted to PDF before TeX runs
+(`src/pipeline/figures.ts`), since TeX runs with shell escape off and cannot run
+the converter LaTeX's epstopdf calls. Every `.eps` and `.ps` file under the
+document's directories is converted by that same converter, TeX Live's
+`repstopdf` (Ghostscript under `-dSAFER`), kept by its bytes for later runs, and
+put in a directory of the run's own that goes first on TEXINPUTS: the figure
+under its name, and beside it the PDF under epstopdf's name
+(`figs/x-eps-converted-to.pdf`). epstopdf, which TeX Live's graphics.cfg loads,
+finds that PDF up to date and includes it, by whichever name graphicx found the
+figure (`figs/x.eps`, `figs/x`, `\graphicspath`, `./figs/x` through
+`\input@path`); nothing in LaTeX is redefined. `repstopdf` sizes the page by the
+figure's `%%BoundingBox`, as LaTeX users get it; Ghostscript's own `-dEPSCrop`
+would take `%%HiResBoundingBox` and make a figure of another size. A document
+with epstopdf settings of its own (`\epstopdfsetup{outdir=…}`) asks for other
+names, which epstopdf writes in the log: the PDF is put there after the pass, and
+TeX runs again. A figure that does not convert is a `figure-convert-failed`
+warning, and a document that includes it stops on the missing PDF.
+
 The template loads the serializer and TikZ before substituting the caller's
 preamble, so the preamble can add packages and TikZ libraries on top. It installs
 the final picture and footnote wrappers after the preamble, ensuring package

@@ -42,6 +42,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_TEMPLATE, DEFAULT_SERIALIZER } from '../../src/pipeline/pipeline.ts';
 import { fillTemplate } from '../../src/pipeline/backend/luatex.ts';
 import { runLuaLatex } from '../../src/pipeline/lualatex.ts';
+import { Log } from '../../src/shared/log.ts';
 import { stack } from './stack.ts';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -95,6 +96,7 @@ export async function pageless(document: string, o: PagelessOptions): Promise<st
   writeFileSync(join(out, 'source-dir.txt'), `${srcDir}\n`);
   await runLuaLatex(out, {
     texinputs: [srcDir, LATEX_DIR], passes: o.passes ?? 2, settle: false, expect: 'input.pdf', block: basename(document),
+    log: new Log('pipeline', [r => log(r.message)]),
     onPass: (n, text) => {
       const shipped = text.split('\n').filter(l => l.startsWith('pageless: '));
       log(`  pass ${n}: ${shipped.pop() ?? 'no pageless line in the log'}`);

@@ -59,7 +59,9 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
       if (!fresh) {
         writeFileSync(join(d, 'input.tex'), tex);
         for (const f of READ_BACK) if (existsSync(join(build, f))) copyFileSync(join(build, f), join(d, f));
-        await runLuaLatex(d, { texinputs, passes: o.passes ?? 1, settle: false, block: `sample ${name}` });
+        // (the strip's run converted the document's EPS figures: its cache)
+        await runLuaLatex(d, { texinputs, passes: o.passes ?? 1, settle: false, block: `sample ${name}`,
+          figureCache: join(build, 'converted-figures-cache'), log: pipelineLog });
       }
       return { data: readSerializerOutput(readFileSync(join(d, 'output.json'), 'utf8')), dir: d };
     };

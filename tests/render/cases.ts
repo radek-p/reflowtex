@@ -229,4 +229,11 @@ export const cases: Record<string, CaseSettings> = {
   // glyphs here), and one put back after the prose that follows it. Worst
   // attained 2026-10-27.
   floats: { against_plain: true, plain_file: 'tests/render/cases/plain/floats.tex', tolerance: 0.009, rule_tolerance: 0.004 },
+  // An EPS figure with a label, named with .eps and without: converted by the
+  // pipeline before TeX runs (TeX's shell escape off), and included as
+  // epstopdf includes it; against plain lualatex, whose restricted shell
+  // escape lets epstopdf convert it itself. In a directory of its own: every
+  // EPS file under a document's directories is converted for it. Worst
+  // attained 2026-10-28.
+  'eps-figures': { file: 'tests/render/eps-figures/main.tex', against_plain: true, tolerance: 0.010, rule_tolerance: 0.001 },
 };

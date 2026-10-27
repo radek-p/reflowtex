@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Reflow TeX – one-command demos.
 #
-# Prerequisites on PATH: lualatex (TeX Live), Node >= 22.18.
+# Prerequisites on PATH: lualatex (TeX Live), Node >= 22.18; for EPS figures, gs (Ghostscript).
 # Node deps: installed into node_modules/ on first use – see the `node-deps` target.
 
 PORT ?= 8000
@@ -60,6 +60,10 @@ check: node-deps
 	node -e 'const [a, b] = process.versions.node.split(".").map(Number); process.exit(a > 22 || (a === 22 && b >= 18) ? 0 : 1)' \
 	  && echo "  found: Node $$(node --version) (runs TypeScript directly)" \
 	  || { echo "  MISSING: Node >= 22.18 (found $$(node --version))"; ok=0; }; \
+	for t in gs repstopdf; do \
+	  if command -v $$t >/dev/null 2>&1; then echo "  found: $$t (EPS figures)"; \
+	  else echo "  not found: $$t (needed only for EPS figures)"; fi; \
+	done; \
 	[ $$ok -eq 1 ] && echo "All prerequisites present." || { echo "Some prerequisites are missing."; exit 1; }
 
 demo: node-deps

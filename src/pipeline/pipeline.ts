@@ -23,6 +23,7 @@ import * as DM from './display-model.ts';
 import { dropUnreferencedParagraphs, stripUnsupportedNodes, batchParts } from './transforms.ts';
 import { attachMathML, readMathmlFile, speaker } from './mathml.ts';
 import { convertPictures, includedPictureFiles } from './pictures.ts';
+import { figureSources } from './figures.ts';
 import { Fonts, fontNeeds, fontWarnings } from './fonts/fonts.ts';
 import { consoleLog, type Log, type Warning } from '../shared/log.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
@@ -278,6 +279,7 @@ export class Pipeline {
 
     const job = await this.backend.open({
       content, preamble, dir, label, searchDirs: this.searchDirs, localFonts: this.localFonts, mathml: this.mathml,
+      figureCache: join(this.buildRoot, 'converted-figures-cache'), log: this.log,
     });
     try {
       // The document at its own width, then (sampleDisplays) at wider ones if it
@@ -298,7 +300,9 @@ export class Pipeline {
       this.diagnostics.set(key, final.diagnostics);
 
       const data = final.data;
-      this.inputs.set(key, fileHashes(includedPictureFiles(data).filter(f => existsSync(f))));
+      // a converted figure's PDF stands for the figure: its bytes are what changes
+      const converted = figureSources(final.dir);
+      this.inputs.set(key, fileHashes(includedPictureFiles(data).map(f => converted.get(resolve(f)) ?? f).filter(f => existsSync(f))));
       await this.transform(data, final.dir, {
         block: label, docTag: key.replace(/[^0-9A-Za-z]/g, '').slice(0, 8), formulas: final.mathml, pictures: final.pictures,
       });

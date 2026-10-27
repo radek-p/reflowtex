@@ -14,6 +14,7 @@
 // What a backend can do beyond that is in its Capabilities descriptor
 // (capabilities.ts). docs/backends.md describes how a backend plugs in.
 import type { SerializerOutput } from '../nodes.ts';
+import type { Log } from '../../shared/log.ts';
 import type { Capabilities } from './capabilities.ts';
 
 export interface CaptureDocument {
@@ -33,6 +34,11 @@ export interface CaptureDocument {
   localFonts: string[];
   /** capture LaTeX's MathML where the document enables it */
   mathml: boolean;
+  /** where what the backend makes of the document's files is kept for
+   *  other documents (LuaTeX: its EPS figures as PDF); default: in `dir` */
+  figureCache?: string;
+  /** where the backend's own messages go (a figure it could not convert) */
+  log?: Log;
 }
 
 export interface CaptureRun {

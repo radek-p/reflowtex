@@ -26,8 +26,10 @@ installed with \texttt{tlmgr} the first time it is used.
 \section*{Locally}
 You need a \TeX{} installation (\texttt{lualatex}) and Node 22.18 or later
 (it runs the build's TypeScript directly; pictures are drawn by MuPDF, one of
-its packages). Running \texttt{make check} verifies them, and installs the
-build's Node packages into \texttt{node\_modules}.
+its packages). EPS figures also need Ghostscript, which \TeX{} Live's
+\texttt{repstopdf} runs to convert them. Running \texttt{make check}
+verifies these, and installs the build's Node packages into
+\texttt{node\_modules}.
 
 \medskip\noindent\textbf{macOS} (Homebrew):
 {{< /latex >}}
@@ -43,11 +45,13 @@ brew install --cask mactex-no-gui
 
 ```sh
 sudo apt install texlive-luatex texlive-latex-extra texlive-fonts-recommended \
-                  nodejs npm
+                  texlive-font-utils ghostscript nodejs npm
 ```
 
 {{< latex preamble="docs" >}}
-Adjust the names for other distributions. An older release's
+On Debian and Ubuntu, \texttt{texlive-font-utils} carries
+\texttt{repstopdf}; MacTeX has it and Ghostscript already. Adjust the names
+for other distributions. An older release's
 \texttt{nodejs} may be below 22.18: \texttt{make check} says so, and
 \texttt{nodejs.org} has current builds. The build compiles \LaTeX, which is
 a programming language: if the snippets come from anyone but you, read

@@ -25,6 +25,9 @@ FROM texlive/texlive:latest-basic@sha256:d54587cc7093dee8cc41c3a6317a37eb33164ba
 # legacy Type1 math route). amsmath, amscls, amsfonts, lm and luaotfload ship
 # with scheme-basic already. Pictures (captured TikZ pages, included PDFs)
 # are drawn as SVG by MuPDF, an npm package (package.json), not a tool here.
+# epstopdf (repstopdf) converts EPS figures to PDF before TeX runs
+# (src/pipeline/figures.ts); scheme-basic has it through epstopdf-pkg, named
+# here so that the check below holds it to that.
 # microtype is loaded by every website preamble (website/latex-preambles/).
 # luamml is not a LaTeX package here: src/extract/mathml.lua uses its Lua
 # converter for the MathML of every formula (without it, no MathML).
@@ -44,13 +47,15 @@ RUN tlmgr update --self && \
         tikz-cd \
         xcolor \
         microtype \
-        luamml; \
+        luamml \
+        epstopdf; \
       missing=; \
       for f in mathtools.sty fontspec.sty unicode-math.sty lualatex-math.sty \
                filehook.sty latinmodern-math.otf pgf.sty tikz-cd.sty xcolor.sty \
                microtype.sty luamml-convert.lua; do \
         kpsewhich "$f" >/dev/null || missing="$missing $f"; \
       done; \
+      [ -x "$(kpsewhich -var-value SELFAUTOLOC)/repstopdf" ] || missing="$missing repstopdf"; \
       [ -z "$missing" ] && break; \
       echo "tlmgr install left out:$missing (attempt $attempt/3)" >&2; \
       [ "$attempt" -lt 3 ] || exit 1; \
@@ -61,8 +66,13 @@ RUN tlmgr update --self && \
 # ── Node + PDF tools ─────────────────────────────────────────────────────────
 # Node comes from nodejs.org, below, not from here.
 # Poppler's pdftotext: tools/pageless-pdf/check-against-paged.ts.
+# Ghostscript: only for EPS and PostScript figures, which repstopdf converts
+# to PDF with it before TeX runs (src/pipeline/figures.ts); the figures are
+# then drawn by MuPDF like any PDF. About 60 MB without recommends, its
+# fonts (urw-base35, the PostScript standard fonts an EPS names) included.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       poppler-utils \
+      ghostscript \
       git \
       make \
     && rm -rf /var/lib/apt/lists/*

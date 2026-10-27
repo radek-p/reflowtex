@@ -11,7 +11,8 @@
 //     the PDF's width and matches each glyph the viewer drew with the PDF's.
 //
 // A case with `against_plain` is also compiled as its author would compile it,
-// with plain lualatex, and the strip at its own width is checked against that
+// with plain lualatex in a copy of its directory, shell escape restricted as
+// TeX Live has it by default, and the strip at its own width is checked against that
 // PDF (againstPlain): the pipeline's compile must typeset the document as
 // LaTeX does, or the browser would be measured against the wrong reference.
 //
@@ -20,7 +21,7 @@
 // the pipeline makes it: pictures captured.
 //
 // Builds go to tests/render/build/<case>/ (ignored by git).
-import { appendFileSync, copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, cpSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -133,9 +134,11 @@ export async function againstPlain(c: Case): Promise<PlainCheck> {
   const strip = c.tex_pictures ? await pagelessRun(c, 0) : buildDir(c, 0);
   const out = join(BUILD, c.name, 'plain');
   rmSync(out, { recursive: true, force: true });
-  mkdirSync(out, { recursive: true });
+  // as its author compiles it: in its directory (a copy), with TeX Live's
+  // default shell escape, restricted – epstopdf converts an EPS figure there
+  cpSync(dirname(c.file), out, { recursive: true });
   copyFileSync(c.plain_file ?? c.file, join(out, 'input.tex'));
-  await runLuaLatex(out, { texinputs: [dirname(c.file)], passes: c.passes, expect: 'input.pdf', block: c.name });
+  await runLuaLatex(out, { texinputs: [dirname(c.file)], passes: c.passes, expect: 'input.pdf', block: c.name, shellEscape: 'restricted' });
   const s = traceStrip(join(strip, 'pageless.pdf')).glyphs, p = traceStrip(join(out, 'input.pdf')).glyphs;
   const r: PlainCheck = { glyphs: { strip: s.length, plain: p.length }, worst: { across: 0, down: 0 } };
   for (let i = 0; i < Math.min(s.length, p.length); i++) {

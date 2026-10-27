@@ -1,0 +1,16 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%Title: A figure written by hand for a test
+%%BoundingBox: 12 20 132 68
+%%HiResBoundingBox: 12.4 20.3 131.6 67.8
+%%EndComments
+% A frame, a line and a label: the page is the %%BoundingBox, not the
+% %%HiResBoundingBox, as epstopdf makes it.
+0.1 0.3 0.8 setrgbcolor
+1 setlinewidth
+newpath 14 22 moveto 116 0 rlineto 0 44 rlineto -116 0 rlineto closepath stroke
+newpath 20 30 moveto 124 30 lineto stroke
+0.8 0.1 0.1 setrgbcolor
+/Times-Roman findfont 14 scalefont setfont
+22 40 moveto (EPS: x + y) show
+showpage
+%%EOF
