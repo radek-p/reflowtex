@@ -119,10 +119,10 @@ the viewer runs, does the same.
 
 The viewer keeps one log for the page: every record the build wrote into
 the blocks' data (each block carries its `warnings`: a font with no face to
-draw it, say), and the viewer's own (a font that failed to download, a kind
-whose component threw). Each record has a level (`error`, `warning`,
-`info`, `debug`), a stable `code` for its kind (`font-load-failed`,
-`font-without-face`, `kind-failed`), its message, its particulars
+draw it, an error TeX carried on past, say), and the viewer's own (a font
+that failed to download, a kind whose component threw). Each record has a
+level (`error`, `warning`, `info`, `debug`), a stable `code` for its kind
+(`font-load-failed`, `font-without-face`, `tex-error`, `kind-failed`), its message, its particulars
 (`details`, strings by name), where it comes from (`pipeline`, `viewer`,
 `companion` or `page`), the block it is about (its key) and its time. The
 type is `LogRecord` in [src/shared/log.ts](../shared/log.ts).

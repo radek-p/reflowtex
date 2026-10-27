@@ -41,6 +41,7 @@ const { values: o, positionals } = parseArgs({
     a11y: { type: 'boolean', default: false },
     'log-alert': { type: 'string' },
     'log-show': { type: 'string' },
+    'fail-on-tex-error': { type: 'boolean', default: false },
     backend: { type: 'string' },
     'list-backends': { type: 'boolean', default: false },
     json: { type: 'boolean', default: false },
@@ -54,7 +55,7 @@ if (o['list-backends']) {
 if (o.help || positionals.length !== 1) {
   console.log(`usage: node integrations/vanilla/build.ts <snippets-dir> [-o site/] [--title T] [--source-url URL]
        [--fonts-base fonts/] [--snippet] [--batch] [-j N] [--local-fonts DIR] [--a11y]
-       [--log-alert LEVEL] [--log-show LIST] [--backend ID]
+       [--log-alert LEVEL] [--log-show LIST] [--fail-on-tex-error] [--backend ID]
        node integrations/vanilla/build.ts --list-backends [--json]
 
   --snippet     each .tex file is a snippet, set in preamble.tex (its
@@ -78,6 +79,11 @@ if (o.help || positionals.length !== 1) {
                 codes (font-load-failed, missing-char) or level names (that
                 level and above), separated by commas or spaces; none shows
                 nothing (the viewer's default: font-load-failed)
+  --fail-on-tex-error
+                a TeX error that TeX carries on past (nonstopmode) fails
+                the block, as TeX stopping does; by default the block is
+                built as TeX set it, with a warning (tex-error) in the
+                build's log and the page's
   --backend     the capture backend (default: REFLOWTEX_BACKEND, else luatex);
                 --list-backends lists them and what each can do`);
   process.exit(o.help ? 0 : 2);
@@ -107,7 +113,8 @@ if (!snippets.length) { log.error('build-error', `error: no .tex snippets found 
 // A snippet's figures and \input files are found next to it.
 let pipe: Pipeline;
 try {
-  pipe = new Pipeline({ buildRoot, fontsDir: join(out, 'fonts'), localFontsDir: localFonts, searchDirs: [srcDir], backend: o.backend, log });
+  pipe = new Pipeline({ buildRoot, fontsDir: join(out, 'fonts'), localFontsDir: localFonts, searchDirs: [srcDir], backend: o.backend, log,
+    texErrors: o['fail-on-tex-error'] ? 'error' : 'warn' });
 } catch (e) { log.error('build-error', `error: ${(e as Error).message}`); process.exit(1); }
 // a batch is made of snippets
 const kind = o.snippet || o.batch ? 'snippet' as const : 'document' as const;

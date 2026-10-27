@@ -44,3 +44,35 @@ export function missingCharWarnings(list: readonly MissingChar[]): Warning[] {
     },
   }));
 }
+
+/** A TeX error a capture reported and carried on past (a Diagnostic of
+ *  severity 'error', backend/types.ts). */
+export interface TexErrorReport { message: string; file?: string; line?: number; context?: string; count?: number; pass?: number }
+
+/** What tells two TeX errors apart: the same message at the same place is
+ *  the same error. */
+export const texErrorKey = (e: TexErrorReport): string => `${e.message}\u0000${e.file ?? ''}\u0000${e.line ?? ''}`;
+
+/** A TeX error TeX carried on past, as the block's warning: the build went
+ *  on, as plain lualatex does, and the page shows what TeX made of the
+ *  document. Code tex-error; details error (TeX's line, `! …`), file and
+ *  line where the log gives them, context (what TeX had read of the line),
+ *  pass (the TeX pass) and count (how many times at that place). */
+export function texErrorWarning(e: TexErrorReport): Warning {
+  const count = e.count ?? 1;
+  const place = e.line === undefined ? '' : e.file ? `${e.file}:${e.line}` : `line ${e.line}`;
+  const where = [place, e.context].filter(Boolean).join(': ');
+  return {
+    level: 'warning',
+    code: 'tex-error',
+    message: `TeX error: ${e.message}${where ? ` (${where})` : ''}${count > 1 ? `, ${count} times` : ''}`,
+    details: {
+      error: `! ${e.message}`,
+      ...(e.file ? { file: e.file } : {}),
+      ...(e.line !== undefined ? { line: String(e.line) } : {}),
+      ...(e.context ? { context: e.context } : {}),
+      ...(e.pass !== undefined ? { pass: String(e.pass) } : {}),
+      count: String(count),
+    },
+  };
+}

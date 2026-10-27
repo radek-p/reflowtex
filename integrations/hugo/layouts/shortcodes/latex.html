@@ -87,6 +87,14 @@
   {{- $key = printf "%.16s" ($hashInput | sha256) -}}
 {{- end -}}
 {{- $data := and $key (index hugo.Data.latex_blocks $key) -}}
+{{- /* An error TeX carried on past is a warning: prebuild built the block as
+       TeX set it and recorded the error (tex_errors). With
+       params.reflowtexFailOnTexError = true it fails the site's build. */ -}}
+{{- if eq (printf "%v" site.Params.reflowtexFailOnTexError) "true" -}}
+  {{- with $data -}}{{- with .tex_errors -}}
+    {{- errorf "%s: the LaTeX block has %d TeX error(s), and params.reflowtexFailOnTexError is on: %s" $.Position (len .) (delimit . "; ") -}}
+  {{- end -}}{{- end -}}
+{{- end -}}
 {{- $a11y := eq (printf "%v" (.Get "a11y" | default site.Params.reflowtexA11y)) "true" -}}
 {{- $showSource := .Get "show-source" -}}
 {{- $source := "" -}}

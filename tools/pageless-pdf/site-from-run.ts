@@ -17,13 +17,18 @@
 // build dir (the .aux copied, so references resolve). When the model is
 // anchored at the strip's run, displays render at the strip's width exactly as
 // the strip and reflow at other widths. --single-width skips it: displays then
-// render as captured, fixed at the strip's width.
+// render as captured, fixed at the strip's width. As in the pipeline, an
+// error TeX reports at a wider width and not in the strip's run means TeX
+// failed at that width.
 import { parseArgs } from 'node:util';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pipeline, sampleDisplays, type Sample } from '../../src/pipeline/pipeline.ts';
 import { runLuaLatex } from '../../src/pipeline/lualatex.ts';
+import { texErrors } from '../../src/pipeline/tex-log.ts';
+import { texErrorKey } from '../../src/pipeline/warnings.ts';
+import { TexError } from '../../src/pipeline/errors.ts';
 import { readSerializerOutput, writeSerializerOutput, type SerializerOutput } from '../../src/pipeline/nodes.ts';
 import { encodeDocument } from '../../src/pipeline/encode.ts';
 import { blockHtml, installViewer } from '../../src/pipeline/site.ts';
@@ -54,6 +59,9 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
     const baseExtra = Number(m[1]);
     const texinputs = [LATEX_DIR];
     if (existsSync(join(build, 'source-dir.txt'))) texinputs.unshift(readFileSync(join(build, 'source-dir.txt'), 'utf8').trim());
+    // the errors of a run in d, as its log gives them; the strip's are the document's own
+    const errorsIn = (d: string) => (existsSync(join(d, `${jobname}.log`)) ? texErrors(readFileSync(join(d, `${jobname}.log`), 'utf8'), d) : []);
+    const known = new Set(errorsIn(build).map(texErrorKey));
     // The document with \reflowtexWidthExtra raised by extraSp, compiled in
     // samples/<name>/; reused when the same input was compiled before.
     const compileAt = async (extraSp: number, name: string): Promise<Sample> => {
@@ -65,6 +73,11 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
         writeFileSync(join(d, DRIVER_FILE), tex);
         for (const f of readBack(jobname)) if (existsSync(join(build, f))) copyFileSync(join(build, f), join(d, f));
         await runLuaLatex(d, { texinputs, passes: o.passes ?? 1, settle: false, main: DRIVER_FILE, jobname, block: `sample ${name}` });
+      }
+      const unknown = errorsIn(d).filter(e => !known.has(texErrorKey(e)));
+      if (unknown.length) {
+        throw new TexError(`TeX reported ${unknown.length} error(s) in sample ${name} that it does not in the strip's run:\n` +
+          `${unknown.slice(0, 10).map(e => `  ! ${e.message}`).join('\n')}\n  see ${d}`, `sample ${name}`, `! ${unknown[0].message}`);
       }
       return { data: readSerializerOutput(readFileSync(join(d, 'output.json'), 'utf8')), dir: d };
     };

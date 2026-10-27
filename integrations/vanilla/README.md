@@ -43,6 +43,7 @@ A directory of LaTeX snippets:
 | `--local-fonts` | `<source>/fonts` if present | repo-shipped OTF fonts |
 | `--log-alert` | the viewer's: `error` | the viewer's messages at this level or above go to the browser's console and as a `reflowtex:log` event: `none`, `error`, `warning`, `info` or `debug` |
 | `--log-show` | the viewer's: `font-load-failed` | which of the viewer's messages readers are shown on the page: codes (`font-load-failed`, `missing-char`) or level names (that level and above), separated by commas or spaces; `none` shows nothing |
+| `--fail-on-tex-error` | off | a TeX error that TeX carries on past fails the block (see below) |
 
 ### The viewer's log
 
@@ -56,6 +57,20 @@ configuration, as a JSON island after `#latex-font-map`:
 (from `--log-alert warning --log-show error,missing-char`). A flag not given is
 left out of it, and the viewer uses its default; with neither, the page has no
 island at all.
+
+### TeX errors
+
+A block fails only where lualatex itself gives the author nothing: TeX
+stopped (an emergency stop – a missing class or file –, a full memory, a
+hundred errors) or wrote no output. An error TeX reports and carries on past
+in nonstopmode – an undefined control sequence, a package's error – leaves
+the document plain lualatex would give the author, with that error in it: the
+block is built as TeX set it, and each distinct error is a warning with the
+code `tex-error`, in the build's log and in the page's (its details: `error`,
+TeX's `! …` line; `file` and `line` where the log gives them; `context`,
+what TeX had read of the line; `pass` and `count`). `--log-alert warning`
+sends them to the browser's console, and the inspector's Log tab lists them.
+With `--fail-on-tex-error` such an error fails the block instead.
 
 ## Output
 

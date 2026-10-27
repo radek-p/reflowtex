@@ -6,6 +6,7 @@
 //                                         [--width-extra 0pt] [--tex-pictures]
 //                                         [--snippet [--preamble P.tex]] [--preamble P.tex]
 //                                         [--document-metadata KEYS [--force-metadata]]
+//                                         [--fail-on-tex-error]
 //
 // The document is compiled as the pipeline compiles it – through the driver
 // (src/pipeline/driver.ts), which reads the capture code and then the file
@@ -32,6 +33,10 @@
 // driver, log and PDF (<stem>.log, <stem>.pdf). Shell escape is off unless
 // REFLOWTEX_SHELL_ESCAPE=1, as in the pipeline.
 //
+// As in the pipeline, an error TeX carries on past (nonstopmode) is a
+// warning line naming it, and the strip is what TeX made of the document;
+// --fail-on-tex-error stops at it instead. TeX stopping always stops it.
+//
 // --tex-pictures leaves TikZ pictures to TeX: the capture is undone at
 // \begin{document}, so each picture is drawn in the galley by PGF, not
 // shipped to a private page and stacked back. The strip is then a reference
@@ -48,7 +53,8 @@ import {
   CALLER_PREAMBLE_FILE, CAPTURE_FILES, DOCUMENT_FILE, DRIVER_FILE, checkJobname, driverTex, snippetDocument,
   type DocumentKind, type DocumentMetadataOption,
 } from '../../src/pipeline/driver.ts';
-import { runLuaLatex } from '../../src/pipeline/lualatex.ts';
+import { runLuaLatex, type TexErrorPolicy } from '../../src/pipeline/lualatex.ts';
+import { texErrorWarning } from '../../src/pipeline/warnings.ts';
 import { stack } from './stack.ts';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -86,6 +92,9 @@ export interface PagelessOptions {
   documentMetadata?: DocumentMetadataOption;
   /** TikZ pictures drawn by TeX in the galley, not captured (--tex-pictures) */
   texPictures?: boolean;
+  /** an error TeX carries on past: a warning line (default 'warn'), or the
+   *  run fails ('error') */
+  texErrors?: TexErrorPolicy;
   log?: (s: string) => void;
 }
 
@@ -117,13 +126,15 @@ export async function pageless(document: string, o: PagelessOptions): Promise<st
   const texinputs = [srcDir, LATEX_DIR];
   const metadata = await applicableMetadata(out, file, o.documentMetadata, { texinputs });
   writeFileSync(join(out, DRIVER_FILE), driverTex({ document: file, widthExtraSp, callerPreamble, metadata, extra: driverExtra(o.margin ?? '36pt', !o.texPictures) }));
-  await runLuaLatex(out, {
+  const run = await runLuaLatex(out, {
     texinputs, passes: o.passes ?? 2, settle: false, main: DRIVER_FILE, jobname, expect: `${jobname}.pdf`, block: basename(document),
+    texErrors: o.texErrors,
     onPass: (n, text) => {
       const shipped = text.split('\n').filter(l => l.startsWith('pageless: '));
       log(`  pass ${n}: ${shipped.pop() ?? 'no pageless line in the log'}`);
     },
   });
+  for (const e of run.errors) log(`  warning: ${texErrorWarning({ ...e, pass: run.passes }).message}`);
   if (!existsSync(join(out, 'pageless.json'))) throw new Error('the run wrote no pageless.json');
   const r = await stack(join(out, `${jobname}.pdf`), JSON.parse(readFileSync(join(out, 'pageless.json'), 'utf8')), join(out, 'pageless.pdf'));
   log(`  pageless.pdf: 1 page, ${r.width.toFixed(3)} x ${r.height.toFixed(3)} bp, ${r.chunks} chunk(s), ${r.pictures} picture(s)`);
@@ -139,17 +150,19 @@ if (import.meta.main) {
       'tex-pictures': { type: 'boolean', default: false },
       snippet: { type: 'boolean', default: false }, preamble: { type: 'string' },
       'document-metadata': { type: 'string' }, 'force-metadata': { type: 'boolean', default: false },
+      'fail-on-tex-error': { type: 'boolean', default: false },
     },
   });
   if (positionals.length !== 1) {
     console.error('usage: pageless.ts <document.tex> [-o DIR] [--passes N] [--margin 36pt] [--width-extra 0pt] [--tex-pictures]\n'
-      + '                   [--snippet] [--preamble P.tex] [--document-metadata KEYS [--force-metadata]]');
+      + '                   [--snippet] [--preamble P.tex] [--document-metadata KEYS [--force-metadata]] [--fail-on-tex-error]');
     process.exit(2);
   }
   const doc = positionals[0];
   try {
     const pdf = await pageless(doc, { out: v.out ?? join('pageless', basename(doc).replace(/\.[^.]*$/, '')),
       passes: Number(v.passes), margin: v.margin, widthExtra: v['width-extra'], texPictures: v['tex-pictures'],
+      texErrors: v['fail-on-tex-error'] ? 'error' : 'warn',
       kind: v.snippet ? 'snippet' : 'document', ...(v.preamble ? { preamble: readFileSync(v.preamble, 'utf8') } : {}),
       ...(v['document-metadata'] ? { documentMetadata: { keys: v['document-metadata'], force: v['force-metadata'] } } : {}) });
     console.log(`pageless: ${pdf}`);
