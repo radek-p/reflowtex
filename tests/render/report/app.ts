@@ -16,6 +16,7 @@ import type { ComponentChildren, RefObject } from 'preact';
 import type { Result } from './results.ts';
 import type { InspectorApi } from '../../../src/inspector/src/protocol.ts';
 import { BAND_PT, PX_PER_PT, bandsIn, cutStrip, indexBoxes, type Box, type BoxIndex, type Strip } from './bands.ts';
+import { summarise, type Fact, type Place, type Step, type Summary } from './summary.ts';
 
 /** What the report reads of a comparison (vector.json, written by
  *  tools/pageless-pdf/vector-compare.ts): positions in pt. */
@@ -645,6 +646,55 @@ function betterSplit(w: number, h: number, [cw, ch]: number[]): 'row' | 'column'
     return fit(w / 2, h) >= fit(w, h / 2) ? 'row' : 'column';
 }
 
+// ── What the test says ─────────────────────────────────────────────────────────
+// Above the two sides, one line: the verdict and a few numbers (summary.ts),
+// or where the test stopped, in full. All of what it says is in the list's
+// Summary tab, in groups, each place it names a click away.
+
+/** The line above the two sides; `onMore` opens the Summary tab. */
+function Headline({ r, summary, onMore }: { r: Result; summary: Summary; onMore: () => void }) {
+    if (!r.problems?.length) return null;
+    if (r.status === 'error')
+        return html`<div class="headline error"><span class="st error">${STATUS.error}</span><span class="msg">${r.problems.join('\n')}</span></div>`;
+    const nums = summary.headline.length ? summary.headline : [r.problems[0]];
+    return html`<div class=${`headline ${r.status}`}>
+        <span class=${`st ${r.status}`}>${STATUS[r.status]}</span>
+        <span class="nums">${nums.map((n, i) => html`${i ? html`<span class="dot"> · </span>` : null}${n}`)}</span>
+        <button type="button" class="ib text" title="All the test says, in the list's Summary tab" onClick=${onMore}>Summary (${r.problems.length})</button>
+    </div>`;
+}
+
+/** A list's first FEW, and the rest on "show all". */
+const FEW = 5;
+function Few<T>({ items, row }: { items: T[]; row: (it: T, i: number) => ComponentChildren }) {
+    const [all, setAll] = useState(false);
+    return html`${(all ? items : items.slice(0, FEW)).map(row)}
+        ${items.length > FEW ? html`<button type="button" class="showall" onClick=${() => setAll(!all)}>${all ? 'show fewer' : `show all ${items.length}`}</button>` : null}`;
+}
+const signedPt = (x: number): string => `${x > 0 ? '+' : ''}${x} pt`;
+
+/** The Summary tab: what the test says, in groups; a step, or a place a
+ *  line names, goes there on both sides (`go`: browser y, TeX y). */
+function SummaryList({ summary, status, sel, go }: { summary: Summary; status: string; sel: string; go: (key: string, y: number, texY?: number) => void }) {
+    if (!summary.groups.length) return html`<p class="empty">${status === 'pass' ? 'Nothing to report: the test passes.' : 'The test says nothing more.'}</p>`;
+    const place = (key: string) => (p: Place, i: number) => html`<button type="button" class="srow place" aria-pressed=${String(sel === `${key}.${i}`)}
+        title=${`Go to y ${p.y} pt`} onClick=${() => go(`${key}.${i}`, p.y)}><span class="y">y ${p.y}</span><span class="what">${p.label}</span></button>`;
+    const fact = (key: string) => (f: Fact, i: number) => html`<div class="fact">
+        <div class="text">${f.head}</div>
+        ${f.places.length ? html`<div class="places"><${Few} items=${f.places} row=${place(`${key}.${i}`)}/></div>` : null}</div>`;
+    const step = (s: Step, i: number) => html`<button type="button" class="srow step" aria-pressed=${String(sel === `step.${i}`)} title=${s.text}
+        onClick=${() => go(`step.${i}`, s.y, s.texY)}>
+        <span class="y">y ${s.y}</span><span class="by">${signedPt(s.change)}</span>
+        <span class="what">${s.quote || '(no text)'}</span></button>`;
+    return html`<div class="summary">${summary.groups.map(g => html`<section class="group" data-group=${g.key}>
+        <h3>${g.title}</h3>
+        ${g.facts.map(fact(g.key))}
+        ${g.steps.length ? html`<div class="steps">
+            <div class="caption">${g.steps.length} ${g.steps[0].word}${g.steps.length > 1 ? 's' : ''}: browser y, dy's change, the line</div>
+            <${Few} items=${g.steps} row=${step}/></div>` : null}
+    </section>`)}</div>`;
+}
+
 // ── The page ───────────────────────────────────────────────────────────────────
 const idFromHash = (): string => decodeURIComponent(location.hash.slice(1));
 const inField = (e: Event) => /^(INPUT|SELECT|TEXTAREA)$/.test((e.target as Element).tagName);
@@ -666,6 +716,8 @@ function App() {
     const lock = lockKept === 'on', setLock = (on: boolean) => setLockKept(on ? 'on' : 'off');
     const [inspecting, setInspecting] = useState(false);
     const [sel, setSel] = useState(-1);
+    const [tab, setTab] = useSetting('tab', 'mismatches');            // the list's: mismatches, summary
+    const [sumSel, setSumSel] = useState('');
     const [fitScale, setFitScale] = useState(1);
     const [liveH, setLiveH] = useState(0);
     const [liveAt, setLiveAt] = useState<[number, number]>([0, 0]);
@@ -696,9 +748,10 @@ function App() {
     const idx = Math.max(0, results.findIndex(r => r.id === id));
     const r = results[idx];
     const go = (i: number) => { const t = results[(i + results.length) % results.length]; if (t) location.hash = encodeURIComponent(t.id); };
+    const summary = useMemo(() => summarise(r?.problems ?? []), [r?.id, r?.at]);
 
     useEffect(() => {
-        setVec(null); setSel(-1); setLiveH(0); setLiveAt([0, 0]);
+        setVec(null); setSel(-1); setSumSel(''); setLiveH(0); setLiveAt([0, 0]);
         if (!r || r.status === 'error') return;
         getJson<Vector>(`${BUILD}${r.dir}/vector/vector.json`).then(setVec, e => setVec({ error: String(e) }));
     }, [r?.id, r?.at]);
@@ -780,14 +833,22 @@ function App() {
         lastScale.current = scale;
         if (f !== 1) for (const p of [left.current, right.current]) if (p) { p.scrollTop *= f; p.scrollLeft *= f; }
     }, [scale]);
+    // a height (pt) in the middle of both sides; scrolling apart, the TeX
+    // side at its own (a step's TeX y)
+    const centre = (y: number, texY = y) => {
+        for (const [p, at] of [[left.current, lock ? y : texY], [right.current, y]] as const)
+            if (p) p.scrollTop = Math.max(0, at * scale - p.clientHeight / 2);
+    };
     // show a mismatch: in the middle of both sides
     const reveal = (i: number) => {
         setSel(i);
+        setTab('mismatches');
         const it = items[i];
         if (!it) return;
-        for (const p of [left.current, right.current]) if (p) p.scrollTop = Math.max(0, it.y * scale - p.clientHeight / 2);
+        centre(it.y);
         document.querySelector(`.list .row[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
     };
+    const goSummary = (key: string, y: number, texY?: number) => { setSumSel(key); centre(y, texY); };
 
     // The inspector: one panel, in this page, docked or floating as the
     // inspector does anywhere; it inspects the live page, whichever test is
@@ -882,7 +943,7 @@ function App() {
                 <button class="ib" title="Read the report again (after a test run)" aria-label="Reload" onClick=${load}><${IconReload}/></button>
             </div>
         </div>
-        ${r.problems?.length ? html`<ul class=${`problems ${r.status}`}>${r.problems.map(p => html`<li>${p}</li>`)}</ul>` : null}
+        <${Headline} r=${r} summary=${summary} onMore=${() => setTab('summary')}/>
         <div class="main">
             <div class=${`compare${colours === 'inverted' ? ' inverted' : ''}`} ref=${compare} data-dir=${dir}>
                 <section class="side">
@@ -905,22 +966,33 @@ function App() {
                 </section>
             </div>
             <section class="list">
-                <h2>
-                    <span class="fill">${items.length ? `${items.length} not matching` : vec && !vec.error ? 'Everything matches' : ''}</span>
+                <h2 class="tabs">
+                    <span role="tablist" aria-label="The list">
+                        ${[['mismatches', 'Mismatches'], ['summary', 'Summary']].map(([k, label]) => html`<button type="button" role="tab" id=${`tab-${k}`}
+                            aria-controls=${`panel-${k}`} aria-selected=${String(tab === k)} onClick=${() => setTab(k)}>${label}</button>`)}
+                    </span>
+                    <span class="fill"></span>
+                    ${tab === 'mismatches' ? html`
                     <button class="ib" title="Previous (p)" aria-label="Previous mismatch" disabled=${!items.length} onClick=${() => reveal(Math.max(0, sel - 1))}><${IconUp}/></button>
-                    <button class="ib" title="Next (n)" aria-label="Next mismatch" disabled=${!items.length} onClick=${() => reveal(Math.min(items.length - 1, sel + 1))}><${IconDown}/></button>
+                    <button class="ib" title="Next (n)" aria-label="Next mismatch" disabled=${!items.length} onClick=${() => reveal(Math.min(items.length - 1, sel + 1))}><${IconDown}/></button>` : null}
                 </h2>
-                <div class="filters" role="group" aria-label="Error thresholds">
-                    <span class="caption muted" title="What is further off is listed here and boxed on both sides; ↺ goes back to the case's ceiling">Error threshold (pt)</span>
-                    <${Threshold} label="glyph" what="Glyphs" value=${glyphThr} fallback=${r.tolerance} onChange=${setGlyphThr}/>
-                    <${Threshold} label="rule" what="Rules" value=${ruleThr} fallback=${r.rule_tolerance ?? r.tolerance} onChange=${setRuleThr}/>
+                <div class="panel" role="tabpanel" id="panel-mismatches" aria-labelledby="tab-mismatches" hidden=${tab !== 'mismatches'}>
+                    <div class="count">${items.length ? `${items.length} not matching` : vec && !vec.error ? 'Everything matches' : ''}</div>
+                    <div class="filters" role="group" aria-label="Error thresholds">
+                        <span class="caption muted" title="What is further off is listed here and boxed on both sides; ↺ goes back to the case's ceiling">Error threshold (pt)</span>
+                        <${Threshold} label="glyph" what="Glyphs" value=${glyphThr} fallback=${r.tolerance} onChange=${setGlyphThr}/>
+                        <${Threshold} label="rule" what="Rules" value=${ruleThr} fallback=${r.rule_tolerance ?? r.tolerance} onChange=${setRuleThr}/>
+                    </div>
+                    <div class="rows" role="listbox" aria-label="Mismatches">
+                        ${shown.map((it, i) => html`<div class=${`row ${it.allowed ? 'allowed' : ''}`} role="option" data-i=${i} aria-selected=${String(i === sel)}
+                            onClick=${() => reveal(i)} title=${`y ${it.y} pt`}>
+                            <span class="k">${it.k === 'g' ? '◆' : it.k === 'r' ? '▬' : it.k}</span>
+                            <span class="what">${it.what}</span><span class="muted">${it.note}</span></div>`)}
+                        ${items.length > shown.length ? html`<div class="more">and ${items.length - shown.length} more</div>` : null}
+                    </div>
                 </div>
-                <div class="rows" role="listbox" aria-label="Mismatches">
-                    ${shown.map((it, i) => html`<div class=${`row ${it.allowed ? 'allowed' : ''}`} role="option" data-i=${i} aria-selected=${String(i === sel)}
-                        onClick=${() => reveal(i)} title=${`y ${it.y} pt`}>
-                        <span class="k">${it.k === 'g' ? '◆' : it.k === 'r' ? '▬' : it.k}</span>
-                        <span class="what">${it.what}</span><span class="muted">${it.note}</span></div>`)}
-                    ${items.length > shown.length ? html`<div class="more">and ${items.length - shown.length} more</div>` : null}
+                <div class="panel" role="tabpanel" id="panel-summary" aria-labelledby="tab-summary" hidden=${tab !== 'summary'}>
+                    <${SummaryList} key=${`${r.id}|${r.at}`} summary=${summary} status=${r.status} sel=${sumSel} go=${goSummary}/>
                 </div>
             </section>
         </div>

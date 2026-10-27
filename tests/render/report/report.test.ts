@@ -2,8 +2,9 @@
 // The report page in Chromium, on results made up here: a long document –
 // a strip 48,000 pt tall with 160,000 glyphs, every one off, and a page as
 // tall – opens quickly and draws only what is near the view; the TeX side,
-// the boxes and the live page stay at the same x and y as it scrolls; and a
-// short one is drawn whole, as before.
+// the boxes and the live page stay at the same x and y as it scrolls; a
+// short one is drawn whole, as before; and what a test says is one line above
+// the two sides, and in full in the list's Summary tab.
 //
 //     node --test tests/render/report/report.test.ts      (make test-render runs it)
 import { test, before, after } from 'node:test';
@@ -28,7 +29,7 @@ const ODD_HSIZE = 452.9678955078125;
 /** A test's results: `lines` lines of glyphs, every glyph 0.3 pt lower in
  *  the browser than in TeX; the page a block as tall, with a mark at
  *  `markPt`; the column `hsize` pt wide. */
-function makeTest(build: string, name: string, lines: number, markPt: number, hsize = HSIZE): void {
+function makeTest(build: string, name: string, lines: number, markPt: number, hsize = HSIZE, problems: string[] = []): void {
   const dir = join(build, name, 'w0'), heightPt = lines * LINE + 20, widthPt = hsize + 2 * MARGIN;
   mkdirSync(join(dir, 'vector'), { recursive: true });
   mkdirSync(join(dir, 'site'), { recursive: true });
@@ -58,9 +59,24 @@ ${uses.join('\n')}
 <div id="lt-content"><div class="latex-block" style="position:relative;height:${heightPt * 2}px">
 <div id="mark" style="position:absolute;left:${MARGIN * 2 + 20}px;top:${markPt * 2}px;width:40px;height:20px;background:#000"></div>
 </div></div></body></html>`);
-  writeResult(dir, { id: name, case: name, extra: 0, status: 'fail', problems: [], tolerance: 0.05, target: 0.05,
+  writeResult(dir, { id: name, case: name, extra: 0, status: 'fail', problems, tolerance: 0.05, target: 0.05,
                      hsize_pt: hsize, page: `${name}/w0/site` }, build);
 }
+
+/** What a long document's test says, as a tool comparing whole documents
+ *  writes it: line metrics, seven steps, and render.ts's verdict. */
+const STEPS = [6000, 8000, 3000, 9000, 4000, 7000, 5000];
+const SAID = [
+  "lines: 990 of 1000 browser lines matched to TeX's; 7 step(s); dy at the end 12 pt; 10 browser and 10 TeX lines without a partner",
+  "across (each matched line moved onto TeX's baseline): 660 of 40000 glyphs beyond 0.092 pt, worst 0.332 pt",
+  ...STEPS.map((y, i) => `step at browser y ${y} (TeX y ${y - 4}): dy ${i} → ${i + 4} (+4 pt)  ${JSON.stringify(`line at ${y}`)}`),
+  'glyphs TeX 40000 / drawn 40000 / matched 39000 (within 0.7 pt); within 0.092 pt: 81.4 %',
+  "1000 of the browser's glyphs have no glyph in the PDF within 0.7 pt",
+  '40000 glyphs off by more than 0.05 pt: "a" at y 10.3 off by (+0.000, -0.300), "a" at y 22.3 off by (+0.000, -0.300)',
+  '666 rules in the PDF the browser did not draw (0 allowed): at y 2290.83, at y 2297.49',
+  'a line of a shape the report does not know',
+];
+const STOPPED = 'stopped at capture after 5 s: TexError: lualatex failed:\n  ! Undefined control sequence.\n  l.12 \\foo';
 
 let build = '', server: Server, url = '', browser: Browser;
 before(async () => {
@@ -68,7 +84,11 @@ before(async () => {
   makeTest(build, 'long', 4000, 30000);
   makeTest(build, 'short', 12, 60);
   makeTest(build, 'odd-width', 12, 60, ODD_HSIZE);
-  writeIndex(build, ['long', 'short', 'odd-width']);
+  makeTest(build, 'said', 1000, 60, HSIZE, SAID);
+  const stopped = join(build, 'stopped', 'w0');
+  mkdirSync(stopped, { recursive: true });
+  writeResult(stopped, { id: 'stopped', case: 'stopped', extra: 0, status: 'error', problems: [STOPPED], tolerance: 0.05, target: 0.05 }, build);
+  writeIndex(build, ['long', 'short', 'odd-width', 'said', 'stopped']);
   ensureBundles({ only: ['inspector'] });
   const page = join(build, '.page');
   mkdirSync(page);
@@ -83,7 +103,7 @@ after(async () => {
   rmSync(build, { recursive: true, force: true });
 });
 
-async function open(id: string): Promise<Page & { errors: string[] }> {
+async function open(id: string, ready = true): Promise<Page & { errors: string[] }> {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 1 });
   await ctx.addInitScript(() => { localStorage.setItem('render-report.inspector', 'closed'); });
   const page = Object.assign(await ctx.newPage(), { errors: [] as string[] });
@@ -91,10 +111,14 @@ async function open(id: string): Promise<Page & { errors: string[] }> {
   page.on('console', m => { if (m.type() === 'error') page.errors.push(m.text()); });
   page.on('response', r => { if (r.status() >= 400) page.errors.push(`${r.status()}: ${r.url()}`); });
   await page.goto(`${url}/#${id}`);
-  await page.waitForFunction(() => document.querySelector<HTMLElement>('iframe.page')?.style.visibility === 'visible'
-    && !!document.querySelector('.side:nth-child(1) svg.sheet use') && !!document.querySelector('.list .fill')?.textContent);
-  await settle(page);
+  if (ready) await drawn(page);
   return page;
+}
+/** Until both sides are drawn, and the list counted. */
+async function drawn(page: Page): Promise<void> {
+  await page.waitForFunction(() => document.querySelector<HTMLElement>('iframe.page')?.style.visibility === 'visible'
+    && !!document.querySelector('.side:nth-child(1) svg.sheet use') && !!document.querySelector('.list .count')?.textContent);
+  await settle(page);
 }
 /** Until the page has drawn what it draws while idle. */
 const settle = (page: Page) => page.evaluate(() => new Promise<void>(done => {
@@ -115,7 +139,7 @@ const look = (page: Page) => page.evaluate(() => {
     boxes: [...document.querySelectorAll('svg.boxes')].map(s => s.querySelectorAll('rect').length
       + [...s.querySelectorAll('path')].reduce((n, p) => n + (p.getAttribute('d')!.match(/M/g) ?? []).length, 0)),
     boxElements: document.querySelectorAll('svg.boxes *').length,
-    listed: document.querySelector('.list .fill')!.textContent,
+    listed: document.querySelector('.list .count')!.textContent,
     left: left.scrollTop, right: right.scrollTop, paneHeight: right.clientHeight,
     frameHeight: frame.offsetHeight * k, frameTop: f.top - stage.top, pageScroll: win.scrollY * k,
     // the mark, on the stage (CSS px)
@@ -209,5 +233,62 @@ test('the live page is laid out at TeX\'s width, not at the nearest whole pixel'
   // the viewer breaks lines at data-latex-width; the column is as wide (to Chromium's 1/64 px)
   assert.equal(w.pt, String(ODD_HSIZE));
   assert.ok(Math.abs(w.px - ODD_HSIZE * 2) < 1 / 32, `the column is ${w.px} px, not ${ODD_HSIZE * 2}`);
+  assert.deepEqual(page.errors, []);
+});
+
+test('what a test says: one line above the sides, all of it in the Summary tab, a step a click away', async () => {
+  const page = await open('said');
+  // one line: the verdict and three numbers
+  const top = await page.evaluate(() => {
+    const h = document.querySelector<HTMLElement>('.headline')!;
+    return { text: h.innerText.replace(/\s+/g, ' ').trim(), height: h.getBoundingClientRect().height,
+             lines: h.querySelector('.nums')!.getClientRects().length, list: document.querySelectorAll('.problems, .headline li').length };
+  });
+  assert.equal(top.text, 'Fail 990 of 1000 lines matched, 7 step(s) · 81.4 % of glyphs within 0.092 pt · 666 rules not drawn (0 allowed) Summary (14)');
+  assert.ok(top.height <= 30 && top.lines === 1, `the line is ${top.height} px tall`);
+  assert.equal(top.list, 0);
+  // the Summary tab: the lines in groups, the steps five at first
+  assert.equal(await page.locator('#panel-summary').isVisible(), false);
+  await page.click('.headline button');
+  assert.equal(await page.getAttribute('#tab-summary', 'aria-selected'), 'true');
+  assert.equal(await page.locator('#panel-mismatches').isVisible(), false);
+  const groups = () => page.evaluate(() => [...document.querySelectorAll('#panel-summary .group')].map(g => ({
+    title: g.querySelector('h3')!.textContent, facts: g.querySelectorAll('.fact').length,
+    steps: g.querySelectorAll('.srow.step').length, places: g.querySelectorAll('.srow.place').length })));
+  assert.deepEqual(await groups(), [
+    { title: 'Lines and steps', facts: 1, steps: 5, places: 0 },
+    { title: 'Glyphs', facts: 4, steps: 0, places: 2 },
+    { title: 'Rules', facts: 1, steps: 0, places: 2 },
+    { title: 'Other', facts: 1, steps: 0, places: 0 },
+  ]);
+  await page.click('#panel-summary .steps .showall');
+  assert.equal((await groups())[0].steps, 7);
+  // a step: both sides go there, its browser y in the middle
+  const step = page.locator('#panel-summary .srow.step').nth(3);
+  assert.match((await step.textContent())!, /y 9000\s*\+4 pt\s*line at 9000/);
+  await step.click();
+  await settle(page);
+  const at = await page.evaluate(() => {
+    const [left, right] = [...document.querySelectorAll<HTMLElement>('.side .scroll')];
+    const svg = document.querySelector<SVGSVGElement>('svg.boxes')!;
+    const k = svg.getBoundingClientRect().height / svg.viewBox.baseVal.height;              // (px per pt)
+    return { left: left.scrollTop, right: right.scrollTop, want: 9000 * k - right.clientHeight / 2 };
+  });
+  assert.ok(Math.abs(at.left - at.want) <= 1 && Math.abs(at.right - at.want) <= 1, `scrolled to ${at.left}, ${at.right}, not ${at.want}`);
+  assert.equal(await step.getAttribute('aria-pressed'), 'true');
+  // the tab is kept in this browser
+  await page.reload();
+  await drawn(page);
+  assert.equal(await page.getAttribute('#tab-summary', 'aria-selected'), 'true');
+  // and n goes to the next mismatch, in its tab
+  await page.keyboard.press('n');
+  assert.equal(await page.getAttribute('#tab-mismatches', 'aria-selected'), 'true');
+  assert.deepEqual(page.errors, []);
+});
+
+test('a test that stopped: its message in full above the sides', async () => {
+  const page = await open('stopped', false);
+  await page.waitForSelector('.headline.error');
+  assert.equal(await page.locator('.headline.error .msg').textContent(), STOPPED);
   assert.deepEqual(page.errors, []);
 });

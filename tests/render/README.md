@@ -93,7 +93,15 @@ The list on the right has every mismatch, top to bottom; click one, or
 press n and p, to bring it to the middle of both sides. ← and → (or the
 menu at the left of the toolbar) go through the tests, and the toolbar
 says each one's status: pass, fail, known failure, passes with a known
-mark, or error, with the test's own message.
+mark, or error.
+
+What the test says (its `problems` in result.json) is one line above the
+two sides: the verdict and a few numbers – or, where the test stopped, its
+message in full. All of it is in the list's **Summary** tab, in groups
+(lines and steps, glyphs, rules, and other lines as they are); a step, or a
+place a line names, is a click away on both sides. The report reads the
+lines as `report/summary.ts` knows them; a line of another shape shows as
+it is, under Other.
 
 Both sides have the same size: the page's width, and the longer side's
 height. Past the end of a side there is a checkerboard, so a side that ends

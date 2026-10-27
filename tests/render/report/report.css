@@ -59,12 +59,17 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); 
 .st.fixed { color: var(--known); } .st.error { color: var(--error); } .st.none { color: var(--muted); }
 
 /* ── What the test says ──────────────────────────────────────────────────── */
-.problems { flex: none; max-height: 20vh; overflow: auto; margin: 0; padding: 6px 12px 6px 28px;
-  border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11.5px; }
-.problems li { margin: 2px 0; }
-.problems.fail { background: color-mix(in srgb, var(--fail) 8%, var(--bg)); }
-.problems.known, .problems.fixed { background: color-mix(in srgb, var(--known) 10%, var(--bg)); }
-.problems.error { background: color-mix(in srgb, var(--error) 10%, var(--bg)); white-space: pre-wrap; }
+/* One line: the verdict, a few numbers, and the way to the rest (the list's
+   Summary tab); where the test stopped, its message in full. */
+.headline { flex: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 6px;
+  border-bottom: 1px solid var(--line); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.headline .nums { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.headline .dot { color: var(--muted); }
+.headline.fail { background: color-mix(in srgb, var(--fail) 8%, var(--bg)); }
+.headline.known, .headline.fixed { background: color-mix(in srgb, var(--known) 10%, var(--bg)); }
+.headline.error { height: auto; max-height: 20vh; overflow: auto; align-items: flex-start; padding: 5px 12px 5px 6px;
+  background: color-mix(in srgb, var(--error) 10%, var(--bg)); }
+.headline.error .msg { flex: 1; min-width: 0; font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; }
 
 /* ── The two sides, and the list ────────────────────────────────────────── */
 .main { flex: 1; min-height: 0; display: flex; }
@@ -111,6 +116,37 @@ h2 .seg button { padding: 0 7px; }
 .list .row .k { color: var(--fail); text-align: center; }
 .list .row.allowed .k { color: var(--known); }
 .list .more { padding: 6px 10px; color: var(--muted); }
+/* the list's tabs: what does not match, and all the test says */
+.list h2.tabs { padding-left: 0; }
+.tabs [role="tablist"] { display: flex; align-self: stretch; }
+.tabs [role="tab"] { border: 0; border-bottom: 2px solid transparent; background: none; padding: 2px 10px 0; cursor: pointer;
+  font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.tabs [role="tab"]:hover { color: var(--fg); }
+.tabs [role="tab"][aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabs [role="tab"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.list .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.list .panel[hidden] { display: none; }
+.list .count { flex: none; padding: 5px 10px 0; font-weight: 600; }
+/* The summary: groups of lines; a step, or a place a line names, goes there */
+.summary { flex: 1; min-height: 0; overflow: auto; padding: 2px 0 10px; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.summary h3 { margin: 10px 10px 3px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.summary .fact { padding: 2px 10px 3px; }
+.summary .fact .text { overflow-wrap: anywhere; white-space: pre-wrap; }
+.summary .places { margin: 2px 0 0 -10px; }
+.summary .steps { margin-top: 4px; }
+.summary .caption { padding: 2px 10px; color: var(--muted); font-size: 11px; }
+.srow { display: grid; grid-template-columns: 11ch 1fr; gap: 6px; align-items: baseline; width: 100%; padding: 2px 10px 2px 20px;
+  border: 0; background: none; text-align: left; cursor: pointer; white-space: nowrap; font-family: var(--mono); font-size: 11.5px; }
+.srow.step { grid-template-columns: 11ch 9ch 1fr; padding-left: 10px; }
+.srow:hover { background: var(--hover); }
+.srow[aria-pressed="true"] { background: var(--sel); }
+.srow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.srow .y { color: var(--muted); text-align: right; }
+.srow .by { text-align: right; }
+.srow .what { overflow: hidden; text-overflow: ellipsis; }
+.showall { display: block; margin: 1px 0 2px; padding: 1px 10px 1px 20px; border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 11px; }
+.steps .showall { padding-left: 10px; }
+.showall:hover { text-decoration: underline; }
 
 /* ── The View menu ───────────────────────────────────────────────────────── */
 .menuwrap { position: relative; }
