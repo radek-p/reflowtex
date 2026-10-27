@@ -25,7 +25,7 @@ test.beforeAll(async () => {
   writeFileSync(join(DIR, 'entry.ts'), `import { pdfPagePicture } from ${JSON.stringify(join(REPO, 'src/pictures/pdf-svg.ts'))};
 self.onmessage = async e => {
   const { bytes, prefix, wasmUrl } = e.data;
-  try { self.postMessage({ picture: await pdfPagePicture(bytes, 1, prefix, { wasmUrl, stripPageBackground: true }) }); }
+  try { self.postMessage({ picture: await pdfPagePicture(bytes, 1, prefix, { wasmUrl }) }); }
   catch (err) { self.postMessage({ error: String(err) }); }
 };`);
   await esbuild.build({
@@ -50,6 +50,6 @@ test('the converter in a Web Worker draws the pipeline\'s pictures', async ({ pa
       return r;
     }, [base, name] as const);
     expect(inWorker.error, name).toBeUndefined();
-    expect(inWorker.picture, name).toEqual(await pdfPagePicture(bytes, 1, 'p1-', { stripPageBackground: true }));
+    expect(inWorker.picture, name).toEqual(await pdfPagePicture(bytes, 1, 'p1-'));
   }
 });

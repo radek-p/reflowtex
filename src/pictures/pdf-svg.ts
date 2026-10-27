@@ -142,9 +142,7 @@ export async function pdfPageSvg(bytes: Uint8Array, page: number, o: PdfSvgOptio
 
 /** Page `page` of the PDF in `bytes` as a picture to inline in a page, as
  *  the pipeline makes it: its markup cleaned, ids prefixed with `prefix`,
- *  colours themed (rewrite.ts), and with `stripPageBackground` (an included
- *  figure, not a captured TikZ picture) its opaque white page rectangle gone. */
-export async function pdfPagePicture(bytes: Uint8Array, page: number, prefix: string,
-                                     o: PdfSvgOptions & { stripPageBackground?: boolean } = {}): Promise<Picture> {
-  return rewritePictureSvg((await pdfPageSvg(bytes, page, o)).svg, prefix, o.stripPageBackground ?? false);
+ *  colours themed (rewrite.ts). */
+export async function pdfPagePicture(bytes: Uint8Array, page: number, prefix: string, o: PdfSvgOptions = {}): Promise<Picture> {
+  return rewritePictureSvg((await pdfPageSvg(bytes, page, o)).svg, prefix);
 }

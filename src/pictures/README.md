@@ -6,8 +6,8 @@ pipeline and a browser (a host's Web Worker) convert a picture alike.
 
 | module | what |
 |---|---|
-| `pdf-svg.ts` | `pdfPageSvg(bytes, page, { wasmUrl })` → `{ svg }`: MuPDF's drawing of the page, every glyph a `<use data-text>` of its outline; `pdfPagePicture(bytes, page, prefix, { wasmUrl, stripPageBackground })` → `{ svg, vb_w, vb_h }`, the picture as the pipeline puts it in a document |
-| `rewrite.ts` | `rewritePictureSvg(svg, prefix, stripPageBackground)`: the markup cleaned of what could run, ids prefixed, colours to the theme's custom properties, an included figure's white page removed. No MuPDF |
+| `pdf-svg.ts` | `pdfPageSvg(bytes, page, { wasmUrl })` → `{ svg }`: MuPDF's drawing of the page, every glyph a `<use data-text>` of its outline; `pdfPagePicture(bytes, page, prefix, { wasmUrl })` → `{ svg, vb_w, vb_h }`, the picture as the pipeline puts it in a document |
+| `rewrite.ts` | `rewritePictureSvg(svg, prefix)`: the markup cleaned of what could run, ids prefixed, colours to the theme's custom properties (a mask's content keeps its own). No MuPDF |
 
 Bytes are a `Uint8Array`, results plain objects of strings and numbers.
 MuPDF (the `mupdf` package, 10 MB of WebAssembly) is loaded with a dynamic

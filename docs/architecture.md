@@ -116,8 +116,8 @@ is encoded:
   custom properties for theming (a mask's content keeps its own). MuPDF draws
   every font kind (Type 3 among them), ICC colour, images, shadings (as images)
   and patterns; glyphs are outlines, each a `<use data-text>` carrying its
-  character. An included PDF's opaque white rectangle over the whole page is
-  removed; a captured TikZ page keeps it.
+  character. Every picture is drawn as its PDF paints it, a white page
+  included: the theme maps white to the page's colour.
   An included PNG or JPEG is not converted: it becomes one `<image>` holding its
   bytes unchanged (a data: URI), the size of its box in TeX, and is not themed.
 

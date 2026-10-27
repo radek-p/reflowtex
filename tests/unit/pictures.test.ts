@@ -262,9 +262,9 @@ test('a renamed PDF is read as the PDF it is', { skip: !hasLualatex && 'lualatex
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('a captured TikZ picture keeps a full-size white rectangle; an included figure loses it', async () => {
+test('a captured TikZ picture and an included figure draw a full-size white rectangle alike, in the page\'s colour', async () => {
   // the capture's page is a picture of its own (generated: a page of the
-  // build's PDF), and a white rectangle as large as it may be what it draws
+  // build's PDF); both are drawn as their PDF paints them, themed alike
   const root = mkdtempSync(join(tmpdir(), 'rtx-page-rect-'));
   try {
     const { figmaFramePdf } = await import('./figure-pdfs.ts');
@@ -273,8 +273,8 @@ test('a captured TikZ picture keeps a full-size white rectangle; an included fig
     const data = { paragraphs: [{ nodes: [node({ file: 'input.pdf', generated: true }), node({ file: join(root, 'input.pdf') })] }], content: [], streams: [] } as unknown as SerializerOutput;
     assert.equal(await convertPictures(data, root, 'b', 'd'), 2);
     const [captured, included] = (data.pictures as Picture[]).map(p => p.svg);
-    assert.match(captured, /d="M0 0H200V100H0Z" fill="var\(--latex-color-ffffff, #ffffff\)"/);
-    assert.doesNotMatch(included, /d="M0 0H200V100H0Z" fill=/, "only the clip has that shape now");
+    for (const svg of [captured, included]) assert.match(svg, /d="M0 0H200V100H0Z" fill="var\(--latex-color-ffffff, #ffffff\)"/);
+    assert.equal(captured.replace(/pd-1-/g, 'pd-2-'), included, 'the same picture');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -70,9 +70,6 @@ export interface PictureSource {
   /** the picture's SVG document (an <svg> root with a viewBox); its ids and
    *  colours are rewritten by the pipeline */
   svg(ref: PictureRef): Promise<string>;
-  /** whether an opaque page-sized background rectangle may be dropped
-   *  (true for included graphics, false for captured drawings) */
-  stripsBackground?(ref: PictureRef): boolean;
 }
 
 /** A glyph's source position (capabilities glyphSourceLines and

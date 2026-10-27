@@ -130,8 +130,7 @@ export async function convertPictures(data: SerializerOutput, buildDir: string, 
         try { svg = (await pdfPageSvg(readFileSync(pdf), page)).svg; }
         catch (e) { throw new PictureError(`MuPDF could not draw page ${page} of ${pdf}: ${(e as Error).message}`, block); }
       }
-      const strip = source?.stripsBackground?.(ref) ?? (!externalized && !generated);
-      try { pictures.push(rewritePictureSvg(svg, `p${docTag}-${pictures.length + 1}-`, strip)); }
+      try { pictures.push(rewritePictureSvg(svg, `p${docTag}-${pictures.length + 1}-`)); }
       catch (e) { throw new PictureError(`${(e as Error).message} (${src}, page ${page})`, block); }
       bySource.set(key, pictures.length);          // 1-based
       converted++;

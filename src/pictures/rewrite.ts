@@ -17,7 +17,9 @@
 //    keeps its colours, black by default: they are not paint but how much of
 //    what the mask covers shows (a soft mask, a clip by text), and themed,
 //    a dark theme's white page would hide what the mask lets through.
-//    Images keep their colours, as an included bitmap does.
+//    Images keep their colours, as an included bitmap does. A white page
+//    rectangle is white like any other: the theme maps white to the page's
+//    colour, so it shows in no theme.
 import { cleanSvgMarkup } from '../viewer/src/engine/safe.ts';
 
 // Attribute values in either quote: MuPDF writes "…", other sources '…'.
@@ -38,8 +40,6 @@ function hexDigits(c: string): string {
 }
 const NUM = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?';
 const SVG_ROOT_RE = new RegExp(`<svg\\b[^>]*\\bviewBox=(["'])(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})\\1[^>]*>([\\s\\S]*)<\\/svg>`);
-const RECT_PATH_RE = new RegExp(`^M\\s*(${NUM})[\\s,]+(${NUM})\\s*H\\s*(${NUM})\\s*V\\s*(${NUM})\\s*H\\s*(${NUM})\\s*(?:V\\s*(${NUM})\\s*)?Z?$`);
-const MATRIX_RE = new RegExp(`^matrix\\(\\s*(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})[\\s,]+(${NUM})\\s*\\)$`);
 
 export interface Picture { svg: string; vb_w: number; vb_h: number }
 
@@ -75,48 +75,17 @@ function maskContent(s: string): [number, number][] {
 
 const attr = (tag: string, name: string) => new RegExp(`(?<![\\w:-])${name}=(["'])([^"']*)\\1`).exec(tag)?.[2];
 
-/** Whether the <path> tag `tag` fills, in white and with no stroke, exactly
- *  the rectangle 0 0 w h. */
-function isPageRectangle(tag: string, w: number, h: number): boolean {
-  const fill = attr(tag, 'fill')?.toLowerCase();
-  if (fill !== '#fff' && fill !== '#ffffff' && fill !== 'white') return false;
-  const stroke = attr(tag, 'stroke');
-  if (stroke !== undefined && stroke !== 'none') return false;
-  const r = RECT_PATH_RE.exec(attr(tag, 'd')?.trim() ?? '');
-  if (!r || Number(r[5]) !== Number(r[1]) || (r[6] !== undefined && Number(r[6]) !== Number(r[2]))) return false;
-  const t = attr(tag, 'transform');
-  const m = t === undefined ? [1, 0, 0, 1, 0, 0] : MATRIX_RE.exec(t.trim())?.slice(1).map(Number);
-  if (!m || m[1] !== 0 || m[2] !== 0) return false;
-  const xs = [Number(r[1]), Number(r[3])].map(x => m[0] * x + m[4]), ys = [Number(r[2]), Number(r[4])].map(y => m[3] * y + m[5]);
-  const near = (a: number, b: number) => Math.abs(a - b) < 1e-3;
-  return near(Math.min(...xs), 0) && near(Math.max(...xs), w) && near(Math.min(...ys), 0) && near(Math.max(...ys), h);
-}
-
 /** The markup inside a picture's <svg>, cleaned of what could run in the
  *  page (src/viewer/src/engine/safe.ts: a picture may come from anyone's
  *  document), ids prefixed and colours themed, with its viewBox size.
- *  `stripPageBackground`: an included PDF is artwork on the host page, so
- *  an opaque white rectangle over the whole viewBox (what Figma and
- *  Matplotlib draw first) goes – the first one drawn, wherever it stands,
- *  and not one inside a definition, a clip or a mask (a clipped PDF puts its
- *  <defs> first). Only white: a rectangle with no fill is black in MuPDF's
- *  output, which drops no colour, and a coloured or black page is content.
- *  A captured TikZ picture keeps it: a full-size rectangle there may be
- *  content. */
-export function rewritePictureSvg(svg: string, prefix: string, stripPageBackground = false): Picture {
+ *  Every picture is drawn as its PDF paints it, a white page included: the
+ *  theme maps white to the page's colour (runtime/colour.ts), so it shows
+ *  in neither theme. */
+export function rewritePictureSvg(svg: string, prefix: string): Picture {
   const m = SVG_ROOT_RE.exec(svg);
   if (!m) throw new Error('the picture\'s SVG has no <svg viewBox=...> root');
   const vbW = Number(m[4]), vbH = Number(m[5]);
   let inner = cleanSvgMarkup(m[6]);
-  if (stripPageBackground) {
-    const hidden = extentsOf(inner, 'defs|clipPath|mask|pattern|symbol|marker');
-    for (const p of inner.matchAll(/<path\b[^>]*>/g)) {
-      if (within(hidden, p.index) || !isPageRectangle(p[0], vbW, vbH)) continue;
-      const [a, b] = elementExtent(inner, p.index);
-      inner = inner.slice(0, a) + inner.slice(b).replace(/^\s*\n/, '');
-      break;
-    }
-  }
   const ids = new Set([...inner.matchAll(SVG_ID_RE)].map(x => x[2]));
   if (ids.size) {
     inner = inner.replace(SVG_ID_RE, (_, q: string, id: string) => `id=${q}${prefix}${id}${q}`);
