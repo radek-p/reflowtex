@@ -168,6 +168,9 @@ h2 .seg button { padding: 0 7px; }
 .key { display: inline-flex; align-items: center; gap: 4px; }
 .sw { width: 12px; height: 9px; border: 1.5px solid #d93025; }
 .sw.dash { border-style: dashed; border-color: #e37400; }
+.sw.jump { height: 0; border-width: 1.5px 0 0; border-color: #e37400; }
+.list .measure { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 10px 0; font-size: 11px; }
+.list .measure .seg { flex: none; }
 .sw.sel { border-color: #0b57d0; background: rgba(11,87,208,.15); }
 .bar .group { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .bar .start { justify-self: start; }

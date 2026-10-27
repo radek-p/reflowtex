@@ -6,7 +6,9 @@
 // short one is drawn whole, as before; and what a test says is one line above
 // the two sides, and in full in the list's Summary tab. And a real page, a
 // long document the pipeline builds: after a jump far down, the live page
-// shows there the lines the measurement saw there.
+// shows there the lines the measurement saw there. A document whose lines
+// all sit lower in TeX from the first on: by placement, nothing is off, and
+// the one jump is marked.
 //
 //     node --test tests/render/report/report.test.ts      (make test-render runs it)
 import { test, before, after } from 'node:test';
@@ -75,6 +77,34 @@ ${uses.join('\n')}
 </svg>`);
 }
 
+/** A test whose every line is JUMP pt lower in TeX than in the browser, from
+ *  the first on: nothing within vector-compare's window, every glyph on one
+ *  side only; its lines paired (lines.json). */
+const JUMP = 31.39;
+function makeJumped(build: string, name: string, lines: number): void {
+  const dir = join(build, name, 'w0'), heightPt = lines * LINE + 20 + JUMP, widthPt = HSIZE + 2 * MARGIN;
+  mkdirSync(join(dir, 'vector'), { recursive: true });
+  mkdirSync(join(dir, 'site'), { recursive: true });
+  const viewer: Glyph[] = [], strip: Glyph[] = [], paired: object[] = [];
+  for (let l = 0; l < lines; l++) {
+    const y = 10 + l * LINE;
+    for (let g = 0; g < PER_LINE; g++) {
+      viewer.push({ x: MARGIN + g * 8, y, size: 10, text: 'a' });
+      strip.push({ x: MARGIN + g * 8, y: y + JUMP, size: 10, text: 'a' });
+    }
+    paired.push({ viewer_y: y, strip_y: y + JUMP, dy: JUMP, glyphs: PER_LINE, score: 1, text: 'a'.repeat(PER_LINE) });
+  }
+  writeStrip(dir, widthPt, heightPt, strip);
+  const w = (g: Glyph) => ({ ...g, w: 5 });
+  writeFileSync(join(dir, 'vector', 'vector.json'), JSON.stringify({ hsize_pt: HSIZE, margin_pt: MARGIN, matched: [],
+    viewer_unmatched: viewer.map(w), strip_unmatched: strip.map(w), glyphs: { strip: strip.length, viewer: viewer.length, matched: 0 } }));
+  writeFileSync(join(dir, 'vector', 'lines.json'), JSON.stringify({ lines: paired, steps: [], unmatched_viewer: 0, unmatched_strip: 0, matched_lines: lines }));
+  writeFileSync(join(dir, 'site', 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><title>${name}</title></head><body>
+<div id="lt-content"><div class="latex-block" style="height:${heightPt * 2}px"></div></div></body></html>`);
+  writeResult(dir, { id: name, case: name, extra: 0, status: 'fail', problems: [], tolerance: 0.092, target: 0.092, hsize_pt: HSIZE,
+                     page: `${name}/w0/site` }, build);
+}
+
 // A real page: a long document (400 parts, some 66,000 pt), built by the
 // pipeline, its viewer laying out what is far from its screen in slices of
 // idle time, by an estimate of the height until then.
@@ -141,13 +171,14 @@ before(async () => {
   makeTest(build, 'short', 12, 60);
   makeTest(build, 'odd-width', 12, 60, ODD_HSIZE);
   makeTest(build, 'said', 1000, 60, HSIZE, SAID);
+  makeJumped(build, 'jumped', 40);
   const stopped = join(build, 'stopped', 'w0');
   mkdirSync(stopped, { recursive: true });
   writeResult(stopped, { id: 'stopped', case: 'stopped', extra: 0, status: 'error', problems: [STOPPED], tolerance: 0.05, target: 0.05 }, build);
   const far = buildFar(build);
   writeResult(far, { id: 'far', case: 'far', extra: 0, status: 'fail', problems: [], tolerance: 0.05, target: 0.05, hsize_pt: HSIZE,
                      page: 'far/w0/site' }, build);
-  writeIndex(build, ['long', 'short', 'odd-width', 'said', 'stopped', 'far']);
+  writeIndex(build, ['long', 'short', 'odd-width', 'said', 'stopped', 'jumped', 'far']);
   ensureBundles({ only: ['inspector'] });
   const page = join(build, '.page');
   mkdirSync(page);
@@ -156,7 +187,7 @@ before(async () => {
   ({ server, url } = await serveMounts({ '/': page, '/build/': build, '/inspector/': join(REPO, 'src/inspector') }));
   browser = await chromium.launch();
   await measureFar(far, `${url}/build/far/w0/site/index.html`);
-  writeIndex(build, ['long', 'short', 'odd-width', 'said', 'stopped', 'far']);
+  writeIndex(build, ['long', 'short', 'odd-width', 'said', 'stopped', 'jumped', 'far']);
 });
 after(async () => {
   await browser?.close();
@@ -397,5 +428,38 @@ test('far down a long page, the live page shows the lines the measurement saw th
   // each of TeX's lines there, on the live page at the same height (to a point: a line is its baseline, rounded)
   const off = tex.filter(([y, t]) => !live.some(([ly, lt]) => lt === t && Math.abs(ly - y) <= 1));
   assert.deepEqual(off, [], `near y ${farY}, TeX's side has\n  ${tex.slice(0, 4).map(l => l.join(' ')).join('\n  ')}\nthe live page\n  ${live.slice(0, 4).map(l => l.join(' ')).join('\n  ')}`);
+  assert.deepEqual(page.errors, []);
+});
+
+test('one jump at the first line: by placement nothing is off, and the jump is marked once; in absolute position, all of it', async () => {
+  const page = await open('jumped');
+  const shown = () => page.evaluate(() => ({
+    count: document.querySelector('.list .count')!.textContent,
+    red: [...document.querySelectorAll('svg.boxes path[stroke="#d93025"]')].reduce((n, p) => n + (p.getAttribute('d')!.match(/M/g) ?? []).length, 0),
+    jumps: [...document.querySelectorAll('svg.boxes text')].map(t => t.textContent),
+    rows: [...document.querySelectorAll('.list .row .what')].map(e => e.textContent),
+    measure: [...document.querySelectorAll('.list .measure .seg button')].map(b => `${b.textContent}${b.getAttribute('aria-pressed') === 'true' ? '*' : ''}`),
+  }));
+  const p = await shown();
+  assert.deepEqual(p.measure, ['Placement*', 'Absolute']);
+  assert.equal(p.count, 'Everything matches, 1 vertical jump');
+  assert.equal(p.red, 0);
+  assert.deepEqual(p.jumps, ['+31.39 pt', '+31.39 pt']);                     // (on both sides)
+  assert.deepEqual(p.rows, ['jump +31.39 pt']);
+  // the jump, a click away: the TeX side at its own height
+  await page.click('.list .row');
+  // absolute: every glyph on one side only
+  await page.click('.list .measure .seg button:text-is("Absolute")');
+  await settle(page);
+  const a = await shown();
+  assert.equal(a.count, `${2 * 40 * PER_LINE} not matching`);
+  assert.ok(a.red > 0 && a.jumps.length === 0, `${a.red} red, ${a.jumps.length} jumps`);
+  assert.deepEqual(page.errors, []);
+});
+
+test('a build without paired lines: in absolute position, and the report says so', async () => {
+  const page = await open('short');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.list .measure .seg button')].map(b => b.textContent)), ['Absolute']);
+  assert.match((await page.locator('.list .measure .muted').textContent())!, /no line pairing/);
   assert.deepEqual(page.errors, []);
 });

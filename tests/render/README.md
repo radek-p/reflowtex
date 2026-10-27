@@ -89,6 +89,18 @@ a glyph further off than *glyph*, a rule further off than *rule*. Both
 start at the case's ceilings; set them to 0 to see every offset. Also
 boxed: glyphs and rules on one side only. TeX's rules the browser did not
 draw are dashed amber while they are within the case's `rules_missing`.
+How the two are compared is chosen above the list. **Placement**, the
+default where the build has its lines paired (`vector/lines.json`: each of
+the browser's lines with the TeX line it pairs with, and their dy), sets
+each line on TeX's baseline first (`report/placement.ts`): a glyph is
+boxed when it is off along its line, or in its line on one side only, or in
+a line with no partner; a rule is moved by its line's dy before it is
+compared. A vertical offset then costs nothing where it holds: it is marked
+once, in amber, where dy changes – a **jump**, labelled with the change,
+listed with the mismatches. **Absolute** boxes what does not match where it
+is, as `vector-compare.ts` matched it: one jump near the top and every glyph
+below it is boxed. The render tests' builds have no line pairing, so they
+are compared in absolute position, and the report says so.
 The list on the right has every mismatch, top to bottom; click one, or
 press n and p, to bring it to the middle of both sides. ← and → (or the
 menu at the left of the toolbar) go through the tests, and the toolbar
@@ -149,6 +161,12 @@ a reader; where the page scrolls itself (a link, the inspector), the
 panes follow. Each element and box is drawn once, where it is in the
 whole, so both sides keep the same x and y. `report/report.test.ts`
 checks it on a long document made up for it (`make test-render` runs it).
+The live page is laid out whole, in one pass, as `dom-dump.ts` lays it out,
+and shown once the viewer is idle: laid out in slices, what is far from the
+viewer's screen would be placed by an estimate of its height until a slice
+reached it, and a height on the live side would show another part of the
+document than TeX's. The test builds a long document with the pipeline and
+checks it far down, at once after the page shows.
 
 What it reads is written by every run: `result.json` in each width's
 folder, and `vector/strip.svg` and `vector/viewer.png` beside

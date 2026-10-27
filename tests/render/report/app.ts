@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Render report: a render test's pageless PDF (TeX) on the left, the page the
 // browser reflowed on the right, and every glyph or rule that does not match
-// boxed in red on both (see README.md).
+// boxed in red on both (see README.md): by default once each line is set on
+// TeX's baseline (placement.ts), where the build has its lines paired
+// (lines.json), the vertical jumps between lines marked in amber; or in
+// absolute position, as vector-compare.ts matched them.
 //
 // Both sides are in the frame vector-compare.ts measures in: pt from the left
 // edge of the margin and from the top of the block. strip.svg (MuPDF's drawing
@@ -17,23 +20,19 @@ import type { Result } from './results.ts';
 import type { InspectorApi } from '../../../src/inspector/src/protocol.ts';
 import { BAND_PT, PX_PER_PT, bandsIn, cutStrip, indexBoxes, type Box, type BoxIndex, type Strip } from './bands.ts';
 import { summarise, type Fact, type Place, type Step, type Summary } from './summary.ts';
+import { placementOf, type Glyph, type LineData, type VectorGlyphs } from './placement.ts';
 
 /** What the report reads of a comparison (vector.json, written by
  *  tools/pageless-pdf/vector-compare.ts): positions in pt. */
-interface Vector {
+interface Vector extends VectorGlyphs {
     error?: string;
-    hsize_pt?: number;
-    margin_pt?: number;
     glyphs?: { strip: number; viewer: number; matched: number };
-    matched?: { x: number; y: number; w: number; size: number; text: string; font?: string; dx: number; dy: number }[];
-    viewer_unmatched?: { x: number; y: number; w: number; size: number; text: string }[];
-    strip_unmatched?: { x: number; y: number }[];
     rules?: { x?: number; y: number; w?: number; h?: number; unmatched?: boolean; off: number; dx: number; dy: number }[];
-    rules_missing?: { x: number; y: number; w?: number; h?: number }[];
 }
-/** Something that does not match: its kind, a label, its place and note,
- *  and its box on either side. */
-interface Item { k: string; what: string; y: number; note: string; off?: number; allowed?: boolean; viewer?: Box; strip?: Box }
+/** Something that does not match: its kind, a label, its place (on the
+ *  browser's side; `texY`: on TeX's, where it differs) and note, and its box
+ *  on either side; `jump`: a vertical jump, its change as a label. */
+interface Item { k: string; what: string; y: number; texY?: number; note: string; off?: number; allowed?: boolean; jump?: string; viewer?: Box; strip?: Box }
 /** The TeX side and the browser's. */
 type Side = 'left' | 'right';
 type Marks = ReturnType<typeof makeMarks>;
@@ -81,7 +80,7 @@ function mismatches(v: Vector, glyphThr: number, ruleThr: number, rulesAllowed: 
     for (const g of v.viewer_unmatched ?? [])
         out.push({ k: '+', what: `${JSON.stringify(g.text)} browser only`, y: g.y, note: 'no TeX glyph', viewer: glyphBox(g.x, g.y, g.w, g.size) });
     for (const p of v.strip_unmatched ?? [])
-        out.push({ k: '−', what: 'glyph TeX only', y: p.y, note: 'not drawn', strip: glyphBox(p.x, p.y, 0, 0) });
+        out.push({ k: '−', what: `${p.text ? JSON.stringify(p.text) : 'glyph'} TeX only`, y: p.y, note: 'not drawn', strip: glyphBox(p.x, p.y, p.w ?? 0, p.size ?? 0) });
     for (const r of v.rules ?? []) {
         const b: Box = { x: r.x ?? 0, y: r.y, w: r.w ?? 1, h: r.h ?? 1 };
         if (r.unmatched) out.push({ k: '+', what: 'rule browser only', y: r.y, note: `${r.w} × ${r.h}`, viewer: b });
@@ -91,8 +90,41 @@ function mismatches(v: Vector, glyphThr: number, ruleThr: number, rulesAllowed: 
     for (const r of missing)
         out.push({ k: '−', what: 'rule TeX only', y: r.y, note: 'not drawn', allowed: missing.length <= rulesAllowed,
                    strip: { x: r.x, y: r.y, w: r.w ?? 2, h: r.h ?? 2 } });
+    return sorted(out);
+}
+const sorted = (items: Item[]): Item[] => {
     const x = (it: Item) => (it.viewer ?? it.strip)!.x;
-    return out.sort((a, b) => a.y - b.y || x(a) - x(b));
+    return items.sort((a, b) => a.y - b.y || x(a) - x(b));
+};
+const signedPt2 = (x: number): string => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x).toFixed(2)} pt`;
+
+/** The same, by placement (placement.ts): glyphs off along their line once it
+ *  is set on TeX's baseline, or on one side only; rules moved by their line's
+ *  dy; and each vertical jump, once, where it is. */
+function placementItems(v: Vector, l: LineData, glyphThr: number, ruleThr: number, rulesAllowed: number): Item[] {
+    const p = placementOf(v, l, glyphThr, ruleThr);
+    const width = (v.hsize_pt ?? 345) + 2 * (v.margin_pt ?? 36);
+    const gb = (g: Glyph) => glyphBox(g.x, g.y, g.w, g.size), q = (t: string) => (t ? JSON.stringify(t) : 'glyph');
+    const missing = p.off.filter(o => o.kind === 'rule-strip').length;
+    // (a jump's mark: just above the line it happens at, clear of its glyphs)
+    const above = (y: number) => Math.max(1, y - 11);
+    const out: Item[] = p.off.map((o): Item => {
+        switch (o.kind) {
+            case 'along': return { k: 'g', what: `${q(o.viewer.text)} along its line`, y: o.viewer.y, texY: o.strip.y, note: `${signed(o.dx)} along`,
+                                   off: Math.abs(o.dx), viewer: gb(o.viewer), strip: gb(o.strip) };
+            case 'viewer': return { k: '+', what: `${q(o.viewer.text)} browser only`, y: o.viewer.y, note: o.lone ? 'its line has no partner' : 'no TeX glyph in its line',
+                                    viewer: gb(o.viewer) };
+            case 'strip': return { k: '−', what: `${q(o.strip.text)} TeX only`, y: o.strip.y, note: o.lone ? 'its line has no partner' : 'not drawn in its line',
+                                   strip: gb(o.strip) };
+            case 'rule': return { k: 'r', what: 'rule', y: o.viewer.y, texY: o.strip.y, note: `corners ${f3(o.off)}`, off: o.off, viewer: o.viewer, strip: o.strip };
+            case 'rule-viewer': return { k: '+', what: 'rule browser only', y: o.viewer.y, note: `${o.viewer.w} × ${o.viewer.h}`, viewer: o.viewer };
+            case 'rule-strip': return { k: '−', what: 'rule TeX only', y: o.strip.y, note: 'not drawn', allowed: missing <= rulesAllowed, strip: o.strip };
+        }
+    });
+    for (const j of p.jumps)
+        out.push({ k: '↕', what: `jump ${signedPt2(j.change)}`, y: j.viewer_y, texY: j.strip_y, note: `dy ${j.before} → ${j.after}`, jump: signedPt2(j.change),
+                   viewer: { x: 0, y: above(j.viewer_y), w: width, h: 0 }, strip: { x: 0, y: above(j.strip_y), w: width, h: 0 } });
+    return sorted(out);
 }
 
 /** Boxes of one side as SVG markup, in pt: at least 3 pt across and a point
@@ -101,11 +133,17 @@ function mismatches(v: Vector, glyphThr: number, ruleThr: number, rulesAllowed: 
  *  thousands: as many elements would be slow to draw), and the selected one
  *  on top. */
 function boxesSvg(items: Item[], which: number[], side: 'viewer' | 'strip', sel: number): string {
-    let red = '', amber = '', on = '';
+    let red = '', amber = '', on = '', jumps = '';
     const r = (n: number) => +n.toFixed(3);
     for (const i of which) {
         const it = items[i], b = it[side];
         if (!b) continue;
+        if (it.jump) {
+            const c = i === sel ? BLUE : AMBER;
+            jumps += `<rect x="${r(b.x)}" y="${r(b.y - .6)}" width="${r(b.w)}" height="1.2" fill="${c}"/>` +
+                `<text x="${r(b.x + b.w - 4)}" y="${r(b.y - 2.5)}" text-anchor="end" font-size="9" font-family="system-ui, sans-serif" fill="${c}">${it.jump}</text>`;
+            continue;
+        }
         const w = Math.max(b.w, 3), h = Math.max(b.h, 3);
         const x = b.x - (w - b.w) / 2 - 1, y = b.y - (h - b.h) / 2 - 1;
         if (i === sel) on = `<rect x="${x}" y="${y}" width="${w + 2}" height="${h + 2}" fill="rgba(11,87,208,.15)" stroke="${BLUE}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`;
@@ -113,7 +151,7 @@ function boxesSvg(items: Item[], which: number[], side: 'viewer' | 'strip', sel:
         else red += `M${r(x)} ${r(y)}h${r(w + 2)}v${r(h + 2)}h${r(-w - 2)}z`;
     }
     const path = (d: string, colour: string, more = '') => (d ? `<path d="${d}" fill="none" stroke="${colour}" stroke-width="1.5" vector-effect="non-scaling-stroke"${more}/>` : '');
-    return path(red, RED) + path(amber, AMBER, ' stroke-dasharray="4 3"') + on;
+    return path(red, RED) + path(amber, AMBER, ' stroke-dasharray="4 3"') + jumps + on;
 }
 
 // ── Drawing near the view only ──────────────────────────────────────────────
@@ -721,6 +759,8 @@ function App() {
     const [report, setReport] = useState<{ results: Result[] } | null>(null), [error, setError] = useState<string | null>(null);
     const [id, setId] = useState(idFromHash());
     const [vec, setVec] = useState<Vector | null>(null);
+    const [lineData, setLineData] = useState<LineData | null>(null);
+    const [measure, setMeasure] = useSetting('measure', 'placement');        // placement, absolute
     const [thr, setThr] = useState<Record<string, [number, number]>>({});                   // per test: [glyph, rule]
     const [zoom, setZoom] = useState<'fit' | number>('fit');
     const [mode, setMode] = useState('live');
@@ -766,16 +806,22 @@ function App() {
     const summary = useMemo(() => summarise(r?.problems ?? []), [r?.id, r?.at]);
 
     useEffect(() => {
-        setVec(null); setSel(-1); setSumSel(''); setLiveH(0); setLiveAt([0, 0]);
+        setVec(null); setLineData(null); setSel(-1); setSumSel(''); setLiveH(0); setLiveAt([0, 0]);
         if (!r || r.status === 'error') return;
         getJson<Vector>(`${BUILD}${r.dir}/vector/vector.json`).then(setVec, e => setVec({ error: String(e) }));
+        if (r.lines) getJson<LineData>(`${BUILD}${r.dir}/vector/lines.json`).then(setLineData, () => setLineData(null));
     }, [r?.id, r?.at]);
 
     const glyphThr = thr[r?.id]?.[0] ?? r?.tolerance ?? 0.05;
     const ruleThr = thr[r?.id]?.[1] ?? r?.rule_tolerance ?? r?.tolerance ?? 0.05;
     const setGlyphThr = (n: number) => setThr({ ...thr, [r.id]: [n, ruleThr] });
     const setRuleThr = (n: number) => setThr({ ...thr, [r.id]: [glyphThr, n] });
-    const items = useMemo(() => (vec && !vec.error ? mismatches(vec, glyphThr, ruleThr, r?.rules_missing ?? 0) : []), [vec, glyphThr, ruleThr]);
+    // by placement where the build has its lines paired, else in absolute position
+    const byPlacement = measure === 'placement' && !!lineData;
+    const items = useMemo(() => (!vec || vec.error ? []
+        : byPlacement ? placementItems(vec, lineData!, glyphThr, ruleThr, r?.rules_missing ?? 0)
+        : mismatches(vec, glyphThr, ruleThr, r?.rules_missing ?? 0)), [vec, lineData, byPlacement, glyphThr, ruleThr]);
+    const jumpCount = useMemo(() => items.filter(it => it.jump).length, [items]);
     const index = useMemo(() => ({ strip: indexBoxes(items.map(it => it.strip)), viewer: indexBoxes(items.map(it => it.viewer)) }), [items]);
     const onPlace = useCallback((at: [number, number], h: number) => {
         setLiveH(h);
@@ -860,7 +906,7 @@ function App() {
         setTab('mismatches');
         const it = items[i];
         if (!it) return;
-        centre(it.y);
+        centre(it.y, it.texY);
         document.querySelector(`.list .row[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
     };
     const goSummary = (key: string, y: number, texY?: number) => { setSumSel(key); centre(y, texY); };
@@ -992,7 +1038,15 @@ function App() {
                     <button class="ib" title="Next (n)" aria-label="Next mismatch" disabled=${!items.length} onClick=${() => reveal(Math.min(items.length - 1, sel + 1))}><${IconDown}/></button>` : null}
                 </h2>
                 <div class="panel" role="tabpanel" id="panel-mismatches" aria-labelledby="tab-mismatches" hidden=${tab !== 'mismatches'}>
-                    <div class="count">${items.length ? `${items.length} not matching` : vec && !vec.error ? 'Everything matches' : ''}</div>
+                    <div class="count">${items.length - jumpCount ? `${items.length - jumpCount} not matching` : vec && !vec.error ? 'Everything matches' : ''}${
+                        jumpCount ? `, ${jumpCount} vertical jump${jumpCount > 1 ? 's' : ''}` : ''}</div>
+                    <div class="measure">
+                        <${Seg} title="How the two are compared: each line set on TeX's baseline (placement), or glyph by glyph where it is (absolute)"
+                            value=${byPlacement ? 'placement' : 'absolute'} onChange=${setMeasure}
+                            options=${lineData ? [['placement', 'Placement'], ['absolute', 'Absolute']] : [['absolute', 'Absolute']]}/>
+                        <span class="muted">${byPlacement ? 'each line on TeX\'s baseline; jumps in amber'
+                            : lineData ? 'where each glyph is: one jump moves all below it' : 'no line pairing in this build: where each glyph is'}</span>
+                    </div>
                     <div class="filters" role="group" aria-label="Error thresholds">
                         <span class="caption muted" title="What is further off is listed here and boxed on both sides; ↺ goes back to the case's ceiling">Error threshold (pt)</span>
                         <${Threshold} label="glyph" what="Glyphs" value=${glyphThr} fallback=${r.tolerance} onChange=${setGlyphThr}/>
@@ -1015,6 +1069,7 @@ function App() {
             <span class="group start">
                 <span class="key" title="A glyph or rule further off than the error threshold, or on one side only"><span class="sw"></span>error</span>
                 <span class="key" title="A rule of TeX's the browser did not draw, within the case's rules_missing"><span class="sw dash"></span>allowed</span>
+                <span class="key" title="Where the browser's lines move against TeX's (placement): the change, once, where it happens"><span class="sw jump"></span>jump</span>
                 <span class="key"><span class="sw sel"></span>selected</span>
             </span>
             <span class="group middle where mono" ref=${statusRef}></span>
