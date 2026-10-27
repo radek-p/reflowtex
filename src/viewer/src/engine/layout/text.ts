@@ -272,9 +272,10 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
         const align   = para.align || p.align;
         const justify = align === 'justify';
 
-        // TeX interline parameters for this paragraph (sp → px). bskip>0 marks
-        // "use the LaTeX rule"; absent (old data) falls back to adaptive leading.
-        const lineMeta = para.baselineskip ? {
+        // TeX interline parameters for this paragraph (sp → px), for the LaTeX
+        // rule; a \baselineskip of 0 is one too (the lines then stand
+        // \lineskip apart). Absent (old data) falls back to adaptive leading.
+        const lineMeta = para.baselineskip != null ? {
             bskip:      para.baselineskip  * SP_TO_PX,
             lskip:      (para.lineskip || 0) * SP_TO_PX,
             lskiplimit: (para.lineskiplimit || 0) * SP_TO_PX,

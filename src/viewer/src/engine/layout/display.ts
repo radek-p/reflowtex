@@ -450,7 +450,7 @@ export function layoutDisplaySegment(fontInfo: FontTable, seg: DisplaySegment, w
     return {
         lines: rows.map(r => ({ nodes: [r.item.box!], ratio: 0, fitness: 2, leftProtrusion: 0 })),
         lrp:   rows.map(r => ({ ratio: 0, er: 0, x0: r.x0 })),
-        gaps:  rows.map(r => r.gap || null),
+        gaps:  rows.map(r => r.gap),
         W:     Math.ceil(right),
         fitW:  Math.ceil(fit),
         // the display's left edge at this width, for displaySkipsFull: the

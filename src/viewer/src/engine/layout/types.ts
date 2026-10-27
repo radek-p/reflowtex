@@ -83,7 +83,7 @@ export interface SegmentGeometry {
     lines: Line[];
     lrp: LinePlacement[];
     meta?: (LineMeta | null)[];
-    gaps?: (number | null)[];
+    gaps?: number[];
     itemStarts?: number[];
     W: number;
     /** A display's: the width its boxes need (layoutDisplaySegment), which
@@ -111,7 +111,7 @@ export interface SegmentLayout {
     lrp?: LinePlacement[];
     meta?: (LineMeta | null)[];
     /** An alignment's own space between its rows (px). */
-    gaps?: (number | null)[];
+    gaps?: number[];
     /** The first line of each paragraph. */
     itemStarts?: number[];
     profiles?: InkItem[][];

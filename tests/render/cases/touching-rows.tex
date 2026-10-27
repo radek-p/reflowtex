@@ -1,0 +1,27 @@
+% Rows with no space between them: a longtable, whose rows TeX stacks with no glue at all (\baselineskip and \lineskip are 0 inside it), a short \halign of struts under \offinterlineskip, and a paragraph set with \baselineskip=0pt.
+\documentclass{article}
+\usepackage{array,longtable}
+\begin{document}
+A paragraph before the table, long enough to fill a line of the text width
+and then a few more words, so that it wraps.
+\begin{longtable}{|l|l|}\hline
+Name & Value \\ \hline\hline
+alpha & one \\
+beta & two \\
+gamma & three \\ \hline
+delta & four \\ \hline
+\end{longtable}
+A paragraph between the table and a short alignment of struts, long enough
+to break onto a second line of the column.
+
+{\offinterlineskip
+\halign{\strut#\hfil\quad&#\hfil\cr
+first&row\cr
+second&row, with a descender: y\cr
+third&row\cr}}
+A paragraph set with no baselineskip, so that TeX puts only the lineskip
+between its lines. {\baselineskip=0pt It goes on long enough to break onto
+several lines of the column, at every width it is shown at, gladly.\par}
+And a last paragraph after it, long enough to fill a line of the text width
+and then a few more words.
+\end{document}

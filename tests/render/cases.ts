@@ -122,6 +122,11 @@ export const cases: Record<string, CaseSettings> = {
   // dropped with its space (12 to 25.6 pt each, 134 pt by the end). One page,
   // so against_plain too. Worst attained 2026-10-25.
   'blank-lines': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.003 },
+  // Rows with no space between them: a longtable, an \halign of struts under
+  // \offinterlineskip, a paragraph with \baselineskip=0pt. A gap of 0 was taken
+  // for no gap and the rows spread by the viewer's own leading, 16 pt at least.
+  // Worst attained 2026-10-27.
+  'touching-rows': { tolerance: 0.010, rule_tolerance: 0.003 },
   // Interline glue TeX did not take from the lines it stands between, as in
   // real papers: amsart's abstract, a \vtop of height zero with \prevdepth\z@
   // after it; a \vbox to a fixed height with fil glue (a title box); a

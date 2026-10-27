@@ -245,27 +245,23 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
         const ascent     = (profiles[0] ?? []).reduce((m, it) => Math.max(m, it.h), 0);
         const baselineYs = [ascent];
         for (let j = 1; j < geom.lines.length; j++) {
-            const gap = geom.gaps && geom.gaps[j];
+            const gap = geom.gaps?.[j];
+            const lm = geom.meta?.[j];
+            const prevDepth = profiles[j-1].reduce((m, it) => Math.max(m, it.d), 0);
+            const thisAsc   = profiles[j].reduce((m, it) => Math.max(m, it.h), 0);
             let advance: number;
-            if (gap) {
-                // TeX's own spacing between the rows of an alignment. Measured
-                // baseline-to-baseline it must clear the previous depth and
-                // this row's ascent.
-                const prevDepth = profiles[j-1].reduce((m, it) => Math.max(m, it.d), 0);
-                const rowAscent = profiles[j].reduce((m, it) => Math.max(m, it.h), 0);
-                advance = prevDepth + gap + rowAscent;
+            if (gap !== undefined) {
+                // TeX's own spacing between the rows of an alignment, 0 where
+                // they touch (a longtable's). Measured baseline-to-baseline
+                // it must clear the previous depth and this row's ascent.
+                advance = prevDepth + gap + thisAsc;
+            } else if (lm) {
+                // Land the line at exactly the LaTeX baseline-to-baseline.
+                advance = texInterlineAdvance(prevDepth, thisAsc, lm);
             } else {
-                const prevDepth = profiles[j-1].reduce((m, it) => Math.max(m, it.d), 0);
-                const thisAsc   = profiles[j].reduce((m, it) => Math.max(m, it.h), 0);
-                const lm = geom.meta && geom.meta[j];
-                if (lm) {
-                    // Land the line at exactly the LaTeX baseline-to-baseline.
-                    advance = texInterlineAdvance(prevDepth, thisAsc, lm);
-                } else {
-                    // No captured metrics (older data): adaptive collision leading.
-                    const needed = minRequiredAdvance(profiles[j-1], profiles[j]);
-                    advance = needed > minGapPx ? needed + padPx : minGapPx;
-                }
+                // No captured metrics (older data): adaptive collision leading.
+                const needed = minRequiredAdvance(profiles[j-1], profiles[j]);
+                advance = needed > minGapPx ? needed + padPx : minGapPx;
             }
             baselineYs.push(baselineYs[j-1] + advance);
         }
@@ -572,9 +568,12 @@ export function estimateGeometry(seg: TextSegment | DisplaySegment, widthPt: num
     }
     let H = 0, firstMeta: LineMeta | null = null, bskip = 12 * ZOOM;
     for (const { para } of seg.items) {
-        bskip = para.baselineskip ? para.baselineskip * SP_TO_PX : bskip;
-        const meta = para.baselineskip ? { bskip, lskip: (para.lineskip || 0) * SP_TO_PX,
-                                           lskiplimit: (para.lineskiplimit || 0) * SP_TO_PX } : null;
+        const meta = para.baselineskip != null ? { bskip: para.baselineskip * SP_TO_PX,
+                                                   lskip: (para.lineskip || 0) * SP_TO_PX,
+                                                   lskiplimit: (para.lineskiplimit || 0) * SP_TO_PX } : null;
+        // (a line's height for the estimate: a \baselineskip of 0 or less
+        // keeps the one before)
+        if (meta && meta.bskip > 0) bskip = meta.bskip;
         if (!firstMeta) firstMeta = meta;
         const avail = Math.max(1, widthSp - (para.indent || 0));
         const lines = seg.isFigure ? 1 : Math.max(1, Math.ceil(sumWidthSp(para.nodes || []) * 1.03 / avail));
