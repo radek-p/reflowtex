@@ -139,14 +139,18 @@ test('epstopdf\'s own settings (outdir): the PDF put where it asks, and TeX run 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('a figure that does not convert: a warning naming it and why, and the document stops on the missing PDF', { skip: tools }, async () => {
+test('a figure that does not convert: a warning naming it and why, and TeX\'s error for the missing PDF', { skip: tools }, async () => {
   const root = tmp('failed');
   try {
     const src = join(root, 'src'), run = join(root, 'run');
     write(join(src, 'bad.eps'), BROKEN);
     write(join(run, 'input.tex'), '\\documentclass{article}\\usepackage{graphicx}\\begin{document}\\includegraphics{bad}\\end{document}\n');
     const log = new Log('pipeline');
-    await assert.rejects(runLuaLatex(run, { texinputs: [src], passes: 1, expect: 'input.pdf', block: 'failed', log }),
+    // TeX carries on past a missing figure: its error is the run's, as for any figure that is not there
+    const r = await runLuaLatex(run, { texinputs: [src], passes: 1, expect: 'input.pdf', block: 'failed', log });
+    assert.ok(r.errors.some(e => /File `bad-eps-converted-to\.pdf' not found/.test(e.message)), r.errors.map(e => e.message).join('\n'));
+    // and stops the build where the caller asks for that
+    await assert.rejects(runLuaLatex(run, { texinputs: [src], passes: 1, expect: 'input.pdf', block: 'failed', log, texErrors: 'error' }),
       (e: Error) => e instanceof TexError && /File `bad-eps-converted-to\.pdf' not found/.test(e.message));
     const w = log.records().filter(r => r.code === 'figure-convert-failed');
     assert.equal(w.length, 1);
@@ -163,7 +167,7 @@ test('through the pipeline: the figure drawn, by any name graphicx finds it unde
     write(join(src, 'figure.eps'), EPS);
     const pipe = new Pipeline({ buildRoot: join(root, 'build'), fontsDir: join(root, 'fonts'), searchDirs: [src], mathml: false, log: new Log('pipeline') });
     // ./figure: not along TEXINPUTS, but through \\input@path (the template)
-    await pipe.compile('A figure: \\includegraphics{figure.eps}, \\includegraphics[width=30pt]{figure} and \\includegraphics[width=20pt]{./figure}.', '', { key: 'eps' });
+    await pipe.compile('A figure: \\includegraphics{figure.eps}, \\includegraphics[width=30pt]{figure} and \\includegraphics[width=20pt]{./figure}.', { kind: 'snippet', key: 'eps' });
     assert.deepEqual(Object.keys(pipe.inputs.get('eps')!), [join(src, 'figure.eps')]);
     const data = JSON.parse(readFileSync(join(root, 'build', 'eps', 'output.json'), 'utf8')) as { pictures: { svg: string }[] };
     assert.ok(data.pictures.length >= 1);

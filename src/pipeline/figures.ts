@@ -30,8 +30,8 @@
 // again.
 //
 // A figure that does not convert is a warning (figure-convert-failed, naming
-// the file and the reason), and its PDF is missing: a document that includes
-// it stops on the missing file, as on any figure that is not there.
+// the file and the reason), and its PDF is missing: TeX reports the missing
+// file where the document includes it, as for any figure that is not there.
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import {

@@ -62,7 +62,8 @@ would take `%%HiResBoundingBox` and make a figure of another size. A document
 with epstopdf settings of its own (`\epstopdfsetup{outdir=…}`) asks for other
 names, which epstopdf writes in the log: the PDF is put there after the pass, and
 TeX runs again. A figure that does not convert is a `figure-convert-failed`
-warning, and a document that includes it stops on the missing PDF.
+warning, and TeX reports the missing PDF where the document includes it, as for
+any figure that is not there.
 
 The extraction stream is genuinely pageless rather than a `\maxdimen`-tall
 page. The serializer retains a copy with the real geometry while zeroing only
