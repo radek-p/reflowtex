@@ -9,7 +9,7 @@ import { disposePieces } from '../host/inline.ts';
 import { debugLog } from './page.ts';
 import { alignFromEl } from './params.ts';
 import { scheduleSettle } from './settle.ts';
-import { observedBlocks, paintVisibleNow, segIO } from './visibility.ts';
+import { observedBlocks, paintVisibleNow, unwatch } from './visibility.ts';
 import { frame } from './pending.ts';
 import { layoutBlock, startSlices, slicedFor } from './slices.ts';
 import type { BlockData } from './block-data.ts';
@@ -98,7 +98,7 @@ export function reflowBlock(el: HTMLElement, quick = false): boolean {
     }
     // Re-layout moved every line: painted segments now hold ink at stale positions.
     // Mark them dirty so they get re-drawn in place – the on-screen ones now (below),
-    // each off-screen one when it next scrolls into view (segIO). They are never
+    // each off-screen one when it next scrolls into view (visibility.ts). They are never
     // hidden in the meantime: their <svg> keeps its new reserved size, only its
     // glyphs are stale until repainted.
     markDirty(data.cache);
@@ -123,7 +123,7 @@ export function reflowBlock(el: HTMLElement, quick = false): boolean {
 export function rerenderBlock(el: HTMLElement): void {
     const data = blockData.get(el);
     if (!data) return;
-    // Rebuilding makes fresh <svg>s, so stop observing the old ones (segIO would
+    // Rebuilding makes fresh <svg>s, so stop observing the old ones (the observers would
     // otherwise hold detached elements). layoutDocument observes the new ones.
     unobserveAll(data.cache);
     disposePieces(data.cache);
@@ -155,7 +155,7 @@ export function markDirty(cache: LayoutCache): void {
 export function unobserveAll(cache: LayoutCache): void {
     if (!cache.dom) return;
     for (const s of cache.dom.segs) {
-        if (s.svg) segIO.unobserve(s.svg);
+        if (s.svg) unwatch(s.svg);
         if (s.sub) unobserveAll(s.sub);
     }
 }

@@ -171,7 +171,7 @@ export async function initBlock(el: HTMLElement, of: BlockSource | null = null, 
     const t3 = performance.now();
     // Paint the segments near the viewport now; layoutDocument has already set the
     // IntersectionObserver watching the rest, which paint (once, for good) as they
-    // are scrolled toward. Never un-painted.
+    // are scrolled toward (visibility.ts). Never un-painted.
     paintVisibleNow(fontInfo, cache);
     data.painted = true;
     // (sliced: what is not on the screen is laid out and painted at idle)
@@ -184,7 +184,7 @@ export async function initBlock(el: HTMLElement, of: BlockSource | null = null, 
     const t4 = performance.now();
     ro.observe(el);
     // A segment is the paint unit: a run of consecutive text paragraphs, or a single
-    // display. The rest are painted as they approach the viewport (segIO).
+    // display. The rest are painted as they approach the viewport (visibility.ts).
     const segTotal   = cache.dom!.segs.length;
     const segPainted = cache.dom!.segs.reduce((n, s) => n + (s.painted ? 1 : 0), 0);
     return { decode: t1 - t0, fonts: t2 - t1, layout: t3 - t2, paint: t4 - t3,
