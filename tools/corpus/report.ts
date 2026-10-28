@@ -202,6 +202,17 @@ export function blockOf(page: string): { block: string; bytes: Uint8Array; fonts
   return { block: blocks[0], bytes: new Uint8Array(Buffer.from(b64, 'base64')), fonts: map ? JSON.parse(map) as Record<string, string> : {} };
 }
 
+/** Whether a block's displays follow the reader's width: a document with a display carries the display model
+ *  (pipeline.ts, sampleDisplays), or its displays stay as captured, set for the width TeX compiled them at. */
+export function reflowsDisplays(bytes: Uint8Array): boolean {
+  type Item = { kind?: string };
+  const Document = messageType('Document');
+  const doc = Document.toObject(Document.decode(bytes), { enums: String, defaults: false }) as
+    { content?: Item[]; streams?: { content?: Item[] }[]; display_model?: boolean };
+  const items = [...doc.content ?? [], ...(doc.streams ?? []).flatMap(st => st.content ?? [])];
+  return Boolean(doc.display_model) || !items.some(it => it.kind === 'display');
+}
+
 /** What a page of the site embeds for a paper (website/corpus-blocks/<id>.json): the block's data and accessible
  *  layer as prebuild's data/latex_blocks/<key>.json has them, the attributes of the measured block (the
  *  shortcode puts them on it), and its fonts, by served path relative to the site's fonts/ folder. */
@@ -219,6 +230,8 @@ function copyPaper(p: Paper, e: CorpusPaper, build: string, dir: string, assets:
   if (!existsSync(join(site, 'index.html'))) throw new Error(`no site/index.html in ${build}`);
   const measured = readFileSync(join(site, 'index.html'), 'utf8');
   const { block, bytes, fonts } = blockOf(measured);
+  // the site shows the paper at other widths than its own
+  if (!reflowsDisplays(bytes)) throw new Error(`the block in ${site} has displays but no display model: they would not follow the width`);
   // the page's scripts and fonts: shared when every one of them is the same as the shared copy (or there is none yet)
   const own = filesUnder(site).filter(f => f === 'latex-viewer.js' || f === 'protobuf.min.js' || f.startsWith('fonts/'));
   const shared = own.every(f => !existsSync(join(assets, f)) || sameFile(join(site, f), join(assets, f)));
