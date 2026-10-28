@@ -6,7 +6,7 @@
       {{ partial "reflowtex-viewer.html" . }}
 
   It embeds the schema, the minimum CSS the rendered SVG needs, and the two
-  scripts (protobuf.min.js must load before latex-viewer.js). prebuild.py copies
+  scripts (protobuf.min.js must load before latex-viewer.js). prebuild.ts copies
   both scripts into static/ and writes data/latex_schema.json.
 */ -}}
 {{ with hugo.Data.latex_schema }}
@@ -16,7 +16,7 @@
      renamed + content-hashed). safeJS keeps it raw JSON in the script context.
      No data-fonts-base here: the viewer's own default already resolves fonts/
      against latex-viewer.js's own URL (see src/viewer/latex-viewer.js), which
-     fonts/ always sits beside (prebuild.py copies both into static/) – that
+     fonts/ always sits beside (prebuild.ts copies both into static/) – that
      works under a subpath, a different domain, and a page opened straight off
      disk over file://, none of which a build-time absolute path (e.g. from
      Hugo's relURL) can promise all at once. data-fonts-base is still read if
@@ -58,7 +58,7 @@
 <script id="latex-color-maps" type="application/json">{{ . | jsonify | safeJS }}</script>
 {{ end }}
 
-{{/* Cross-reference resolution. prebuild.py records which content page defines
+{{/* Cross-reference resolution. prebuild.ts records which content page defines
      each \label, from the compilation itself; only Hugo knows what URL that page
      ended up at, so the join happens here. A label whose page cannot be resolved
      is simply left out, and the viewer then renders that reference as plain text

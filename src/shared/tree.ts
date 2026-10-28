@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The one walk over TeX node trees, for the whole project: the build pipeline,
-// the tools and (bundled by esbuild) the viewer. It imports nothing, so it
-// runs anywhere.
+// The one walk over TeX node trees in the build pipeline. It imports
+// nothing, so it runs anywhere.
 //
 // A node's descendants hang off it in two ways: child lists (a box's
 // `children`, a discretionary's `pre`, `post` and `replace`) and a leader

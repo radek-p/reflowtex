@@ -9,8 +9,11 @@
 // TeX opened and closed before the error – `(name` and `)` in the log – and
 // kept only when that file's line N holds what the context says TeX read;
 // otherwise the error has a line but no file.
+//
+// Each reads TeX's lines joined where TeX broke them (TexLog).
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
+import { TexLog, type TexLogSource } from './backend/tex-log.ts';
 
 /** An error TeX reported and carried on past, as the log gives it. */
 export interface TexErrorInfo {
@@ -33,17 +36,18 @@ export interface TexErrorInfo {
 const FATAL_RE = /^(! Emergency stop\.|! TeX capacity exceeded|\*\*\* \(job aborted|\*\*\* \(cannot \\read|\(That makes 100 errors|!\s+==> Fatal error occurred)/;
 
 /** The log's line saying TeX stopped, or null when it went on to the end. */
-export function fatalStop(log: string): string | null {
-  for (const l of log.split('\n')) if (FATAL_RE.test(l)) return l.trim();
-  return null;
+export function fatalStop(source: TexLogSource): string | null {
+  const log = TexLog.of(source);
+  const i = log.lines.findIndex(l => FATAL_RE.test(l));
+  return i < 0 ? null : log.join(i).text.trim();
 }
 
-/** TeX's error lines as they are (`! …`): what the error message of a
- *  failed build has always listed. */
-export const errorLines = (log: string): string[] => log.split('\n').filter(l => l.startsWith('! '));
-
-/** TeX Live's log lines are broken at this many characters (max_print_line). */
-const MAX_PRINT_LINE = 79;
+/** TeX's error lines (`! …`), each whole: what the error message of a
+ *  failed build lists. */
+export function errorLines(source: TexLogSource): string[] {
+  const log = TexLog.of(source);
+  return log.lines.flatMap((l, i) => (l.startsWith('! ') ? [log.join(i).text] : []));
+}
 /** A line that ends an error's message: its context, LaTeX's help lines. */
 const MESSAGE_END_RE = /^(l\.\d+ |<[^>]*> |Type {2}H <return>|See the .* for explanation\.| \.\.\.)/;
 /** A box TeX reports as over- or underfull: the lines after it show the
@@ -55,8 +59,9 @@ const CONTEXT_LINES = 40;
 /** Each distinct error TeX reported in `log` and carried on past, in the
  *  order first met; the same message at the same place is one, with its
  *  count. `dir` is where TeX ran: file names in the log are relative to it. */
-export function texErrors(log: string, dir: string): TexErrorInfo[] {
-  const lines = log.split('\n');
+export function texErrors(source: TexLogSource, dir: string): TexErrorInfo[] {
+  const log = TexLog.of(source);
+  const { lines } = log;
   const files = new FileTracker(dir);
   const found = new Map<string, TexErrorInfo>();
   for (let i = 0; i < lines.length; i++) {
@@ -66,14 +71,16 @@ export function texErrors(log: string, dir: string): TexErrorInfo[] {
       while (i + 1 < lines.length && lines[i + 1].trim() !== '') i++;
       continue;
     }
-    if (!l.startsWith('! ')) { files.read(lines, i); continue; }
+    if (!l.startsWith('! ')) { i = files.read(log, i); continue; }
     if (FATAL_RE.test(l)) continue;
-    let message = l.slice(2);
-    let j = i + 1;
-    for (let prev = l; j < lines.length && lines[j].trim() !== '' && !MESSAGE_END_RE.test(lines[j]) && !lines[j].startsWith('! '); j++) {
-      // a line TeX broke at its width goes on without a space
-      message += prev.length >= MAX_PRINT_LINE ? lines[j] : ` ${lines[j].trim()}`;
-      prev = lines[j];
+    const first = log.join(i);
+    let message = first.text.slice(2);
+    let j = first.end + 1;
+    // a LaTeX error's own lines (\MessageBreak) go on after a space
+    while (j < lines.length && lines[j].trim() !== '' && !MESSAGE_END_RE.test(lines[j]) && !lines[j].startsWith('! ')) {
+      const next = log.join(j);
+      message += ` ${next.text.trim()}`;
+      j = next.end + 1;
     }
     message = message.replace(/\s+/g, ' ').trim();
     let line: number | undefined, context: string | undefined;
@@ -111,20 +118,19 @@ class FileTracker {
     try { return statSync(isAbsolute(name) ? name : join(this.dir, name)).isFile(); } catch { return false; }
   }
 
-  /** Take in line i of the log. */
-  read(lines: string[], i: number): void {
-    const l = lines[i];
+  /** Take in line i of the log, and the lines it goes on in where TeX broke
+   *  a name that is not a file's; returns the last line taken in. */
+  read(log: TexLog, i: number): number {
+    const { text: l, end } = log.join(i, t => { const m = /\(([^\s(){}"]*)$/.exec(t); return !m || this.exists(m[1]); });
     for (let c = 0; c < l.length; c++) {
       if (l[c] === ')') { this.stack.pop(); continue; }
       if (l[c] !== '(') continue;
-      let name = /^[^\s(){}"]+/.exec(l.slice(c + 1))?.[0] ?? '';
-      // a name TeX broke at the end of the line goes on in the next
-      if (name && c + 1 + name.length === l.length && l.length >= MAX_PRINT_LINE && i + 1 < lines.length && !this.exists(name))
-        name += /^[^\s(){}"]+/.exec(lines[i + 1])?.[0] ?? '';
+      const name = /^[^\s(){}"]+/.exec(l.slice(c + 1))?.[0] ?? '';
       const file = name && /[./]/.test(name) && this.exists(name) ? name : null;
       this.stack.push(file);
       if (file) this.opened.push(file);
     }
+    return end;
   }
 
   private linesOf(file: string): string[] | null {

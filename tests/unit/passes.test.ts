@@ -3,13 +3,16 @@
 // what TeX reads back (.aux, .toc, .lof, .lot) changed in the last, or the
 // run asked for one ("Rerun"), up to the most the caller allows. Nothing is
 // read from the document's source. A lualatex of the test's own stands in
-// for TeX: it writes what a pass of a document would.
+// for TeX – it writes what a pass of a document would – but for a document
+// whose references are in an \input file, compiled by lualatex.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runLuaLatex } from '../../src/pipeline/lualatex.ts';
+import { logDiagnostics } from '../../src/pipeline/backend/tex-log.ts';
 
 /** Runs of a fake lualatex: `script` is its shell body, run in the build
  *  directory with $n the pass number (1, 2, …); returns how many passes ran
@@ -52,4 +55,25 @@ test('what a pass reads back keeps changing, or the run asks again: the most all
   assert.equal((await passes(`printf '\\\\newlabel{s}{{%s}{1}}\\n' "$n" > paper.aux`)).passes, 3);
   assert.equal((await passes(`echo 'LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.' >> paper.log`)).passes, 3);
   assert.equal((await passes(`printf '\\\\newlabel{s}{{%s}{1}}\\n' "$n" > paper.aux`, 2)).passes, 2);
+});
+
+test('a request to run again that TeX broke across two log lines is read whole', async () => {
+  // "Rerun" split at the log's width (79 bytes), as TeX breaks a long line
+  const line = `Package demo Warning: ${'x'.repeat(53)} Rerun to get it right.`;
+  const broken = `${line.slice(0, 79)}\\n${line.slice(79)}`;
+  assert.ok(!broken.split('\\n').some(l => /Rerun/.test(l)));
+  assert.equal((await passes(`printf '${broken}\\n' >> paper.log`)).passes, 3);
+});
+
+const lualatex = (() => { try { execFileSync('lualatex', ['--version'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+
+test('references only in an \\input file: a second pass, and none left undefined', { skip: !lualatex && 'lualatex not installed' }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rtx-passes-input-'));
+  try {
+    writeFileSync(join(dir, 'main.tex'), '\\documentclass{article}\n\\begin{document}\n\\input{section}\n\\end{document}\n');
+    writeFileSync(join(dir, 'section.tex'), '\\section{One}\\label{s:one}\nSee Section~\\ref{s:one}.\n');
+    const r = await runLuaLatex(dir, { texinputs: [], passes: 3, main: 'main.tex', expect: 'main.pdf', block: 'input-refs' });
+    assert.equal(r.passes, 2);
+    assert.deepEqual(logDiagnostics(r.texLog).filter(d => /undefined/.test(d.message)), []);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

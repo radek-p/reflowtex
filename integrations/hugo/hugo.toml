@@ -1,7 +1,7 @@
 # This directory doubles as a runnable reflowtex example site: `node prebuild.ts`
 # then `hugo server`. In your own site you only need layouts/shortcodes/latex.html
 # and layouts/partials/reflowtex-viewer.html (copy them into your layouts/), plus
-# prebuild.py run before every build.
+# prebuild.ts run before every build.
 baseURL = "/"
 title = "Reflow TeX – Hugo example"
 disableKinds = ["taxonomy", "term", "RSS", "sitemap", "404"]

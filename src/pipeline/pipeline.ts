@@ -26,6 +26,7 @@ import { convertPictures, includedPictureFiles } from './pictures.ts';
 import { figureSources } from './figures.ts';
 import { Fonts, fontNeeds } from './fonts/fonts.ts';
 import { consoleLog, type Log } from '../shared/log.ts';
+import { g6 } from '../shared/numbers.ts';
 import { normaliseGlyphAddressing, normaliseLegacyFontAddressing } from './fonts/addressing.ts';
 import { kpsewhich } from './fonts/type1.ts';
 import { FontFiles, compositeTexts, resolveVirtualFonts } from './fonts/vf.ts';
@@ -329,7 +330,7 @@ export class Pipeline {
         const r = await job.capture({ widthExtraSp: extraSp, passes: 1 });
         const fresh = r.diagnostics.filter(d => d.severity === 'error' && !known.has(texErrorKey(d)));
         if (fresh.length) {
-          throw new TexError(`TeX reported ${fresh.length} error(s) with the text ${DM.pyG(extraSp / 65536)} pt wider that it does not at the ` +
+          throw new TexError(`TeX reported ${fresh.length} error(s) with the text ${g6(extraSp / 65536)} pt wider that it does not at the ` +
             `document's own width:\n${fresh.slice(0, 10).map(e => `  ! ${e.message}`).join('\n')}\n  see ${r.dir}`, label, `! ${fresh[0].message}`);
         }
         return r;
@@ -465,7 +466,7 @@ export async function sampleDisplays<S extends Sample>(first: S, o: SamplingOpti
   if (!DM.wantsModel(first.data)) return first;
   const { label, log } = o;
   const x0 = Number(first.data.source_width);
-  const pt = (extraSp: number) => DM.pyG((x0 + extraSp) / 65536);
+  const pt = (extraSp: number) => g6((x0 + extraSp) / 65536);
   // Each compilation as it settles, holding nothing of its output; also what
   // keeps one that fails after sampling has ended from going unhandled.
   const settled: Promise<void>[] = [];
@@ -522,7 +523,7 @@ async function modelDisplays<S extends Sample>(first: S, o: SamplingOptions<S>,
   const { label } = o;
   const widthOf = (x: Sample) => Number(x.data.source_width ?? 0);
   const x0 = widthOf(first);
-  const pt = (extraSp: number) => DM.pyG((x0 + extraSp) / 65536);
+  const pt = (extraSp: number) => g6((x0 + extraSp) / 65536);
   const ahead: [number, Promise<S>][] = [1, 2].map(k => [k * DISPLAY_SAMPLE_STEP_SP, o.at(k * DISPLAY_SAMPLE_STEP_SP)]);
   let next = 3;
   /** The window: up to three samples by increasing width, with their extra widths. */
@@ -544,7 +545,7 @@ async function modelDisplays<S extends Sample>(first: S, o: SamplingOptions<S>,
       const [a, b, c] = window.map(([, y]) => y);
       const [ok, reason] = DM.checkSamples(a.data, b.data, c.data);
       if (ok) {
-        const widths = [a, b, c].map(y => DM.pyG(widthOf(y) / 65536)).join(', ');
+        const widths = [a, b, c].map(y => g6(widthOf(y) / 65536)).join(', ');
         if (a === first) {
           o.log.info('display-model-stable', `  ${label}: display model stable at ${widths} pt`, { block: label, widths });
           return { ...a, data: DM.attachModel(a.data, b.data, c.data) };
@@ -554,12 +555,12 @@ async function modelDisplays<S extends Sample>(first: S, o: SamplingOptions<S>,
         // the wider regime as a second form, from the width TeX switches at –
         // found by compiling in between.
         const [nWide, nProbes] = await DM.anchorModel(first.data, b.data, c.data, (wd, floor) => probe(wd - x0, floor - x0));
-        o.log.info('display-model-stable', `  ${label}: display model stable at ${widths} pt, anchored at the document's ${DM.pyG(x0 / 65536)} pt` +
+        o.log.info('display-model-stable', `  ${label}: display model stable at ${widths} pt, anchored at the document's ${g6(x0 / 65536)} pt` +
           (nWide ? `; ${nWide} display(s) set another way there get a wide form (${nProbes} more compilation(s) to find where)` : ''),
-          { block: label, widths, anchor: DM.pyG(x0 / 65536), wide: String(nWide) });
+          { block: label, widths, anchor: g6(x0 / 65536), wide: String(nWide) });
         return first;
       }
-      const width = DM.pyG(widthOf(a) / 65536);
+      const width = g6(widthOf(a) / 65536);
       o.log.info('display-sample-rejected', `  ${label}: rejected display sample at ${width} pt: ${reason}`, { block: label, width, reason: reason ?? '' });
       window.shift();
     }

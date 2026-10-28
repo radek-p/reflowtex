@@ -103,9 +103,7 @@ export interface SerializerOutput {
 
 // ── Reading and writing output.json ─────────────────────────────────────────
 // JSON.parse puts integer-like keys first, in numeric order, whatever order the
-// text has; the font map's order matters, so its keys are read as strings. And
-// serializer.lua's JSON writer cannot tell an empty map from an empty array: a
-// block with no glyphs writes "fonts": [].
+// text has; the font map's order matters, so its keys are read as strings.
 
 export function readSerializerOutput(text: string): SerializerOutput {
   const data = JSON.parse(text.replace(/"(\d+)":/g, '"#$1":'), (key, value) => {

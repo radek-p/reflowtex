@@ -3,28 +3,17 @@ import { test } from 'node:test';
 import v8 from 'node:v8';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
-import { pyG, pyRepr, topologyError, checkSamples, anchorModel } from '../../src/pipeline/display-model.ts';
+import { topologyError, checkSamples, anchorModel } from '../../src/pipeline/display-model.ts';
 import { readSerializerOutput, type SerializerOutput, type TexNode } from '../../src/pipeline/nodes.ts';
 import { sampleDisplays, type Sample, type SamplingOptions } from '../../src/pipeline/pipeline.ts';
 import { TexError } from '../../src/pipeline/errors.ts';
 import { Log } from '../../src/shared/log.ts';
 
-test("pyG formats as Python's format(x, 'g')", () => {
-  const cases: [number, string][] = [[0, '0'], [3, '3'], [3.5, '3.5'], [123456, '123456'], [1234567, '1.23457e+06'],
-    [0.0001, '0.0001'], [0.00001234, '1.234e-05'], [1e-6, '1e-06'], [2.5e-7, '2.5e-07'], [-4.25, '-4.25'], [999999.5, '1e+06']];
-  for (const [x, s] of cases) assert.equal(pyG(x), s, String(x));
-});
-
-test("pyRepr writes a dict as Python's repr", () => {
-  assert.equal(pyRepr({ type: 'glyph', char: 65, color: "it's" }), `{'type': 'glyph', 'char': 65, 'color': "it's"}`);
-  assert.equal(pyRepr({ a: [true, null, 0.5] }), `{'a': [True, None, 0.5]}`);
-});
-
 test('topologyError: identity, counts and leaders, in walk order', () => {
   const box = (children: TexNode[]): TexNode => ({ type: 'hlist', children });
   assert.equal(topologyError(box([{ type: 'kern', kern: 1 }]), box([{ type: 'kern', kern: 2 }]), 'b'), null);   // geometry is not identity
   assert.equal(topologyError(box([{ type: 'kern' }]), box([{ type: 'glue' }]), 'b'),
-    `b.children[0]: node identity changed ({'type': 'kern'} != {'type': 'glue'})`);
+    `b.children[0]: node identity changed ({"type":"kern"} != {"type":"glue"})`);
   assert.equal(topologyError(box([]), box([{ type: 'kern' }]), 'b'), 'b.children: node count changed (0 != 1)');
   assert.equal(topologyError({ type: 'glue', leader: box([]) }, { type: 'glue' }, 'g'), 'g.leader: presence changed');
 });

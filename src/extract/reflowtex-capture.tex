@@ -51,9 +51,10 @@
 % TeX Live ships under texmf-dist (different glyph-index ordering internally,
 % despite matching filenames). Since reflowtex addresses glyphs by the index
 % LuaTeX assigns while compiling but *serves the browser the texmf-dist file*
-% (via kpsewhich, see fonts.py), a "system" font winning that lookup makes every
-% glyph index wrong – wrong enough that normalise_glyph_addressing
-% (transforms.py) treats it as a substituted glyph and PUA-rewrites it, and the
+% (via kpsewhich, see src/pipeline/fonts/fonts.ts), a "system" font winning
+% that lookup makes every glyph index wrong – wrong enough that
+% normaliseGlyphAddressing (src/pipeline/fonts/addressing.ts) treats it as a
+% substituted glyph and PUA-rewrites it, and the
 % served font (lacking the PUA codepoints, since they were computed against a
 % different file) can't display it at all. Reordering precedence so texmf wins
 % keeps compilation and serving on the same file. This can't be set via a

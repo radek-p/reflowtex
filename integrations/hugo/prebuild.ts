@@ -40,7 +40,8 @@ import { Pipeline, contentKey, toolchainHash, filesUnchanged } from '../../src/p
 import { readSerializerOutput } from '../../src/pipeline/nodes.ts';
 import { a11yLayerFromBytes } from '../../src/pipeline/a11y.ts';
 import { listBackends, formatBackends } from '../../src/pipeline/backend/registry.ts';
-import { installViewer, schemaBase64, pyJsonDumps, jsonSorted } from '../../src/pipeline/site.ts';
+import { installViewer, schemaBase64, jsonSorted } from '../../src/pipeline/site.ts';
+import { pyJsonDumps } from '../../src/pipeline/python-format.ts';
 import { consoleLog } from '../../src/shared/log.ts';
 import { texErrorWarning } from '../../src/pipeline/warnings.ts';
 import { BUILTIN_COLOR_MAPS } from '../../src/viewer/src/runtime/builtin-colour-maps.ts';
@@ -159,7 +160,7 @@ const addPart = (attrs: string, page: string, pos: number, key: string, content:
 };
 const demosPreamble = (d: string) => (existsSync(join(d, 'preamble.tex')) ? readFileSync(join(d, 'preamble.tex'), 'utf8') : '');
 
-// Paths in byte order, as Python's sorted(rglob) gives them.
+// Paths in byte order, the same on every platform.
 for (const path of mdFiles(contentDir).sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)))) {
   const text = readFileSync(path, 'utf8');
   const page = pagePath(path);
@@ -307,6 +308,8 @@ for (const [bname, all] of [...batches].sort((a, b) => (a[0] < b[0] ? -1 : a[0] 
   const preambles = new Set(parts.map(p => p.preamble));
   if (preambles.size > 1) fail(`the blocks of batch "${bname}" use different preambles; give them all the same preamble="…"`);
   const preamble = [...preambles][0];
+  // the batch's hash, written as it always has been (Python's json.dumps): a
+  // site's data stores it
   const bhash = createHash('sha256').update(pyJsonDumps([bname, preamble, parts.map(p => [p.weight, p.key])])).digest('hex').slice(0, 16);
   liveBatches.add(bhash);
   if (!o.force && parts.every(p => storedHash(p.key) === bhash)) {

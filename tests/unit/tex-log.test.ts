@@ -1,13 +1,87 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The characters a font did not have, read off TeX's own log
-// (src/pipeline/backend/tex-log.ts): TeX's, pdfTeX's, XeTeX's and LuaTeX's
-// lines as each engine writes them (the excerpts below are from TeX Live
-// 2025 and 2026 logs), broken at max_print_line or not, as warnings or as
-// errors.
+// TeX's log read once (src/pipeline/backend/tex-log.ts, TexLog): its lines
+// joined where TeX broke them, by LuaTeX's rule (printing.c), with
+// characters of several bytes at the break. Then the characters a font did
+// not have, read off it: TeX's, pdfTeX's, XeTeX's and LuaTeX's lines as each
+// engine writes them (the excerpts below are from TeX Live 2025 and 2026
+// logs), broken at max_print_line or not, as warnings or as errors.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { missingCharsFromLog } from '../../src/pipeline/backend/index.ts';
+import { readFileSync } from 'node:fs';
+import { missingCharsFromLog, TexLog } from '../../src/pipeline/backend/index.ts';
 import { missingCharWarnings } from '../../src/pipeline/warnings.ts';
+
+const utf8 = new TextEncoder();
+
+/** Text as LuaTeX's print_char writes it to the log (printing.c): bytes
+ *  counted; a character of n >= 2 bytes goes to the next line when the line
+ *  has width - n bytes or more (needs_wrapping); the line is broken once it
+ *  has width bytes – then a line ending there is followed by an empty one. */
+function luatexLines(text: string, width = 79): string[] {
+  const lines: number[][] = [[]];
+  for (const ch of text) {
+    const b = utf8.encode(ch);
+    if (b.length > 1 && lines[lines.length - 1].length + b.length >= width) lines.push([]);
+    for (const x of b) {
+      lines[lines.length - 1].push(x);
+      if (lines[lines.length - 1].length === width) lines.push([]);
+    }
+  }
+  return lines.map(l => new TextDecoder().decode(new Uint8Array(l)));
+}
+
+test('TexLog: a line LuaTeX broke is joined whole, whichever character of 1–4 bytes falls at the break', () => {
+  for (const ch of ['a', 'ł', '═', '😀']) {
+    for (let at = 70; at <= 82; at++) {
+      const text = `${'x'.repeat(at)}${ch}${'y'.repeat(at)}${ch}tail`;
+      const lines = luatexLines(text);
+      assert.ok(lines.length > 1);
+      const log = new TexLog([...lines, 'The next line.'].join('\n'));
+      assert.deepEqual(log.join(0), { text, end: lines.length - 1 }, `${ch} after ${at} bytes`);
+      assert.deepEqual(log.join(lines.length), { text: 'The next line.', end: lines.length }, 'the next line is its own');
+    }
+  }
+  // a line of 79 bytes ends where TeX broke it: the empty line after is the break's
+  const full = 'x'.repeat(79);
+  assert.deepEqual(luatexLines(full), [full, '']);
+  assert.deepEqual(new TexLog(`${full}\n\nNext`).join(0), { text: full, end: 1 });
+});
+
+test('TexLog: where a line is full and where it is not', () => {
+  const log = new TexLog(['x'.repeat(78), 'ok', 'x'.repeat(77), 'łx', 'x'.repeat(76), 'łx', 'x'.repeat(76), '═x', 'x'.repeat(75), '😀x',
+    'x'.repeat(74), '😀x', 'x'.repeat(80), 'tail', 'x'.repeat(78), ''].join('\n'));
+  assert.deepEqual(log.lines.map((_, i) => log.full(i)),
+    [false, false, true, false, false, false, true, false, true, false, false, false, true, false, false, false]);
+  // another width: the same rule
+  const narrow = new TexLog('abcdefghij\nklm\nabcdefgh\nłx', { maxPrintLine: 10 });
+  assert.deepEqual(narrow.lines.map((_, i) => narrow.full(i)), [true, false, true, false]);
+});
+
+test('TexLog: a full line may be whole; a reader that can tell stops there', () => {
+  // LuaTeX ends lines of 79 and 80 bytes by itself after a font's name
+  // (fixtures/luatex-broken-lines.log)
+  const whole = 'Missing character: There is no ═ (U+2550) in font file:lmroman10-regular.otf!';
+  assert.equal(utf8.encode(whole).length, 79);
+  const log = new TexLog(`${whole}\nMissing character: There is no ═ (U+2550) in font file:lmroman10-bolditalic.ot\nf!`);
+  assert.equal(log.join(0).end, 2, 'by the rule alone, joined');
+  assert.deepEqual(log.join(0, t => t.endsWith('!')), { text: whole, end: 0 });
+  assert.deepEqual(log.join(1, t => t.endsWith('!')), { text: 'Missing character: There is no ═ (U+2550) in font file:lmroman10-bolditalic.otf!', end: 2 });
+});
+
+test('TexLog: bytes decoded once a line is joined (a character pdfTeX split), CRLF, the text as written', () => {
+  const ł = utf8.encode('ł');
+  const bytes = new Uint8Array([...utf8.encode('x'.repeat(78)), ł[0], 0x0A, ł[1], ...utf8.encode('y\r\n'), 0xC8, 0x0A]);
+  const log = new TexLog(bytes);
+  assert.deepEqual(log.join(0), { text: `${'x'.repeat(78)}ły`, end: 1 });
+  assert.equal(log.lines[2], '\u00C8', 'a byte that is not UTF-8 is its own code');
+  assert.equal(log.text, `${log.lines[0]}\n${log.lines[1]}\n\u00C8\n`);
+  assert.equal(TexLog.of(log), log, 'a log read once is not read again');
+});
+
+test('TexLog uses no Node API: a browser reads a log as the pipeline does', () => {
+  const source = readFileSync(new URL('../../src/pipeline/backend/tex-log.ts', import.meta.url), 'utf8');
+  assert.deepEqual(source.match(/^import (?!type ).*$/gm), null, 'types alone');
+});
 
 /** [font, char, count] for each record */
 const brief = (log: string | Uint8Array, o?: { maxPrintLine?: number }) =>

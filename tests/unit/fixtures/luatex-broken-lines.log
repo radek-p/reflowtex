@@ -1,0 +1,278 @@
+This is LuaHBTeX, Version 1.24.0 (TeX Live 2026)  (format=lualatex 2026.9.20)  28 OCT 2026 05:59
+**doc.tex
+(./doc.tex
+LaTeX2e <2026-06-01>
+L3 programming layer <2026-08-10>
+Lua module: luaotfload 2024-12-03 v3.29 Lua based OpenType font support
+Lua module: lualibs 2023-07-13 v2.76 ConTeXt Lua standard libraries.
+Lua module: lualibs-extended 2023-07-13 v2.76 ConTeXt Lua libraries -- extended 
+collection.
+luaotfload | conf : Root cache directory is "/usr/local/texlive/2026/texmf-var/l
+uatex-cache/generic/names".
+luaotfload | init : Loading fontloader "fontloader-2023-12-28.lua" from kpse-res
+olved path "/usr/local/texlive/2026/texmf-dist/tex/luatex/luaotfload/fontloader-
+2023-12-28.lua".
+Lua-only attribute luaotfload@noligature = 1
+luaotfload | init : Context OpenType loader version 3.134
+Inserting `luaotfload.node_processor' in `pre_linebreak_filter'.
+Inserting `luaotfload.node_processor' in `hpack_filter'.
+Inserting `luaotfload.glyph_stream' in `glyph_stream_provider'.
+Inserting `luaotfload.define_font' in `define_font'.
+Lua-only attribute luaotfload_color_attribute = 2
+luaotfload | conf : Root cache directory is "/usr/local/texlive/2026/texmf-var/l
+uatex-cache/generic/names".
+Inserting `luaotfload.harf.strip_prefix' in `find_opentype_file'.
+Inserting `luaotfload.harf.strip_prefix' in `find_truetype_file'.
+Removing  `luaotfload.glyph_stream' from `glyph_stream_provider'.
+Inserting `luaotfload.harf.glyphstream' in `glyph_stream_provider'.
+Inserting `luaotfload.harf.finalize_vlist' in `post_linebreak_filter'.
+Inserting `luaotfload.harf.finalize_hlist' in `hpack_filter'.
+Inserting `luaotfload.cleanup_files' in `wrapup_run'.
+Inserting `luaotfload.harf.finalize_unicode' in `finish_pdffile'.
+Inserting `luaotfload.glyphinfo' in `glyph_info'.
+Lua-only attribute luaotfload.letterspace_done = 3
+Inserting `luaotfload.aux.set_sscale_dimens' in `luaotfload.patch_font'.
+Inserting `luaotfload.aux.set_font_index' in `luaotfload.patch_font'.
+Inserting `luaotfload.aux.patch_cambria_domh' in `luaotfload.patch_font'.
+Inserting `luaotfload.aux.fixup_fontdata' in `luaotfload.patch_font_unsafe'.
+Inserting `luaotfload.aux.set_capheight' in `luaotfload.patch_font'.
+Inserting `luaotfload.aux.set_xheight' in `luaotfload.patch_font'.
+Inserting `luaotfload.rewrite_fontname' in `luaotfload.patch_font'.
+Inserting `tracingstacklevels' in `input_level_string'. (/usr/local/texlive/202
+6/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+(/usr/local/texlive/2026/texmf-dist/tex/latex/base/size10.clo
+File: size10.clo 2025/01/22 v1.4n Standard LaTeX file (size option)
+luaotfload | db : Font names database loaded from /usr/local/texlive/2026/texmf-
+var/luatex-cache/generic/names/luaotfload-names.luc.gz)
+\c@part=\count274
+\c@section=\count275
+\c@subsection=\count276
+\c@subsubsection=\count277
+\c@paragraph=\count278
+\c@subparagraph=\count279
+\c@figure=\count280
+\c@table=\count281
+\abovecaptionskip=\skip49
+\belowcaptionskip=\skip50
+\bibindent=\dimen149
+)
+(/usr/local/texlive/2026/texmf-dist/tex/latex/graphics/graphicx.sty
+Package: graphicx 2026-05-17 v1.2e Enhanced LaTeX Graphics (DPC,SPQR)
+
+(/usr/local/texlive/2026/texmf-dist/tex/latex/graphics/keyval.sty
+Package: keyval 2026-05-17 v1.15 key=value parser (DPC)
+\KV@toks@=\toks17
+)
+(/usr/local/texlive/2026/texmf-dist/tex/latex/graphics/graphics.sty
+Package: graphics 2026-05-17 v1.4h Standard LaTeX Graphics (DPC,SPQR)
+
+(/usr/local/texlive/2026/texmf-dist/tex/latex/graphics/trig.sty
+Package: trig 2023/12/02 v1.11 sin cos tan (DPC)
+)
+(/usr/local/texlive/2026/texmf-dist/tex/latex/graphics-cfg/graphics.cfg
+File: graphics.cfg 2016/06/04 v1.11 sample graphics configuration
+)
+Package graphics Info: Driver file: luatex.def on input line 106.
+
+(/usr/local/texlive/2026/texmf-dist/tex/latex/graphics-def/luatex.def
+File: luatex.def 2025/09/29 v1.2f Graphics/color driver for luatex
+))
+\Gin@req@height=\dimen150
+\Gin@req@width=\dimen151
+)
+(/usr/local/texlive/2026/texmf-dist/tex/latex/l3kernel/l3backend-luatex.def
+File: l3backend-luatex.def 2026-08-10 L3 backend support: PDF output (LuaTeX)
+\l__color_backend_stack_int=\count282
+Inserting `l3color' in `luaotfload.parse_color'.)
+No file doc.aux.
+
+\openout1 = doc.aux
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 3.
+LaTeX Font Info:    ... okay on input line 3.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 3.
+LaTeX Font Info:    ... okay on input line 3.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 3.
+LaTeX Font Info:    ... okay on input line 3.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 3.
+LaTeX Font Info:    ... okay on input line 3.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 3.
+LaTeX Font Info:    ... okay on input line 3.
+LaTeX Font Info:    Checking defaults for TU/lmr/m/n on input line 3.
+LaTeX Font Info:    ... okay on input line 3.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 3.
+LaTeX Font Info:    ... okay on input line 3.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 3.
+LaTeX Font Info:    ... okay on input line 3.
+(/usr/local/texlive/2026/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+\scratchcounter=\count283
+\scratchdimen=\dimen152
+\scratchbox=\box53
+\nofMPsegments=\count284
+\nofMParguments=\count285
+\everyMPshowfont=\toks18
+\MPscratchCnt=\count286
+\MPscratchDim=\dimen153
+\MPnumerator=\count287
+\makeMPintoPDFobject=\count288
+\everyMPtoPDFconversion=\toks19
+) (/usr/local/texlive/2026/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-base.sty
+Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
+Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
+85.
+
+(/usr/local/texlive/2026/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
+File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
+e
+))
+Package epstopdf Info: Source file: <figures/wykres-zależności-czasu-od-rozmi
+aru-danych.eps>
+(epstopdf)                    date: 2026-10-28 05:58:44
+(epstopdf)                    size: 97 bytes
+(epstopdf)             Output file: <figures/wykres-zależności-czasu-od-rozmi
+aru-danych-eps-converted-to.pdf>
+(epstopdf)             Command: <repstopdf --outfile=figures/wykres-zależnośc
+i-czasu-od-rozmiaru-danych-eps-converted-to.pdf figures/wykres-zależności-cza
+su-od-rozmiaru-danych.eps>
+(epstopdf)             \includegraphics on input line 4.
+system(repstopdf --outfile=figures/wykres-zależności-czasu-od-rozmiaru-danych-
+eps-converted-to.pdf figures/wykres-zależności-czasu-od-rozmiaru-danych.eps) e
+xecuted.
+Package epstopdf Info: Result file: <figures/wykres-zależności-czasu-od-rozmi
+aru-danych-eps-converted-to.pdf>.
+
+
+! Package luatex.def Error: File `figures/wykres-zależności-czasu-od-rozmiaru
+-danych-eps-converted-to.pdf' not found: using draft setting.
+
+See the luatex.def package documentation for explanation.
+Type  H <return>  for immediate help.
+ ...                                              
+                                                  
+l.4 ...-zależności-czasu-od-rozmiaru-danych.eps}
+                                                  
+Try typing  <return>  to proceed.
+If that doesn't work, type  X <return>  to quit.
+
+Package epstopdf Info: Source file: <figures/distribution-of-the-run-times-xx
+łódź.eps>
+(epstopdf)                    date: 2026-10-28 05:58:44
+(epstopdf)                    size: 97 bytes
+(epstopdf)             Output file: <figures/distribution-of-the-run-times-xx
+łódź-eps-converted-to.pdf>
+(epstopdf)             Command: <repstopdf --outfile=figures/distribution-of-th
+e-run-times-xxłódź-eps-converted-to.pdf figures/distribution-of-the-run-time
+s-xxłódź.eps>
+(epstopdf)             \includegraphics on input line 5.
+system(repstopdf --outfile=figures/distribution-of-the-run-times-xxłódź-eps-c
+onverted-to.pdf figures/distribution-of-the-run-times-xxłódź.eps) executed.
+Package epstopdf Info: Result file: <figures/distribution-of-the-run-times-xx
+łódź-eps-converted-to.pdf>.
+
+! Package luatex.def Error: File `figures/distribution-of-the-run-times-xxłód
+ź-eps-converted-to.pdf' not found: using draft setting.
+
+See the luatex.def package documentation for explanation.
+Type  H <return>  for immediate help.
+ ...                                              
+                                                  
+l.5 ...istribution-of-the-run-times-xxłódź.eps}
+                                                  
+Try typing  <return>  to proceed.
+If that doesn't work, type  X <return>  to quit.
+
+
+Package demo Warning: Ostrzeżenie: źródło danych zawiera wartości spoza za
+kresu, więc wykres jest przycięty on input line 6.
+
+
+! Package demo Error: Nie można zapisać pliku wyników: katalog docelowy jest
+ tylko do odczytu.
+
+See the demo package documentation for explanation.
+Type  H <return>  for immediate help.
+ ...                                              
+                                                  
+l.7 ...: katalog docelowy jest tylko do odczytu}{}
+                                                  
+This error message was generated by an \errmessage
+command, so I can't give any explicit help.
+Pretend that you're Hercule Poirot: Examine all clues,
+and deduce the truth by order and method.
+
+
+(./rozdziały/część-pierwsza-wprowadzenie-do-zagadnień-teoretycznych/sekcja
+.tex
+! Undefined control sequence.
+l.2 Zdanie z błędem \nieznanepolecenie
+                                        {} w środku.
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Missing character: There is no ═ (U+2550) in font file:lmroman10-regular.otf!
+Missing character: There is no 😀 (U+1F600) in font file:lmroman10-regular.otf
+!
+Missing character: There is no 􏿽 (U+10FFFD) in font file:lmroman10-regular.ot
+f!
+Missing character: There is no 😀 (U+1F600) in font file:lmroman10-italic.otf!
+Missing character: There is no 􏿽 (U+10FFFD) in font file:lmroman10-italic.otf
+!
+Missing character: There is no ═ (U+2550) in font file:lmroman10-bolditalic.ot
+f!
+Missing character: There is no ═ (U+2550) in font file:lmroman10-regular.otf!
+Missing character: There is no 😀 (U+1F600) in font file:lmroman10-regular.otf
+!
+Missing character: There is no 􏿽 (U+10FFFD) in font file:lmroman10-regular.ot
+f!
+Missing character: There is no 😀 (U+1F600) in font file:lmroman10-italic.otf!
+Missing character: There is no 􏿽 (U+10FFFD) in font file:lmroman10-italic.otf
+!
+Missing character: There is no ═ (U+2550) in font file:lmroman10-bolditalic.ot
+f!
+[1
+
+{/usr/local/texlive/2026/texmf-var/fonts/map/pdftex/updmap/pdftex.map}
+Missing character: There is no ═ (U+2550) in font file:lmroman10-regular.otf!
+Missing character: There is no 😀 (U+1F600) in font file:lmroman10-regular.otf
+!
+Missing character: There is no 􏿽 (U+10FFFD) in font file:lmroman10-regular.ot
+f!
+Missing character: There is no 😀 (U+1F600) in font file:lmroman10-italic.otf!
+Missing character: There is no 􏿽 (U+10FFFD) in font file:lmroman10-italic.otf
+!
+Missing character: There is no ═ (U+2550) in font file:lmroman10-bolditalic.ot
+f!
+] (./doc.aux)
+ ***********
+LaTeX2e <2026-06-01>
+L3 programming layer <2026-08-10>
+ ***********
+)
+
+Here is how much of LuaTeX's memory you used:
+ 1326 strings out of 475635
+ 100000,662416 words of node,token memory allocated
+ 406 words of node memory still in use:
+   3 hlist, 1 vlist, 1 rule, 2 glue, 3 kern, 1 glyph, 4 attribute, 48 glue_spec,
+ 4 attribute_list, 1 write nodes
+   avail lists: 2:54,3:6,4:2,5:25,6:2,7:476,9:54,10:1,11:34
+ 24237 multiletter control sequences out of 65536+600000
+ 19 fonts using 1244583 bytes
+ 57i,5n,62p,192b,144s stack positions out of 10000i,1000n,20000p,200000b,200000s
+</usr/local/texlive/2026/texmf-dist/fonts/opentype/public/lm/lmroman10-bolditali
+c.otf></usr/local/texlive/2026/texmf-dist/fonts/opentype/public/lm/lmroman10-ita
+lic.otf></usr/local/texlive/2026/texmf-dist/fonts/opentype/public/lm/lmroman10-r
+egular.otf></usr/local/texlive/2026/texmf-dist/fonts/opentype/public/lm/lmmono10
+-regular.otf>
+Output written on doc.pdf (1 page, 11591 bytes).
+
+PDF statistics: 36 PDF objects out of 1000 (max. 8388607)
+ 20 compressed objects within 1 object stream
+ 0 named destinations out of 1000 (max. 1048576)
+ 1 words of extra memory for PDF output out of 10000 (max. 100000000)
+

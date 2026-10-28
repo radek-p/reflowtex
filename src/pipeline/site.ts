@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // What every integration needs besides compiling: the viewer's files, a block's
-// HTML, the passes a snippet needs, and a few formats shared with the page
-// templates. (Integrations depend on src/; nothing here knows any of them.)
+// HTML, and a few formats shared with the page templates. (Integrations
+// depend on src/; nothing here knows any of them.)
 import { copyFileSync, cpSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
@@ -17,20 +17,6 @@ const VIEWER_DIR = join(SRC, 'viewer');
  *  this is where the page footer's source link points by default. */
 export const DEFAULT_SOURCE_URL = process.env.REFLOWTEX_SOURCE_URL ?? 'https://github.com/radek-p/reflowtex';
 
-/** A snippet that refers to labels, has a table of contents or a list of
- *  figures (read back from .toc/.lof) or cites needs the .aux round trip, or
- *  every \ref prints "??": up to three passes (revtex sets its ToC's number
- *  column from the pass before), stopping as soon as nothing changes. */
-export const REF_RE = /\\(?:(?:eq|auto|c|C|name|page)?ref\*?\{|tableofcontents|listof(?:figures|tables)|cite)/;
-export const REF_PASSES = 3;
-/** PGF pictures that remember their position on the page (`remember
- *  picture`, and nicematrix, which places its rules, blocks and dotted lines
- *  by the nodes of its cells): each writes where it was shipped to the .aux,
- *  and the pictures of the next run are drawn from those positions. In the
- *  first run every one is taken to be at the same point. */
-export const POSITIONS_RE = /remember\s*picture|\\pgfrememberpicturepositiononpagetrue|\\begin\{[pbBvV]?Nice(?:Tabular\*?|TabularX|Array|ArrayWithDelims|Matrix)\}|\\tikzmark/;
-export const passesFor = (content: string): number => (REF_RE.test(content) || POSITIONS_RE.test(content) ? REF_PASSES : 1);
-
 /** The schema as a page embeds it. */
 export const schemaBase64 = (): string => Buffer.from(protoText(), 'utf8').toString('base64');
 
@@ -44,7 +30,7 @@ export const blockHtml = (bytes: Uint8Array, attrs: Record<string, string> = {},
   `<div class="latex-block"${a11y ? ' aria-hidden="true"' : ''}${Object.entries(attrs).map(([k, v]) => ` ${k}="${escapeHtml(v)}"`).join('')} ` +
   `data-nodelist-b64="${Buffer.from(bytes).toString('base64')}"></div>` + (a11y ? a11yLayerFromBytes(bytes) : '');
 
-/** Python's html.escape(s, quote=True). */
+/** `s` escaped for HTML text and attribute values: & < > " and '. */
 export const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
 
@@ -78,36 +64,10 @@ export function installViewer(outDir: string, { inspector = false, log = console
   for (const f of ['companion.js', 'companion.css']) copyFileSync(join(SRC, 'companion', f), join(outDir, 'companion', f));
 }
 
-// ── Python-compatible JSON, where a stored hash depends on it ────────────────
-
-/** A float as Python's repr() writes it (so 0 is "0.0"). */
-function pyFloat(x: number): string {
-  if (Number.isInteger(x) && Math.abs(x) < 1e16) return `${x}.0`;
-  const s = String(x);
-  if (!s.includes('e')) return s;
-  const [m, e] = s.split('e');
-  return `${m}e${e[0] === '-' ? '-' : '+'}${e.replace(/^[+-]/, '').padStart(2, '0')}`;
-}
-
-/** json.dumps() of strings, floats and lists as Python writes them (ASCII
- *  escapes, ", " between items): data files store hashes of such text, and a
- *  hash must not change when the builder does. Numbers here are floats. */
-export function pyJsonDumps(v: unknown): string {
-  if (typeof v === 'string') {
-    return `"${v.replace(/[\\"\u0000-\u001f\u007f-￿]/g, c => {
-      const named: Record<string, string> = { '\\': '\\\\', '"': '\\"', '\n': '\\n', '\r': '\\r', '\t': '\\t', '\b': '\\b', '\f': '\\f' };
-      return named[c] ?? `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`;
-    })}"`;
-  }
-  if (typeof v === 'number') return pyFloat(v);
-  if (Array.isArray(v)) return `[${v.map(pyJsonDumps).join(', ')}]`;
-  if (v === null) return 'null';
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  throw new Error(`pyJsonDumps: unsupported ${typeof v}`);
-}
+// ── Data files ───────────────────────────────────────────────────────────────
 
 /** JSON as the data files are written – sorted keys, two-space indent,
- *  non-ASCII escaped – byte for byte what the Python prebuild wrote, so a
+ *  non-ASCII escaped – as the data files have always been written, so a
  *  site's committed data does not churn when the builder changes. */
 export function jsonSorted(v: unknown): string {
   const sort = (x: unknown): unknown => (Array.isArray(x) ? x.map(sort)

@@ -20,7 +20,7 @@ import {
   type Capabilities, type CaptureBackend, type CaptureDocument, type CaptureRun, type Diagnostic,
 } from '../../src/pipeline/backend/index.ts';
 import { Log } from '../../src/shared/log.ts';
-import { logDiagnostics } from '../../src/pipeline/backend/luatex.ts';
+import { logDiagnostics } from '../../src/pipeline/backend/tex-log.ts';
 import type { SerializerOutput } from '../../src/pipeline/nodes.ts';
 import { encodeDocument, SchemaMismatch } from '../../src/pipeline/encode.ts';
 import { messageType } from '../../src/pipeline/schema.ts';

@@ -6,4 +6,4 @@ export * from './capabilities.ts';
 export * from './registry.ts';
 export { LuaTeXBackend, LUATEX_CAPABILITIES } from './luatex.ts';
 export { TectonicPlaceholder } from './tectonic.ts';
-export { missingCharsFromLog, type LogReadOptions } from './tex-log.ts';
+export { logDiagnostics, missingCharsFromLog, TexLog, type LogReadOptions, type TexLogSource } from './tex-log.ts';

@@ -26,7 +26,7 @@ export function loadSchema(): void {
 }
 
 
-// Decode one block. toObject options reproduce the kiwi decode shape exactly:
+// Decode one block. toObject options give the shape the renderer reads:
 // defaults:false keeps unset scalars absent (proto2 presence – gW relies on
 // width===undefined); arrays:true gives empty repeated fields as [] (not
 // undefined); enums:String yields the lowercase enum names the renderer compares

@@ -1,4 +1,4 @@
-# reflowtex-generated artefacts (recreated by prebuild.py)
+# reflowtex-generated artefacts (recreated by prebuild.ts)
 .reflowtex-build/
 data/latex_blocks/
 data/latex_schema.json

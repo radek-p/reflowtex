@@ -42,14 +42,14 @@ hugo server                                            # open the printed URL
    {{</* latex file="01-inline-math.tex" /*/>}}
    ```
 
-   File references resolve against `prebuild.py --demos-dir` (default:
+   File references resolve against `prebuild.ts --demos-dir` (default:
    `<site>/latex-src/`), share that directory's `preamble.tex`, and are looked up
    through `data/latex_files.json` – the shortcode never reads across
    directories. The example site points `--demos-dir` at the shared
    `../../examples/demo` (see the Makefile's `hugo-demo` target), which is exactly
    the set the vanilla integration renders.
 
-4. **Run `prebuild.py` before every build.** Point it at your site root
+4. **Run `prebuild.ts` before every build.** Point it at your site root
    (defaults to the current directory):
 
    ```sh
@@ -73,7 +73,7 @@ and the Knuth–Plass knobs:
 `show-source="true"` presents a block as an example: the rendered result beside
 its LaTeX, highlighted, or behind Result / LaTeX tabs when the space is narrow.
 It works for both forms; a file ref's text comes from `data/latex_sources.json`,
-which `prebuild.py` writes. The result's right edge is a handle: drag it, or
+which `prebuild.ts` writes. The result's right edge is a handle: drag it, or
 focus it and use the arrow keys, to narrow the result and watch it re-break
 (double-click or Home restores the full width). The partial carries the behaviour; style
 `figure.latex-example` to taste (this project's website is an example).
@@ -253,7 +253,7 @@ One `.md` page of nothing but such blocks (`render = "never"` in its front
 matter keeps it out of the site) replaces what would otherwise need a whole
 `--demos-dir` of tiny single-purpose files, one per label.
 
-## What prebuild.py generates
+## What prebuild.ts generates
 
 | Path | Contents | Commit? |
 |---|---|---|

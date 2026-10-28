@@ -57,7 +57,7 @@ test('the PDF\'s name: epstopdf-base\'s, the name without its extension, -<exten
   assert.equal(convertedName('a.b/c.d.ps'), 'a.b/c.d-ps-converted-to.pdf');
 });
 
-test('what epstopdf asked for, from its log: lines TeX broke at 79 characters joined', () => {
+test('what epstopdf asked for, from its log: lines TeX broke at 79 bytes joined', () => {
   const long = 'figures/a-figure-with-a-name-long-enough-to-be-broken-across-two-lines';
   const wrap = (s: string) => s.match(/.{1,79}/g)!.join('\n');
   const log = [
