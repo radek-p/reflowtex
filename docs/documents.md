@@ -41,6 +41,12 @@ The run is set up as the author's own:
 - The run's own directory comes first in `TEXINPUTS`, so the job's `.aux`,
   `.toc`, `.lof` and `.lot` are its own, never stale files of the same name
   beside the document. The document's directories come next.
+- What TeX writes goes to the run's directory, which stands in for the
+  document's: a file written into one of the document's subdirectories
+  (`\include{chapters/one}` writes `chapters/one.aux`) goes into the same
+  subdirectory of the run's, made when TeX first writes there. A directory the
+  document's own lacks is not made: TeX cannot write there, as in the author's
+  run.
 - The primitive `\input` reads the document as TeX reads a main file:
   LaTeX's file hooks do not run for it, and `\CurrentFile` is empty in it, as in
   the author's run.

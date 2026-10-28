@@ -103,7 +103,7 @@ export interface PagelessOptions {
 export async function pageless(document: string, o: PagelessOptions): Promise<string> {
   const log = o.log ?? (s => console.log(s));
   const out = resolve(o.out);
-  mkdirSync(join(out, 'pics'), { recursive: true });
+  mkdirSync(out, { recursive: true });
   // the document's own files (\input, graphics) resolve beside it; noted for
   // site-from-run.ts, which compiles the document again
   const srcDir = dirname(resolve(document));

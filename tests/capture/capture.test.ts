@@ -6,7 +6,7 @@
 // web tests look at. TeX only, no browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { DEFAULT_PREAMBLE, Pipeline, contentKey, type CompileOptions } from '../../src/pipeline/pipeline.ts';
@@ -960,6 +960,41 @@ test('the caller\'s metadata, forced: applied, and the document\'s own ignored w
 
 test('the caller\'s metadata applies to a snippet', async () => {
   assert.equal((await compiled(LANG, '', { kind: 'snippet', documentMetadata: { keys: 'lang=de' } })).text, 'Lang:de.');
+});
+
+// ── The document's directories ──────────────────────────────────────────────
+// TeX runs in a build directory, which stands in for the document's: what
+// TeX writes into one of the document's subdirectories (\include's .aux) it
+// writes into the same one there, made when it is first written to. A
+// wider display sample is a copy of the first run's directory, those files
+// with it.
+
+test('\\include{chapters/one}: the chapter is set, and its .aux written and read back, in the run and its samples', async () => {
+  const src = mkdtempSync(join(tmpdir(), 'reflowtex-include-'));
+  mkdirSync(join(src, 'chapters'));
+  writeFileSync(join(src, 'chapters', 'one.tex'), '\\section{One}\\label{s:one}\nText of the included chapter.\n\\begin{equation}\\label{e:one} a = b \\end{equation}\n');
+  const main = '\\documentclass{article}\n\\begin{document}\nSee section~\\ref{s:one}: $$x = y \\quad (\\ref{e:one})$$\n\\include{chapters/one}\n\\end{document}\n';
+  const inc = new Pipeline({ buildRoot: join(root, 'build-include'), fontsDir: join(root, 'fonts'), searchDirs: [src], log: new Log('pipeline') });
+  await inc.compile(main, { kind: 'document', key: 'include', passes: 3 });
+  const dir = join(inc.buildRoot, 'include');
+  const d: Output = JSON.parse(readFileSync(join(dir, 'output.json'), 'utf8'));
+  const text = d.paragraphs.map(p => glyphText(p.nodes)).join(' ');
+  assert.match(text, /^Seesection1:/);
+  assert.match(text, /Textoftheincludedchapter\./);
+  assert.ok(existsSync(join(dir, 'chapters', 'one.aux')));
+  const samples = existsSync(join(dir, 'samples')) ? readdirSync(join(dir, 'samples')) : [];
+  assert.ok(samples.length > 0, 'a display sample was taken');
+  for (const s of samples) {
+    const log = readFileSync(join(dir, 'samples', s, 'input.log'), 'utf8');
+    assert.doesNotMatch(log, /Reference `[se]:one' on page \d+ undefined/, `sample ${s} read the chapter's .aux back`);
+  }
+});
+
+test('\\include{nowhere/one}, a directory the document\'s lacks: TeX cannot write its .aux, as in the document\'s directory', async () => {
+  const src = mkdtempSync(join(tmpdir(), 'reflowtex-include-'));
+  const inc = new Pipeline({ buildRoot: join(root, 'build-include'), fontsDir: join(root, 'fonts'), searchDirs: [src], log: new Log('pipeline') });
+  await assert.rejects(inc.compile('\\documentclass{article}\n\\begin{document}\nText.\n\\include{nowhere/one}\n\\end{document}\n', { kind: 'document', key: 'nowhere' }),
+    (e: Error) => e instanceof TexError && /I can't write on file `nowhere\/one\.aux'/.test(e.message));
 });
 
 // ── TeX errors ──────────────────────────────────────────────────────────────
