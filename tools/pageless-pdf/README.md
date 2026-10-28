@@ -53,11 +53,13 @@ Shipping a copy would repeat a shipout's side effects (`\write`s – every
 `\label` again into the .aux – late Lua, destinations, annotations), so
 those are stripped, with inserts and marks; drawing whatsits (colour,
 literals, matrices) stay. Captured TikZ pictures are empty placeholders in
-the galley; their positions are recorded in `pageless.json`.
+the galley; `pageless_pdf.lua` keeps a copy of each captured box and fills
+the shipped copy's placeholders with it, so TeX's backend draws each picture
+in its place, through the matrix, colour or clip around it (`\resizebox`,
+`\rotatebox`), as on the document's page.
 
 `stack.ts` (pdf-lib) folds the pages into one: each becomes a Form XObject
-placed at the sum of the preceding pages' heights, and the TikZ pictures'
-private pages are drawn back at their places. The page exceeds Acrobat's
+placed at the sum of the preceding pages' heights. The page exceeds Acrobat's
 14400-unit limit by design; browsers, Poppler and MuPDF show it, and
 `raster.ts` (MuPDF) rasterises any band of it without drawing the rest.
 

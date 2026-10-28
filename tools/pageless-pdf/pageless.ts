@@ -39,7 +39,7 @@
 //
 // --tex-pictures leaves TikZ pictures to TeX: the capture is undone at
 // \begin{document}, so each picture is drawn in the galley by PGF, not
-// shipped to a private page and stacked back. The strip is then a reference
+// captured into a box that the strip puts back. The strip is then a reference
 // the capture had no part in – what the browser's pictures, labels and all,
 // are to match. The run's output.json is not the pipeline's (it has no picture
 // nodes); build the page from an ordinary run.
@@ -138,7 +138,7 @@ export async function pageless(document: string, o: PagelessOptions): Promise<st
   for (const e of run.errors) log(`  warning: ${texErrorWarning({ ...e, pass: run.passes }).message}`);
   if (!existsSync(join(out, 'pageless.json'))) throw new Error('the run wrote no pageless.json');
   const r = await stack(join(out, `${jobname}.pdf`), JSON.parse(readFileSync(join(out, 'pageless.json'), 'utf8')), join(out, 'pageless.pdf'));
-  log(`  pageless.pdf: 1 page, ${r.width.toFixed(3)} x ${r.height.toFixed(3)} bp, ${r.chunks} chunk(s), ${r.pictures} picture(s)`);
+  log(`  pageless.pdf: 1 page, ${r.width.toFixed(3)} x ${r.height.toFixed(3)} bp, ${r.chunks} chunk(s)`);
   return join(out, 'pageless.pdf');
 }
 

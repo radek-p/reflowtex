@@ -27,8 +27,8 @@ export interface CaseSettings {
   preamble?: string;
   /** the caller's \DocumentMetadata keys (the document's own wins) */
   metadata?: string;
-  /** TikZ pictures in the PDF drawn by TeX, not stacked back from the
-   *  capture's private pages (pageless.ts --tex-pictures): the browser's
+  /** TikZ pictures in the PDF drawn by TeX, not put back from the
+   *  capture's boxes (pageless.ts --tex-pictures): the browser's
    *  pictures – their labels' glyphs – are then checked against TeX itself,
    *  with the capture and the conversion to SVG under test; the page is built from a run of
    *  its own */
@@ -258,6 +258,13 @@ export const cases: Record<string, CaseSettings> = {
   // ones drawn twice. Worst attained 2026-10-25 (12 of TeX's rules not drawn
   // until then, when only TeX's strokes counted).
   nicematrix: { tex_pictures: true, tolerance: 0.009, rule_tolerance: 0.005 },
+  // Captured pictures inside \resizebox, \scalebox, \reflectbox, \rotatebox
+  // and two of them nested: the strip drew each captured picture at its
+  // natural size, without the matrix around it, until it put the captured
+  // box itself back into the galley. Captured, not tex_pictures, so that the
+  // strip of the pipeline's own run is checked against plain lualatex's page.
+  // Worst attained 2026-10-28.
+  'scaled-pictures': { against_plain: true, tolerance: 0.009, rule_tolerance: 0.006 },
   // A page whose origin is moved – geometry's hoffset and voffset, a class's
   // \advance\hoffset-1in, the PDF origin – with a picture: the strip and the
   // captured picture are shipped with no offsets (both used to keep them:
