@@ -42,8 +42,9 @@ test('a PNG and a JPEG are drawn at their TeX size', async ({ openPage }) => {
 // Pictures drawn as their PDF paints them (pages/pictures/d-backgrounds.tex):
 // an included figure's opaque white page (white-page.pdf, as Figma exports
 // one) and a TikZ picture's white rectangle as large as itself are white,
-// which a theme shows as the page's colour; a coloured square keeps its
-// colour, as the colour map gives it.
+// which a theme shows as the page's colour (the page's map, which gives the
+// dark theme, gives it all: its white is the paper too); a coloured square
+// keeps its colour, as the colour map gives it.
 test('a white page in a picture is the page\'s colour in every theme; colours are mapped', async ({ openPage }) => {
   const fills = async (theme?: string) => {
     const page = await openPage('pictures', theme ? { theme } : {});

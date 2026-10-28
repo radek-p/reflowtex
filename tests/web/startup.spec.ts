@@ -33,5 +33,6 @@ test('colour maps set before the first block are kept over the island\'s', async
     });` });
   await idle(page);
   const maps = await page.evaluate(() => Object.keys((window as W).reflowtex.host.colorMaps()).sort());
-  expect(maps).toEqual(['mine', 'test']);
+  // the host's and the island's, beside the built-in one the viewer always has
+  expect(maps).toEqual(['mine', 'reflowtex', 'test']);
 });
