@@ -2266,7 +2266,12 @@ local function walk_flow(head, pending, ctx, box)
             pending.sp = (pending.sp or 0) + w
             if n.subtype == GLUE_ABOVEDISPLAY or n.subtype == GLUE_ABOVEDISPLAYSHORT then
                 pending.above_skip = w
-            elseif (n.subtype == GLUE_BELOWDISPLAY or n.subtype == GLUE_BELOWDISPLAYSHORT) and last_display then
+            elseif (n.subtype == GLUE_BELOWDISPLAY or n.subtype == GLUE_BELOWDISPLAYSHORT) and last_display
+                   and last_box == "display" and pending.above_skip == nil then
+                -- The last display's glue: TeX puts it right after the
+                -- display's box (§1205, §1206), so only while nothing was
+                -- stacked since and no other display began (its above glue
+                -- came) – a display alignment with no rows stacks nothing.
                 -- Which of the two skips TeX chose, by the glue's kind (its
                 -- width is not the skip itself with tagging on: LaTeX then
                 -- negates both as the display ends, cancels TeX's glue and puts
