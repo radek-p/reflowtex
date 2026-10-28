@@ -122,6 +122,13 @@ export const cases: Record<string, CaseSettings> = {
   // width only: the lines are set to fill that measure. Worst attained
   // 2026-10-28.
   'whatsits-paragraph-end': { widths: [0], tolerance: 0.010, rule_tolerance: 0.005 },
+  // Infinite glues that cancel (\hskip 0pt plus -1filll then plus 1filll, as
+  // breqn sets them) in a justified line and between a finite \rightskip and
+  // a rigid \parfillskip: TeX sums the stretch of each order and justifies
+  // the line by its finite glue; the browser counted each such glue as a
+  // fill and set the line at its natural width (179 glyphs past 0.7 pt).
+  // Worst attained 2026-10-28.
+  'fill-cancelling': { tolerance: 0.010 },
   paragraph: { tolerance: 0.010 },
   // The paragraph at widths that are no whole number of pixels (2 px per pt):
   // a real paper's \hsize rarely is one. The column must be the exact width,

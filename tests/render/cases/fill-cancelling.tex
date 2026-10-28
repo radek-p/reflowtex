@@ -1,0 +1,20 @@
+% Infinite glues that cancel: \hskip 0pt plus -1filll ... \hskip 0pt plus
+% 1filll, as breqn puts them around its break points. TeX sums the stretch of
+% each order: -1filll + 1filll = 0, so the line has no fill, is justified by
+% its finite glue, and has badness by it. A justified paragraph with the pair
+% in one line, a one-line paragraph with a rigid \parfillskip and a finite
+% \rightskip, as breqn sets an equation, and a control paragraph without it.
+\documentclass{article}
+\newcommand\pair{\penalty10000\hskip 0pt plus -1filll\penalty10000\hskip 0pt plus 1filll\penalty10000}
+\begin{document}
+A paragraph of ordinary running text in which the second line holds a pair of
+infinite glues that cancel each other\pair{} out exactly, so that TeX sets that line
+justified with its spaces stretched, like every other line of the paragraph, and the
+paragraph goes on for one more line after it.
+
+{\parfillskip=0pt \rightskip=0pt plus 60pt \noindent One line with the pair\pair{} and a finite right skip, as breqn sets an equation.\par}
+
+Control: the same paragraph of ordinary running text without the pair, in which the
+second line holds no infinite glue at all, so that TeX sets that line justified with
+its spaces stretched, like every other line of the paragraph, and it goes on.
+\end{document}

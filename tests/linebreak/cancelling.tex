@@ -1,0 +1,32 @@
+% Paragraphs with glue of infinite stretch that cancels: \hskip 0pt plus
+% -1filll followed by \hskip 0pt plus 1filll (as breqn puts around its break
+% points) in a justified line and in one set between a finite \rightskip
+% with a rigid \parfillskip; TeX's \hfil\penalty0\hfilneg, which fills a line
+% broken at the penalty and cancels in one that goes on; \hfill with
+% \hskip 0pt plus -1fill; and a fill of one order with the negative of
+% another. TeX sums the stretch of each order, so a line whose fills cancel is
+% justified by its finite glue. Each paragraph is set at several measures.
+% Captured with capture.lua into cancelling/ (README.md).
+\documentclass[12pt]{article}
+\newcommand\at[2]{{\hsize=#1\relax #2\par}}
+\newcommand\pair{\penalty10000\hskip 0pt plus -1filll\penalty10000\hskip 0pt plus 1filll\penalty10000}
+\newcommand\textA{A paragraph of ordinary running text in which one line holds a pair of infinite glues that cancel each other\pair{} out exactly, so that TeX sets that line justified with its spaces stretched, like every other line of the paragraph.}
+\newcommand\textB{\parfillskip=0pt \rightskip=0pt plus 60pt \noindent One equation-like line with the pair\pair{} and a finite right skip, broken where it must be, with words enough for more than one line at the narrower measures.}
+\newcommand\textC{The quick brown fox jumps over the lazy dog\hfil\penalty0\hskip 0pt plus -1fil and the five boxing wizards jump quickly over the fence while the sphinx of black quartz judges my vow.}
+\newcommand\textD{The quick brown fox jumps over the lazy dog\hfill\hskip 0pt plus -1fill{} and the five boxing wizards jump quickly over the fence while the sphinx of black quartz judges my vow.}
+\newcommand\textE{The quick brown fox jumps over the lazy dog\hskip 0pt plus 1fil\hskip 0pt plus -1fill{} and the five boxing wizards jump quickly over the fence while the sphinx of black quartz judges my vow.}
+\begin{document}
+\at{345pt}{\textA}
+\at{250pt}{\textA}
+\at{200pt}{\textA}
+\at{345pt}{\textB}
+\at{250pt}{\textB}
+\at{180pt}{\textB}
+\at{345pt}{\textC}
+\at{250pt}{\textC}
+\at{200pt}{\textC}
+\at{345pt}{\textD}
+\at{250pt}{\textD}
+\at{345pt}{\textE}
+\at{250pt}{\textE}
+\end{document}

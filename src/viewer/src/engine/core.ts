@@ -171,20 +171,16 @@ export function nodeWidthSp(n: TexNode): number {
 }
 
 export function sumWidthSp(nodes: TexNode[]): number { return nodes.reduce((a, n) => a + nodeWidthSp(n), 0); }
-// The infinite-order fill on a line (\hfil/\hfill from \\, \hfill, or the amsthm
-// QED glue) and its total stretch at that order. A line carrying one is not
-// justified; instead its slack goes entirely into this glue, which is what pushes
-// anything after it (a QED box, a right-flushed word) to the right margin.
-export function fillInfo(nodes: TexNode[]): { order: number; stretch: number } {
-    let order = 0, stretch = 0;
-    for (const n of nodes) {
-        if (n.type === 'glue' && (n.stretch_order || 0) > 0) {
-            const o = n.stretch_order!;
-            if (o > order) { order = o; stretch = n.stretch; }
-            else if (o === order) stretch += n.stretch;
-        }
-    }
-    return { order, stretch };
+// The stretch of a line's glue at each order, summed as TeX's hpack sums it
+// (total_stretch): [finite, sfi, fil, fill, filll]. The highest order whose
+// sum is not zero takes a line's slack (\hfil/\hfill from \\, \hfill, the
+// amsthm QED glue), which is what pushes anything after it (a QED box, a
+// right-flushed word) to the right margin; glues of one order that cancel
+// (\hskip 0pt plus -1filll and plus 1filll) take nothing.
+export function stretchByOrder(nodes: TexNode[]): number[] {
+    const s = [0, 0, 0, 0, 0];
+    for (const n of nodes) if (n.type === 'glue' && n.stretch) s[n.stretch_order || 0] += n.stretch;
+    return s;
 }
 
 // The set size of one glue node under a box's packing ratio.

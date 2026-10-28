@@ -18,9 +18,9 @@ export interface BreakCandidate {
     nodeIdx: number;
     penalty: number;
     pre: Widths; post: Widths; replace: Widths;
-    leadW: number; leadS: number; leadZ: number; leadFill: number;
+    leadW: number; leadS: number; leadZ: number; leadFill: Fills;
     trailW: number; trailN: number;
-    cumW: number; cumS: number; cumZ: number; cumGlyphW: number; cumFS: number; cumFZ: number; cumFill: number;
+    cumW: number; cumS: number; cumZ: number; cumGlyphW: number; cumFS: number; cumFZ: number; cumFill: Fills;
     rightProtrusion: number;
     /** Where in the paragraph the search for the right protrusion ended
      *  (lastProtChar): it counts on a line that starts before that. */
@@ -34,6 +34,12 @@ export interface BreakCandidate {
     preNodes?: TexNode[];
     postNodes?: TexNode[];
 }
+/** Glue stretch of infinite order, summed per order as TeX sums it (the line
+ *  breaker's active widths, hpack's total_stretch): index 1 to 4 for sfi,
+ *  fil, fill and filll (0 is unused). Glues of one order cancel: \hskip 0pt
+ *  plus -1filll and \hskip 0pt plus 1filll make no fill. */
+export type Fills = readonly number[];
+const NO_FILLS: Fills = [0, 0, 0, 0, 0];
 /** A paragraph's candidates, and its expansion limits when it expands. */
 export type BreakCandidates = BreakCandidate[] & { expansion?: Expansion | null; adjustSpacing?: number };
 /** A line's measures between two candidates (lineMetrics). */
@@ -252,8 +258,8 @@ export function discardable(n: TexNode): boolean {
 export const PRECEDES_BREAK = new Set<string>(['glyph', 'hlist', 'vlist', 'rule', 'disc', 'wdisc', 'picture', 'widget', 'transform', 'adjust']);
 
 // Every candidate carries the running totals up to its node: natural width
-// (cumW), finite stretch and shrink (cumS, cumZ), infinite fills (cumFill:
-// how many glues of infinite stretch order),
+// (cumW), finite stretch and shrink (cumS, cumZ), infinite stretch per order
+// (cumFill),
 // *expandable* width (cumGlyphW, per unit of expansion as the renderer
 // applies it – see expandableSp) and TeX's font stretch and shrink at the
 // full expansion limit (cumFS, cumFZ); a discretionary has the same four
@@ -276,27 +282,29 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
     const prot = (g: TexNode | null, left: boolean) => protrusionOf(fontInfo, para, g, left);
     const right = (idx: number) => { const r = lastProtChar(nodes, idx); return { rightProtrusion: prot(r.node, false), rightAt: r.at }; };
     const NONE: Widths = { w: 0, g: 0, fs: 0, fz: 0 };
-    let cumW=0, cumS=0, cumZ=0, cumGlyphW=0, cumFS=0, cumFZ=0, cumFill=0;
+    let cumW=0, cumS=0, cumZ=0, cumGlyphW=0, cumFS=0, cumFZ=0;
+    const fill = [0, 0, 0, 0, 0];
     const cand = (kind: BreakCandidate['kind'], i: number, penalty: number, extra?: Partial<BreakCandidate>): BreakCandidate => ({
         kind, nodeIdx: i, penalty, pre: NONE, post: NONE, replace: NONE,
-        leadW: 0, leadS: 0, leadZ: 0, leadFill: 0, trailW: 0, trailN: 0,
-        cumW, cumS, cumZ, cumGlyphW, cumFS, cumFZ, cumFill,
+        leadW: 0, leadS: 0, leadZ: 0, leadFill: NO_FILLS, trailW: 0, trailN: 0,
+        cumW, cumS, cumZ, cumGlyphW, cumFS, cumFZ, cumFill: fill.slice(),
         rightProtrusion: 0, rightAt: -1, leftProtrusion: 0, ...extra,
     });
     // What a break at node i discards after itself (discardable), up to the
-    // next thing that is kept – an infinite fill among them too, so the next
+    // next thing that is kept – infinite stretch among them too, so the next
     // line does not count it as its own. A break that discards everything up
     // to the paragraph's end discards its \parfillskip too: the line after it
     // is empty, and has no fill (§837).
     const lead = (from: number) => {
-        let W = 0, S = 0, Z = 0, F = 0, k = from;
+        let W = 0, S = 0, Z = 0, k = from;
+        const F = [0, 0, 0, 0, 0];
         for (; k < nodes.length; k++) {
             const m = nodes[k];
             if (!discardable(m)) break;
             W += nodeWidthSp(m);
             if (m.type === 'glue') {
                 S += !m.stretch_order ? m.stretch : 0; Z += !m.shrink_order ? m.shrink : 0;
-                if (m.stretch_order) F++;
+                if (m.stretch_order) F[m.stretch_order] += m.stretch;
             }
         }
         return { leadW: W, leadS: S, leadZ: Z, leadFill: F, leftProtrusion: prot(findFirstGlyph(nodes, k), true) };
@@ -325,7 +333,7 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
         // (ext_try_break) has no character to look from at the end.
         if (n.type==='glue' && n.subtype===15) {
             cumW+=n.width; cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0;
-            if (n.stretch_order) cumFill+=1;
+            if (n.stretch_order) fill[n.stretch_order]+=n.stretch;
             // (the breaker leaves it out, but the line is packed with it)
             const r = right(i);
             bcs.push(cand('end', i, -10000, { packRightProtrusion: r.rightProtrusion, rightAt: r.rightAt }));
@@ -339,9 +347,8 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
             // correction, \,) or a math node TeX breaks at that node instead,
             // which drops it from the end of the line. Its stretch does not
             // matter (§866): LaTeX's \and between authors is \hskip 1em plus
-            // .17fil, and a row of them too wide for the line breaks there. An
-            // infinite fill marks the line that keeps it as filled (cumFill):
-            // its slack goes to the fill, as on a last line.
+            // .17fil, and a row of them too wide for the line breaks there. Its
+            // infinite stretch counts in the line that keeps it (cumFill).
             const prev = nodes[i-1];
             let ok = false, trailN = 0;
             if (!inMath && prev) {
@@ -355,7 +362,7 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
                     ...right(i - trailN), ...lead(i) }));
             }
             cumW+=n.width; cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0;
-            if (n.stretch_order) cumFill+=1;
+            if (n.stretch_order) fill[n.stretch_order]+=n.stretch;
         } else if (n.type==='disc') {
             const pre=part(n.pre), post=part(n.post), replace=part(n.replace);
             const preGs=(n.pre||[]).filter(isChar), postGs=(n.post||[]).filter(isChar);
@@ -391,13 +398,12 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
 // A paragraph's margin skips, \leftskip and \rightskip, are in every line
 // (TeX's background, §827): their fixed parts are out of the measure
 // already, their finite stretch and their shrink (which TeX makes finite,
-// §826) count in every line's, and an infinite stretch in either makes
-// every line filled.
+// §826) count in every line's, and their infinite stretch is in every
+// line's fills (lineFilled).
 const finiteStretch = (g: GlueNode | undefined) => g && !(g.stretch_order || 0) ? g.stretch || 0 : 0;
 export const marginStretch = (p: Params): number => finiteStretch(p.leftSkip) + finiteStretch(p.rightSkip);
 export const marginShrink = (p: Params): number => (p.leftSkip?.shrink || 0) + (p.rightSkip?.shrink || 0);
 const fills = (g: GlueNode | undefined) => !!g && (g.stretch_order || 0) > 0 && !!g.stretch;
-export const marginFilled = (p: Params): boolean => fills(p.leftSkip) || fills(p.rightSkip);
 
 // The right protrusion of a line from candidate a to candidate b: LuaTeX's
 // search for it goes back to the line's start, no further. The breaker has
@@ -474,15 +480,21 @@ export function expansionShortfall(shortfall: number, m: LineMetrics, ex: Expans
     return shortfall;
 }
 
-// A line carrying an infinite-order fill (\hfil from \\, \hfill, the
-// \parfillskip of the last line) absorbs positive slack instead of justifying:
-// badness 0. So does every line of a paragraph whose margin skips stretch
-// infinitely: \raggedright, \centering and \raggedleft set \rightskip or
+// A line whose stretch of some infinite order does not sum to zero (\hfil
+// from \\, \hfill, the \parfillskip of the last line) absorbs positive slack
+// instead of justifying: badness 0 (§852). The margin skips' stretch is in
+// every line's: \raggedright, \centering and \raggedleft set \rightskip or
 // \leftskip to 0pt plus 1fil, so any line that fits costs nothing and TeX
-// takes the fewest lines, hyphenating only when it must. An empty last line
-// after a break that discarded the \parfillskip has no fill (§837).
+// takes the fewest lines, hyphenating only when it must. Stretch of one order
+// cancels: a line with \hskip 0pt plus -1filll and plus 1filll (breqn's,
+// around its break points) has no fill, and is justified by its finite glue.
+// An empty last line after a break that discarded the \parfillskip has no
+// fill (§837).
+const stretchAt = (g: GlueNode | undefined, order: number) => g && (g.stretch_order || 0) === order ? g.stretch || 0 : 0;
 export function lineFilled(a: BreakCandidate, b: BreakCandidate, p: Params): boolean {
-    return marginFilled(p) || b.cumFill > a.cumFill + a.leadFill;
+    for (let o = 1; o < NO_FILLS.length; o++)
+        if (b.cumFill[o] - a.cumFill[o] - a.leadFill[o] + stretchAt(p.leftSkip, o) + stretchAt(p.rightSkip, o) !== 0) return true;
+    return false;
 }
 
 // ── KP DP (one pass) ─────────────────────────────────────────────────────────
