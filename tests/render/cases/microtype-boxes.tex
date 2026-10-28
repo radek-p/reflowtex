@@ -1,0 +1,30 @@
+% Protrusion and font expansion in paragraphs TeX set inside boxes: two minipages side by side
+% (as subcaptions are), a \parbox, and p-columns of a tabular. The browser draws these lines as
+% TeX finished them, each glyph expanded and each line's edge characters hanging as TeX set them.
+% The boxes have fixed widths, so that TeX sets them alike at every width the case is tested at.
+\documentclass{article}
+\usepackage{microtype}
+\begin{document}
+Running text before the boxes, set in the main flow, long enough to need a second line in the
+column, so that the browser breaks it as well as drawing the boxes below.
+
+\noindent\begin{minipage}[t]{4cm}
+(a) Mean absolute error of the predicted pressure field, in kilopascal, over all the test
+cases. ``Lower'' is better, and the scale is logarithmic throughout.
+\end{minipage}\hfill
+\begin{minipage}[t]{4cm}
+(b) Mean absolute percentage error of the predicted pressure, over all the test cases.
+Lower is better -- and the scale is logarithmic throughout.
+\end{minipage}
+
+\noindent\parbox{6cm}{Figure 2: A caption set in a box of its own, with words enough for three
+or four lines, a few of them hyphenated, and ``quotation marks'' at the start of a line.}
+
+\begin{tabular}{p{3cm}p{3cm}}
+Purchase trigger: exploring the category out of curiosity, with no particular need &
+Routine replacement, or repair of something worn out, ``urgent'' or not\\
+\end{tabular}
+
+Running text after the boxes, long enough to need a second line in the column at every width the
+case is tested at, and then a few words more.
+\end{document}

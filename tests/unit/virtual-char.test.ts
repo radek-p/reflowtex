@@ -65,3 +65,18 @@ test('a character drawn as a box expands with its line, and a font kern beside i
   assert.ok(Math.abs(at[1][1] - (420080 - 9824) * 1.02 * px) < 1e-9, 'the next character after the widened box and kern');
   assert.ok(Math.abs(end - (420080 - 9824 + 290976) * 1.02 * px) < 1e-9);
 });
+
+test('a character in a line TeX set (in a box) is drawn with the expansion TeX gave it, a box of pieces too', () => {
+  // as the serializer records such a line: each character's factor in
+  // millionths of its width, its font kerns as expanded
+  const ff = { ...charBox(27, 70, 420080), expansion_factor: 20000 };
+  const e: Node = { type: 'glyph', font: 7, char: 101, width: 290976, height: 8 * PT, depth: 0, expansion_factor: -15000 };
+  const at: [number, number][] = [];
+  const sink = { glyph: (n: Node, x: number) => at.push([n.char as number, x]), space() {}, rule() {}, picture() {}, beginTransform() {}, endTransform() {} };
+  const end = render.renderNodes(fontInfo, sink, [ff, e, { type: 'glyph', font: 8, char: 120, width: 300000, height: 8 * PT, depth: 0 }], 0, 0, 0, 0);
+  const px = 2 / 65536;
+  assert.ok(Math.abs(at[0][1] - LETTERSPACE * 1.02 * px) < 1e-9, "the piece where the box's widened packet puts it");
+  assert.ok(Math.abs(at[1][1] - 420080 * 1.02 * px) < 1e-9, 'the next character after the widened box');
+  assert.ok(Math.abs(at[2][1] - (420080 * 1.02 + 290976 * 0.985) * px) < 1e-9, 'and after the narrowed one');
+  assert.ok(Math.abs(end - (420080 * 1.02 + 290976 * 0.985 + 300000) * px) < 1e-9, 'one without a factor: its own width');
+});

@@ -177,6 +177,40 @@ test('a \\vadjust is kept in its paragraph, with its height and what it draws', 
   assert.deepEqual(d.content.filter(it => it.kind === 'vspace').map(it => it.amount ?? 0).filter(a => a !== 0), []);
 });
 
+// A line TeX set in a box (a minipage, a p-column) is drawn as TeX finished
+// it: with microtype, its glyphs expanded and its edge characters hanging by
+// margin kerns. What is recorded of each such line adds up to the line's
+// width, as TeX packed it.
+test('a line TeX set in a box keeps its glyphs\' expansion and its margin kerns', async () => {
+  const d = await capture('\\noindent\\begin{minipage}[t]{4cm}(a) Mean absolute error of the predicted pressure field, '
+    + 'in kilopascal, over all the test cases. ``Lower\'\' is better, and the scale is logarithmic throughout.\\end{minipage}',
+    '\\usepackage{microtype}');
+  type Packed = Node & { glue_set?: number; glue_sign?: number; glue_order?: number;
+                         stretch?: number; shrink?: number; stretch_order?: number; shrink_order?: number; expansion_factor?: number };
+  const lines: Packed[] = [];
+  for (const p of d.paragraphs) for (const n of walk(p.nodes) as Generator<Packed>)
+    if (n.type === 'hlist' && n.children?.some(c => c.type === 'glyph')) lines.push(n);
+  assert.ok(lines.length >= 4, `${lines.length} lines`);
+  const glyphs = lines.flatMap(l => l.children!.filter(c => c.type === 'glyph') as Packed[]);
+  assert.ok(glyphs.some(g => g.expansion_factor), 'some glyphs are expanded');
+  for (const l of lines) {
+    let w = 0;
+    for (const c of l.children! as Packed[]) {
+      if (c.type === 'glyph') w += c.width! * (1 + (c.expansion_factor ?? 0) / 1e6);
+      else if (c.type === 'kern') w += c.kern!;
+      else if (c.type === 'glue') {
+        w += c.width!;
+        if (l.glue_sign === 1 && (c.stretch_order ?? 0) === (l.glue_order ?? 0)) w += (c.stretch ?? 0) * l.glue_set!;
+        if (l.glue_sign === 2 && (c.shrink_order ?? 0) === (l.glue_order ?? 0)) w -= (c.shrink ?? 0) * l.glue_set!;
+      } else w += c.width ?? 0;
+    }
+    // (TeX rounds each expanded glyph to a whole sp)
+    assert.ok(Math.abs(w - l.width!) < l.children!.length, `${glyphText([l])}: ${w} sp drawn, TeX's line ${l.width} sp`);
+  }
+  // the line starting with "(a)" hangs its parenthesis into the margin
+  assert.ok((lines[0].children!.find(c => c.type === 'kern')?.kern ?? 0) < 0, 'a margin kern at the first line\'s start');
+});
+
 test('multicols text is not kept twice', async () => {
   // multicol's output routine puts the balanced columns back on the main
   // list as one box, after their lines went past as ordinary lines.

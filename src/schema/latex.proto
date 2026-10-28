@@ -147,6 +147,13 @@ message Node {
   // its box – a box resource (\saveboxresource, \useboxresource), as graphicx
   // clips an included picture by.
   optional bool clip = 59;
+  // glyph (or a virtual font's character box): its font expansion in a line
+  // TeX has set, in millionths of its width (LuaTeX's expansion_factor):
+  // 20000 is 2 % wider. Only in lines TeX finished in a box (a minipage, a
+  // p-column); a paragraph the viewer breaks again is expanded by its own
+  // lines. Absent = none. (A font kern in such a line is written as expanded;
+  // a margin kern as a kern, subtype 1.)
+  optional int32 expansion_factor = 60;
 }
 
 // A named placeholder in running text (\webtext{name}{default} in

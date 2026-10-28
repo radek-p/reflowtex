@@ -91,6 +91,12 @@ export const cases: Record<string, CaseSettings> = {
   'latin-modern-math': { tolerance: 0.009, rule_tolerance: 0.004 },
   'lists-headings': { tolerance: 0.009 },
   microtype: { tolerance: 0.014 },
+  // The same in paragraphs TeX set inside boxes (minipages side by side, a
+  // \parbox, p-columns), whose lines the browser draws as TeX finished them:
+  // their glyphs were drawn unexpanded and their edge characters did not
+  // hang, so each line drifted from its first space on (281 glyphs over 0.7
+  // pt off). Worst attained 2026-10-28.
+  'microtype-boxes': { tolerance: 0.014 },
   paragraph: { tolerance: 0.010 },
   // The paragraph at widths that are no whole number of pixels (2 px per pt):
   // a real paper's \hsize rarely is one. The column must be the exact width,
