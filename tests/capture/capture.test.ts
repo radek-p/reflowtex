@@ -962,6 +962,29 @@ test('the caller\'s metadata applies to a snippet', async () => {
   assert.equal((await compiled(LANG, '', { kind: 'snippet', documentMetadata: { keys: 'lang=de' } })).text, 'Lang:de.');
 });
 
+// ── Tables of contents ──────────────────────────────────────────────────────
+// Each line read from the .toc links to its heading (reflowtex-toc-k), the
+// lines of a list of figures do not; whatever reads the .toc – the kernel's
+// \@starttoc, or amsart's, which takes the heading as a second argument.
+
+for (const [cls, packages] of [['article', ''], ['amsart', ''], ['amsart', '\\usepackage{hyperref}\n']]) {
+  test(`a table of contents links each entry to its heading, a list of figures none: ${cls}${packages ? ' with hyperref' : ''}`, async () => {
+    const content = `\\documentclass{${cls}}\n${packages}\\begin{document}\n\\tableofcontents\n\\listoffigures\n` +
+      '\\section{Intro}\nText.\n\\subsection{More}\nMore text.\n\\begin{figure}\\caption{Afigure}\\end{figure}\n\\end{document}\n';
+    const key = contentKey(`toc\n${content}`, '');
+    await kinds.compile(content, { kind: 'document', key, passes: 3 });
+    const d: Output = JSON.parse(readFileSync(join(kinds.buildRoot, key, 'output.json'), 'utf8'));
+    assert.deepEqual((kinds.diagnostics.get(key) ?? []).filter(w => w.severity === 'error').map(w => w.message), []);
+    const toc = linkedRuns(d).filter(([, l]) => l.label?.startsWith('reflowtex-toc-'));
+    const labels = [...new Set(toc.map(([, l]) => l.label))];
+    assert.deepEqual(labels, labels.map((_, i) => `reflowtex-toc-${i + 1}`));
+    const text = (label: string) => toc.filter(([, l]) => l.label === label).map(([t]) => t).join('');
+    assert.ok(labels.some(l => /Intro/.test(text(l!))) && labels.some(l => /More/.test(text(l!))), labels.map(l => text(l!)).join(' | '));
+    assert.ok(!labels.some(l => /Afigure/.test(text(l!))), 'a list of figures links to no heading');
+    for (const l of labels) assert.ok(d.anchors.includes(l!), `${l} has its anchor`);
+  });
+}
+
 // ── The document's directories ──────────────────────────────────────────────
 // TeX runs in a build directory, which stands in for the document's: what
 // TeX writes into one of the document's subdirectories (\include's .aux) it
