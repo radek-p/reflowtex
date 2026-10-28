@@ -167,7 +167,7 @@ export function fitText(fits: { piece: HTMLElement; px: number }[]): void {
             return round === 0 ? Math.sqrt(r) * 0.95 : Math.min(r, 0.9);
         });
         fits = fits.filter((f, k) => {
-            if (scale[k] === 1) return false;
+            if (scale[k] === 1 || f.px <= MIN_PX) return false;    // (fits, or can shrink no more)
             f.px = Math.max(MIN_PX, f.px * scale[k]);
             f.piece.style.fontSize = `${f.px}px`;
             return true;
