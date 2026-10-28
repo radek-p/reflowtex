@@ -1,0 +1,111 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   – (U+2013) -> \textendash: 2 in the source (8 missing-character lines in the log before)
+#   — (U+2014) -> \textemdash: 5 in the source (12 missing-character lines in the log before)
+#   ’ (U+2019) -> \textquoteright: 4 in the source (16 missing-character lines in the log before)
+#   “ (U+201C) -> \textquotedblleft: 1 in the source (4 missing-character lines in the log before)
+#   ” (U+201D) -> \textquotedblright: 1 in the source (4 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/FNM.tex
++++ b/FNM.tex
+@@ -100,7 +100,7 @@
+ From a theoretical standpoint, a universal approximation result has been established for the FNO, demonstrating that it can approximate a broad class of sufficiently regular operators with arbitrary accuracy \cite{kovachki2021universal}.
+ 
+ %The classical FNO framework maps a function to another function which belong to continuous functions spaces. In our problem we want to map a vector representing the simulation parameters and the time to the pressure field for this time. So our problem is to map a finite dimensional vector to a continuous function representing the pressure field and lying in a function space. One could represent the simulation parameters as constant functions to fit the FNO setting. But the representation of constants functions in the Fourier domain would lead to a Dirac's delta function centered at zero frequency. Because the classical FNO architecture contains only pointwise operations, convolutions and spectral convolutions (pointwise multiplication in the frequency domain), a constant function can only be transformed to another constant function, forgetting the possibility to predict fields containing a complex distribution of frequency modes. In practice, due to convolution padding combined with non-nonlinearities making constant function to be perturbed, a more broad spectrum can arise but not directly from the input function frequency structure. So the FNO framework is not directly and naturally adapted to our problem. In the Section \ref{sec:perFNM} we will introduce the Fourier Neural Mapping, an extension of the FNO framework when the input is a finite dimensional vector.
+-\paragraph{FNO and finite dimensional input.} The classical FNO framework is designed to approximate mappings between functions defined on continuous function spaces. In the present study, however, the objective is to map a finite-dimensional vector (containing simulation parameters and time) to a pressure field defined over a continuous domain. This corresponds to learning an operator from a finite-dimensional space to an infinite-dimensional function space. A straightforward approach to reconcile this discrepancy is to embed the input parameters into the FNO framework by representing them as constant functions over the spatial domain. However, such a representation is degenerate in the spectral domain, as constant functions correspond to a Dirac delta function concentrated at zero frequency. Given that the standard FNO architecture relies on pointwise functions, local convolutions, and spectral convolutions (implemented as pointwise multiplications in Fourier space), this spectral degeneracy severely restricts the expressive capacity of the model. In particular, it implies that constant inputs are mapped to constant outputs, thereby limiting the model’s ability to generate pressure fields exhibiting rich spatial frequency content. In practice, minor deviations from strict constancy may arise due to numerical artifacts such as padding in convolutional layers together with the effect of nonlinear activation functions, which can introduce perturbations and broaden the resulting frequency spectrum. Nevertheless, these effects are incidental and do not fundamentally resolve the mismatch between the input representation and the desired output complexity. Consequently, the standard FNO formulation is not naturally suited to the problem under consideration. To address this limitation, Section \ref{sec:perFNM} introduces the Fourier Neural Mapping (FNM) \cite{huang2024operator}, an extension of the FNO framework specifically designed to handle mappings from finite-dimensional inputs to continuous function spaces.
++\paragraph{FNO and finite dimensional input.} The classical FNO framework is designed to approximate mappings between functions defined on continuous function spaces. In the present study, however, the objective is to map a finite-dimensional vector (containing simulation parameters and time) to a pressure field defined over a continuous domain. This corresponds to learning an operator from a finite-dimensional space to an infinite-dimensional function space. A straightforward approach to reconcile this discrepancy is to embed the input parameters into the FNO framework by representing them as constant functions over the spatial domain. However, such a representation is degenerate in the spectral domain, as constant functions correspond to a Dirac delta function concentrated at zero frequency. Given that the standard FNO architecture relies on pointwise functions, local convolutions, and spectral convolutions (implemented as pointwise multiplications in Fourier space), this spectral degeneracy severely restricts the expressive capacity of the model. In particular, it implies that constant inputs are mapped to constant outputs, thereby limiting the model{\textquoteright}s ability to generate pressure fields exhibiting rich spatial frequency content. In practice, minor deviations from strict constancy may arise due to numerical artifacts such as padding in convolutional layers together with the effect of nonlinear activation functions, which can introduce perturbations and broaden the resulting frequency spectrum. Nevertheless, these effects are incidental and do not fundamentally resolve the mismatch between the input representation and the desired output complexity. Consequently, the standard FNO formulation is not naturally suited to the problem under consideration. To address this limitation, Section \ref{sec:perFNM} introduces the Fourier Neural Mapping (FNM) \cite{huang2024operator}, an extension of the FNO framework specifically designed to handle mappings from finite-dimensional inputs to continuous function spaces.
+ 
+ % ===================================================================
+ %\subsection{Neural Operator Framework}
+--- a/Intro_v3.tex
++++ b/Intro_v3.tex
+@@ -8,7 +8,7 @@
+ %Assuming a weak coupling between the blade structure and the aerodynamic excitation, and under the hypothesis of linear behavior of the blade structure with harmonic motion, the assessment of these phenomena relies on the so-called Generalized Aerodynamic Forces (GAFs), which are obtained by projecting the unsteady pressure distribution onto the structural vibration modes of the blade. The GAFs provide the link between the aerodynamic forcing and the structural response and are therefore key quantities in the evaluation of blade vibration amplitudes, high-cycle fatigue risk and mechanical integrity. Because these quantities depend on both the spatial distribution and temporal evolution of the pressure field, their accurate prediction requires a reliable representation of the underlying flow dynamics.
+ 
+ % Modèles de simulation numérique (URANS) + coût simu
+-This loading can be assessed through various Computational Fluid Dynamics (CFD) modeling approaches, each offering a different level of fidelity. Unsteady Reynolds-Averaged Navier–Stokes (URANS) methods are commonly preferred over low-order approaches, such as those based on the Euler solvers, due to their ability to capture nonlinear effects of compressibility and viscosity \cite{tucker2013trends, cinnella2004numerical}. Additionally, they are often favored in industry over scale-resolving methods such as Large-Eddy Simulation (LES), which, while more accurate, are considerably more computationally demanding \cite{tucker2011computation}. Nonetheless, the computational cost associated with URANS simulations remains substantial. This becomes particularly restrictive in industrial workflows involving design optimization, uncertainty quantification, sensitivity analysis, or digital-twin applications, where hundreds of flow evaluations may be required \cite{khatouri2022metamodeling}. Reducing the cost of generating unsteady aerodynamic predictions while maintaining sufficient accuracy therefore remains a central challenge.
++This loading can be assessed through various Computational Fluid Dynamics (CFD) modeling approaches, each offering a different level of fidelity. Unsteady Reynolds-Averaged Navier{\textendash}Stokes (URANS) methods are commonly preferred over low-order approaches, such as those based on the Euler solvers, due to their ability to capture nonlinear effects of compressibility and viscosity \cite{tucker2013trends, cinnella2004numerical}. Additionally, they are often favored in industry over scale-resolving methods such as Large-Eddy Simulation (LES), which, while more accurate, are considerably more computationally demanding \cite{tucker2011computation}. Nonetheless, the computational cost associated with URANS simulations remains substantial. This becomes particularly restrictive in industrial workflows involving design optimization, uncertainty quantification, sensitivity analysis, or digital-twin applications, where hundreds of flow evaluations may be required \cite{khatouri2022metamodeling}. Reducing the cost of generating unsteady aerodynamic predictions while maintaining sufficient accuracy therefore remains a central challenge.
+ 
+ % Stratégie de surrogate modelling. Justification de l'intérêt de prédire la pression en plus des QoIs
+ A common strategy consists in constructing surrogate models \cite{keane2020surrogate}, sometimes directly for scalar quantities of engineering interest. In turbomachinery applications, these quantities depend on the underlying physical problem and may include aerodynamic performance indicators such as stage isentropic efficiency, structural metrics such as maximum von Mises stress \cite{dong2025adaptive}, acoustic measures such as sound power level, or GAFs in the case of forced-response analyses \cite{tran2009multi, ding2026high}, which is the focus of the present work. While such approaches can significantly reduce computational cost, they provide limited insight into the physical mechanisms underlying the predicted response \cite{khatouri2022metamodeling}. Moreover, multiple quantities of interest often originate from the same underlying physical field, which necessitates the development of separate surrogate models despite their shared physical origin. This limitation has motivated increasing interest in field-level surrogate models, which aim to reproduce the complete discretized physical solutions rather than selected derived scalar engineering quantities alone.
+--- a/ProblemV2.tex
++++ b/ProblemV2.tex
+@@ -125,7 +125,7 @@
+ 
+ For simplicity, the remainder of this work focuses on the first harmonic coefficient, $\hat{F}_{r,1}$, associated with the structural mode $\boldsymbol{\Phi}_r$ considered in this study. This coefficient is hereafter referred to as the GAF coefficient, with its modulus and phase denoted by $\rho$ and $\phi$, respectively. Although the analysis is restricted to this specific coefficient, the proposed methodology is not intrinsically limited to a particular structural mode or harmonic. In particular, the p-FNM predicts the unsteady pressure field independently of the structural model, such that any GAF coefficient can subsequently be obtained by projecting the predicted pressure field onto the corresponding structural mode and extracting the desired Fourier harmonic. The framework can therefore be extended to other structural modes and GAF coefficients without modifying the pressure-prediction model.
+ 
+-The structural deformation field $\boldsymbol{\Phi}_r$ used in the projection is obtained from a finite-element modal analysis performed using the \texttt{SAMCEF} solver. The blade is modeled as a homogeneous steel structure with Young’s modulus $E = 210$ GPa, density $\rho_{\mathrm{mat}} = 7800$ kg/m$^3$, and Poisson’s ratio $\nu = 0.3$. The modal analysis is performed under rotational loading conditions to account for centrifugal forces. However, no additional steady aerodynamic load is applied in the structural computation. For the sake of simplicity the root of the blade is assumed clamped at the hub, while no cyclic symmetry or inter-blade coupling is considered, resulting in an isolated blade configuration. This assumption ensures that the projected aerodynamic forces remain purely real-valued and that no complex coupling between adjacent blades is introduced in the definition of the GAFs. Nevertheless, the methodology proposed in this work is not intrinsically restricted to these simplified mechanical assumptions and can, in principle, be extended to more realistic configurations involving complex structural modes and inter-blade interactions.
++The structural deformation field $\boldsymbol{\Phi}_r$ used in the projection is obtained from a finite-element modal analysis performed using the \texttt{SAMCEF} solver. The blade is modeled as a homogeneous steel structure with Young{\textquoteright}s modulus $E = 210$ GPa, density $\rho_{\mathrm{mat}} = 7800$ kg/m$^3$, and Poisson{\textquoteright}s ratio $\nu = 0.3$. The modal analysis is performed under rotational loading conditions to account for centrifugal forces. However, no additional steady aerodynamic load is applied in the structural computation. For the sake of simplicity the root of the blade is assumed clamped at the hub, while no cyclic symmetry or inter-blade coupling is considered, resulting in an isolated blade configuration. This assumption ensures that the projected aerodynamic forces remain purely real-valued and that no complex coupling between adjacent blades is introduced in the definition of the GAFs. Nevertheless, the methodology proposed in this work is not intrinsically restricted to these simplified mechanical assumptions and can, in principle, be extended to more realistic configurations involving complex structural modes and inter-blade interactions.
+ 
+ In the following sections, both pressure-field errors and GAF-based metrics are used to compare the different surrogate-modeling approaches.
+ 
+--- a/main.tex
++++ b/main.tex
+@@ -111,7 +111,7 @@
+ \input{Conclusion}
+ % ------------------------ ------------------------ ------------------------
+ \section*{Acknowledgments}
+-The presented work has been performed in the framework of the HE-ART project, part of the Clean Aviation Joint Undertaking, and funded by the European Union’s Horizon 2020 research and innovation programme under grant agreement N° 101102013. It was also supported by the "ARIAC by DigitalWallonia4.ai" research project (grant agreement No 2010235– TRAIL institute) and benefited from computational resources made available on the Tier-1 supercomputer of the Fédération Wallonie-Bruxelles, infrastructure funded by the Walloon Region under grant agreement N° 1910847.
++The presented work has been performed in the framework of the HE-ART project, part of the Clean Aviation Joint Undertaking, and funded by the European Union{\textquoteright}s Horizon 2020 research and innovation programme under grant agreement N° 101102013. It was also supported by the "ARIAC by DigitalWallonia4.ai" research project (grant agreement No 2010235{\textendash} TRAIL institute) and benefited from computational resources made available on the Tier-1 supercomputer of the Fédération Wallonie-Bruxelles, infrastructure funded by the Walloon Region under grant agreement N° 1910847.
+ \section*{AI Disclosure Statement}
+ Generative AI tools, such as ChatGPT, were used for language editing and improving the clarity of the manuscript. All intellectual content, research design, and data analysis were conducted solely by the authors.
+ % ------------------------ ------------------------ ------------------------
+--- a/references.bib
++++ b/references.bib
+@@ -20,7 +20,7 @@
+ }
+ 
+ @article{laumert2002_part1,
+-  title={Investigation of unsteady aerodynamic blade excitation mechanisms in a transonic turbine stage—Part I: Phenomenological identification and classification},
++  title={Investigation of unsteady aerodynamic blade excitation mechanisms in a transonic turbine stage{\textemdash}Part I: Phenomenological identification and classification},
+   author={Laumert, Bjorn and Martensson, Hans and Fransson, Torsten H},
+   journal={J. Turbomach.},
+   volume={124},
+@@ -30,7 +30,7 @@
+ }
+ 
+ @article{laumert2002_part2,
+-  title={Investigation of Unsteady Aerodynamic Blade Excitation Mechanisms in a Transonic Turbine Stage—Part II: Analytical Description and Quantification},
++  title={Investigation of Unsteady Aerodynamic Blade Excitation Mechanisms in a Transonic Turbine Stage{\textemdash}Part II: Analytical Description and Quantification},
+   author={Laumert, Bjorn and Martensson, Hans and Fransson, Torsten H},
+   journal={J. Turbomach.},
+   volume={124},
+@@ -291,7 +291,7 @@
+ }
+ 
+ @article{romero2006,
+-  title={Comparison of pure and “Latinized” centroidal Voronoi tessellation against various other statistical sampling methods},
++  title={Comparison of pure and {\textquotedblleft}Latinized{\textquotedblright} centroidal Voronoi tessellation against various other statistical sampling methods},
+   author={Romero, Vicente J and Burkardt, John V and Gunzburger, Max D and Peterson, Janet S},
+   journal={Reliability Engineering \& System Safety},
+   volume={91},
+@@ -324,7 +324,7 @@
+ 
+ 
+ @inproceedings{laumert2001investigation,
+-  title={Investigation of Unsteady Aerodynamic Blade Excitation Mechanisms in a Transonic Turbine Stage: Part II—Analytical Description and Quantification},
++  title={Investigation of Unsteady Aerodynamic Blade Excitation Mechanisms in a Transonic Turbine Stage: Part II{\textemdash}Analytical Description and Quantification},
+   author={Laumert, Bjorn and Maartensson, Hans and Fransson, Torsten H},
+   booktitle={Turbo Expo: Power for Land, Sea, and Air},
+   volume={78538},
+@@ -334,7 +334,7 @@
+ }
+ 
+ @article{laumert2002investigation,
+-  title={Investigation of unsteady aerodynamic blade excitation mechanisms in a transonic turbine stage—Part I: Phenomenological identification and classification},
++  title={Investigation of unsteady aerodynamic blade excitation mechanisms in a transonic turbine stage{\textemdash}Part I: Phenomenological identification and classification},
+   author={Laumert, Bjorn and Maartensson, Hans and Fransson, Torsten H},
+   journal={J. Turbomach.},
+   volume={124},
+@@ -485,7 +485,7 @@
+   publisher={Springer}
+ }
+ @article{tucker2011computation,
+-  title={Computation of unsteady turbomachinery flows: Part 2—LES and hybrids},
++  title={Computation of unsteady turbomachinery flows: Part 2{\textemdash}LES and hybrids},
+   author={Tucker, PG},
+   journal={Progress in Aerospace Sciences},
+   volume={47},

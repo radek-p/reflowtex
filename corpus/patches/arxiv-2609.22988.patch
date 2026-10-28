@@ -1,0 +1,82 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   – (U+2013) -> \textendash: 8 in the source (33 missing-character lines in the log before)
+#   ’ (U+2019) -> \textquoteright: 1 in the source (4 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/acl_latex.tex
++++ b/acl_latex.tex
+@@ -133,7 +133,7 @@
+ \maketitle
+ \begin{abstract}
+ 
+-Multilingual code language models transfer skills across programming languages (PLs), but whether any PL occupies a privileged pivot position remains contested: geometric analyses point to C-family languages and Go, while behavioral evidence highlights Python. We revisit this question under controls for representational anisotropy and length variation across PLs, two confounds that compromise prior cosine-based analyses. Across three code models on multilingual competitive-programming data, we study three views of cross-PL organization: pairwise PL geometry, PL-English alignment, and pivoted retrieval through candidate PL representation spaces. The results are relation-dependent. Code-code geometry reveals structured language regions but no universal center; code-English alignment favors high-level scripting languages; and pivoted retrieval favors different intermediate spaces for code-to-code and English-to-code transfer. These findings suggest that Python’s special role is better understood as English-facing affinity than as universal geometric centrality\footnote{All code and scripts needed to reproduce our experiments can be found at \href{https://github.com/drndr/codelm_hub_lang}{github.com/drndr/codelm\_hub\_lang}}.
++Multilingual code language models transfer skills across programming languages (PLs), but whether any PL occupies a privileged pivot position remains contested: geometric analyses point to C-family languages and Go, while behavioral evidence highlights Python. We revisit this question under controls for representational anisotropy and length variation across PLs, two confounds that compromise prior cosine-based analyses. Across three code models on multilingual competitive-programming data, we study three views of cross-PL organization: pairwise PL geometry, PL-English alignment, and pivoted retrieval through candidate PL representation spaces. The results are relation-dependent. Code-code geometry reveals structured language regions but no universal center; code-English alignment favors high-level scripting languages; and pivoted retrieval favors different intermediate spaces for code-to-code and English-to-code transfer. These findings suggest that Python{\textquoteright}s special role is better understood as English-facing affinity than as universal geometric centrality\footnote{All code and scripts needed to reproduce our experiments can be found at \href{https://github.com/drndr/codelm_hub_lang}{github.com/drndr/codelm\_hub\_lang}}.
+ 
+ \end{abstract}
+ 
+@@ -186,7 +186,7 @@
+ 
+ \paragraph{Pivot Languages in Multilingual LMs}
+ Recent interpretability work suggests that multilingual LMs internally route through English-like representations regardless of input language. \citet{wendler2024llamas} show that intermediate-layer representations of non-English prompts decode into English tokens with high probability; \citet{dumas2025separating} strengthen this with causal activation patching, demonstrating language-agnostic but English-aligned mid-layer concepts.
+-This centrality likely reflects English dominance in pretraining rather than a privileged status of English itself~\citep{zhong2025language}. \citet{he2025semantic} find that multilingual models route through shared intermediate tokens when source–target co-occurrence is low, while \citet{alabi2024hidden} show that even adapted models evolve predictions in the base model's source language until final layers. Together, these results suggest pivot structure follows from training data composition.
++This centrality likely reflects English dominance in pretraining rather than a privileged status of English itself~\citep{zhong2025language}. \citet{he2025semantic} find that multilingual models route through shared intermediate tokens when source{\textendash}target co-occurrence is low, while \citet{alabi2024hidden} show that even adapted models evolve predictions in the base model's source language until final layers. Together, these results suggest pivot structure follows from training data composition.
+ This structure extends beyond natural language: \citet{wu2025semantic} propose that multilingual models share a single semantic hub across modalities including code, showing that interventions on English representations affect code generation.
+ 
+ \paragraph{Cross-lingual Analysis of Code LMs}
+@@ -196,7 +196,7 @@
+ 
+ While the geometric analyses above point toward C-family languages and Go as central in code representation space, behavioral and training-dynamics evidence highlights a different language: Python. \citet{moumoula2026programming} document programming language confusion in code LMs: when models generate code in unintended languages despite explicit instructions, Python emerges as a ``universal attractor'', which they attribute to Python's overrepresentation in training corpora. \citet{yang2026scaling} demonstrate this asymmetry at the pre-training level: mixing Python as an auxiliary language during pre-training consistently improves performance on other target languages, while Python itself does not benefit from auxiliary mixing.
+ 
+-These findings are in tension: geometric analyses place Python far from other PLs and emphasize C-family centrality, while behavioral evidence points toward Python as uniquely influential. This motivates our study: we revisit cross-programming-language representations under controls for anisotropy and code length, and separately examine code–code structure and code–English alignment.
++These findings are in tension: geometric analyses place Python far from other PLs and emphasize C-family centrality, while behavioral evidence points toward Python as uniquely influential. This motivates our study: we revisit cross-programming-language representations under controls for anisotropy and code length, and separately examine code{\textendash}code structure and code{\textendash}English alignment.
+ 
+ \section{Experimental Setup}
+ 
+@@ -207,7 +207,7 @@
+ 
+ We construct our evaluation dataset from the xCodeEval benchmark~\cite{khan2024xcodeeval}, a large-scale multilingual code understanding and generation dataset derived from competitive programming submissions. The dataset contains approximately 1.29 million submissions spanning 11 programming languages, with each submission linked to a unique problem identifier. We choose xCodeEval because our cross-language analyses require functionally equivalent solutions to shared problems across many programming languages, together with execution validation and paired natural-language problem descriptions.
+ 
+-We filter for problems that have accepted solutions in at least 7 of the 11 supported programming languages, ensuring sufficient cross-lingual coverage for alignment evaluation. For each (problem, language) pair, we retain a single canonical solution: the shortest source code with a passing execution outcome. Retaining one solution per problem–language pair avoids unequal weighting from differing numbers of accepted submissions, while selecting the shortest provides a deterministic canonicalization rule.
++We filter for problems that have accepted solutions in at least 7 of the 11 supported programming languages, ensuring sufficient cross-lingual coverage for alignment evaluation. For each (problem, language) pair, we retain a single canonical solution: the shortest source code with a passing execution outcome. Retaining one solution per problem{\textendash}language pair avoids unequal weighting from differing numbers of accepted submissions, while selecting the shortest provides a deterministic canonicalization rule.
+ The resulting canonical set contains 7{,}735 solutions across 11 languages.
+ 
+ The 11 programming languages, ordered by number of canonical solutions, are: C++ (961), Python (959), Java (922), C\# (919), C (892), Go (701), Rust (626), Kotlin (477), Javascript (455), PHP (454), and Ruby (369). In addition, we treat the natural-language problem description as a 12th modality (``English''), giving each problem a textual representation alongside its code solutions (961 total unique problem descriptions). 
+@@ -336,7 +336,7 @@
+ \bottomrule
+ \end{tabular}
+ \end{adjustbox}
+-\caption{Anisotropy in code language model representations across all layers. Random-pair cosine and mean-norm ratio are reported as min–max ranges over layers.}
++\caption{Anisotropy in code language model representations across all layers. Random-pair cosine and mean-norm ratio are reported as min{\textendash}max ranges over layers.}
+ \label{tab:anisotropy}
+ \end{table}
+ 
+@@ -395,7 +395,7 @@
+     \centering
+     \includegraphics[width=0.99\linewidth]{img/code_english_mid_depth_rank_heatmap_with_raw_lexical.pdf}
+     \caption{
+-Code–English alignment ranks at normalized depth 0.5. Model columns rank length-matched, mean-centered cosine similarity between each programming language and English problem descriptions. The Lexical column ranks raw Jaccard token overlap. Lower rank = closer to English. High-level scripting-like languages align most closely with English, a pattern not explained by lexical overlap alone.}
++Code{\textendash}English alignment ranks at normalized depth 0.5. Model columns rank length-matched, mean-centered cosine similarity between each programming language and English problem descriptions. The Lexical column ranks raw Jaccard token overlap. Lower rank = closer to English. High-level scripting-like languages align most closely with English, a pattern not explained by lexical overlap alone.}
+     \label{fig:code-english-alignment}
+ \end{figure}
+ 
+@@ -537,7 +537,7 @@
+ 
+ \section{Conclusion}
+ 
+-We revisited the question of whether multilingual code language models organize representations around a single pivot programming language, under controls for representational anisotropy and code-length variation. After applying these controls, we find that the organizational structure is relation-dependent rather than centered on any one language. Code-to-code transfer favors a broad tier of bridge languages, while English–code alignment concentrates in high-level languages such as Ruby and Python. Python's widely noted special status is better explained by its English-facing affinity than by geometric centrality. These findings suggest that the field should move from asking which language is the pivot to asking which relation a candidate language helps bridge.
++We revisited the question of whether multilingual code language models organize representations around a single pivot programming language, under controls for representational anisotropy and code-length variation. After applying these controls, we find that the organizational structure is relation-dependent rather than centered on any one language. Code-to-code transfer favors a broad tier of bridge languages, while English{\textendash}code alignment concentrates in high-level languages such as Ruby and Python. Python's widely noted special status is better explained by its English-facing affinity than by geometric centrality. These findings suggest that the field should move from asking which language is the pivot to asking which relation a candidate language helps bridge.
+ 
+ \newpage
+ 
+@@ -549,7 +549,7 @@
+ \section*{Acknowledgments}
+ 
+ This research is co-funded by the Deutsche Forschungsgemeinschaft (DFG, German
+-Research Foundation) – \textit{504226141}. The authors acknowledge support by the state of Baden-Württemberg through bwHPC. L.G.P.\ acknowledges support from the MIST project, funded by the Novo Nordisk Foundation under grant reference number NNF25OC0103204.
++Research Foundation) {\textendash} \textit{504226141}. The authors acknowledge support by the state of Baden-Württemberg through bwHPC. L.G.P.\ acknowledges support from the MIST project, funded by the Novo Nordisk Foundation under grant reference number NNF25OC0103204.
+ 
+ Generative AI was used to assist with writing and editing this paper. The authors reviewed all outputs and bear full responsibility for the content.
+ 

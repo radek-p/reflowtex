@@ -1,0 +1,94 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   ł (U+0142) -> \l: 3 in the source (7 missing-character lines in the log before)
+#   ń (U+0144) -> \'n: 3 in the source (17 missing-character lines in the log before)
+#   Ś (U+015A) -> \'S: 1 in the source (3 missing-character lines in the log before)
+#   – (U+2013) -> \textendash: 2 in the source (7 missing-character lines in the log before)
+#   — (U+2014) -> \textemdash: 3 in the source (7 missing-character lines in the log before)
+#   ’ (U+2019) -> \textquoteright: 1 in the source (3 missing-character lines in the log before)
+#   “ (U+201C) -> \textquotedblleft: 1 in the source (3 missing-character lines in the log before)
+#   ” (U+201D) -> \textquotedblright: 1 in the source (3 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/positronium_gate.tex
++++ b/positronium_gate.tex
+@@ -8,7 +8,7 @@
+ 
+ \title{A Monte Carlo positronium decay source model with multiple annihilation channels in GATE}
+ 
+-\author{Wojciech Krzemien$^{1,*}$\orcid{0000-0002-9546-358X}, Mateusz Bala$^2$\orcid{0000-0002-2505-7949}, Kamil Dulski$^{3}$\orcid{0000-0002-4093-8162}, Wojciech Zdeb$^2$\orcid{0009-0000-1485-251X}, Aurélien Coussat$^4$\orcid{0000-0002-8336-7056}, Beatrix C. Hiesmayr$^{5,6}$\orcid{0000-0001-9062-6039}, Konrad Klimaszewski$^2$\orcid{},Michał Obara$^2$\orcid{0009-0006-4779-6757},L. Raczyński$^2$\orcid{0000-0002-7039-2084}, Roman Y. Shopa$^2$\orcid{0000-0002-1089-5050}}
++\author{Wojciech Krzemien$^{1,*}$\orcid{0000-0002-9546-358X}, Mateusz Bala$^2$\orcid{0000-0002-2505-7949}, Kamil Dulski$^{3}$\orcid{0000-0002-4093-8162}, Wojciech Zdeb$^2$\orcid{0009-0000-1485-251X}, Aurélien Coussat$^4$\orcid{0000-0002-8336-7056}, Beatrix C. Hiesmayr$^{5,6}$\orcid{0000-0001-9062-6039}, Konrad Klimaszewski$^2$\orcid{},Micha{\l} Obara$^2$\orcid{0009-0006-4779-6757},L. Raczy{\'n}ski$^2$\orcid{0000-0002-7039-2084}, Roman Y. Shopa$^2$\orcid{0000-0002-1089-5050}}
+ 
+ \affil{$^1$National Centre for Nuclear Research, Department of High Energy Physics, 05-400 Otwock, Poland}\\
+ \affil{$^2$National Centre for Nuclear Research, Department of Complex Systems, 05-400 Otwock, Poland}\\
+@@ -59,8 +59,8 @@
+ 
+ \section{Physical Model}
+ \label{sec:Physical_model}
+-Positronium is a bound state of an electron and a positron, formed after the thermalisation of the positron in matter~\citep{harpenPositroniumReviewSymmetry2003}. Depending on the relative spin configuration of the electron–positron pair, positronium exists in two distinct states: \ac{p-Ps} with antiparallel spins, and \ac{o-Ps} with parallel spins. These states differ both in their lifetimes and decay modes.
+-In a vacuum, \ac{p-Ps} decays into two back-to-back photons, each with an energy of 511~keV, with a mean lifetime of approximately 125~ps. \Ac{o-Ps} decays into three photons with a continuous energy spectrum constrained by energy and momentum conservation, with a vacuum lifetime of approximately 142~ns. In matter, these lifetimes are substantially modified by interactions with the surrounding medium. The dominant quenching mechanism for \ac{o-Ps} in biological matter is pick-off annihilation, in which the positron of the \ac{o-Ps} pair annihilates with an electron from a neighbouring molecule rather than its bound partner, producing a two-photon final state with a lifetime that depends on the local electron density. Spin-exchange processes, in which the spin state of \ac{o-Ps} is converted to \ac{p-Ps} through interaction with unpaired electrons in the medium, provide an additional quenching channel. As a result, the effective \ac{o-Ps} lifetime in matter, typically in the range of 1–4~ns in biological tissue~\citep{mercolliVivoVoxelwisePositronium2026, moskalPositroniumImageHuman2024a}, is sensitive to the local chemical environment and the free-volume microstructure of the medium (called {\it voids}), which is the physical basis of \ac{PLI}.
++Positronium is a bound state of an electron and a positron, formed after the thermalisation of the positron in matter~\citep{harpenPositroniumReviewSymmetry2003}. Depending on the relative spin configuration of the electron{\textendash}positron pair, positronium exists in two distinct states: \ac{p-Ps} with antiparallel spins, and \ac{o-Ps} with parallel spins. These states differ both in their lifetimes and decay modes.
++In a vacuum, \ac{p-Ps} decays into two back-to-back photons, each with an energy of 511~keV, with a mean lifetime of approximately 125~ps. \Ac{o-Ps} decays into three photons with a continuous energy spectrum constrained by energy and momentum conservation, with a vacuum lifetime of approximately 142~ns. In matter, these lifetimes are substantially modified by interactions with the surrounding medium. The dominant quenching mechanism for \ac{o-Ps} in biological matter is pick-off annihilation, in which the positron of the \ac{o-Ps} pair annihilates with an electron from a neighbouring molecule rather than its bound partner, producing a two-photon final state with a lifetime that depends on the local electron density. Spin-exchange processes, in which the spin state of \ac{o-Ps} is converted to \ac{p-Ps} through interaction with unpaired electrons in the medium, provide an additional quenching channel. As a result, the effective \ac{o-Ps} lifetime in matter, typically in the range of 1{\textendash}4~ns in biological tissue~\citep{mercolliVivoVoxelwisePositronium2026, moskalPositroniumImageHuman2024a}, is sensitive to the local chemical environment and the free-volume microstructure of the medium (called {\it voids}), which is the physical basis of \ac{PLI}.
+ 
+ Although \ac{Ps} can also decay into higher photon multiplicities, such as \ac{p-Ps} into four photons or \ac{o-Ps} into five photons, these channels are strongly suppressed \citep{ADKINS2002136,PhysRevA.68.032512}, with branching ratios of the order of $10^{-6}$. Consequently, they can be neglected for virtually all practical applications.
+ 
+@@ -125,7 +125,7 @@
+ The positronium decay logic is implemented in \texttt{PositroniumDecayModel}, which defines the available decay channels and handles the probabilistic channel selection.
+ For each event, \texttt{PositroniumDecayModel} selects a decay channel according
+ to user-defined branching fractions, samples the corresponding positronium lifetime, and triggers the generation of annihilation photons and, when applicable, prompt photons.
+-Each decay channel is represented by the \texttt{GatePositronium} class, which encapsulates the channel’s physical properties and provides the corresponding decay products.
++Each decay channel is represented by the \texttt{GatePositronium} class, which encapsulates the channel{\textquoteright}s physical properties and provides the corresponding decay products.
+ \Cref{fig:ps_architecture} summarises the overall processing flow and the mapping between physical concepts and software components. The event generation sequence is illustrated in \cref{fig:ps_flow}.
+ 
+ \begin{figure}
+@@ -352,7 +352,7 @@
+         \midrule
+         \multicolumn{5}{c}{\nucGa} \\
+         \midrule
+-        $\beta^+_{0, 0}$ & — & 87.68 & 100 & 96.66\% \\
++        $\beta^+_{0, 0}$ & {\textemdash} & 87.68 & 100 & 96.66\% \\
+         $\beta^+_{0, 1}$ & 1.077 & 1.2 & 1.379 & 1.32\% \\
+         $\epsilon_{0, 1}$ & 1.077 & 1.8 & 2.053 & 1.99\% \\
+         $\beta^+_{0, 2}$ & 1.656 & 0.00026 & 0.000297 & 0.00029\% \\
+@@ -360,7 +360,7 @@
+         \midrule
+         \multicolumn{5}{c}{\nucI} \\
+         \midrule
+-        $\beta^+_{0, 0}$ & — & 10.32 & 100 & 19.46\% \\
++        $\beta^+_{0, 0}$ & {\textemdash} & 10.32 & 100 & 19.46\% \\
+         $\beta^+_{0, 1}$ & 0.603 & 11.45 & 111 & 21.59\% \\
+         $\epsilon_{0, 1}$ & 0.603 & 25.55 & 248 & 48.17\% \\
+         $\beta^+_{0, 3}$ & 1.326 & 0.287 & 2.78 & 0.54\% \\
+@@ -800,8 +800,8 @@
+ \section*{Acknowledgments}
+ W.K. thanks Nils Krah and Thomas Baudier for their help with porting the code into \ac{GATE}~10.
+ The authors acknowledge the support by the Foundation for Polish Science through the FIRST TEAM FENG.02.02-IP.05-0152/23 programme co-financed by the European Union under the European Funds for Smart Economy 2021-2027 (FENG). The work is co-financed by the Polish National Agency for Academic Exchange in the frame of the project BPN/BFR/2025/1/00036/U/00001 and BPN/BAT/2025/1/00009 and co-supported by the Austrian Ministry for Women, Science and Research (project WTZ PL 11/2026).
+-This work was partially supported by the “PHC POLONIUM” program (project number: 55194PB), funded by the French Ministry for Europe and Foreign Affairs, the French Ministry for Higher Education, Research and Space, and the Polish NAWA.
+-This work was completed with resources provided by the Świerk Computing Centre at the National Centre for Nuclear Research.
++This work was partially supported by the {\textquotedblleft}PHC POLONIUM{\textquotedblright} program (project number: 55194PB), funded by the French Ministry for Europe and Foreign Affairs, the French Ministry for Higher Education, Research and Space, and the Polish NAWA.
++This work was completed with resources provided by the {\'S}wierk Computing Centre at the National Centre for Nuclear Research.
+ 
+ \bibliography{references}
+ 
+--- a/references.bib
++++ b/references.bib
+@@ -875,7 +875,7 @@
+ }
+ 
+ @article{PALSAV2,
+-  title = {PALS Avalanche — A New PAL Spectra Analysis Software},
++  title = {PALS Avalanche {\textemdash} A New PAL Spectra Analysis Software},
+   author = {Dulski, K},
+   year = 2020,
+   journal = {Acta Phys. Pol. A},
+@@ -971,7 +971,7 @@
+ }
+ 
+ @article{raczynskiVertex2026,
+-  author  = {Raczyński, Lech and Krzemień, Wojciech and Coussat, Aurelien and Bała, Mateusz and Hiesmayr, Beatrix C. and Klimaszewski, Konrad and Obara, Michał and Shopa, Roman Y.},
++  author  = {Raczy{\'n}ski, Lech and Krzemie{\'n}, Wojciech and Coussat, Aurelien and Ba{\l}a, Mateusz and Hiesmayr, Beatrix C. and Klimaszewski, Konrad and Obara, Micha{\l} and Shopa, Roman Y.},
+   doi     = {https://doi.org/10.48550/arXiv.2605.09174},
+   journal = {pre-print},
+   title   = {Ortho-Positronium Three-Photon Decays: Physics Constraints and a Closed-Form Energy Method for Annihilation Vertex Reconstruction},

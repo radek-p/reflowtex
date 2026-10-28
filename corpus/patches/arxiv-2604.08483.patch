@@ -1,0 +1,178 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   č (U+010D) -> \v c: 2 in the source (9 missing-character lines in the log before)
+#   ė (U+0117) -> \.e: 3 in the source (9 missing-character lines in the log before)
+#   š (U+0161) -> \v s: 1 in the source (3 missing-character lines in the log before)
+#   ū (U+016B) -> \=u: 1 in the source (6 missing-character lines in the log before)
+#   ‐ (U+2010) -> -: 2 in the source (6 missing-character lines in the log before)
+#   – (U+2013) -> \textendash: 7 in the source (24 missing-character lines in the log before)
+#   — (U+2014) -> \textemdash: 3 in the source (13 missing-character lines in the log before)
+#   ‘ (U+2018) -> \textquoteleft: 1 in the source (4 missing-character lines in the log before)
+#   ’ (U+2019) -> \textquoteright: 5 in the source (16 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build has the same page count, and 72 of these lines remain (č ė š ū – — ‘ ’): they come from the bibliography, which biber writes into the .bbl as UTF-8 again whatever form the .bib gives them. The ‐ in the .bib, now a plain -, no longer goes missing.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/article.tex
++++ b/article.tex
+@@ -152,7 +152,7 @@
+ 
+ This sensitivity is exemplified by the benchmark molecule 2,4,5,6-Tet\-ra\-kis(9\textit{H}-car\-ba\-zol-9-yl)iso\-phthalo\-nitrile (4CzIPN) and its halogenated derivatives. \cite{Uoyama2012, Niwa2014, Ishimatsu2013, Streiter2020} For instance, chlorination has been shown to decrease $\Delta E_\mathrm{ST}$ and accelerate intersystem crossing (ISC), yet it often compromises the photoluminescence quantum yield (PLQY) through increased non-radiative pathways. \cite{Streiter2020} Similarly, bromination in systems such as 3-PXZ-XO (3-(10H-phenoxazin-10-yl)-9\textit{H}-xan\-then-9-one) increases both ISC and RISC rates, yet unexpectedly yields an opposite trend in ACRXTN (3-(9,9-di\-methyl\-ac\-ri\-din-10(9H)-yl)-9\textit{H}-xan\-then-9-one) due to changes in the CT state. \cite{Aizawa2020} These diverging results underscore the fact that heavy-atom effects for D--A type TADF molecules appear to be secondary to the primary influence of molecular conformation and electronic environment.
+ 
+-Conventionally, the computational determination of ISC and RISC rates has relied on a simplified framework derived from Fermi’s Golden Rule, typically expressed in a form analogous to Marcus Theory. \cite{marcus1993electron, bredas2004charge, Olivier2017} In this approach, the transition rate is primarily governed by the energy splitting $\Delta E_{ST}$ between the lowest excited singlet ($S_\mathrm{1}$) and triplet ($T_\mathrm{1}$) states and the corresponding spin--orbit coupling (SOC) matrix element. This methodology assumes that the transition occurs exclusively between the equilibrium minima of these two states, with electronic parameters calculated at the respective optimized geometries. 
++Conventionally, the computational determination of ISC and RISC rates has relied on a simplified framework derived from Fermi{\textquoteright}s Golden Rule, typically expressed in a form analogous to Marcus Theory. \cite{marcus1993electron, bredas2004charge, Olivier2017} In this approach, the transition rate is primarily governed by the energy splitting $\Delta E_{ST}$ between the lowest excited singlet ($S_\mathrm{1}$) and triplet ($T_\mathrm{1}$) states and the corresponding spin--orbit coupling (SOC) matrix element. This methodology assumes that the transition occurs exclusively between the equilibrium minima of these two states, with electronic parameters calculated at the respective optimized geometries. 
+ 
+ Despite its utility, this approach suffers from several limitations that can lead to deviations from experimental observations. First, the reliance on a two-state model ($S_\mathrm{1}$ and $T_\mathrm{1}$) does not take the relevance of higher-lying triplet states ($T_\mathrm{n}$) into account. \cite{Aizawa2020, gao2026unveiling} These states can play a decisive role in the RISC process by providing mediated pathways or spin--vibronic channels that significantly enhance the rate beyond what $\Delta E_{ST}$ alone would suggest. \cite{gibson2017nonadiabatic, kim2019spin} Furthermore, the assumption of static, optimized geometries fails to account for the breakdown of the Condon approximation. In many high-performance emitters, the spin-orbit coupling is not a constant but is also sensitive to the D--A torsional angles. \cite{kaminski2024balancing} This can lead to an inaccurate description of the complex kinetic landscape, especially in disordered thin films.
+ 
+@@ -313,12 +313,12 @@
+ 
+ \subsubsection*{Conformational Sampling and Geometry Optimization}\label{sec:QM1}
+ 
+-\noindent Geometries of all molecules were constructed using GaussView 6. \cite{gv6} Subsequent ground state optimizations were carried out with Gaussian 16, \cite{g16} using the B3LYP functional \cite{vosko1980accurate, lee1988development, becke1988density, becke1993density, stephens1994ab} augmented by Grimme’s D3 dispersion correction \cite{grimme2010consistent} in conjunction with the 6-31+G* Pople basis set. \cite{ditchfield1971a, hehre1972a, hariharan1973a, francl1982a, gordon1982a, clark1983a, spitznagel1987a} This level of theory is based on our previous studies of carbazole-containing cyanoarenes as TADF emitter materials. \cite{Streiter2020, morgenstern2025unlocking} All resulting optimized structures were confirmed as minimum energy geometries by vibrational frequency analysis.\\
++\noindent Geometries of all molecules were constructed using GaussView 6. \cite{gv6} Subsequent ground state optimizations were carried out with Gaussian 16, \cite{g16} using the B3LYP functional \cite{vosko1980accurate, lee1988development, becke1988density, becke1993density, stephens1994ab} augmented by Grimme{\textquoteright}s D3 dispersion correction \cite{grimme2010consistent} in conjunction with the 6-31+G* Pople basis set. \cite{ditchfield1971a, hehre1972a, hariharan1973a, francl1982a, gordon1982a, clark1983a, spitznagel1987a} This level of theory is based on our previous studies of carbazole-containing cyanoarenes as TADF emitter materials. \cite{Streiter2020, morgenstern2025unlocking} All resulting optimized structures were confirmed as minimum energy geometries by vibrational frequency analysis.\\
+ To explore the ground state conformational space of the cyanoarene systems, the global optimizer algorithm (GOAT) module \cite{de2025goat} implemented in Orca 6 \cite{ORCA, neese2025software} was used in combination with the semiempirical GFN2-XTB method. \cite{bannwarth2019gfn2} The global minima of each molecule served as starting points for TD--DFT optimizations of the first singlet ($S_\mathrm{1}$) and triplet ($T_\mathrm{1}$) excited states with the same level of theory used for the ground state optimizations.
+ 
+ \subsubsection*{Computational Determination of Photophysical Properties}\label{sec:QM2}
+ 
+-All electronic energies and SOC matrix elements $H_\mathrm{SO}$ were calculated at the corresponding optimized geometries using Orca 6 and the B3LYP-D3/def2-SVPD \cite{weigend2005a, rappoport2010a} level of theory with TD--DFT as well as an optimally tuned (OT) version of the range-separated hybrid functional $\omega$B97X-D3 \cite{lin2013long} with the same specifications to improve upon the description of CT states. The Tamm-Dancoff approximation was employed for triplet calculations with  OT-$\omega$B97X-D3. Range separation parameters $\omega$ were determined for the ground state global minimum of each molecule by minimizing the following function \cite{stein2009reliable} derived from Koopmans' theorem \cite{koopmans1934zuordnung} using Brent’s algorithm: \cite{brent1971algorithm}
++All electronic energies and SOC matrix elements $H_\mathrm{SO}$ were calculated at the corresponding optimized geometries using Orca 6 and the B3LYP-D3/def2-SVPD \cite{weigend2005a, rappoport2010a} level of theory with TD--DFT as well as an optimally tuned (OT) version of the range-separated hybrid functional $\omega$B97X-D3 \cite{lin2013long} with the same specifications to improve upon the description of CT states. The Tamm-Dancoff approximation was employed for triplet calculations with  OT-$\omega$B97X-D3. Range separation parameters $\omega$ were determined for the ground state global minimum of each molecule by minimizing the following function \cite{stein2009reliable} derived from Koopmans' theorem \cite{koopmans1934zuordnung} using Brent{\textquoteright}s algorithm: \cite{brent1971algorithm}
+ 
+ \begin{equation}
+     J^2(\omega) = \sum\limits_{i=0}^{1}(\varepsilon_\mathrm{HOMO}(N+i)+IP(N+i))^2
+@@ -370,7 +370,7 @@
+ 
+ \section*{Acknowledgements}
+ 
+-This work was funded by the German Research Foundation (DFG), TRR-386, TPs B06 and B08, project number 514664767. The authors gratefully acknowledge the resources on the LiCCA HPC cluster of the University of Augsburg, co-funded by the DFG – Project-ID 499211671.
++This work was funded by the German Research Foundation (DFG), TRR-386, TPs B06 and B08, project number 514664767. The authors gratefully acknowledge the resources on the LiCCA HPC cluster of the University of Augsburg, co-funded by the DFG {\textendash} Project-ID 499211671.
+ 
+ 
+ \section*{Supporting Information}
+--- a/bibliography.bib
++++ b/bibliography.bib
+@@ -30,7 +30,7 @@
+ @Article{Aizawa2020,
+   author    = {Aizawa, Naoya and Harabuchi, Yu and Maeda, Satoshi and Pu, Yong-Jin},
+   journal   = {Nature Communications},
+-  title     = {Kinetic prediction of reverse intersystem crossing in organic donor–acceptor molecules},
++  title     = {Kinetic prediction of reverse intersystem crossing in organic donor{\textendash}acceptor molecules},
+   year      = {2020},
+   issn      = {2041-1723},
+   month     = aug,
+@@ -115,7 +115,7 @@
+ @Article{Stavrou2020,
+   author    = {Stavrou, Kleitos and Franca, Larissa G. and Monkman, Andrew P.},
+   journal   = {ACS Applied Electronic Materials},
+-  title     = {Photophysics of TADF Guest–Host Systems: Introducing the Idea of Hosting Potential},
++  title     = {Photophysics of TADF Guest{\textendash}Host Systems: Introducing the Idea of Hosting Potential},
+   year      = {2020},
+   issn      = {2637-6113},
+   month     = aug,
+@@ -213,7 +213,7 @@
+ @Article{Weissenseel2019,
+   author    = {Weissenseel, Sebastian and Drigo, Nikita A. and Kudriashova, Liudmila G. and Schmid, Markus and Morgenstern, Thomas and Lin, Kun-Han and Prlj, Antonio and Corminboeuf, Clémence and Sperlich, Andreas and Brütting, Wolfgang and Nazeeruddin, Mohammad Khaja and Dyakonov, Vladimir},
+   journal   = {The Journal of Physical Chemistry C},
+-  title     = {Getting the Right Twist: Influence of Donor–Acceptor Dihedral Angle on Exciton Kinetics and Singlet–Triplet Gap in Deep Blue Thermally Activated Delayed Fluorescence Emitter},
++  title     = {Getting the Right Twist: Influence of Donor{\textendash}Acceptor Dihedral Angle on Exciton Kinetics and Singlet{\textendash}Triplet Gap in Deep Blue Thermally Activated Delayed Fluorescence Emitter},
+   year      = {2019},
+   issn      = {1932-7455},
+   month     = oct,
+@@ -295,7 +295,7 @@
+ }
+ 
+ @Article{Zhou2025,
+-  author    = {Zhou, Xin and Nikan, Jawid and Guo, Kaiwen and Blom, Paul W. M. and Wetzelaer, Gert‐Jan A. H. and Li, Yungui},
++  author    = {Zhou, Xin and Nikan, Jawid and Guo, Kaiwen and Blom, Paul W. M. and Wetzelaer, Gert-Jan A. H. and Li, Yungui},
+   journal   = {Advanced Science},
+   title     = {Determination of the Kinetic Rates and Intrinsic Nonradiative Losses in Organic Thermally Activated Delayed Fluorescence Emitters},
+   year      = {2025},
+@@ -323,7 +323,7 @@
+ }
+ 
+ @Article{Olivier2017,
+-  author    = {Olivier, Y. and Yurash, B. and Muccioli, L. and D’Avino, G. and Mikhnenko, O. and Sancho-García, J. C. and Adachi, C. and Nguyen, T.-Q. and Beljonne, D.},
++  author    = {Olivier, Y. and Yurash, B. and Muccioli, L. and D{\textquoteright}Avino, G. and Mikhnenko, O. and Sancho-García, J. C. and Adachi, C. and Nguyen, T.-Q. and Beljonne, D.},
+   journal   = {Physical Review Materials},
+   title     = {Nature of the singlet and triplet excitations mediating thermally activated delayed fluorescence},
+   year      = {2017},
+@@ -381,7 +381,7 @@
+ @Article{Speckmeier2018,
+   author    = {Speckmeier, Elisabeth and Fischer, Tillmann G. and Zeitler, Kirsten},
+   journal   = {Journal of the American Chemical Society},
+-  title     = {A Toolbox Approach To Construct Broadly Applicable Metal-Free Catalysts for Photoredox Chemistry: Deliberate Tuning of Redox Potentials and Importance of Halogens in Donor–Acceptor Cyanoarenes},
++  title     = {A Toolbox Approach To Construct Broadly Applicable Metal-Free Catalysts for Photoredox Chemistry: Deliberate Tuning of Redox Potentials and Importance of Halogens in Donor{\textendash}Acceptor Cyanoarenes},
+   year      = {2018},
+   issn      = {1520-5126},
+   month     = oct,
+@@ -585,7 +585,7 @@
+ }
+ 
+ @article{neese2025software,
+-  title={Software update: The ORCA program system—version 6.0},
++  title={Software update: The ORCA program system{\textemdash}version 6.0},
+   author={Neese, F.},
+   journal={Wiley Interdisciplinary Reviews: Computational Molecular Science},
+   volume={15},
+@@ -597,7 +597,7 @@
+ }
+ 
+ @article{bannwarth2019gfn2,
+-  title={GFN2-xTB—An accurate and broadly parametrized self-consistent tight-binding quantum chemical method with multipole electrostatics and density-dependent dispersion contributions},
++  title={GFN2-xTB{\textemdash}An accurate and broadly parametrized self-consistent tight-binding quantum chemical method with multipole electrostatics and density-dependent dispersion contributions},
+   author={Bannwarth, C. and Ehlert, S. and Grimme, S.},
+   journal={Journal of Chemical Theory and Computation},
+   volume={15},
+@@ -699,7 +699,7 @@
+ }
+ 
+ @article{spellerberg2003tribute,
+-  title={A Tribute to Claude Shannon (1916--2001) and a Plea for More Rigorous Use of Species Richness, Species Diversity and the ‘Shannon--Wiener’Index},
++  title={A Tribute to Claude Shannon (1916--2001) and a Plea for More Rigorous Use of Species Richness, Species Diversity and the {\textquoteleft}Shannon--Wiener{\textquoteright}Index},
+   author={Spellerberg, Ian F. and Fedor, Peter J.},
+   journal={Global Ecology and Biogeography},
+   volume={12},
+@@ -709,7 +709,7 @@
+ }
+ 
+ @article{lindstrom1988newton,
+-  title={Newton—Raphson and EM algorithms for linear mixed-effects models for repeated-measures data},
++  title={Newton{\textemdash}Raphson and EM algorithms for linear mixed-effects models for repeated-measures data},
+   author={Lindstrom, Mary J and Bates, Douglas M},
+   journal={Journal of the American Statistical Association},
+   volume={83},
+@@ -770,7 +770,7 @@
+ }
+ 
+ @Article{Serevicius2023,
+-  author    = {Serevičius, Tomas and Skaisgiris, Rokas and Tumkevičius, Sigitas and Dodonova-Vaitkūnienė, Jelena and Juršėnas, Saulius},
++  author    = {Serevi{\v c}ius, Tomas and Skaisgiris, Rokas and Tumkevi{\v c}ius, Sigitas and Dodonova-Vaitk{\=u}nien{\.e}, Jelena and Jur{\v s}{\.e}nas, Saulius},
+   journal   = {Journal of Materials Chemistry C},
+   title     = {Understanding the temporal dynamics of thermally activated delayed fluorescence in solid hosts},
+   year      = {2023},
+@@ -785,7 +785,7 @@
+ @Article{Thieulloy2025,
+   author    = {de Thieulloy, Laure and de Sousa, Leonardo Evaristo and de Silva, Piotr},
+   journal   = {Journal of Materials Chemistry C},
+-  title     = {Enhancing triplet harvesting in inverted singlet–triplet gap molecules through mechanistic understanding},
++  title     = {Enhancing triplet harvesting in inverted singlet{\textendash}triplet gap molecules through mechanistic understanding},
+   year      = {2025},
+   issn      = {2050-7534},
+   number    = {32},
+@@ -906,7 +906,7 @@
+ @Article{Garreau2019,
+   author    = {Garreau, Marion and Le Vaillant, Franck and Waser, Jerome},
+   journal   = {Angewandte Chemie International Edition},
+-  title     = {C‐Terminal Bioconjugation of Peptides through Photoredox Catalyzed Decarboxylative Alkynylation},
++  title     = {C-Terminal Bioconjugation of Peptides through Photoredox Catalyzed Decarboxylative Alkynylation},
+   year      = {2019},
+   issn      = {1521-3773},
+   month     = may,
+@@ -932,7 +932,7 @@
+ }
+ 
+ @Article{DosSantos2024,
+-  author    = {Dos Santos, John Marques and Hall, David and Basumatary, Biju and Bryden, Megan and Chen, Dongyang and Choudhary, Praveen and Comerford, Thomas and Crovini, Ettore and Danos, Andrew and De, Joydip and Diesing, Stefan and Fatahi, Mahni and Griffin, Máire and Gupta, Abhishek Kumar and Hafeez, Hassan and Hämmerling, Lea and Hanover, Emily and Haug, Janine and Heil, Tabea and Karthik, Durai and Kumar, Shiv and Lee, Oliver and Li, Haoyang and Lucas, Fabien and Mackenzie, Campbell Frank Ross and Mariko, Aminata and Matulaitis, Tomas and Millward, Francis and Olivier, Yoann and Qi, Quan and Samuel, Ifor D. W. and Sharma, Nidhi and Si, Changfeng and Spierling, Leander and Sudhakar, Pagidi and Sun, Dianming and Tankelevi\v{c}iu\={u}t\.{e}, Eglė and Duarte Tonet, Michele and Wang, Jingxiang and Wang, Tao and Wu, Sen and Xu, Yan and Zhang, Le and Zysman-Colman, Eli},
++  author    = {Dos Santos, John Marques and Hall, David and Basumatary, Biju and Bryden, Megan and Chen, Dongyang and Choudhary, Praveen and Comerford, Thomas and Crovini, Ettore and Danos, Andrew and De, Joydip and Diesing, Stefan and Fatahi, Mahni and Griffin, Máire and Gupta, Abhishek Kumar and Hafeez, Hassan and Hämmerling, Lea and Hanover, Emily and Haug, Janine and Heil, Tabea and Karthik, Durai and Kumar, Shiv and Lee, Oliver and Li, Haoyang and Lucas, Fabien and Mackenzie, Campbell Frank Ross and Mariko, Aminata and Matulaitis, Tomas and Millward, Francis and Olivier, Yoann and Qi, Quan and Samuel, Ifor D. W. and Sharma, Nidhi and Si, Changfeng and Spierling, Leander and Sudhakar, Pagidi and Sun, Dianming and Tankelevi\v{c}iu\={u}t\.{e}, Egl{\.e} and Duarte Tonet, Michele and Wang, Jingxiang and Wang, Tao and Wu, Sen and Xu, Yan and Zhang, Le and Zysman-Colman, Eli},
+   journal   = {Chemical Reviews},
+   title     = {The Golden Age of Thermally Activated Delayed Fluorescence Materials: Design and Exploitation},
+   year      = {2024},

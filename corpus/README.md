@@ -17,7 +17,10 @@ chemistry, the earth sciences and medicine. Each is under a licence that allows 
   build yet (`"supported": false`) is listed with the reason and not run.
 - `patches/<id>.patch`: what was changed in a paper's source before it was built, and why, in the patch's
   header. A change is made only where the paper needs another engine for something it does not use (an
-  unused package that needs pdfTeX, say).
+  unused package that needs pdfTeX, say), or where it was written for pdfLaTeX: UTF-8 text in an 8-bit font
+  encoding, whose characters LuaLaTeX cannot find in the font. Those characters are replaced by LaTeX's own
+  definitions for them (`ż` by `\.z`, `–` by `\textendash`), what pdfLaTeX's inputenc gives, outside verbatim,
+  listings and URLs.
 - `LICENSES.md`: attribution per paper, written from the manifest (`node tools/corpus/licences.ts`).
 
 The sources themselves are not in the repository. `tools/corpus/fetch.ts` downloads each, once, into
