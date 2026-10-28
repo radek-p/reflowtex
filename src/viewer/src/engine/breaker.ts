@@ -51,10 +51,15 @@ export function lineWidthAt(measure: Measure, k: number): number {
 // ── Protrusion ────────────────────────────────────────────────────────────────
 
 // What LuaTeX steps over looking for the character at a line's edge
-// (cp_skipable): penalties, a \vadjust, empty glue, a font kern or an empty
-// one, a math node without surround, an empty discretionary. An italic
-// correction or an explicit kern stops the search, so the character before
-// it does not hang.
+// (cp_skipable, linebreak.h): penalties, a \vadjust, empty glue, a font kern
+// or an empty one, a math node without surround, an empty discretionary, a
+// rule of size zero, and a box of size zero with nothing in it (the empty
+// nucleus of $^1$, a \label's anchor, an empty \hbox{}). LuaTeX also steps
+// over whatsits, marks, inserts, boundaries and direction nodes, which reach
+// the viewer as such empty boxes (pipeline: stripUnsupportedNodes). An
+// italic correction or an explicit kern stops the search, so the character
+// before it does not hang.
+const zeroSize = (n: { width: number; height: number; depth: number }) => !n.width && !n.height && !n.depth;
 export function protSkipable(n: TexNode): boolean {
     switch (n.type) {
         case 'penalty': case 'adjust': case 'local_par': return true;
@@ -62,12 +67,17 @@ export function protSkipable(n: TexNode): boolean {
         case 'kern':    return !n.kern || (n.subtype || 0) === 0;
         case 'math':    return !n.surround;
         case 'disc':    return !(n.pre || []).length && !(n.post || []).length && !(n.replace || []).length;
-        case 'glyph': case 'rule': case 'hlist': case 'vlist': case 'picture': case 'transform':
-        case 'widget': case 'wdisc':
+        case 'rule':    return zeroSize(n);
+        case 'hlist':   return !isCharBox(n) && !(n.children || []).length && zeroSize(n);
+        case 'glyph': case 'vlist': case 'picture': case 'transform': case 'widget': case 'wdisc':
             return false;
         default:        return unreachable(n, 'node');
     }
 }
+// A box the search goes into: one with something in it. (A virtual font's
+// character in its box is that character: core.ts, isCharBox.)
+const searchedInto = (n: TexNode): n is TexNode & { children: TexNode[] } =>
+    n.type === 'hlist' && !isCharBox(n) && !!(n.children || []).length;
 // The character at the right edge of nodes[0..idx), as LuaTeX's
 // find_protchar_right finds it: stepping back over what protSkipable allows,
 // into a box to its last character, and over a box with nothing in it but
@@ -87,22 +97,32 @@ export function findLastGlyph(nodes: TexNode[], idx: number): TexNode | null {
     }
     return null;
 }
-// The character at the left edge from nodes[idx], as find_protchar_left
-// finds it: past empty boxes, then over what protSkipable allows, into a box
-// to its first character – but a box with nothing to protrude ends the
-// search there. A virtual font's character in its box is that character.
+// The character at the left edge from nodes[idx], as LuaTeX's
+// find_protchar_left finds it: over what protSkipable allows, into a box to
+// its first character. A box that holds nothing but such things ends the
+// search: LuaTeX steps out of it (and of every box it ends) to the node
+// after, and takes that node as it is – a character protrudes, anything else
+// does not. LuaTeX first steps over the empty boxes and the local_par a
+// paragraph starts with, which protSkipable steps over too. Called from a
+// break, it then skips the discardables there (its `d` pass, which also
+// takes every kern); the viewer looks from where the break's discards end
+// (lead), as post_line_break does.
 export function findFirstGlyph(nodes: TexNode[], idx: number): TexNode | null {
-    let k=idx;
-    const emptyBox = (n: TexNode) => n.type==='hlist' && !(n.children||[]).length && !n.width && !n.height && !n.depth;
-    while (k<nodes.length-1 && emptyBox(nodes[k])) k++;
-    for (;k<nodes.length;k++) {
-        const n=nodes[k];
-        if (protSkipable(n)) continue;
-        if (isCharBox(n)) return n;
-        if (n.type==='hlist' && (n.children||[]).length) return findFirstGlyph(n.children!, 0);
-        return n.type==='glyph'?n:null;
+    if (idx >= nodes.length) return null;
+    const up: [TexNode[], number][] = [];
+    let list = nodes, k = idx;
+    for (;;) {
+        const n = list[k];
+        if (searchedInto(n)) { up.push([list, k]); list = n.children; k = 0; continue; }
+        if (!protSkipable(n)) break;
+        if (k + 1 < list.length) { k++; continue; }
+        if (!up.length) break;
+        while (k + 1 >= list.length && up.length) [list, k] = up.pop()!;
+        if (k + 1 < list.length) k++;
+        break;
     }
-    return null;
+    const n = list[k];
+    return isChar(n) ? n : null;
 }
 
 // TeX's round_xn_over_d: x·n/d rounded half away from zero, in integers.

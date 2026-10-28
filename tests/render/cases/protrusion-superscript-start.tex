@@ -1,0 +1,30 @@
+% Lines that start with a superscript under microtype: $^1$, $^{4}$ and
+% \textsuperscript{2} (LaTeX's \ensuremath{^{\mbox{2}}}). A formula with only a
+% superscript is math-on, an empty nucleus (a box of size zero with nothing in
+% it), the superscript's box and math-off; TeX steps over the empty box into
+% the superscript and protrudes its digit into the margin. Ragged and
+% justified paragraphs, and lines broken just before such a mark.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\begin{document}
+{\small\raggedright $^1$Department of Examples, Institute of Sample Studies, Long Street 12, 00-000 Sometown, Somewhere\par}
+{\small\raggedright $^4$Laboratory of Placeholder Text, University of Somewhere Else, Another Road 34, 11-111 Othertown, and more words here\par}
+{\raggedright $^{1}$Faculty of Illustrative Physics, Astronomy and Applied Example Science, Third Avenue 56, Elsewhere\par}
+{\raggedright \textsuperscript{2}School of Generic Mathematics, Fourth Lane 78, 22-222 Yet Another Town, Elsewhere\par}
+
+\noindent $^1$Justified text that begins with a superscript digit and goes on long enough to need a second line, so that the
+breaker's first line is tried with the protrusion of the digit, and
+\mbox{}1 an empty box before a digit.
+
+\noindent\textsuperscript{3}Justified text that begins with a superscript made by \verb|\textsuperscript| and
+goes on long enough to need a second line.
+
+Running text in which marks follow one another so that some line may be broken just before one of them:
+words $^1$first $^2$second $^3$third $^4$fourth $^1$fifth $^2$sixth $^3$seventh $^4$eighth $^1$ninth $^2$tenth
+$^3$eleventh $^4$twelfth \textsuperscript{1}thirteenth \textsuperscript{4}fourteenth \textsuperscript{1}fifteenth.
+
+{}``Quoted'' text after an empty group, with words enough to fill a line or two of the paragraph so it is broken by the
+viewer itself rather than kept.
+\end{document}

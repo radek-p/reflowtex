@@ -543,8 +543,8 @@ test('a character the font lacks is drawn by nothing, and the block lists it', a
   const missing = [0x142, 0xFB00, 0x2554, 0x2550, 0x2557];
   assert.deepEqual(nodes.filter(n => n.type === 'glyph' && (missing.includes(n.char!) || (n as { gindex?: number }).gindex === 0)), [],
     'no glyph for them, nor a .notdef');
-  // each a box holding a rule of size 0 (it stops the search for a protruding character)
-  const boxes = nodes.filter(n => n.type === 'hlist' && n.children?.length === 1 && n.children[0].type === 'rule' && !n.children[0].width);
+  // each a box holding an empty vlist (it stops the search for a protruding character)
+  const boxes = nodes.filter(n => n.type === 'hlist' && n.children?.length === 1 && n.children[0].type === 'vlist' && !n.children[0].children?.length);
   // ł and ﬀ: 0 wide; each box-drawing character: 0, then its .notdef
   assert.deepEqual(boxes.map(b => b.width! > 0), [false, false, false, true, false, true, false, true]);
   // nor in the text layer (copy, search, screen readers): TeX's PDF has none

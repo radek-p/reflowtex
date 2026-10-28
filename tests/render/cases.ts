@@ -102,6 +102,11 @@ export const cases: Record<string, CaseSettings> = {
   // discards both at a break. Worst attained 2026-10-28 (0.689 before).
   mathsurround: { tolerance: 0.010 },
   microtype: { tolerance: 0.014 },
+  // Lines that start with a superscript ($^1$, \textsuperscript) under
+  // microtype: TeX steps over the formula's empty nucleus and protrudes the
+  // digit; the browser stopped at the empty box, and each such line sat up to
+  // 0.41 pt right of TeX's. Worst attained 2026-10-28.
+  'protrusion-superscript-start': { tolerance: 0.039 },
   paragraph: { tolerance: 0.010 },
   // The paragraph at widths that are no whole number of pixels (2 px per pt):
   // a real paper's \hsize rarely is one. The column must be the exact width,
