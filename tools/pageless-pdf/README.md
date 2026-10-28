@@ -28,8 +28,10 @@ dimensions (`Serializer.flow_head()`). That copy is the pageless document.
 `pageless.ts` compiles the document as the pipeline does – through the
 driver, which reads the capture code and then the file as it is, under its
 own job name (`src/pipeline/driver.ts`, `docs/documents.md`), shell escape
-off unless `REFLOWTEX_SHELL_ESCAPE=1` – with two lines added: `pageless_pdf.lua` loaded after the serializer, and a hook at the
-end of the document that ships the copy. It compiles once, at the
+off unless `REFLOWTEX_SHELL_ESCAPE=1` – with a few lines added: `pageless_pdf.lua` loaded after the serializer, and
+`\@@end` (the primitive `\end` that every `\enddocument` ends in, a class's
+own included, which may run no end-of-document hook) made to ship the copy
+first. It compiles once, at the
 document's own width; `--width-extra` widens `\textwidth` through the
 capture's width hook. A file is a complete document; `--snippet` sets it in
 `--preamble`'s setup instead (for a document, `--preamble` is read at the end

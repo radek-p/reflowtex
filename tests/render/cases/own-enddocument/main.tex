@@ -1,0 +1,14 @@
+% A document in a class with its own \enddocument (oldend.cls, LaTeX's from
+% before 2020): no end-of-document hook runs, and the strip must still be
+% shipped, with all of the document in it.
+\documentclass{oldend}
+\pagestyle{empty}
+\begin{document}
+\section{A section}\label{sec}
+A paragraph long enough to break across lines differently at every width
+the test tries, with a reference to Section~\ref{sec} in it, and some more
+words so that it has a third line as well at the narrowest width.
+
+The last paragraph, which ends the document just before its own
+\verb|\enddocument| runs.
+\end{document}

@@ -315,6 +315,11 @@ export const cases: Record<string, CaseSettings> = {
   // job input, and LaTeX's \input set \CurrentFile to the main file.
   jobname: { file: 'tests/render/cases/jobname/paper.tex', against_plain: true, tolerance: 0.010 },
   'relative-paths': { file: 'tests/render/cases/relative-paths/main.tex', tolerance: 0.010 },
+  // A class with an \enddocument of its own, LaTeX's from before 2020 (no
+  // hooks): the strip was shipped from enddocument/afterlastpage, which never
+  // ran, so there was no strip at all. It is shipped from \@@end now, the
+  // primitive every \enddocument ends in. Worst attained 2026-10-28.
+  'own-enddocument': { file: 'tests/render/cases/own-enddocument/main.tex', against_plain: true, tolerance: 0.010 },
   // Pictures graphicx clips (clip with a trim or a viewport), beside one whole
   // and one through a viewport unclipped. graphicx puts a clipped image in a
   // box resource, which the page drew as a filled rule: the picture and its

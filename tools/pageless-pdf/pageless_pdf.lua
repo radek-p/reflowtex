@@ -35,10 +35,14 @@
 --
 -- Load this file right after serializer.lua (it wraps
 -- Serializer.note_captured_picture to keep each picture's box), and
--- call Pageless.ship() from the `enddocument/afterlastpage` hook:
+-- call Pageless.ship() when the document has ended: from \@@end, the
+-- primitive \end every \enddocument ends in (a class's own \enddocument,
+-- as LaTeX's was before 2020, runs no end-of-document hook), after the last
+-- \clearpage has put every float into the galley:
 --
---   \AddToHook{enddocument/afterlastpage}{%
---     \directlua{Pageless.ship{margin = tex.sp("36pt")}}}
+--   \expandafter\let\expandafter\reflowtexPagelessEnd\csname @@end\endcsname
+--   \expandafter\def\csname @@end\endcsname{%
+--     \directlua{Pageless.ship{margin = tex.sp("36pt")}}\reflowtexPagelessEnd}
 --
 -- Output: the pages, appended to the job's PDF, and pageless.json describing
 -- them (page numbers, heights), all in sp.
