@@ -163,7 +163,7 @@ reflowtex.host.define('lean', {    // \webwidget[decl=…]{lean}: instance.attrs
       opener = btn; btn.setAttribute('aria-expanded', 'true');
       menu = document.createElement('div');
       menu.className = 'lean-menu'; menu.setAttribute('role', 'menu');
-      menu.innerHTML = '<div class="head">Checked by Lean 4 · <code>' + DECL + '</code></div>'
+      menu.innerHTML = '<div class="head">Checked by Lean 4<br><code>' + DECL + '</code></div>'
         + '<button type="button" role="menuitemcheckbox" aria-checked="' + showDecl + '" data-act="decl">'
         + '<span class="tick">' + (showDecl ? '✓' : '') + '</span>Show the declaration</button>'
         + '<button type="button" role="menuitem" data-act="copy"><span class="tick"></span>Copy the declaration name</button>'

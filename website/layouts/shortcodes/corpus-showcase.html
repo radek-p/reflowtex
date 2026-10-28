@@ -1,0 +1,66 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The paper corpus as cards, by domain (data/corpus.json; see
+  partials/corpus/). Each card: the paper, its class and notable packages,
+  links to the paper here and to the original, its licence and
+  attribution. A paper that is not shown says why.
+*/ -}}
+{{- $c := partial "corpus/data.html" . -}}
+{{- partial "corpus/style.html" .Page -}}
+{{- with $c.papers -}}
+{{- $groups := partial "corpus/domains.html" . -}}
+<div class="corpus" id="corpus">
+  {{- with $c.totals }}
+  <p class="corpus-summary">{{ .displayed }} of {{ .papers }} papers are shown here, in {{ len $groups }} domains.</p>
+  {{- end }}
+  <nav aria-label="Domains">
+    <ul class="corpus-domains-nav">
+      {{- range $groups }}
+      <li><a href="#{{ .anchor }}">{{ .name }}<span>{{ len .papers }}</span></a></li>
+      {{- end }}
+    </ul>
+  </nav>
+  <div class="corpus-domains">
+  {{- range $groups }}
+  <section class="corpus-domain cg-{{ cond (gt (len .papers) 2) 3 (len .papers) }}" id="{{ .anchor }}" aria-labelledby="{{ .anchor }}-h">
+    <h3 id="{{ .anchor }}-h">{{ .name }} <span>{{ len .papers }} {{ cond (eq (len .papers) 1) "paper" "papers" }}</span></h3>
+      {{- range .papers }}
+      {{- $p := . }}
+      {{- $pub := partial "corpus/published.html" . }}
+      {{- $url := partial "corpus/page-url.html" . }}
+      {{- $shown := eq .status "displayed" }}
+      <article class="corpus-card{{ if not $shown }} is-stopped{{ end }}" id="paper-{{ .id }}">
+        {{- with .field }}<p class="cc-field">{{ . }}</p>{{ end }}
+        <h4 class="cc-title">{{ with $url }}<a href="{{ . }}">{{ $p.title }}</a>{{ else }}{{ .title }}{{ end }}</h4>
+        {{- with partial "corpus/authors.html" .authors }}<p class="cc-authors">{{ . }}</p>{{ end }}
+        {{- $where := slice }}{{ with or .venue (and .published .published.venue) }}{{ $where = $where | append . }}{{ end }}
+        {{- with .year }}{{ if not (in (delimit $where " ") (string .)) }}{{ $where = $where | append (string .) }}{{ end }}{{ end }}
+        {{- with $where }}<p class="cc-venue">{{ delimit . ", " }}</p>{{ end }}
+        {{- with .published }}{{ with .doi }}<p class="cc-doi">DOI <a href="{{ or $p.published.url (printf "https://doi.org/%s" .) }}" rel="noopener">{{ . }}</a></p>{{ end }}{{ end }}
+        <ul class="cc-labels" aria-label="Class and notable packages">
+          {{- with .class }}<li class="cc-class" title="Document class">{{ . }}</li>{{ end }}
+          {{- range .packages }}{{ if not (hasPrefix ($p.class | default "") .) }}<li>{{ . }}</li>{{ end }}{{ end }}
+        </ul>
+        {{- if not $shown }}
+        <p class="cc-reason"><strong>Not shown here.</strong> {{ .reason | default "It did not build." }}</p>
+        {{- end }}
+        {{- with .patched }}<details class="cc-patched"><summary>Changed to build here</summary><p>{{ . }}</p></details>{{ end }}
+        <p class="cc-links">
+          {{- with $url }}<a class="cc-read" href="{{ . }}">Read it here</a>{{ end }}
+          {{- with .original_url }}{{ if ne . $pub.url }}<a href="{{ . }}" rel="noopener">Original</a>{{ end }}{{ end }}
+          {{- with .source_url }}{{ if ne . $pub.url }}<a href="{{ . }}" rel="noopener">Source</a>{{ end }}{{ end }}
+        </p>
+        <p class="cc-licence">
+          {{- if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ partial "corpus/licence.html" .licence }}</a>{{ else }}{{ partial "corpus/licence.html" .licence }}{{ end }}
+          {{- with $pub.url }}, published at <a href="{{ . }}" rel="noopener">{{ $pub.host }}</a>{{ end }}
+          {{- with .attribution }}<span>{{ . }}</span>{{ end -}}
+        </p>
+      </article>
+      {{- end }}
+  </section>
+  {{- end }}
+  </div>
+</div>
+{{- else -}}
+<p class="corpus-missing">The corpus's results are not part of this build.</p>
+{{- end -}}

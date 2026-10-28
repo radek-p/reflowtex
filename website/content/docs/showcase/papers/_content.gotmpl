@@ -1,0 +1,18 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  One page per shown paper of the corpus (data/corpus.json), at
+  /docs/showcase/papers/<id>/: the docs shell with the paper's details at
+  the top, its typeset text below (shortcodes/corpus-paper.html) and its
+  contents on the right. Like testmath.tex, the pages are not listed in the
+  menu; Showcase stays marked while one is read.
+*/ -}}
+{{- range (hugo.Data.corpus.papers | default slice) -}}
+  {{- if eq .status "displayed" -}}
+    {{- $.AddPage (dict
+          "path" .id
+          "kind" "page"
+          "title" .title
+          "content" (dict "mediaType" "text/markdown" "value" "{{< corpus-paper >}}")
+          "params" (dict "corpusId" .id "toc" true "widthControl" true "hideInNav" true "latexTitle" true)) -}}
+  {{- end -}}
+{{- end -}}

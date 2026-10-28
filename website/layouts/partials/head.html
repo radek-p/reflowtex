@@ -1,7 +1,7 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }} · {{ site.Title }}{{ end }}</title>
+<title>{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }} – {{ site.Title }}{{ end }}</title>
 <meta name="description" content="{{ site.Params.tagline }}">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ctext%20x='3'%20y='13'%20font-size='15'%20font-family='Georgia,serif'%20fill='%23888'%3E%E2%88%AB%3C/text%3E%3C/svg%3E">
 
@@ -129,7 +129,7 @@
   .site-nav .brand .int { opacity: 0.5; }
   .site-nav .spacer { flex: 1; }
   @media (max-width: 64rem) { .site-nav { padding: 1rem 1.25rem; } }
-  @media (max-width: 30rem) { .site-nav { gap: 0.9rem; font-size: 0.85rem; } }
+  @media (max-width: 30rem) { .site-nav { gap: 0.4rem 0.65rem; font-size: 0.85rem; flex-wrap: wrap; } }
   .site-nav a.navlink { text-decoration: none; opacity: 0.72; }
   .site-nav a.navlink:hover { opacity: 1; }
 

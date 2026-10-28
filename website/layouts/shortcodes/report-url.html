@@ -1,0 +1,4 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* The comparison report's URL for a batch: {{< report-url batch="tests" >}}
+       (partials/report-url.html). */ -}}
+{{- partial "report-url.html" (dict "batch" (.Get "batch" | default "tests")) -}}

@@ -36,3 +36,9 @@
 /static/render-tests/
 # The privacy note, built by build.sh from browser/privacy-notice.ts.
 /static/privacy-notice.js
+# The paper corpus's pages and comparisons, written by tools/corpus/report.ts
+# (CI's corpus workflow; the deploy downloads them).
+/static/corpus/
+# The paper corpus's blocks, for its pages (tools/corpus/report.ts;
+# params.corpus.blocks).
+/corpus-blocks/

@@ -8,13 +8,15 @@
 // long document the pipeline builds: after a jump far down, the live page
 // shows there the lines the measurement saw there. A document whose lines
 // all sit lower in TeX from the first on: by placement, nothing is off, and
-// the one jump is marked.
+// the one jump is marked. And batches: a second set of results (a paper
+// corpus, its files gzipped) beside the tests, each shown on its own.
 //
 //     node --test tests/render/report/report.test.ts      (make test-render runs it)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -184,7 +186,20 @@ before(async () => {
   mkdirSync(page);
   for (const f of ['index.html', 'report.css']) copyFileSync(join(HERE, f), join(page, f));
   writeFileSync(join(page, 'app.js'), reportScript());
-  ({ server, url } = await serveMounts({ '/': page, '/build/': build, '/inspector/': join(REPO, 'src/inspector') }));
+  // a second batch, as the website has the paper corpus beside the tests: its own report.json, its files gzipped
+  const corpus = join(build, '.corpus');
+  makeTest(corpus, 'paper-a', 12, 60);
+  for (const f of ['vector.json', 'strip.svg']) {
+    const p = join(corpus, 'paper-a', 'w0', 'vector', f);
+    writeFileSync(`${p}.gz`, gzipSync(readFileSync(p)));
+    rmSync(p);
+  }
+  const paper = JSON.parse(readFileSync(join(corpus, 'paper-a', 'w0', 'result.json'), 'utf8'));
+  writeFileSync(join(corpus, 'report.json'), JSON.stringify({ batch: { id: 'corpus', label: 'Paper corpus', order: 2 },
+    results: [{ ...paper, label: 'A paper (paper-a)', gz: true }] }));
+  writeFileSync(join(page, 'batches.json'), JSON.stringify({ batches: [{ id: 'corpus', label: 'Paper corpus', index: 'corpus/report.json', order: 2 },
+    { id: 'tests', label: 'Tests', index: 'build/report.json', order: 1 }] }));
+  ({ server, url } = await serveMounts({ '/': page, '/build/': build, '/corpus/': corpus, '/inspector/': join(REPO, 'src/inspector') }));
   browser = await chromium.launch();
   await measureFar(far, `${url}/build/far/w0/site/index.html`);
   writeIndex(build, ['long', 'short', 'odd-width', 'said', 'stopped', 'jumped', 'far']);
@@ -336,7 +351,7 @@ test('what a test says: one line above the sides, all of it in the Summary tab, 
     return { text: h.innerText.replace(/\s+/g, ' ').trim(), height: h.getBoundingClientRect().height,
              lines: h.querySelector('.nums')!.getClientRects().length, list: document.querySelectorAll('.problems, .headline li').length };
   });
-  assert.equal(top.text, 'Fail 990 of 1000 lines matched, 7 step(s) · 81.4 % of glyphs within 0.092 pt · 666 rules not drawn (0 allowed) Summary (14)');
+  assert.equal(top.text, 'Fail 990 of 1000 lines matched, 7 step(s), 81.4 % of glyphs within 0.092 pt, 666 rules not drawn (0 allowed) Summary (14)');
   assert.ok(top.height <= 30 && top.lines === 1, `the line is ${top.height} px tall`);
   assert.equal(top.list, 0);
   // the Summary tab: the lines in groups, the steps five at first
@@ -479,4 +494,28 @@ test('a build without paired lines: in absolute position, and the report says so
   assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.list .measure .seg button')].map(b => b.textContent)), ['Absolute']);
   assert.match((await page.locator('.list .measure .muted').textContent())!, /no line pairing/);
   assert.deepEqual(page.errors, []);
+});
+
+test('batches: each its own list and totals, named by the URL, its gzipped files read', async () => {
+  const page = await open('paper-a', false);
+  await page.goto(`${url}/?batch=corpus#paper-a`);
+  await drawn(page);
+  const listed = () => page.evaluate(() => ({
+    options: [...document.querySelectorAll<HTMLOptionElement>('select[aria-label="Test"] option')].map(o => o.textContent!.trim()),
+    totals: document.querySelector('.totals')!.textContent, batch: document.querySelector('[aria-label="Which results: each batch is its own list and summary"] [aria-pressed="true"]')?.textContent,
+    uses: document.querySelectorAll('svg.sheet use').length }));
+  const corpus = await listed();
+  assert.deepEqual(corpus.options.map(o => o.replace(/^\S+\s/, '')), ['A paper (paper-a)']);
+  assert.equal(corpus.totals, '1');
+  assert.equal(corpus.batch, 'Paper corpus');
+  assert.ok(corpus.uses > 0, 'the TeX side drawn from strip.svg.gz');
+  // the other batch: the tests alone, and the URL says so
+  await page.click('button:text("Tests")');
+  await page.waitForFunction(() => [...document.querySelectorAll('select[aria-label="Test"] option')].length > 1);
+  const tests = await listed();
+  assert.ok(tests.options.some(o => o.endsWith(' long')), JSON.stringify(tests.options));
+  assert.ok(!tests.options.some(o => o.includes('paper-a')));
+  assert.equal(new URL(page.url()).searchParams.get('batch'), 'tests');
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
 });

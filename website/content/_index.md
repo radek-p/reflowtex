@@ -329,8 +329,8 @@ theorems and environments of your own.
 {{< latex preamble="home" >}}
 \raggedright
 \cardtitle{Showcase}
-\noindent Whole papers and books, including the
-AMS sample paper \texttt{testmath.tex}.
+\noindent Whole papers and books: the AMS sample
+paper \texttt{testmath.tex} and openly licensed papers from several sciences.
 {{< /latex >}}
 
 </a>

@@ -15,11 +15,13 @@ typeset by LuaTeX twice from one run: as a
 \href{../../tools/pageless-pdf/}{pageless PDF} -- one page as tall as the
 document, so that nothing is moved to another page -- and in the browser by
 Reflow\TeX, with its column exactly as wide as the PDF's. The two are then
-compared in two ways, each with a tool to see the results.
+compared in two ways, each with a tool to see the results. The first is
+also run on a corpus of openly licensed papers: \href{\#corpus}{Papers},
+below.
 {{< /latex >}}
 
 <div class="accuracy-tools">
-<a href="{{< siteurl "render-tests/" >}}" class="primary">Render tests</a>
+<a href="{{< report-url batch="tests" >}}" class="primary">Render tests</a>
 <a href="../../tools/pixel-compare/">Pixel comparison</a>
 </div>
 <style>
@@ -61,3 +63,29 @@ renderer puts each glyph on a whole pixel row.
 \emph{Pixel comparison} shows the pictures for the whole paper, with the
 rows that differ marked.
 {{< /latex >}}
+
+{{< latex preamble="about" >}}
+\section*{Papers}
+The papers are those in \href{../../showcase/\#corpus}{Showcase}. We chose
+them because their licences (CC BY 4.0, CC BY-SA 4.0, CC0 and, for one,
+the GPL) allow us to serve a copy of them here. Each one shows its licence
+and authors, and links to where it was published.
+
+They are compared as the render tests are: each is typeset by LuaTeX as a
+pageless PDF, its text set as one long page, and in the browser at the same
+text width, and the two are compared glyph by glyph. A paper's
+\emph{placement} is the share of \TeX's glyphs that the browser puts within
+0.092\,pt of \TeX's position along their line, in the lines that match. A \emph{vertical jump} is a gap between
+two lines whose height differs from \TeX's by more than the same tolerance.
+
+A two-column paper is set here in one column at its full text width, as a
+web page has no columns; we compare with \TeX{} setting that one column, not
+with the two-column PDF. Only each paper's own text width is measured: at
+other widths the browser breaks the lines again, and there is no PDF from
+\TeX{} to compare with.
+The figures count glyphs only; the pixel comparison above is made for
+\texttt{testmath.tex} alone. A paper that cannot be shown is counted, with
+the reason, and has no figures.
+{{< /latex >}}
+
+{{< corpus-accuracy >}}

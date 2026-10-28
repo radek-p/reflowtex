@@ -20,8 +20,8 @@ inspector open on it.
 {{< /latex >}}
 
 <div class="render-tests">
-<p><a href="{{< siteurl "render-tests/" >}}" class="open">Open the render tests</a> It fills the window; the browser's back button returns here.</p>
-<a href="{{< siteurl "render-tests/" >}}" class="shot"><img src="{{< siteurl "images/render-tests.webp" >}}" width="1600" height="1000" alt="The render tests: a test's pageless PDF beside the page the browser laid out, TeX's rules the browser draws otherwise marked on the PDF, the list of them on the right, and the inspector open below." loading="lazy"></a>
+<p><a href="{{< report-url batch="tests" >}}" class="open">Open the render tests</a> It fills the window; the browser's back button returns here.</p>
+<a href="{{< report-url batch="tests" >}}" class="shot"><img src="{{< siteurl "images/render-tests.webp" >}}" width="1600" height="1000" alt="The render tests: a test's pageless PDF beside the page the browser laid out, TeX's rules the browser draws otherwise marked on the PDF, the list of them on the right, and the inspector open below." loading="lazy"></a>
 </div>
 <style>
   .render-tests .shot { display: block; margin-bottom: 2rem; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px; overflow: hidden; line-height: 0; }

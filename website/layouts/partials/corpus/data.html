@@ -1,0 +1,4 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* The paper corpus's results: data/corpus.json, which CI writes
+       (tools/corpus). Without it, nothing: the shortcodes say so. */ -}}
+{{- return (hugo.Data.corpus | default dict) -}}

@@ -2,8 +2,8 @@
 // Tar archives of regular files, the part of the format the tools need: write
 // a reproducible one (no times, owners or order that depends on the disk; byte
 // for byte what Python's tarfile writes for the same files), and
-// read one back – ustar, with pax extended headers (their `path` is honoured)
-// and GNU long names skipped. What a reader then does with an entry's name is
+// read one back – ustar, with pax extended headers and GNU long names (their
+// path is honoured for the entry that follows). What a reader then does with an entry's name is
 // its business: check it before writing anywhere.
 const BLOCK = 512, RECORD = 20 * BLOCK;
 
@@ -58,7 +58,8 @@ export function readTar(buf: Uint8Array): TarEntry[] {
       for (const rec of Buffer.from(data).toString('utf8').split('\n')) { const m = / path=(.*)$/.exec(rec); if (m) paxPath = m[1]; }
       continue;
     }
-    if (type === 'g' || type === 'L' || type === 'K') continue;
+    if (type === 'L') { paxPath = Buffer.from(data).toString('utf8').replace(/\u0000.*$/s, ''); continue; }   // GNU: the next entry's long name
+    if (type === 'g' || type === 'K') continue;
     if (paxPath !== null) { name = paxPath; paxPath = null; }
     out.push({ name, type: type === '0' || type === '\u0000' ? 'file' : type === '5' ? 'dir' : 'other', data });
   }

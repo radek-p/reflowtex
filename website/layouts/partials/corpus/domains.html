@@ -1,0 +1,16 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* The papers by domain: the domain with most papers first (ties by
+       name), each domain's papers by title. Returns a list of
+       { name, anchor, papers }. */ -}}
+{{- $papers := . -}}
+{{- $names := slice -}}
+{{- range $papers }}{{ $names = $names | append (.domain | default "Other") }}{{ end -}}
+{{- $groups := slice -}}
+{{- range uniq $names -}}
+  {{- $name := . -}}
+  {{- $in := slice -}}
+  {{- range $papers }}{{ if eq (.domain | default "Other") $name }}{{ $in = $in | append . }}{{ end }}{{ end -}}
+  {{- $groups = $groups | append (dict "name" $name "anchor" (printf "domain-%s" (urlize (lower $name)))
+        "papers" (sort $in "title") "key" (printf "%05d %s" (sub 99999 (len $in)) $name)) -}}
+{{- end -}}
+{{- return (sort $groups "key") -}}

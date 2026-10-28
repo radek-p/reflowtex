@@ -1,0 +1,29 @@
+# lshort.sty, its LuaTeX branch: \setsansfont, \setmonofont and \setmainfont came before luatextra, which loads
+# fontspec, so they were undefined, Latin Modern stayed the main font and polyglossia found no Greek or Cyrillic;
+# luatextra now comes first. \RequirePackage[all]{xy} is commented out: the book has no xy diagrams, and xy's
+# xypdf refuses LuaTeX; xy's \Xy logo, which the bibliography uses, is defined as xy.tex defines it.
+# lshort is GPL-2.0-or-later, which allows modified copies: this file records the change.
+--- a/lshort.sty
++++ b/lshort.sty
+@@ -35,10 +35,10 @@
+       BoldItalicFont=*tx,
+     ]
+    \else
++    \RequirePackage{luatextra}% loads fontspec: before the \set...font below (corpus patch)
+     \setsansfont{CMU Sans Serif}
+     \setmonofont{CMU Typewriter Text}
+     \setmainfont{CMU Serif}
+-    \RequirePackage{luatextra}
+    \fi
+ 
+    \defaultfontfeatures{Ligatures=TeX}
+@@ -65,7 +65,8 @@
+ \RequirePackage{IEEEtrantools}
+ \RequirePackage[psamsfonts]{amssymb}
+ \RequirePackage{cmmib57}% Use blueSky cmmib5 cmmib7 cmsy
+-\RequirePackage[all]{xy}
++%\RequirePackage[all]{xy}% no diagrams, and its xypdf refuses LuaTeX (corpus patch): only xy's \Xy logo, as xy.tex defines it
++\DeclareRobustCommand{\Xy}{\leavevmode\hbox{\kern-.1em X\kern-.3em\lower.4ex\hbox{Y\kern-.15em}}}
+ %\RequirePackage[babel=true,kerning=true]{microtype}
+ %\RequirePackage{textcomp}
+ %\RequirePackage{type1cm}% remove size restrictions

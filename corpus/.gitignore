@@ -1,0 +1,4 @@
+# Downloaded sources (tools/corpus/fetch.ts) and corpus builds (tools/corpus/run.ts)
+/.cache/
+/work/
+/results/

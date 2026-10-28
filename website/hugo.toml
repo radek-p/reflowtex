@@ -20,6 +20,15 @@ enableInlineShortcodes = true
   # Every block with its accessible layer (text and MathML for screen readers).
   reflowtexA11y = true
 
+  # The comparison report (tests/render/report), which build.sh puts at
+  # this path. Its URLs are made in one place: layouts/partials/report-url.html.
+  [params.report]
+    path = "render-tests/"
+  # The corpus's papers, as blocks its build measured (one <id>.json each,
+  # in the form of data/latex_blocks): read by shortcodes/corpus-paper.html.
+  [params.corpus]
+    blocks = "corpus-blocks"
+
 # The landing copy is rendered through the reflowtex pipeline via {{< latex >}}
 # shortcodes wrapped in a little layout HTML (feature grid, hero), so unsafe
 # (raw-HTML passthrough in Markdown) is required.

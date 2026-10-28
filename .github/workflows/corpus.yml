@@ -1,0 +1,167 @@
+name: Corpus
+
+# The paper corpus (corpus/README.md): every paper of corpus/manifest.json
+# built by plain lualatex and by reflowtex, the browser's page compared with
+# TeX's pageless PDF glyph by glyph, and the results written for the website
+# (tools/corpus/report.ts). The website's deploy (hugo.yml) takes the newest
+# successful run's `corpus-site` artifact, as it takes the render tests' from
+# CI, and runs again when this finishes.
+#
+# When: on a push to main that changes what the results depend on (the
+# pipeline, the viewer, the tools, the corpus, its image), and by hand.
+# Nothing else changes them – TeX Live is frozen and every source is pinned
+# by its sha256 – so a nightly run would only measure the same again.
+#
+# The papers run in four shards side by side, each paper in a container of its
+# own with no network (tools/corpus/run.ts). The image is frozen TeX Live 2025
+# with only the packages the papers read (docker/corpus/), built only when its
+# inputs change and kept in this repository's registry, as the CI image is.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'corpus/**'
+      - 'docker/corpus/**'
+      - 'docker/lualatex-autoinstall.sh'
+      - 'tests/render/report/**'
+      - 'package-lock.json'
+      - '.github/workflows/corpus.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: corpus
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.tag.outputs.image }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        env:
+          INPUTS_HASH: ${{ hashFiles('docker/corpus/**', 'docker/lualatex-autoinstall.sh', 'docker/playwright-deps.sh', 'package-lock.json') }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "image=ghcr.io/${owner}/reflowtex-corpus:${INPUTS_HASH:0:20}" >> "$GITHUB_OUTPUT"
+      - run: .github/scripts/ci-image.sh login
+      - id: probe
+        run: |
+          if .github/scripts/ci-image.sh exists "${{ steps.tag.outputs.image }}"; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            [ $? -eq 1 ] || exit 1
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.probe.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+      - if: steps.probe.outputs.build == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/corpus/Dockerfile
+          push: true
+          tags: ${{ steps.tag.outputs.image }}
+          cache-from: type=gha,scope=corpus
+          cache-to: type=gha,mode=max,scope=corpus
+
+  # The sources, each downloaded once and kept in the Actions cache by the
+  # manifest's hash (fetch.ts asks for none it has, at most one request every
+  # few seconds, with a User-Agent that names only the project).
+  sources:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/cache@v4
+        with:
+          path: corpus/.cache
+          key: corpus-sources-${{ hashFiles('corpus/manifest.json') }}
+          restore-keys: corpus-sources-
+      - run: node tools/corpus/fetch.ts --check
+
+  run:
+    needs: [image, sources]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      IMAGE: ${{ needs.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/cache/restore@v4
+        with:
+          path: corpus/.cache
+          key: corpus-sources-${{ hashFiles('corpus/manifest.json') }}
+          fail-on-cache-miss: true
+      - run: .github/scripts/ci-image.sh login && docker pull --quiet "$IMAGE"
+      - name: Install the dependencies (for the image's platform)
+        run: docker run --rm -v "$PWD":"$PWD" -w "$PWD" "$IMAGE" npm ci --no-audit --no-fund
+      - name: Build and measure this shard's papers
+        run: node tools/corpus/run.ts --image "$IMAGE" --shard ${{ matrix.shard }}/4 --offline
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-results-${{ matrix.shard }}
+          # what report.ts reads, and the logs (not the sources, nor the page's DOM dump)
+          path: |
+            corpus/results/*/metrics.json
+            corpus/results/*/stages.json
+            corpus/results/*/build-check.json
+            corpus/results/*/logs/
+            corpus/results/*/plain/*.log
+            corpus/results/*/build/*.log
+            corpus/results/*/build/pageless.pdf
+            corpus/results/*/build/pageless.json
+            corpus/results/*/build/vector/vector.json
+            corpus/results/*/build/vector/lines.json
+            corpus/results/*/build/site/
+          retention-days: 7
+
+  report:
+    needs: [image, run]
+    if: always() && needs.image.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      IMAGE: ${{ needs.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: corpus-results-*
+          path: corpus/results/
+          merge-multiple: true
+      - run: .github/scripts/ci-image.sh login && docker pull --quiet "$IMAGE"
+      - name: The website's data, the papers' blocks and the comparisons
+        run: |
+          docker run --rm -v "$PWD":"$PWD" -w "$PWD" "$IMAGE" npm ci --no-audit --no-fund
+          docker run --rm --network none -v "$PWD":"$PWD" -w "$PWD" "$IMAGE" \
+            node tools/corpus/report.ts --results corpus/results --site website --commit "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corpus-site
+          path: |
+            website/data/corpus.json
+            website/static/corpus/
+            website/corpus-blocks/
+          retention-days: 90

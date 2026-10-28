@@ -1,0 +1,94 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  The paper corpus's accuracy (data/corpus.json; see partials/corpus/):
+  the totals, the run they come from, and every paper's figures by domain,
+  each with a link to its comparison in the report.
+*/ -}}
+{{- $c := partial "corpus/data.html" . -}}
+{{- partial "corpus/style.html" .Page -}}
+{{- with $c.papers -}}
+{{- $papers := . -}}
+{{- $groups := partial "corpus/domains.html" . -}}
+<div class="corpus-acc" id="corpus">
+  {{- with $c.totals }}
+  <dl class="corpus-totals">
+    <div><dt>Papers</dt><dd>{{ .papers }}</dd></div>
+    <div><dt>Shown</dt><dd>{{ .displayed }}</dd></div>
+    <div><dt>At the goal</dt><dd>{{ .at_goal }}</dd></div>
+    <div><dt>Mean placement</dt><dd>{{ partial "corpus/pct.html" .mean_placement }}</dd></div>
+    <div><dt>Vertical jumps</dt><dd>{{ .jumps }}</dd></div>
+  </dl>
+  {{- end }}
+  {{- $shown := where $papers "status" "displayed" }}
+  {{- with $shown }}{{ with index (sort . "placement") 0 }}
+  {{- $goal := $c.goal | default dict }}
+  {{- $gj := int ($goal.jumps | default 0) }}
+  <p class="corpus-note">A paper is at the goal when its placement is at least
+    {{ partial "corpus/pct.html" ($goal.placement | default 0.99) | replaceRE "\\.00%" "%" }} and it has
+    {{ if eq $gj 0 }}no vertical jump{{ else }}at most {{ $gj }} vertical {{ cond (eq $gj 1) "jump" "jumps" }}{{ end }}.
+    Mean placement is over the papers shown; the lowest is
+    {{ partial "corpus/pct.html" .placement }}, in <a href="#row-{{ .id }}">{{ .title }}</a>.</p>
+  {{- end }}{{ end }}
+  <p class="corpus-run">
+    Run of {{ time.Format "2 January 2006" $c.generated }}
+    {{- with $c.commit }}, on commit <a href="{{ site.Params.github }}/commit/{{ . }}" rel="noopener"><code>{{ substr . 0 7 }}</code></a>{{ end }}
+    {{- with $c.texlive }}, with TeX Live {{ . }}{{ end }}
+    {{- with $c.tolerance_pt }}; tolerance {{ . }}&#8239;pt{{ end }}.
+    CI regenerates these figures; the site shows the latest run.</p>
+  <div class="corpus-table-wrap">
+  <table class="corpus-table">
+    <caption class="sr-only">Every paper of the corpus: placement, whole-page placement, vertical jumps, glyphs compared, and status, by domain</caption>
+    <thead><tr>
+      <th scope="col">Paper</th>
+      <th scope="col" class="num">Placement</th>
+      <th scope="col" class="num c-abs">Whole page</th>
+      <th scope="col" class="num">Jumps</th>
+      <th scope="col" class="num c-glyphs">Glyphs</th>
+      <th scope="col">Status</th>
+    </tr></thead>
+    {{- range $groups }}
+    <tbody>
+      <tr class="ct-domain"><th colspan="6" scope="colgroup">{{ .name }}</th></tr>
+      {{- range .papers }}
+      {{- $p := . }}
+      {{- $shown := eq .status "displayed" }}
+      {{- $goal := partial "corpus/at-goal.html" . }}
+      <tr id="row-{{ .id }}"{{ if not $shown }} class="is-stopped"{{ end }}>
+        <th scope="row">
+          {{- with partial "corpus/page-url.html" . }}<a href="{{ . }}">{{ $p.title }}</a>{{ else }}{{ .title }}{{ end }}
+          <span class="ct-sub ct-meta">{{ with .class }}<code>{{ . }}</code>{{ end }}{{ with .field }}<span>{{ . }}</span>{{ end }}</span>
+          {{- $pub := partial "corpus/published.html" . }}
+          <span class="ct-sub">{{ if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ partial "corpus/licence.html" .licence }}</a>{{ else }}{{ partial "corpus/licence.html" .licence }}{{ end }}{{ with $pub.url }}, published at <a href="{{ . }}" rel="noopener">{{ $pub.host }}</a>{{ end }}</span>
+          {{- if not $shown }}<span class="ct-reason">{{ .reason | default "It did not build." }}</span>{{ end }}
+        </th>
+        {{- if $shown }}
+        <td class="num">{{ partial "corpus/pct.html" .placement }}</td>
+        <td class="num c-abs">{{ with .absolute }}{{ partial "corpus/pct.html" . }}{{ else }}–{{ end }}</td>
+        <td class="num">{{ .jumps | default 0 }}{{ if gt (int (.jumps | default 0)) 0 }}{{ with .max_jump_pt }}<span class="ct-sub">up to {{ . }}&#8239;pt</span>{{ end }}{{ end }}</td>
+        <td class="num c-glyphs">{{ with .glyphs }}{{ lang.FormatNumber 0 . }}{{ end }}</td>
+        <td class="ct-status">
+          {{- if $goal }}<span class="ct-goal"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5l2.3 2.3L9.5 3.8"/></svg>At the goal</span>
+          {{- else }}<span class="ct-below">Below the goal</span>{{ end }}
+          {{- with .compare }}<a class="ct-compare" href="{{ partial "report-url.html" (dict "batch" "corpus" "paper" $p) }}">Compare</a>{{ end }}
+        </td>
+        {{- else }}
+        <td class="num">–</td><td class="num c-abs">–</td><td class="num">–</td><td class="num c-glyphs">–</td>
+        <td class="ct-status"><span class="ct-stopped">Not shown</span></td>
+        {{- end }}
+      </tr>
+      {{- end }}
+    </tbody>
+    {{- end }}
+  </table>
+  </div>
+  <p class="corpus-note">Placement: the share of TeX's glyphs that the browser puts within the
+    tolerance of TeX's position along their line, in lines that match.
+    Whole page: the share of TeX's glyphs within the tolerance of their position on the whole
+    long page, an older and stricter measure; one vertical shift early in a paper lowers it for
+    the rest of the paper.
+    Jumps: gaps between lines that differ from TeX's by more than the tolerance.
+    Glyphs: how many were compared.</p>
+</div>
+{{- else -}}
+<p class="corpus-missing">The corpus's results are not part of this build.</p>
+{{- end -}}
