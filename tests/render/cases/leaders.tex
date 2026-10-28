@@ -1,0 +1,35 @@
+% Box leaders: \leaders sit on a grid counted from the left edge of the box they are in (the line's, left of its
+% \leftskip and moved by \hangindent, or an \hbox's), so the dots of a table of contents line up from entry to
+% entry; \cleaders are centred in their glue and \xleaders spread over it. tocloft's entries keep their dots.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{tocloft}
+\begin{document}
+\tableofcontents
+\section{Short}
+\subsection{A}
+\subsection{Ab}
+\subsection{Abc defg}
+\subsection{Participants}
+\subsection{Intellectual Origins}
+\subsection{Conversation as a Metaphor}
+\subsection{A title long enough to need a second line of the table of contents, with dots after it}
+\section{Leaders by hand}
+\def\dotbox{\hbox to 7.2pt{\hss.\hss}}
+\def\barbox{\hbox to 11pt{\hss|\hss}}
+\noindent x\leaders\dotbox\hfill y\par
+\noindent xx\leaders\dotbox\hfill y\par
+{\leftskip 13pt \noindent xxx\leaders\dotbox\hfill y\par}
+{\leftskip 0pt plus 1fil \noindent xxx\leaders\dotbox\hskip 100pt\relax y\par}
+\hangindent 21pt \hangafter 0 \noindent xxxx\leaders\dotbox\hfill y\par
+\noindent In a box: \hbox to 200pt{ab\leaders\dotbox\hfill c}\par
+\noindent In a box: \hbox to 200pt{abc\leaders\barbox\hfill c}\par
+\noindent Two: a\leaders\dotbox\hskip 50pt b\leaders\barbox\hskip 61pt c\leaders\dotbox\hfill d\par
+\noindent Centred: x\cleaders\dotbox\hfill y\par
+\noindent Centred: xxx\cleaders\barbox\hskip 100pt y\par
+\noindent Centred: xxx\cleaders\barbox\hskip 103.7pt y\par
+\noindent Expanded: x\xleaders\dotbox\hfill y\par
+\noindent Expanded: xxx\xleaders\barbox\hskip 100pt y\par
+\noindent Expanded: abc\xleaders\barbox\hskip 103.7pt y\par
+\end{document}

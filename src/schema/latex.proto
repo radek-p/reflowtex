@@ -249,6 +249,10 @@ message FontInfo {
   // lists only the characters with a non-default code, among those the
   // document used in this font – and, for a font a \webtext slot is set in,
   // every character that protrudes, since a page may give the slot any text.
+  // The codes are those TeX broke the glyphs' paragraphs with: a font whose
+  // codes changed along the document has an entry for each set of them (the
+  // same name, size and file; another id), each glyph in the one it was set
+  // with.
   optional int32     quad           = 5;
   optional int32     expand_stretch = 6;
   optional int32     expand_shrink  = 7;
@@ -323,6 +327,11 @@ message Paragraph {
   // as the block's alignment (data-align) asks.
   optional Node left_skip  = 18;
   optional Node right_skip = 19;
+  // \leftskip's fixed part (sp), which `indent` and each LineBand's indent
+  // include. TeX's line is a box from the band's start, the \leftskip inside
+  // it, so a line's box starts this far left of its indent: the origin its
+  // \leaders are aligned from (the dots of a table of contents). Absent = 0.
+  optional int32 left_skip_width = 20;
 }
 
 // A line's band in a shaped paragraph (sp, at Document.source_width): where

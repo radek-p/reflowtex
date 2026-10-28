@@ -211,6 +211,28 @@
 % Exports the finished node list as output.json (see src/extract/serializer.lua).
 \directlua{dofile("serializer.lua")}
 
+% ── Protrusion and expansion codes changing ──────────────────────────────────
+% TeX breaks each paragraph with the codes its fonts hold at that moment, and
+% they may change along the document (microtype sets a font's anew for each
+% NFSS shape it serves). The serializer reads a font's codes again only when
+% they may have changed, so the primitives that change them say each time
+% they are used: each is a macro that counts (Serializer.codes_changed, a Lua
+% function called by number, expandable as \directlua is) and is then the
+% primitive, which TeX goes on to read or assign as before. See
+% serializer.lua, "Protrusion and expansion".
+\makeatletter
+\directlua{
+  local n = luatexbase.new_luafunction("reflowtex.codes_changed")
+  lua.get_functions_table()[n] = Serializer.codes_changed
+  token.set_macro("reflowtex@codesfunction", tostring(n), "global")}
+\def\reflowtex@countuses#1{%
+  \expandafter\let\csname reflowtex@primitive@#1\expandafter\endcsname\csname #1\endcsname
+  \expandafter\edef\csname #1\endcsname{\noexpand\luafunction\reflowtex@codesfunction\space
+    \expandafter\noexpand\csname reflowtex@primitive@#1\endcsname}}
+\reflowtex@countuses{lpcode}\reflowtex@countuses{rpcode}\reflowtex@countuses{efcode}%
+\reflowtex@countuses{expandglyphsinfont}
+\makeatother
+
 % Nothing here ships pages in the normal course: the serializer keeps the page
 % from filling. An output routine that never settles against that (a class's
 % own page grid) ships empty pages without end instead, so a run is stopped

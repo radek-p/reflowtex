@@ -259,6 +259,10 @@ export interface Paragraph {
      *  or shrink (latex.proto's Paragraph.left_skip, right_skip) */
     left_skip?: GlueNode;
     right_skip?: GlueNode;
+    /** \leftskip's fixed part (sp), which `indent` includes: each line's box
+     *  starts that far left of where its text does (latex.proto's
+     *  Paragraph.left_skip_width) */
+    left_skip_width?: number;
 }
 
 /** A line's band in a shaped paragraph: its indent and measure (sp). */

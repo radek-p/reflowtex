@@ -98,6 +98,16 @@ export const cases: Record<string, CaseSettings> = {
   // measure) and infinite, and a table of contents. Worst attained 2026-10-28
   // (0.69, lines broken otherwise, before they were set as glue).
   'margin-skips': { tolerance: 0.011 },
+  // Box leaders at several offsets and widths, a tocloft table of contents.
+  // Worst attained 2026-10-28 (0.61 before \leaders were aligned on their
+  // box's grid).
+  leaders: { tolerance: 0.012 },
+  // Paragraphs set wider than the column: a page under \newgeometry with
+  // smaller margins, a list with a negative \rightmargin, negative margin
+  // skips. Worst attained 2026-10-28 (0.70 before, when a paragraph was never
+  // set wider than the column).
+  'newgeometry-wider': { tolerance: 0.011 },
+  'wide-paragraphs': { tolerance: 0.010 },
   // Formulas at line starts with \mathsurround 0.1pt and an opening \,: TeX
   // discards both at a break. Worst attained 2026-10-28 (0.689 before).
   mathsurround: { tolerance: 0.010 },
@@ -120,6 +130,13 @@ export const cases: Record<string, CaseSettings> = {
   // 0.7 pt). At the document's width only: the lines are set to overfill that
   // measure. Worst attained 2026-10-28.
   'protrusion-anchor-at-end': { widths: [0], tolerance: 0.018 },
+  // Protrusion codes that change along the document: microtype setting one
+  // font's anew for each family it is substituted for, and \rpcode, \lpcode
+  // and \efcode set by hand between paragraphs. The paragraphs set before the
+  // last change were broken in the browser with the last codes, lines up to
+  // 0.69 pt off and broken elsewhere. Worst attained 2026-10-28.
+  'protrusion-codes-change': { tolerance: 0.043 },
+  'protrusion-codes-by-hand': { tolerance: 0.046 },
   // Paragraphs ending in \index entries, a \label or a \special after the
   // last word, with the line nearly full: TeX keeps the whatsits at a break,
   // breaks at the space after the word and sets an empty last line. The
@@ -189,6 +206,11 @@ export const cases: Record<string, CaseSettings> = {
   // pt right of TeX's, justified lines up to 0.47 pt off. One page, so
   // against_plain too. Worst attained 2026-10-27.
   'times-microtype': { against_plain: true, tolerance: 0.022 },
+  // Small capitals letterspaced by microtype's tracking and words by \textls:
+  // fonts LuaTeX makes as virtual ones, whose packets the capture records.
+  // Their glyphs were drawn at the box's origin, 0.25 pt left of TeX's (34
+  // glyphs). Worst attained 2026-10-28.
+  'letterspace-smallcaps': { tolerance: 0.032 },
   // Long justified lines in T1 Latin Modern, whose widths are no whole
   // thousandths of an em, against the same text in OpenType. The strip's
   // glyphs used to be read by MuPDF's whole-number widths, which put TeX's own

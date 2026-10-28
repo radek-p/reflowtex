@@ -2,7 +2,12 @@
 // Virtual fonts. A TFM face with a .vf file (the maths of newtx and newpx,
 // mathdesign, fourier, kpfonts …) has no outline of its own: each of its
 // characters is a packet of DVI commands drawing characters of other fonts,
-// and rules – its local fonts, faces with outlines or virtual ones again.
+// and rules – its local fonts, faces with outlines or virtual ones again. So
+// has a virtual font LuaTeX makes itself (\letterspacefont: microtype's
+// tracking and \textls, each character moved right by half the letterspace),
+// whose packets the capture records with the font (serializer.lua, "Virtual
+// fonts LuaTeX made"): its pieces are characters of fonts of the document's
+// font table, by id, each with its box.
 // TeX typesets with the virtual face; only the driver (pdfTeX's and LuaTeX's
 // backends, xdvipdfmx) looks inside. A capture sees the virtual face, which
 // the browser cannot draw (its glyphs would stay metric boxes), so each glyph
@@ -21,12 +26,16 @@
 //    compositeTexts gives a box that is a letter and accents (ae's é: an
 //    acute and an e) that letter as its text, so it is read, searched and
 //    found as one.
-// The fonts the pieces are in join the font table, an entry per face and
-// size, a classic font yet to be given its face (ClassicFace): the
-// classic-font conversion that follows gives it its outline. The virtual
-// face's own entry is then a VirtualFace: no glyph is drawn from it. Pure
-// (files in through `readFile`), so the editor's converter runs the same
-// code.
+// The fonts the pieces are in join the font table, an entry per virtual font,
+// face and size, a classic font yet to be given its face (ClassicFace): the
+// classic-font conversion that follows gives it its outline. An entry of its
+// own per virtual font, as a glyph moved into it takes along the codes it had
+// there: two virtual fonts drawing from one face (a family's upright and
+// small capitals, a font and a version of it with other codes: serializer.lua)
+// may give its characters different codes, as may a document setting the
+// face directly. The virtual face's own entry is then a VirtualFace: no glyph
+// is drawn from it. Pure (files in through `readFile`), so the editor's
+// converter runs the same code.
 import { readTfm, texScale, type Tfm } from './tfm.ts';
 import type { FontInfo } from '../nodes.ts';
 
@@ -63,9 +72,13 @@ export function readVf(b: Uint8Array): VirtualFont {
   return { fonts, first, packets };
 }
 
-/** What a packet draws, in sp from the character's origin, y down (DVI's). */
+/** What a packet draws, in sp from the character's origin, y down (DVI's):
+ *  a character of a classic face (by name and size: a .vf's), a character of
+ *  a font of the document's font table (by id, with its box: a recorded
+ *  packet's), a rule. */
 export type Piece =
   | { kind: 'char'; font: string; size: number; char: number; x: number; y: number }
+  | { kind: 'glyph'; font: string; char: number; x: number; y: number; width: number; height: number; depth: number; gindex?: number }
   | { kind: 'rule'; x: number; y: number; width: number; height: number };
 
 /** The virtual fonts and TFMs a document's faces are read from. */
@@ -154,6 +167,59 @@ type Node = { type: string; [field: string]: unknown };
 type FontEntry = FontInfo;
 type Code = { char: number; [field: string]: unknown };
 
+/** A packet as the capture records it for a virtual font LuaTeX made
+ *  (serializer.lua): moves, push and pop, a rule (height, width), and a
+ *  character of a font of the font table (id, char, its box in sp, its glyph
+ *  index), each set as DVI sets it (a rule and a character move right by
+ *  their width). Moves and rules are in units of the virtual font's size
+ *  (2^20 = the size), as LuaTeX keeps them and its backend scales them, the
+ *  same as a .vf's fix_words. */
+export type PacketCommand =
+  | ['right' | 'down', number]
+  | ['push' | 'pop']
+  | ['rule', number, number]
+  | ['char', number, number, number, number, number, number?];
+export interface RecordedPacket { char: number; commands: PacketCommand[] }
+
+/** What character `char` of font `id` draws by the packet the capture
+ *  recorded for it, local fonts that are virtual again followed through
+ *  (recorded too, or a classic face's .vf); null when the font has no
+ *  recorded packets. A character without a packet draws nothing. */
+function recordedPieces(fonts: Map<string, FontEntry>, files: FontFiles, id: string, char: number, depth = 0): Piece[] | null {
+  const vfont = fonts.get(id), packets = vfont?.packets as RecordedPacket[] | undefined;
+  if (!vfont || !packets || depth >= 8) return null;
+  const commands = packets.find(p => p.char === char)?.commands;
+  const out: Piece[] = [];
+  if (!commands) return out;
+  const sc = (v: number) => texScale(v, vfont.size_sp);
+  let h = 0, v = 0;
+  const stack: [number, number][] = [];
+  for (const c of commands) {
+    switch (c[0]) {
+      case 'right': h += sc(c[1]); break;
+      case 'down': v += sc(c[1]); break;
+      case 'push': stack.push([h, v]); break;
+      case 'pop': [h, v] = stack.pop() ?? [h, v]; break;
+      case 'rule': {
+        const height = sc(c[1]), width = sc(c[2]);
+        if (height > 0 && width > 0) out.push({ kind: 'rule', x: h, y: v, width, height });
+        h += width;
+        break;
+      }
+      case 'char': {
+        const [, fid, ch, width, height, dp, gindex] = c, ref = String(fid), f = fonts.get(ref);
+        const inner = recordedPieces(fonts, files, ref, ch, depth + 1)
+          ?? (f && f.face.kind === 'tfm' ? files.pieces(f.name, f.size_sp, ch) : null);
+        if (inner) for (const q of inner) out.push({ ...q, x: q.x + h, y: q.y + v });
+        else out.push({ kind: 'glyph', font: ref, char: ch, x: h, y: v, width, height, depth: dp, ...(gindex === undefined || gindex === null ? {} : { gindex }) });
+        h += width;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 /** The fields of a glyph that are its place and shape, not its attributes;
  *  its expansion in a line TeX set too, which is the box's (it widens the
  *  pieces with it). */
@@ -166,23 +232,27 @@ const GLYPH_OWN = new Set(['type', 'char', 'font', 'gindex', 'width', 'height', 
 export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit: (n: Node) => void) => void,
                                     files: FontFiles): number {
   const virtual = new Map<string, FontEntry>();
-  for (const [id, f] of fonts) if (f.face.kind === 'tfm' && files.vf(f.name)) virtual.set(id, f);
+  for (const [id, f] of fonts) if (f.packets || (f.face.kind === 'tfm' && files.vf(f.name))) virtual.set(id, f);
   if (!virtual.size) return 0;
   let next = Math.max(0, ...[...fonts.keys()].map(Number).filter(Number.isFinite)) + 1;
   const ids = new Map<string, string>();
-  /** the font table's id for face `name` at `size`, an entry made when there is none */
-  const idOf = (name: string, size: number, from: FontEntry): string => {
-    const key = `${name}@${size}`;
+  /** the font table's id for what piece `q` is drawn from (a classic face at
+   *  a size, a font of the table) as virtual font `vid` draws from it, an
+   *  entry made the first time */
+  const idOf = (vid: string, q: Extract<Piece, { kind: 'char' | 'glyph' }>, from: FontEntry): string => {
+    const key = q.kind === 'char' ? `${vid}:${q.font}@${q.size}` : `${vid}:#${q.font}`;
     let id = ids.get(key);
     if (id) return id;
-    id = [...fonts].find(([, f]) => f.name === name && f.size_sp === size && f.face.kind === 'tfm')?.[0];
-    if (!id) {
-      id = String(next++);
-      const entry: FontEntry = { name, size_sp: size, face: { kind: 'tfm' }, quad: files.tfm(name)?.param(6, size) ?? 0 };
-      // the virtual face's expansion is its pieces' (as an expanded copy of it would be drawn)
-      for (const k of ['expand_stretch', 'expand_shrink', 'expand_step']) if (from[k] !== undefined) entry[k] = from[k];
-      fonts.set(id, entry);
+    id = String(next++);
+    let entry: FontEntry;
+    if (q.kind === 'char') entry = { name: q.font, size_sp: q.size, face: { kind: 'tfm' }, quad: files.tfm(q.font)?.param(6, q.size) ?? 0 };
+    else {
+      const { codes: _, packets: __, expand_stretch: _s, expand_shrink: _h, expand_step: _p, ...base } = fonts.get(q.font) ?? { name: '', size_sp: 0, face: { kind: 'tfm' } };
+      entry = base as FontEntry;
     }
+    // the virtual face's expansion is its pieces' (as an expanded copy of it would be drawn)
+    for (const k of ['expand_stretch', 'expand_shrink', 'expand_step']) if (from[k] !== undefined) entry[k] = from[k];
+    fonts.set(id, entry);
     ids.set(key, id);
     return id;
   };
@@ -191,16 +261,17 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
     if (n.type !== 'glyph') return;
     const vfont = virtual.get(String(n.font));
     if (!vfont || typeof n.char !== 'number') return;
-    const pieces = files.pieces(vfont.name, vfont.size_sp, n.char);
+    const pieces = recordedPieces(fonts, files, String(n.font), n.char) ?? files.pieces(vfont.name, vfont.size_sp, n.char);
     if (!pieces) return;
     replaced++;
     const only = pieces.length === 1 ? pieces[0] : null;
-    if (only && only.kind === 'char' && only.x === 0 && only.y === 0) {
-      const id = idOf(only.font, only.size, vfont);
+    if (only && only.kind !== 'rule' && only.x === 0 && only.y === 0) {
+      const id = idOf(String(n.font), only, vfont);
       carryCode(vfont, fonts.get(id)!, n.char, only.char);
       n.font = Number(id);
       n.char = only.char;
-      delete n.gindex;
+      if (only.kind === 'glyph' && only.gindex !== undefined) n.gindex = only.gindex;
+      else delete n.gindex;
       return;
     }
     const virtualChar = n.char, virtualFont = n.font, expansion = n.expansion_factor;
@@ -212,7 +283,10 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
       let piece: Node;
       if (q.kind === 'char') {
         const box = files.tfm(q.font)?.char(q.char, q.size) ?? { width: 0, height: 0, depth: 0 };
-        piece = { type: 'glyph', char: q.char, font: Number(idOf(q.font, q.size, vfont)), width: box.width, height: box.height, depth: box.depth, ...attrs };
+        piece = { type: 'glyph', char: q.char, font: Number(idOf(String(virtualFont), q, vfont)), width: box.width, height: box.height, depth: box.depth, ...attrs };
+      } else if (q.kind === 'glyph') {
+        piece = { type: 'glyph', char: q.char, font: Number(idOf(String(virtualFont), q, vfont)), width: q.width, height: q.height, depth: q.depth,
+                  ...(q.gindex === undefined ? {} : { gindex: q.gindex }), ...attrs };
       } else piece = { type: 'rule', width: q.width, height: q.height, depth: 0 };
       const width = piece.width as number;
       if (q.y !== 0) piece = hbox(width, piece.height as number, piece.depth as number, [piece], q.y);

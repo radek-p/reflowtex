@@ -80,13 +80,17 @@ export function affineMul(m1: Affine | null, m2: Affine | null): Affine | null {
 // en-dashes, and an arrowhead. The set width is whatever the enclosing box's
 // glue setting produced, so the copies are laid out here rather than baked in.
 //
-// Placement follows TeX82 §626-627: as many whole copies as fit, then
-//   \cleaders – the remainder is split evenly at the two ends (centred);
-//   \xleaders – the remainder is spread evenly into count+1 gaps;
-//   \leaders / \gleaders – copies align to a grid on the *enclosing* box rather
-//     than to this glue, which is not information the node carries, so they are
-//     packed from the left. Nothing in this pipeline uses them today.
-export const GLUE_LEADERS = 100, GLUE_CLEADERS = 101, GLUE_XLEADERS = 102;
+// Placement follows TeX82 §626 (hlist_out), in scaled points: the glue's set
+// width, plus TeX's 10sp of slack for rounding, holds the copies, and
+//   \leaders  – each copy sits on a grid of the copy's width counted from the
+//     left edge of the box the glue is in (`edge`): the first at the first
+//     point of the grid not left of the glue's start, so that the dots of a
+//     table of contents line up from line to line;
+//   \gleaders – the same grid, counted from the outermost box (`outer`: the
+//     line, in a paragraph; LuaTeX counts from the page being shipped);
+//   \cleaders – as many copies as fit, the remainder split at the two ends;
+//   \xleaders – as many as fit, the remainder spread into count+1 gaps.
+export const GLUE_LEADERS = 100, GLUE_CLEADERS = 101, GLUE_XLEADERS = 102, GLUE_GLEADERS = 103;
 
 // The DOM reconciler is keyed by node identity, so every tiled copy needs its
 // own node objects: drawing one leader box N times would look up the same
@@ -112,9 +116,10 @@ export function leaderCopies(n: GlueNode, count: number): TexNode[] {
 }
 
 /** A leader glue of an hlist, `wSp` long at x. runH/runD (sp) are the
- *  enclosing box's height and depth, as for a rule in it (renderNodes). */
+ *  enclosing box's height and depth, as for a rule in it (renderNodes);
+ *  `edge` is that box's left edge and `outer` the outermost box's (px). */
 export function renderLeaders(fontInfo: FontTable, sink: Sink, n: GlueNode, x: number, baselineY: number, wSp: number,
-                              runH: number, runD: number): void {
+                              runH: number, runD: number, edge = x, outer = edge): void {
     const L=n.leader;
     if(!L || wSp<=0) return;
 
@@ -128,30 +133,47 @@ export function renderLeaders(fontInfo: FontTable, sink: Sink, n: GlueNode, x: n
         return;
     }
 
-    const Lw=L.width??0;
-    if(Lw<=0) return;                     // would tile forever
-    const count=Math.floor(wSp/Lw);
-    if(count<1) return;                   // not even one copy fits: TeX draws nothing
-
-    const slack=wSp-count*Lw;
-    let start, step=Lw;
-    if(n.subtype===GLUE_XLEADERS){ const gap=slack/(count+1); start=gap; step=Lw+gap; }
-    else if(n.subtype===GLUE_CLEADERS){ start=slack/2; }
-    else { start=0; }                     // \leaders / \gleaders – see note above
-
-    const copies=leaderCopies(n,count);
-    for(let i=0;i<count;i++){
-        renderNodes(fontInfo,sink,[copies[i]],x+(start+i*step)*SP_TO_PX,baselineY,0,0,0);
+    const lw=L.width??0;
+    if(lw<=0) return;                     // would tile forever
+    const at=leaderPlacement(n.subtype??0, Math.round((x-(n.subtype===GLUE_GLEADERS?outer:edge))/SP_TO_PX), Math.round(wSp), lw);
+    if(!at.count) return;                 // not even one copy fits: TeX draws nothing
+    const copies=leaderCopies(n,at.count);
+    for(let i=0;i<at.count;i++){
+        renderNodes(fontInfo,sink,[copies[i]],x+(at.start+i*at.step)*SP_TO_PX,baselineY,0,0,0,0,0,1,undefined,outer);
     }
+}
+
+/** Where TeX sets a box leader's copies (§626): `h` is the glue's start from
+ *  the left edge of the box its grid is counted from, `w` its set width and
+ *  `lw` the copy's width (sp). The first copy's offset from the glue's start,
+ *  the step from one to the next, and how many. */
+export function leaderPlacement(subtype: number, h: number, w: number, lw: number): { start: number; step: number; count: number } {
+    const wd=w+10;                        // TeX's allowance for rounding
+    let cur, lx=0;
+    if(subtype===GLUE_CLEADERS||subtype===GLUE_XLEADERS){
+        const lq=Math.trunc(wd/lw), lr=wd-lq*lw;
+        if(subtype===GLUE_CLEADERS) cur=h+Math.trunc(lr/2);
+        else { lx=Math.trunc(lr/(lq+1)); cur=h+Math.trunc((lr-(lq-1)*lx)/2); }
+    } else {
+        // Pascal's div truncates, and a grid point left of the start moves
+        // on by one: the first point at or right of h, either side of 0.
+        cur=lw*Math.trunc(h/lw);
+        if(cur<h) cur+=lw;
+    }
+    const step=lw+lx, end=h+wd;
+    const count=cur+lw<=end ? Math.floor((end-cur-lw)/step)+1 : 0;
+    return { start: cur-h, step, count };
 }
 
 // An hlist's children, set by its own glue, from its left edge x on its
 // baseline y; cut to the box when it clips. `scale` widens everything in it
 // (a virtual font's character in its box, expanded with its line).
-function renderHlist(fontInfo: FontTable, sink: Sink, n: BoxNode, x: number, y: number, scale = 1): void {
+// Its left edge is the origin of its leaders' grid; `outer` is the outermost
+// box's, for \gleaders.
+function renderHlist(fontInfo: FontTable, sink: Sink, n: BoxNode, x: number, y: number, scale = 1, outer = x): void {
     const{ratio,fillOrder}=hlistGlueRatio(n);
     if(n.clip) sink.beginClip?.(n,x,y-n.height*SP_TO_PX,n.width*scale*SP_TO_PX,(n.height+n.depth)*SP_TO_PX);
-    renderNodes(fontInfo,sink,n.children,x,y,ratio,0,fillOrder,n.height,n.depth,scale);
+    renderNodes(fontInfo,sink,n.children,x,y,ratio,0,fillOrder,n.height,n.depth,scale,x,outer);
     if(n.clip) sink.endClip?.();
 }
 
@@ -161,7 +183,7 @@ function renderHlist(fontInfo: FontTable, sink: Sink, n: BoxNode, x: number, y: 
 // nested inside another vlist can reuse it – without this, a vlist child was
 // dropped, which silently deleted the inner half of a stacked construction
 // (double math accents, \substack, nested roots, …), leaving one piece too high.
-export function renderVlistBody(fontInfo: FontTable, sink: Sink, n: BoxNode, vlistX: number, refY: number): void {
+export function renderVlistBody(fontInfo: FontTable, sink: Sink, n: BoxNode, vlistX: number, refY: number, outer?: number): void {
     const{ratio:vr,fillOrder:vfo}=vlistGlueRatio(n);
     const vlistW=n.width;
     let curY=refY-n.height*SP_TO_PX;
@@ -185,12 +207,13 @@ export function renderVlistBody(fontInfo: FontTable, sink: Sink, n: BoxNode, vli
             curY+=rh;
         } else if(child.type==='hlist'){
             const cb=curY+child.height*SP_TO_PX;
-            renderHlist(fontInfo,sink,child,vlistX+(child.shift??0)*SP_TO_PX,cb);
+            const cx=vlistX+(child.shift??0)*SP_TO_PX;
+            renderHlist(fontInfo,sink,child,cx,cb,1,outer??cx);
             curY+=(child.height+child.depth)*SP_TO_PX;
         } else if(child.type==='vlist'){
             // Inside a vlist a box's shift is horizontal; the child's own baseline
             // sits child.height below the current pen, then we advance past it.
-            renderVlistBody(fontInfo,sink,child,vlistX+(child.shift??0)*SP_TO_PX,curY+child.height*SP_TO_PX);
+            renderVlistBody(fontInfo,sink,child,vlistX+(child.shift??0)*SP_TO_PX,curY+child.height*SP_TO_PX,outer);
             curY+=(child.height+child.depth)*SP_TO_PX;
         }
         // Inspection: a vertical list item's top edge and advance.
@@ -204,10 +227,12 @@ export function renderVlistBody(fontInfo: FontTable, sink: Sink, n: BoxNode, vli
 // QED box). Without this the rule is dropped and only the top/bottom edges show.
 // `scale` widens every advance: the pieces of a virtual font's character
 // whose line expanded it (an expanded character's packet is drawn widened,
-// its moves with it).
+// its moves with it). `edge` is the left edge of the box the nodes are in,
+// where its \leaders count their grid from (a line's box starts left of
+// its text by its \leftskip), and `outer` the outermost box's (\gleaders).
 export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x: number, baselineY: number,
                             ratio?: number, expandRatio?: number, fillOrder?: number, runH?: number, runD?: number,
-                            scale = 1): number {
+                            scale = 1, edge = x, outer = edge): number {
     ratio=ratio||0; expandRatio=expandRatio||0; fillOrder=fillOrder||0; runH=runH||0; runD=runD||0;
     const k=scale*SP_TO_PX;
     for(let i=0;i<nodes.length;i++){
@@ -231,7 +256,7 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
                 let w=n.width;
                 if(ratio>0&&(n.stretch_order||0)===fillOrder&&n.stretch) w+=ratio*n.stretch;       // signed, as setGlue
                 else if(ratio<0&&(n.shrink_order||0)===fillOrder&&n.shrink) w+=ratio*n.shrink;
-                if(n.leader) renderLeaders(fontInfo,sink,n,x,baselineY,w,runH,runD);
+                if(n.leader) renderLeaders(fontInfo,sink,n,x,baselineY,w,runH,runD,edge,outer);
                 if(n.subtype===13) sink.space(n, x, baselineY);
                 if(sink.gap) sink.gap(n,'width',x,w*k);
                 x+=w*k; break;
@@ -260,12 +285,12 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
                 // were siblings in the parent list and their glue is set by
                 // the parent's packing.
                 sink.beginTransform(n, svgMatrixOf(n, x, baselineY));
-                x=renderNodes(fontInfo,sink,n.children,x,baselineY,ratio,expandRatio,fillOrder,runH,runD,scale);
+                x=renderNodes(fontInfo,sink,n.children,x,baselineY,ratio,expandRatio,fillOrder,runH,runD,scale,edge,outer);
                 sink.endTransform();
                 break;
             }
-            case 'disc':  x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,expandRatio,0,runH,runD,scale); break;
-            case 'wdisc': x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,0,0,runH,runD,scale); break;
+            case 'disc':  x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,expandRatio,0,runH,runD,scale,edge,outer); break;
+            case 'wdisc': x=renderNodes(fontInfo,sink,n.replace,x,baselineY,0,0,0,runH,runD,scale,edge,outer); break;
             case 'widget':
                 if(sink.widget) sink.widget(n, x, baselineY);
                 x+=n.width*k; break;
@@ -277,13 +302,13 @@ export function renderNodes(fontInfo: FontTable, sink: Sink, nodes: TexNode[], x
             case 'hlist':{
                 if(n.aside&&sink.aside) sink.aside(n,x,baselineY);
                 const s=scale*(isCharBox(n)?glyphExpandScale(fontInfo,n,expandRatio):1);
-                renderHlist(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX,s);
+                renderHlist(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX,s,outer);
                 x+=n.width*s*SP_TO_PX; break;
             }
             case 'vlist':
                 // A vlist encountered here sits in an hlist context, where a box's
                 // shift is vertical (downward); renderVlistBody stacks its contents.
-                renderVlistBody(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX);
+                renderVlistBody(fontInfo,sink,n,x,baselineY+(n.shift??0)*SP_TO_PX,outer);
                 x+=n.width*k; break;
             case 'penalty': case 'adjust': case 'local_par': break;
             default: unreachable(n, 'node');

@@ -1,0 +1,25 @@
+% One LuaTeX font serving several NFSS shapes, whose protrusion codes change
+% along the document. Without fontenc (TU, Latin Modern) the families ptm and
+% pcr do not exist, and LaTeX substitutes TU/lmr/m/n, the same font, for both;
+% microtype sets protrusion codes per family each time a substituted shape is
+% first used, into that one font. TeX breaks each paragraph with the codes of
+% its moment: the first two paragraphs with ptm's, the last two with pcr's
+% (\texttt in the third). The same paragraph four times.
+\documentclass{article}
+\usepackage{microtype}
+\renewcommand{\rmdefault}{ptm}
+\renewcommand{\ttdefault}{pcr}
+\begin{document}
+\newcommand{\para}{Modern foundation models increasingly serve as general-purpose predictors, answering
+diverse user queries. Yet real deployments frequently deviate from pretraining conditions, in which a
+fixed (no-update) inference procedure can become brittle, which has been noted by many (Kim et al.,
+2023; Lin et al., 2024). More recently, analogous ideas have also been explored for large language
+models (Hardt and Sun, 2024; Hübotter et al., 2025a), and (Exp1) per-prompt selection works too.\par}
+\para
+\textbf{Bold} (substituted: ptm/b/n) and \textit{italic}.
+\para
+Now \texttt{typewriter} (pcr/m/n, substituted by the same font).
+\para
+\textsc{Small caps} (ptm/m/sc).
+\para
+\end{document}
