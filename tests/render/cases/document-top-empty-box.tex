@@ -1,0 +1,15 @@
+% The document's top: a title block that opens with \null, space, an \hbox
+% to the text width with nothing in it (an empty article type), more space,
+% then the title. None of that draws; the document starts at the title's
+% first line, in TeX's strip and in the browser alike.
+\documentclass{article}
+\begin{document}
+\null\vskip21pt
+{\parindent0pt\hbox to \textwidth{{\small\hfill}\par}}
+\removelastskip\vskip20pt\nointerlineskip
+{\LARGE\bfseries\noindent A title set as its own paragraph\par}
+\vskip 20pt
+Some ordinary text after the title, long enough to make a full line of
+running text at every width the test tries, and then a little more so that
+the paragraph has a second line as well.
+\end{document}

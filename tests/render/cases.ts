@@ -265,6 +265,17 @@ export const cases: Record<string, CaseSettings> = {
   // strip of the pipeline's own run is checked against plain lualatex's page.
   // Worst attained 2026-10-28.
   'scaled-pictures': { against_plain: true, tolerance: 0.009, rule_tolerance: 0.006 },
+  // The document's top, one rule for TeX's strip and the browser: it is the
+  // first item that draws, and whatever comes before it – boxes with no ink,
+  // space positive or negative – is left out. The strip used to start at the
+  // first box that was not empty (an ink-less \hbox to\textwidth, a \vbox
+  // 0.03 pt tall) and to leave out a leading rule, which the browser drew;
+  // and a \vbox's own space above a rule was dropped in the browser. Every
+  // glyph of these cases was off by the difference. Worst attained 2026-10-28.
+  'document-top-empty-box': { tolerance: 0.013 },
+  'document-top-negative': { tolerance: 0.009 },
+  'document-top-rule': { tolerance: 0.009, rule_tolerance: 0.003 },
+  'document-top-vbox': { tolerance: 0.009, rule_tolerance: 0.002 },
   // A page whose origin is moved – geometry's hoffset and voffset, a class's
   // \advance\hoffset-1in, the PDF origin – with a picture: the strip and the
   // captured picture are shipped with no offsets (both used to keep them:

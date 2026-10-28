@@ -1617,6 +1617,34 @@ local function has_visible_nodes(nodes)
     return false
 end
 
+-- The same of a node as TeX has it: whether it draws anything – a glyph, a
+-- rule with ink, a picture (an image, a captured TikZ box), or a box, leader
+-- or discretionary holding one. The document's top is the first item that
+-- draws: the walk drops the space before it, and the pageless strip, the
+-- browser's reference, is trimmed to it (Serializer.draws), whether that
+-- space is positive or negative and whatever draws nothing among it.
+local function draws(n)
+    local t = node.type(n.id)
+    if t == "glyph" then return true end
+    if t == "rule" then return inked_rule(n) end
+    if t == "hlist" or t == "vlist" then
+        if node.get_attribute(n, TIKZ_PIC_ATTR) then return true end
+        if n.head then
+            for c in node.traverse(n.head) do
+                if draws(c) then return true end
+            end
+        end
+        return false
+    end
+    if t == "glue" then return n.leader ~= nil and draws(n.leader) end
+    if t == "disc" and n.replace then
+        for c in node.traverse(n.replace) do
+            if draws(c) then return true end
+        end
+    end
+    return false
+end
+
 -- The band of the most recent paragraph, for a display TeX's own is not
 -- known for (see display_width). And its
 -- leading, which a fixed box (emit_fixed) is set with.
@@ -1842,7 +1870,7 @@ local fixed_items = 0
 -- it as TeX set it.
 local HL_EQUATION_WRAP = 6
 local function emit_fixed(n, box, pending, ctx)
-    place_gap(ctx, stream_attr(n), pending.sp, pending.parts)
+    place_gap(ctx, stream_attr(n), pending.sp, pending.parts, pending.box_top)
     reset_pending(pending)
     local g, h = pending.interline, box.height or 0
     local leading = { bskip = cur_leading.bskip, lskip = cur_leading.lskip, lskiplimit = cur_leading.lskiplimit }
@@ -2131,10 +2159,12 @@ local function walk_flow(head, pending, ctx, box)
             -- depth. So the glue above stays in the gap, with what the box holds
             -- above its first line – at the top of the page too, where TeX
             -- drops only what comes before the box; the glue inside counts as
-            -- the box set it, and below it \prevdepth is the box's depth.
+            -- the box set it, and below it \prevdepth is the box's depth. A
+            -- box that draws nothing has no top of its own: at the top of the
+            -- document it is part of what comes before anything (see draws).
             if ctx.last_kind == nil then reset_pending(pending) end
             pending.interline = nil
-            pending.box_top = true
+            if draws(n) then pending.box_top = true end
             box_depth, depth_follows = IGNORE_DEPTH, false
             walk_flow(n.head, pending, ctx, n)
             pending.interline = nil
@@ -2349,6 +2379,10 @@ Serializer = Serializer or {}   -- note_picture already added a table above; do 
 function Serializer.flow_head()
     return flow_head
 end
+
+-- Whether a node of it draws anything (draws): what the document's top is
+-- for such a tool, as for the walk.
+Serializer.draws = draws
 
 -- The id-keyed tables (links, anchors, slots) are lists on the wire: an id is
 -- its entry's 1-based position. The ids come from counters in the capture code and

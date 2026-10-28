@@ -169,21 +169,17 @@ end
 -- with no page breaks.
 --
 -- \maketitle's `\null\vskip 2em` and \end{document}'s \clearpage leave glue
--- and an empty box before the first line and after the last; paged, the top
--- one becomes the page's \topskip and the bottom is blank page. The viewer
--- starts at its first line's ascent and ends at its last depth, so the strip
--- is trimmed to its first and last non-empty box.
-local function empty_box(p)
-    local t = ntype(p)
-    return (t == "hlist" or t == "vlist") and p.head == nil
-        and p.width == 0 and p.height == 0 and p.depth == 0
-end
-
+-- and boxes that draw nothing before the first line and after the last (a
+-- class's title block can open with ink-less boxes and net negative space);
+-- paged, the top becomes the page's \topskip and the bottom is blank page.
+-- The document's top is the first node that draws – a line, a rule, a box
+-- with ink in it – as for the serializer's walk, which drops the space
+-- before it (Serializer.draws: one rule for both); the strip is trimmed to
+-- the first and the last node that draws.
 local function trim_galley(nodes)
     local first, last = nil, nil
     for k, p in ipairs(nodes) do
-        local t = ntype(p)
-        if (t == "hlist" or t == "vlist") and not empty_box(p) then
+        if Serializer.draws(p) then
             first = first or k
             last = k
         end
@@ -192,7 +188,7 @@ local function trim_galley(nodes)
     local out = {}
     for k = first, last do out[#out + 1] = nodes[k] end
     if #out < #nodes then
-        texio.write_nl(string.format("pageless: trimmed %d node(s) before the first box and %d after the last",
+        texio.write_nl(string.format("pageless: trimmed %d node(s) before the first that draws and %d after the last",
                                      first - 1, #nodes - last))
     end
     return out

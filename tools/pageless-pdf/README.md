@@ -44,7 +44,9 @@ the serializer leaves out what paging made – the breaks, LaTeX's empty marker
 boxes, `\vfil`, `\topskip` glue – and sets the next line's interline glue from
 the line before the break, as in the middle of a page; the author's `\vspace`
 and `\vspace*` after a break are kept (`src/extract/README.md`).
-`pageless_pdf.lua` trims the galley to its first and last non-empty box.
+`pageless_pdf.lua` trims the galley to its first and last node that draws (a
+line, a rule, a box with ink: `Serializer.draws`, the rule the walk uses for
+the document's top too).
 It ships the rest at the end of the run as
 consecutive pages of at most 16000pt (just under `\maxdimen`), cut only
 *inside* a top-level glue or kern: the glue's width is split between the end
