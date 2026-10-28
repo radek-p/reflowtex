@@ -11,9 +11,9 @@
 // The document is compiled as the pipeline compiles it – through the driver
 // (src/pipeline/driver.ts), which reads the capture code and then the file
 // as it is, under its own name (\jobname) – plus a few lines: pageless_pdf.lua
-// loaded after the serializer, and \@@end (the primitive \end, which every
-// \enddocument ends in, a class's own too) made to ship the captured galley
-// first, as a few very tall pages. Those are then stacked
+// loaded after the serializer, set to ship the captured galley when TeX has
+// ended the run (whatever the \enddocument, a class's own too), as a few very
+// tall pages. Those are then stacked
 // into one (stack.ts), pageless.pdf: the document with no page breaks, every
 // box and every glue where TeX put them – the reference the browser's
 // rendering is compared with at the same width.
@@ -65,9 +65,9 @@ const LATEX_DIR = resolve(HERE, '../../src/latex');
 export const JOBNAME_FILE = 'jobname.txt';
 
 /** The driver's extra lines (driver.ts): the shipper loaded after the
- *  serializer, and \@@end shipping the strip before it ends the run (not an
- *  end-of-document hook: a class with an \enddocument of its own, as
- *  LaTeX's was before 2020, runs none, but every one ends in \@@end); unless
+ *  serializer, set to ship the strip when TeX has ended the run (LuaTeX's
+ *  finish_pdffile, not an end-of-document hook: a class with an
+ *  \enddocument of its own, as LaTeX's was before 2020, runs none); unless
  *  `capture`, TikZ's own \tikzpicture back, and nicematrix's environments
  *  drawn by TeX in the galley too, once the capture has wrapped them at
  *  \begin{document}. */
@@ -75,9 +75,7 @@ export function driverExtra(margin: string, capture = true): string {
   const restore = capture ? '' : '\\AddToHook{begindocument/before}{%\n'
     + '  \\let\\tikzpicture\\reflowtexOrigTikzpicture \\let\\endtikzpicture\\reflowtexOrigEndtikzpicture\n'
     + '  \\let\\reflowtexCaptureEnvBegin\\relax \\let\\reflowtexCaptureEnvEnd\\relax}\n';
-  return '\\directlua{dofile("pageless_pdf.lua")}\n' + restore
-    + '\\expandafter\\let\\expandafter\\reflowtexPagelessEnd\\csname @@end\\endcsname\n'
-    + `\\expandafter\\def\\csname @@end\\endcsname{\\directlua{Pageless.ship{margin = tex.sp("${margin}")}}\\reflowtexPagelessEnd}\n`;
+  return `\\directlua{dofile("pageless_pdf.lua") Pageless.ship_at_end{margin = tex.sp("${margin}")}}\n` + restore;
 }
 
 /** A TeX dimension (pt, bp, mm, cm, in, pc) in sp. */

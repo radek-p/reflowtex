@@ -328,8 +328,10 @@ export const cases: Record<string, CaseSettings> = {
   'relative-paths': { file: 'tests/render/cases/relative-paths/main.tex', tolerance: 0.010 },
   // A class with an \enddocument of its own, LaTeX's from before 2020 (no
   // hooks): the strip was shipped from enddocument/afterlastpage, which never
-  // ran, so there was no strip at all. It is shipped from \@@end now, the
-  // primitive every \enddocument ends in. Worst attained 2026-10-28.
+  // ran, so there was no strip at all. It is shipped when TeX ends the run
+  // now (finish_pdffile). With bm, whose \bm scans up to the primitive \@@end: a
+  // strip shipped from a redefined \@@end came out in the middle of the
+  // first formula. Worst attained 2026-10-28.
   'own-enddocument': { file: 'tests/render/cases/own-enddocument/main.tex', against_plain: true, tolerance: 0.010 },
   // Pictures graphicx clips (clip with a trim or a viewport), beside one whole
   // and one through a viewport unclipped. graphicx puts a clipped image in a

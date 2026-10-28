@@ -35,14 +35,18 @@
 --
 -- Load this file right after serializer.lua (it wraps
 -- Serializer.note_captured_picture to keep each picture's box), and
--- call Pageless.ship() when the document has ended: from \@@end, the
--- primitive \end every \enddocument ends in (a class's own \enddocument,
--- as LaTeX's was before 2020, runs no end-of-document hook), after the last
--- \clearpage has put every float into the galley:
+-- call Pageless.ship_at_end() there:
 --
---   \expandafter\let\expandafter\reflowtexPagelessEnd\csname @@end\endcsname
---   \expandafter\def\csname @@end\endcsname{%
---     \directlua{Pageless.ship{margin = tex.sp("36pt")}}\reflowtexPagelessEnd}
+--   \directlua{dofile("pageless_pdf.lua") Pageless.ship_at_end{margin = tex.sp("36pt")}}
+--
+-- The strip is shipped when TeX has ended the run and LuaTeX is about to
+-- finish the PDF (the finish_pdffile callback, first of its functions): after
+-- the last \clearpage has put every float into the galley, whatever the
+-- \enddocument – a class's own, as LaTeX's was before 2020, runs no
+-- end-of-document hook – and before the serializer's walk, which runs there
+-- too. (Not from a redefined \@@end: packages take the primitive for a
+-- sentinel that never expands – bm's \bm scans up to it; and stop_run comes
+-- after the PDF is written.)
 --
 -- Output: the pages, appended to the job's PDF, and pageless.json describing
 -- them (page numbers, heights), all in sp.
@@ -349,4 +353,13 @@ function Pageless.ship(opts)
     f:close()
     texio.write_nl(string.format("pageless: shipped %d page(s), %.1fpt tall in all, %d picture(s); wrote %s",
         #chunks, y0 / 65536, pictures, jsonname))
+end
+
+function Pageless.ship_at_end(opts)
+    local cb, before = "finish_pdffile", {}
+    for _, d in ipairs(luatexbase.callback_descriptions(cb)) do
+        before[#before + 1] = { luatexbase.remove_from_callback(cb, d) }
+    end
+    luatexbase.add_to_callback(cb, function() Pageless.ship(opts) end, "pageless")
+    for _, f in ipairs(before) do luatexbase.add_to_callback(cb, f[1], f[2]) end
 end
