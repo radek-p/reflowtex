@@ -561,7 +561,8 @@ function Sheet({ src, size, scale }: { src: string | null; size: [number, number
 // measured; and transparent past its end, so the pane's pattern shows there.
 function pinPage(win: Window & PageHooks, colPx: number, marginPx: number, hsizePt: number): void {
     const doc = win.document;
-    if (win.__setTheme) win.__setTheme('light');
+    // the theme `default`, TeX's colours as they are, as dom-dump.ts measures (pageColours then gives the pane's)
+    if (win.__setTheme) win.__setTheme('default');
     if (win.__zoom) win.__zoom(0);
     // the block is given its width in pt, as dom-dump.ts gives it: its own pixel width would be rounded, and the
     // viewer would break the paragraphs at a measure TeX never used

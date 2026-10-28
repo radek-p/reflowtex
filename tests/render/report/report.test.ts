@@ -431,6 +431,23 @@ test('far down a long page, the live page shows the lines the measurement saw th
   assert.deepEqual(page.errors, []);
 });
 
+test('the live page in TeX\'s colours, inverted or not, is in the default theme; Light in the viewer\'s light one', async () => {
+  for (const [colours, theme] of [['tex', 'default'], ['inverted', 'default'], ['light', 'light']]) {
+    const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(c => { localStorage.setItem('render-report.inspector', 'closed'); localStorage.setItem('render-report.colours', c); }, colours);
+    const page = await ctx.newPage();
+    await page.goto(`${url}/#far`);
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('iframe.page')?.style.visibility === 'visible');
+    await settle(page);
+    const shown = await page.evaluate(() => {
+      const w = document.querySelector<HTMLIFrameElement>('iframe.page')!.contentWindow as Window & { reflowtex?: { theme?(): { theme: string } } };
+      return w.reflowtex?.theme?.().theme;
+    });
+    assert.equal(shown, theme, `colours ${colours}`);
+    await ctx.close();
+  }
+});
+
 test('one jump at the first line: by placement nothing is off, and the jump is marked once; in absolute position, all of it', async () => {
   const page = await open('jumped');
   const shown = () => page.evaluate(() => ({
