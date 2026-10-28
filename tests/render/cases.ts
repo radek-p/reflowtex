@@ -112,6 +112,9 @@ export const cases: Record<string, CaseSettings> = {
   // a leader was dropped as blank. One page, so against_plain too. Worst
   // attained 2026-10-27.
   'colortbl-cells': { against_plain: true, tolerance: 0.009, rule_tolerance: 0.004 },
+  // The same with its first column in a CMYK colour (xcolor's yellow): the
+  // rules' places pass, their colour does not, as in cmyk-colours.
+  'colortbl-cells-cmyk': { against_plain: true, tolerance: 0.009, rule_tolerance: 0.004, known: 'CMYK colours are converted plainly, not as a PDF reader draws them' },
   // bbm's double-struck letters (\mathbbm), a font with only a METAFONT
   // source, drawn from METAFONT's bitmaps as outlines. Worst attained
   // 2026-10-26; all 358 glyphs found (also when they were boxes: the
@@ -296,6 +299,9 @@ export const cases: Record<string, CaseSettings> = {
   // the conditional left behind, and the capture's own TikZ, loaded first,
   // made the options clash. The document is now read as it is.
   'class-in-conditional': { against_plain: true, tolerance: 0.010 },
+  // The same with its text in a CMYK colour (dvipsnames' OliveGreen): the
+  // glyphs' places pass, their colour does not, as in cmyk-colours.
+  'class-in-conditional-cmyk': { against_plain: true, tolerance: 0.010, known: 'CMYK colours are converted plainly, not as a PDF reader draws them' },
   // A document compiled under its own job name, as its author compiles it:
   // \jobname names the files it reads (\input{\jobname-data}), and
   // \CurrentFile is empty in the main file. The driver used to name every
