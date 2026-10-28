@@ -39,3 +39,5 @@
 # The paper corpus's pages and comparisons, written by tools/corpus/report.ts
 # (CI's corpus workflow; the deploy downloads them).
 /static/corpus/
+# The corpus papers' blocks, written by its build (params.corpus.blocks).
+/corpus-blocks/

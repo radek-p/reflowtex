@@ -1,0 +1,62 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  A paper of the corpus on its own page (content/docs/showcase/papers/):
+  its details – authors, venue, the class and notable packages, its
+  licence, where it was published, the original and the comparison with
+  TeX's PDF – and then the paper, the block that was measured. The block
+  is not compiled here: the corpus's build wrote it, in the form a
+  {{< latex >}} block takes (nodelist_b64, a11y_html), to
+  <params.corpus.blocks>/<id>.json.
+*/ -}}
+{{- $id := .Page.Params.corpusId -}}
+{{- $c := partial "corpus/data.html" . -}}
+{{- $p := index (where ($c.papers | default slice) "id" $id) 0 -}}
+{{- partial "corpus/style.html" .Page -}}
+{{- with $p -}}
+{{- $pub := partial "corpus/published.html" . -}}
+<header class="corpus-paper-head">
+  <p class="cp-label"><a href="{{ "docs/showcase/" | relURL }}#paper-{{ .id }}">Showcase</a></p>
+  {{- with partial "corpus/authors-all.html" .authors }}<p class="cp-authors">{{ . }}</p>{{ end }}
+  {{- $where := slice }}{{ with or .venue (and .published .published.venue) }}{{ $where = $where | append . }}{{ end }}
+  {{- with .year }}{{ if not (in (delimit $where " ") (string .)) }}{{ $where = $where | append (string .) }}{{ end }}{{ end }}
+  <p class="cp-venue">
+    {{- with $where }}<span>{{ delimit . ", " }}</span>{{ end }}
+    {{- with .published }}{{ with .doi }}<span>DOI <a href="{{ or $p.published.url (printf "https://doi.org/%s" .) }}" rel="noopener">{{ . }}</a></span>{{ end }}{{ end }}
+    {{- with .field }}<span>{{ . }}</span>{{ end }}
+  </p>
+  <ul class="cc-labels" aria-label="Class and notable packages">
+    {{- with .class }}<li class="cc-class" title="Document class">{{ . }}</li>{{ end }}
+    {{- range .packages }}{{ if not (hasPrefix ($p.class | default "") .) }}<li>{{ . }}</li>{{ end }}{{ end }}
+  </ul>
+  <p class="cc-links">
+    {{- with .compare }}<a class="cc-read" href="{{ partial "report-url.html" (dict "batch" "corpus" "paper" $p) }}">Compare with TeX's PDF</a>{{ end }}
+    {{- with .original_url }}{{ if ne . $pub.url }}<a href="{{ . }}" rel="noopener">Original</a>{{ end }}{{ end }}
+    {{- with .source_url }}{{ if ne . $pub.url }}<a href="{{ . }}" rel="noopener">Source</a>{{ end }}{{ end }}
+  </p>
+  <p class="cp-licence">
+    {{- if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ partial "corpus/licence.html" .licence }}</a>{{ else }}{{ partial "corpus/licence.html" .licence }}{{ end }}
+    {{- with $pub.url }}, published at <a href="{{ . }}" rel="noopener">{{ $pub.host }}</a>{{ end }}.
+    {{- with .attribution }} {{ . }}{{ end -}}
+  </p>
+  {{- with .patched }}<details class="cc-patched"><summary>Changed to build here</summary><p>{{ . }}</p></details>{{ end }}
+</header>
+{{- $file := printf "%s/%s.json" (site.Params.corpus.blocks | default "corpus-blocks") .id -}}
+{{- if fileExists $file -}}
+{{- $b := os.ReadFile $file | transform.Unmarshal -}}
+{{- $a11y := eq (printf "%v" site.Params.reflowtexA11y) "true" }}
+{{- /* The paper's fonts, served with the comparison's: merged over the
+       site's font map on this page (partials/reflowtex-viewer.html). */}}
+{{- with $b.font_map }}{{ $.Page.Store.Set "latexFontMap" . }}{{ end }}
+{{- /* attrs: the viewer's options the paper was measured with (e.g.
+       data-tex-final-pass), each a data-* attribute on the block. */}}
+<div class="latex-block corpus-paper-block"{{ if $a11y }} aria-hidden="true"{{ end }}
+     data-nodelist-b64="{{ $b.nodelist_b64 }}"
+     {{- range $k, $v := $b.attrs }}{{ if hasPrefix $k "data-" }} {{ printf "%s=%q" $k (string $v) | safeHTMLAttr }}{{ end }}{{ end }}
+     {{- with site.Params.latexColorMap }} data-color-map="{{ . }}"{{ end }}></div>
+{{- if and $a11y $b.a11y_html }}{{ $b.a11y_html | safeHTML }}{{ end }}
+{{- else }}
+<p class="corpus-missing">The paper's typeset text is not part of this build.</p>
+{{- end }}
+{{- else -}}
+<p class="corpus-missing">This paper is not in the corpus's data.</p>
+{{- end -}}

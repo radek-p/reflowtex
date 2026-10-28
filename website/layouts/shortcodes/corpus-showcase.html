@@ -27,10 +27,11 @@
       {{- range .papers }}
       {{- $p := . }}
       {{- $pub := partial "corpus/published.html" . }}
+      {{- $url := partial "corpus/page-url.html" . }}
       {{- $shown := eq .status "displayed" }}
       <article class="corpus-card{{ if not $shown }} is-stopped{{ end }}" id="paper-{{ .id }}">
         {{- with .field }}<p class="cc-field">{{ . }}</p>{{ end }}
-        <h4 class="cc-title">{{ if and $shown .page }}<a href="{{ .page | relURL }}">{{ .title }}</a>{{ else }}{{ .title }}{{ end }}</h4>
+        <h4 class="cc-title">{{ with $url }}<a href="{{ . }}">{{ $p.title }}</a>{{ else }}{{ .title }}{{ end }}</h4>
         {{- with partial "corpus/authors.html" .authors }}<p class="cc-authors">{{ . }}</p>{{ end }}
         {{- $where := slice }}{{ with or .venue (and .published .published.venue) }}{{ $where = $where | append . }}{{ end }}
         {{- with .year }}{{ if not (in (delimit $where " ") (string .)) }}{{ $where = $where | append (string .) }}{{ end }}{{ end }}
@@ -45,7 +46,7 @@
         {{- end }}
         {{- with .patched }}<details class="cc-patched"><summary>Changed to build here</summary><p>{{ . }}</p></details>{{ end }}
         <p class="cc-links">
-          {{- if and $shown .page }}<a class="cc-read" href="{{ .page | relURL }}">Read it here</a>{{ end }}
+          {{- with $url }}<a class="cc-read" href="{{ . }}">Read it here</a>{{ end }}
           {{- with .original_url }}{{ if ne . $pub.url }}<a href="{{ . }}" rel="noopener">Original</a>{{ end }}{{ end }}
           {{- with .source_url }}{{ if ne . $pub.url }}<a href="{{ . }}" rel="noopener">Source</a>{{ end }}{{ end }}
         </p>

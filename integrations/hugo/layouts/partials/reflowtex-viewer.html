@@ -22,7 +22,12 @@
      Hugo's relURL) can promise all at once. data-fonts-base is still read if
      a page sets it, for the rarer case of fonts served from somewhere else
      entirely (a CDN), but nothing here needs to. */}}
-{{ with hugo.Data.latex_font_map }}
+{{/* A page may add fonts of its own: a shortcode that puts a map of the same
+     kind in the page's Store under "latexFontMap" has it merged over the
+     site's, on that page only (its entries win). */}}
+{{ $fontMap := hugo.Data.latex_font_map | default dict }}
+{{ with .Store.Get "latexFontMap" }}{{ $fontMap = merge $fontMap . }}{{ end }}
+{{ with $fontMap }}
 <script id="latex-font-map" type="application/json">{{ . | jsonify | safeJS }}</script>
 {{ end }}
 

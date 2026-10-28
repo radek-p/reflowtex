@@ -55,7 +55,7 @@
       {{- $goal := partial "corpus/at-goal.html" . }}
       <tr id="row-{{ .id }}"{{ if not $shown }} class="is-stopped"{{ end }}>
         <th scope="row">
-          {{- if and $shown .page }}<a href="{{ .page | relURL }}">{{ .title }}</a>{{ else }}{{ .title }}{{ end }}
+          {{- with partial "corpus/page-url.html" . }}<a href="{{ . }}">{{ $p.title }}</a>{{ else }}{{ .title }}{{ end }}
           <span class="ct-sub ct-meta">{{ with .class }}<code>{{ . }}</code>{{ end }}{{ with .field }}<span>{{ . }}</span>{{ end }}</span>
           {{- $pub := partial "corpus/published.html" . }}
           <span class="ct-sub">{{ if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ partial "corpus/licence.html" .licence }}</a>{{ else }}{{ partial "corpus/licence.html" .licence }}{{ end }}{{ with $pub.url }}, published at <a href="{{ . }}" rel="noopener">{{ $pub.host }}</a>{{ end }}</span>

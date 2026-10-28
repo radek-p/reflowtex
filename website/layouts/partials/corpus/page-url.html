@@ -1,0 +1,9 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* A shown paper's page on this site: the docs page made for it by
+       content/docs/showcase/papers/_content.gotmpl; else its page field. */ -}}
+{{- $url := "" -}}
+{{- if eq .status "displayed" -}}
+  {{- with site.GetPage (printf "/docs/showcase/papers/%s" .id) -}}{{- $url = .RelPermalink -}}
+  {{- else -}}{{- with $.page }}{{ $url = . | relURL }}{{ end -}}{{- end -}}
+{{- end -}}
+{{- return $url -}}

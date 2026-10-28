@@ -72,6 +72,19 @@
   /* Not shown: an outline where the others have a field. */
   .corpus-card.is-stopped { background: none; border: 1px dashed color-mix(in srgb, currentColor 32%, transparent); }
 
+  /* A paper's page: its details above the paper, in the column's measure. */
+  .corpus-paper-head { display: flex; flex-direction: column; gap: .45rem; max-width: 46rem; margin: 0 0 2.5rem;
+    padding: 1.1rem 1.25rem; font-size: .9rem; line-height: 1.45; background: color-mix(in srgb, currentColor 3%, transparent); }
+  .corpus-paper-head p { margin: 0; }
+  .cp-label { font-size: .72rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+  .cp-label a { text-decoration: none; opacity: .65; }
+  .cp-label a:hover { opacity: 1; text-decoration: underline; }
+  .cp-authors { font-weight: 600; }
+  .cp-venue { display: flex; flex-wrap: wrap; gap: .1rem 1.1rem; opacity: .8; }
+  .cp-venue span { overflow-wrap: anywhere; }
+  .corpus-paper-head .cc-links { margin-top: .2rem !important; padding-top: 0; }
+  .cp-licence { font-size: .8rem; opacity: .75; }
+
   /* The totals: five figures in a row, two or three a row on a phone. */
   .corpus-totals {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: .75rem;

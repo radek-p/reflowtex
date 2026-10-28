@@ -40,6 +40,7 @@ that is fine, since `public/` is not tracked.
 | `browser/privacy-notice.ts` | the note, shown once, on what the site keeps in the browser (About › Privacy); build.sh makes it `static/privacy-notice.js` |
 | `static/images/` | pictures the docs show (the render tests page's screenshot) |
 | `layouts/shortcodes/corpus-showcase.html`, `corpus-accuracy.html` | the paper corpus on Showcase (cards by domain) and on Accuracy (totals and a table), from `data/corpus.json`, which CI writes; helpers in `layouts/partials/corpus/` |
+| `content/docs/showcase/papers/_content.gotmpl`, `layouts/shortcodes/corpus-paper.html` | a page for each shown paper of the corpus, made from `data/corpus.json`: its details, then the block its build measured, read from `corpus-blocks/<id>.json` (`params.corpus.blocks`), with the paper's fonts merged into that page's font map |
 | `layouts/partials/report-url.html` | the one place the comparison report's URLs are made (its path is `params.report.path` in `hugo.toml`) |
 
 Built into `static/` by `build.sh`, not kept in git: the render tests' report
