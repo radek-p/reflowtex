@@ -110,7 +110,7 @@ is made of:
   --rtx-duration: 200ms;          /* every movement */
 }
 .latex-stream[data-kind="accordion"] {
-  --rtx-accordion-motion: fade;   /* slide · fade · none */
+  --rtx-accordion-motion: fade;   /* slide, fade or none */
   --rtx-box-padding: .6em 1em;    /* this kind's boxes only */
 }
 /* The pane showing, and each pane's state, are on the elements: */

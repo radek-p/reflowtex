@@ -80,8 +80,11 @@ two lines whose height differs from \TeX's by more than the same tolerance.
 A paper is at the goal when its placement is at least 99\% and it has no
 vertical jump.
 
-Only each paper's own text width is measured: at other widths the browser
-breaks the lines again, and there is no PDF from \TeX{} to compare with.
+A two-column paper is set here in one column at its full text width, as a
+web page has no columns; we compare with \TeX{} setting that one column, not
+with the two-column PDF. Only each paper's own text width is measured: at
+other widths the browser breaks the lines again, and there is no PDF from
+\TeX{} to compare with.
 The figures count glyphs only; the pixel comparison above is made for
 \texttt{testmath.tex} alone. A paper that cannot be shown is counted, with
 the reason, and has no figures.

@@ -38,7 +38,8 @@ shows its licence and authors, and links to where it was published.
 Each paper is compiled from its authors' source, with its own class and
 packages; where a change was needed for it to build, its card says what. A
 paper is not shown when its class or style refuses LuaTeX, which
-Reflow\TeX{} typesets with; the reason is on its card. The labels name the
+Reflow\TeX{} typesets with; the reason is on its card. A two-column
+paper is set in one column at its full text width. The labels name the
 class and a few of the packages the paper relies on. How closely each
 paper follows the PDF \TeX{} makes of it is in \href{../project/accuracy/\#corpus}{Accuracy}.
 {{< /latex >}}
