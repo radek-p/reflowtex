@@ -485,6 +485,28 @@ test('a display whose number TeX set on its own line has no display skip on that
   assert.equal(opening.display_after_blank, true);
 });
 
+// The skip TeX put below a display is that display's while nothing but glue,
+// penalties and kerns came after it. A display alignment with no rows later
+// on (no box, zero skips) puts its own below-display glue in (§1206): it is
+// not the earlier display's, after text or right after that display.
+test('the below skip of an empty display later on is not an earlier display\'s', async () => {
+  const empty = '\\noindent$$\\abovedisplayskip0pt\\belowdisplayskip0pt\\halign{#\\cr}$$';
+  const d = await capture([
+    'Text.$$a$$',
+    'More text after the display.', '',
+    empty,
+    'Text.$$b$$',
+    empty,
+    'Text after the empty displays.',
+  ].join('\n'));
+  const displays = d.content.filter(i => i.kind === 'display') as (Item & { display_below_short?: number })[];
+  assert.equal(displays.length, 2, 'the empty displays stack nothing');
+  for (const [name, x] of [['a', displays[0]], ['b', displays[1]]] as const) {
+    assert.notEqual(x.display_below_short, x.display_below, 'the two skips differ');
+    assert.equal(x.display_used_below, x.display_below_short, `the short skip TeX set below "${name}"`);
+  }
+});
+
 // newtx is in the CI image (docker/test-packages.txt); elsewhere, run where it is installed.
 const NO_NEWTX = !kpsewhich('newtxmath.sty') && 'newtx is not installed';
 test('newtx maths (virtual fonts over Type 1 faces) draws the glyphs TeX set', { skip: NO_NEWTX }, async () => {

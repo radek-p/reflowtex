@@ -1,0 +1,25 @@
+% A display alignment with no rows and zero skips (\emptydisplay), as some
+% packages set one to end a paragraph: it stacks nothing, but its
+% \belowdisplayskip glue comes all the same. It is not the glue of the display
+% before it, which keeps the short skip TeX set below it: after text, and
+% right after that display.
+\documentclass{article}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\newcommand\emptydisplay{\noindent$$\abovedisplayskip0pt\belowdisplayskip0pt\halign{##\cr}$$}
+\begin{document}
+The sum is
+$$ \sum_{k=1}^{n} k = \frac{n(n+1)}{2}, $$
+and the text after the display goes on for a while, long enough to fill one line of the
+text width and then some.
+
+\emptydisplay
+A paragraph after the empty display, which also goes on for more than one line of the
+text width, so that the lines are broken again at every width.
+
+So is
+$$ \sum_{k=1}^{n} k^2 = \frac{n(n+1)(2n+1)}{6} $$
+\emptydisplay
+and the text right after both displays goes on, again for more than one line of the text
+width at every width tested.
+\end{document}

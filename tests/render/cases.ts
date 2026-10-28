@@ -189,6 +189,11 @@ export const cases: Record<string, CaseSettings> = {
   // papers (the browser added the skip: 10 pt lower after each). At the
   // document's width; worst attained 2026-10-27.
   'eq-tag-own-line': { against_plain: true, widths: [0], tolerance: 0.009 },
+  // A display alignment with no rows and zero skips after a display, as some
+  // packages end a paragraph with: its \belowdisplayskip glue was credited to
+  // the display before it, and the browser moved the text below that display
+  // by the difference of the two skips (4 pt higher). Worst attained 2026-10-28.
+  'empty-display-after-display': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.004 },
   // Lines of their own measures (\hangindent, \parshape, a shape resumed
   // after a display, wrapped section titles), at the document's width. One
   // page, so against_plain too.
