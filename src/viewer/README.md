@@ -779,6 +779,7 @@ block, in px: `--latex-margin-width` (0 for marks only) and
 | `default` | TeX's colours exactly, as the PDF has them: black is `#000000`, every colour the document chose is its own, and a link is drawn as TeX drew it (hyperref's `colorlinks` colours, or black), with no underline. No colour map applies, ever. |
 | `light` | the built-in map's light theme: softer black (`#333333`), links in a colour of their own, underlined while pointed at |
 | `dark` | the built-in map's dark theme: light text, colours made readable on a dark page |
+| `navy` | the built-in map's night blue theme: soft off-white text on a deep blue-green page, a dark theme for reading at length |
 | `sepia` | the built-in map's sepia theme |
 | `contrast` | the built-in map's high-contrast theme |
 
@@ -842,7 +843,7 @@ drives it through `window.reflowtex`:
 | Call | Does |
 |---|---|
 | `reflowtex.theme()` | `{ choice, theme, light, dark }`: the reader's choice (a theme or `'system'`), the theme shown now, and the two slots |
-| `reflowtex.themes()` | the themes on offer: `default`, then the colour maps' (`light`, `dark`, `sepia`, `contrast`, and any theme a page's map adds) |
+| `reflowtex.themes()` | the themes on offer: `default`, then the colour maps' (`light`, `dark`, `navy`, `sepia`, `contrast`, and any theme a page's map adds) |
 | `reflowtex.setTheme(choice)` | a theme's name or `'system'`; applied at once (it also makes the viewer set the page's theme from then on), and remembered on a page that keeps the reader's settings |
 | `reflowtex.setSystemThemes({ light, dark })` | either slot or both; applied at once when the choice is `system`; remembered as above |
 | `reflowtex.rememberTheme()` | keep the reader's settings on this page from now on, as `data-latex-theme-choice` asks at load: the remembered choice and slots are read and applied |

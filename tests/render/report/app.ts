@@ -595,11 +595,11 @@ function pinPage(win: Window & PageHooks, colPx: number, marginPx: number, hsize
 
 // The page's colours. 'tex' is the theme `default`, TeX's own colours with no
 // colour map, exactly as the PDF has them (links too), as the measurement
-// sees them; four are the viewer's other themes, each its colour map;
+// sees them; five are the viewer's other themes, each its colour map;
 // 'inverted' is TeX's, inverted by a filter on both sides (report.css).
 // 'auto': TeX, or inverted while the report is dark.
 const PAGE_COLOURS: [string, string, string][] = [['tex', 'TeX', 'As the PDF: no colour map'], ['light', 'Light', "The viewer's light theme"],
-    ['dark', 'Dark', "The viewer's dark theme"], ['sepia', 'Sepia', "The viewer's sepia theme"], ['contrast', 'Contrast', "The viewer's high-contrast theme"],
+    ['dark', 'Dark', "The viewer's dark theme"], ['navy', 'Night blue', "The viewer's night blue theme"], ['sepia', 'Sepia', "The viewer's sepia theme"], ['contrast', 'Contrast', "The viewer's high-contrast theme"],
     ['inverted', 'TeX inverted', "TeX's colours, inverted on both sides"]];
 const resolvePageColours = (mode: string): string => (mode !== 'auto' ? mode : document.documentElement.dataset.theme === 'dark' ? 'inverted' : 'tex');
 /** Give the live page these colours: a theme of its own, or TeX's. */

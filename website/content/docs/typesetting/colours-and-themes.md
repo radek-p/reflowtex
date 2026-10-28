@@ -9,7 +9,7 @@ latexTitle: true
 \bigskip
 In the default theme every colour is TeX's own, as in the PDF: black text is
 black, and links have the colours the document gave them. The other themes,
-light, dark, sepia and contrast, each replace some colours by a
+light, dark, night blue, sepia and contrast, each replace some colours by a
 \emph{colour map}, so that \verb|\textcolor{blue}| stays readable on a dark
 background, and give links a colour of their own. The options above the
 example set its text size and theme, for the example only; the same options
@@ -18,7 +18,7 @@ system: one theme while it is light and another while it is dark, by default
 the default theme and dark.
 {{< /latex >}}
 
-{{< latex preamble="docs" show-source="true" themes="default,light,dark,sepia,contrast" >}}
+{{< latex preamble="docs" show-source="true" themes="default,light,dark,navy,sepia,contrast" >}}
 A \textcolor{blue}{blue remark}, a \textcolor{red}{red warning}, and
 colour inside mathematics:
 \[
@@ -76,7 +76,7 @@ replaces the built-in one. In the file:
 
 {{< latex preamble="docs" >}}
 A theme is a class on the page's \verb|<html>| element (\texttt{light},
-\texttt{dark}, \texttt{sepia} or \texttt{contrast}; none for the default
+\texttt{dark}, \texttt{navy}, \texttt{sepia} or \texttt{contrast}; none for the default
 theme), so switching themes only changes styles; nothing is drawn again. The Theming section of \texttt{src/viewer/README.md}
 has the details.
 {{< /latex >}}

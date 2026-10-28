@@ -344,6 +344,7 @@
 [data-t="default"]  .rtx-swatch { background: #fff; color: #000; }
 [data-t="light"]    .rtx-swatch { background: #fafaf9; color: #333; }
 [data-t="dark"]     .rtx-swatch { background: #1c1917; color: #e7e5e4; }
+[data-t="navy"]     .rtx-swatch { background: #0f2735; color: #dde5ea; }
 [data-t="sepia"]    .rtx-swatch { background: #f4ecd8; color: #453a26; }
 [data-t="contrast"] .rtx-swatch { background: #fff; color: #000; box-shadow: inset 0 0 0 1.5px #000; }
 .rtx-reading-themes button[aria-checked="true"] .rtx-swatch { outline: 2.5px solid var(--rtx-accent); outline-offset: 2.5px; }
@@ -423,7 +424,7 @@
   --rtx-highlight-blue: #c6dcfb;
   --rtx-highlight-pad: 3px;
 }
-html.dark, [data-latex-theme="dark"] {
+html.dark, [data-latex-theme="dark"], html.navy, [data-latex-theme="navy"] {
   --rtx-highlight-yellow: #5c5000;
   --rtx-highlight-green: #1f4a26;
   --rtx-highlight-pink: #5a2340;

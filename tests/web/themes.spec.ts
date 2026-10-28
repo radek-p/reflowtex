@@ -45,6 +45,17 @@ test('dark: its colour map, links included', async ({ openPage }) => {
   expect((await colours(page)).ref).toBe('rgb(255, 0, 0)');
 });
 
+test('navy (night blue): soft off-white on a deep blue-green, the page included', async ({ openPage }) => {
+  const page = await openPage('themes', { colorScheme: 'light' });
+  expect(await page.evaluate(() => window.reflowtex!.themes!())).toContain('navy');
+  await setTheme(page, 'navy');
+  expect(await colours(page)).toEqual({ text: 'rgb(221, 229, 234)', ref: 'rgb(179, 176, 255)', url: 'rgb(179, 176, 255)', theme: 'navy', classes: 'navy' });
+  expect(await hoverRef(page)).toBe('rgb(212, 210, 255)');
+  // (the page eases into its colours: polled)
+  await expect.poll(() => page.evaluate(() => [getComputedStyle(document.documentElement).backgroundColor,
+    getComputedStyle(document.documentElement).colorScheme]), { message: "the page's background" }).toEqual(['rgb(15, 39, 53)', 'dark']);
+});
+
 test("a page's map gives a theme its link look", async ({ openPage }) => {
   const page = await openPage('themes', { colorScheme: 'light' });
   await page.evaluate(() => window.reflowtex!.host!.setColorMaps({ reflowtex: { links: { light: { color: '#00aa00', hover: '#005500', underline: 'hover' } } } }));

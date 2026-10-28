@@ -33,7 +33,7 @@
 
 <style>
   :root { color-scheme: light; }
-  html.dark { color-scheme: dark; }
+  html.dark, html.navy { color-scheme: dark; }
   /* Palette lives on <html> so it also fills the strip a fixed-width column
      reveals when it overflows horizontally. The viewer keys its colour maps off
      the same html.light / .dark / .sepia / .contrast classes, so text stays in
@@ -41,6 +41,7 @@
   html { background: #fff; color: #000; transition: background .15s ease, color .15s ease; }
   html.light    { background: #fafaf9; color: #333; }
   html.dark     { background: #0c0a09; color: #e7e5e4; }
+  html.navy     { background: #0f2735; color: #dde5ea; }
   html.sepia    { background: #f4ecd8; color: #453a26; }
   html.contrast { background: #fff;    color: #000; }
   /* The one accent colour, used sparingly: links in the typeset text, the
@@ -51,13 +52,14 @@
      it with them, since a var() resolves where it is declared. */
   html,          [data-latex-theme="light"]    { --lt-primary: #2f2ccd; --lt-primary-strong: #221f99; }
   html.dark,     [data-latex-theme="dark"]     { --lt-primary: #9d9bff; --lt-primary-strong: #c3c2ff; }
+  html.navy,     [data-latex-theme="navy"]     { --lt-primary: #b3b0ff; --lt-primary-strong: #d4d2ff; }
   html.sepia,    [data-latex-theme="sepia"]    { --lt-primary: #3431b0; --lt-primary-strong: #25238a; }
   html.contrast, [data-latex-theme="contrast"] { --lt-primary: #1f1ca8; --lt-primary-strong: #000;    }
   /* Its light variant, as a background, only in the light theme, and only
      for theorem frames: the other grey backgrounds stay grey. */
-  html:not(.dark):not(.sepia):not(.contrast), [data-latex-theme="light"] { --latex-theorem-background: #ebebfd; }
-  html.dark, html.sepia, html.contrast,
-  [data-latex-theme="dark"], [data-latex-theme="sepia"], [data-latex-theme="contrast"] { --latex-theorem-background: initial; }
+  html:not(.dark):not(.navy):not(.sepia):not(.contrast), [data-latex-theme="light"] { --latex-theorem-background: #ebebfd; }
+  html.dark, html.navy, html.sepia, html.contrast,
+  [data-latex-theme="dark"], [data-latex-theme="navy"], [data-latex-theme="sepia"], [data-latex-theme="contrast"] { --latex-theorem-background: initial; }
   html, [data-latex-theme] {
     --latex-theorem-accent: var(--lt-primary); --lt-outline-accent: var(--lt-primary);
     --latex-handle-color: var(--lt-primary); }
@@ -84,6 +86,7 @@
     --code-num: #a0522d; --code-name: #8a3ab9;
   }
   html.dark     { --code-kw: #79c0ff; --code-str: #7ee787; --code-com: #8b949e; --code-num: #ffa657; --code-name: #d2a8ff; }
+  html.navy     { --code-kw: #8cc8ff; --code-str: #8fdba0; --code-com: #93a3b0; --code-num: #f0b27a; --code-name: #d2b4ff; }
   html.sepia    { --code-kw: #155e97; --code-str: #3f6b1f; --code-com: #7d6f55; --code-num: #9a4a14; --code-name: #7a3e8a; }
   html.contrast { --code-kw: #0000b3; --code-str: #005a00; --code-com: #444444; --code-num: #8a3000; --code-name: #5b0093; }
   pre, code {
@@ -243,29 +246,9 @@
      the width control is on auto, and gives way in a narrower window. */
   .docs-layout.has-own-width { max-width: max(100rem, calc(var(--docs-own-width) + 40rem)); }
   html[data-width="auto"] .docs-layout.has-own-width #lt-content { flex-basis: var(--docs-own-width); }
-  .docs-toc { flex: 0 0 14rem; min-width: 0; }
-  .docs-toc nav {
-    position: sticky; top: 3rem; max-height: calc(100vh - 5rem - var(--rtx-dock-bottom, 0px)); overflow-y: auto;
-    font-size: 0.85rem; line-height: 1.35; padding: 0 0.25rem 2rem 0;
-    scrollbar-width: thin;
-  }
-  .docs-toc nav .docs-nav-group { margin-top: 0; }
-  .docs-toc ul { list-style: none; margin: 0; padding: 0; }
-  .docs-toc ul ul { display: none; padding-left: 0.85rem; }
-  .docs-toc li.open > ul { display: block; }
-  .docs-toc a {
-    display: block; padding: 0.28rem 0 0.28rem 0.8rem; text-decoration: none;
-    border-left: 2px solid color-mix(in srgb, currentColor 10%, transparent); opacity: 0.66;
-  }
-  .docs-toc a:hover { opacity: 1; }
-  .docs-toc li.open > a { opacity: 0.9; }
-  .docs-toc a.current { opacity: 1; font-weight: 600; border-left-color: var(--lt-primary); }
-  .docs-toc .toc-theorem > a { font-size: 0.8rem; font-style: italic; }
+  /* The list itself, and the rail it becomes where its column is hidden:
+     partials/docs-toc.html. */
   .latex-anchor { scroll-margin-top: 1.5rem; }
-  @media (max-width: 88rem) { .docs-toc { display: none; } }
-  /* Set by docs-shell.html when the reader's width and text size would not
-     fit between both menus: the contents list gives way to the text. */
-  .docs-layout.toc-gives-way .docs-toc { display: none; }
 
   /* Previous / next page, at the foot of every docs page. */
   .docs-pager {
@@ -366,6 +349,7 @@
   .latex-example-preview[data-latex-theme="default"]  { background: #ffffff; color: #000000; --latex-page-bg: #ffffff; }
   .latex-example-preview[data-latex-theme="light"]    { background: #fafaf9; color: #333333; --latex-page-bg: #fafaf9; }
   .latex-example-preview[data-latex-theme="dark"]     { background: #0c0a09; color: #e7e5e4; --latex-page-bg: #0c0a09; }
+  .latex-example-preview[data-latex-theme="navy"]     { background: #0f2735; color: #dde5ea; --latex-page-bg: #0f2735; }
   .latex-example-preview[data-latex-theme="sepia"]    { background: #f4ecd8; color: #453a26; --latex-page-bg: #f4ecd8; }
   .latex-example-preview[data-latex-theme="contrast"] { background: #ffffff; color: #000000; --latex-page-bg: #ffffff; }
   /* The preview options (the integration's themes=, drawn by the companion's
@@ -425,6 +409,7 @@
   html.sepia,    [data-latex-theme="sepia"]    { --lt-note-paper: #f6e19a; }
   html.contrast, [data-latex-theme="contrast"] { --lt-note-paper: #fff27a; }
   html.dark,     [data-latex-theme="dark"]     { --lt-note-paper: #3b3419; }
+  html.navy,     [data-latex-theme="navy"]     { --lt-note-paper: #3a3a22; }
 
   /* ── A glyph zoomed in (shortcode glyph-outline) ────────────────────────
      The outline as a vector editor shows a selected path: anchors as
@@ -567,7 +552,7 @@
      background, its fill the page's text colour – set per theme, since
      currentColor here would be its own (light) text. */
   .hero .cta a.primary { background: var(--lt-primary); color: #fff; border-color: transparent; }
-  html.dark .hero .cta a.primary { color: #0c0a09; }
+  html.dark .hero .cta a.primary, html.navy .hero .cta a.primary { color: #0c0a09; }
   .hero .cta a.primary:hover { background: var(--lt-primary-strong); }
   @media (prefers-reduced-motion: reduce) { .hero-caption.motion { display: none; } }
 
@@ -657,7 +642,7 @@
     font: 600 .72em/1.7 ui-sans-serif, system-ui, sans-serif; white-space: nowrap;
     background: var(--lt-primary); color: #fff;
   }
-  html.dark .home-badge { color: #0c0a09; }
+  html.dark .home-badge, html.navy .home-badge { color: #0c0a09; }
   .latex-widget-hover .home-badge { background: var(--lt-primary-strong); }
   /* Split across lines (as in the HTML widgets example): a cut end gets
      small corners and a perforation, and a little more padding for it. */
@@ -707,7 +692,7 @@
   }
   .home-doc-cta a:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
   .home-doc-cta a.primary { background: var(--lt-primary); color: #fff; border-color: transparent; }
-  html.dark .home-doc-cta a.primary { color: #0c0a09; }
+  html.dark .home-doc-cta a.primary, html.navy .home-doc-cta a.primary { color: #0c0a09; }
   .home-doc-cta a.primary:hover { background: var(--lt-primary-strong); }
   /* The paragraph to drag: no field, only its right edge, a hairline
      that is always faintly there. */
@@ -783,6 +768,7 @@
   html          { --latex-page-bg: #ffffff; --lt-glass: rgba(255, 255, 255, .80); --lt-seg-on: #ffffff; }
   html.light    { --latex-page-bg: #fafaf9; --lt-glass: rgba(250, 250, 249, .74); --lt-seg-on: #ffffff; }
   html.dark     { --latex-page-bg: #0c0a09; --lt-glass: rgba(34, 31, 29, .74);    --lt-seg-on: #4a4541; }
+  html.navy     { --latex-page-bg: #0f2735; --lt-glass: rgba(24, 52, 68, .76);    --lt-seg-on: #2c4f63; }
   html.sepia    { --latex-page-bg: #f4ecd8; --lt-glass: rgba(244, 236, 216, .80); --lt-seg-on: #fbf6ea; }
   html.contrast { --latex-page-bg: #ffffff; --lt-glass: rgba(255, 255, 255, .92); --lt-seg-on: #ffffff; }
   /* Popovers (the viewer's footnotes, the companion's panels) in the reading

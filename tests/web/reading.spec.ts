@@ -26,6 +26,7 @@ test('theme, width and size are followed and kept', async ({ openPage }) => {
   const page = await openPage('reading');
   await page.locator('.rtx-reading-button').click();
   const panel = page.locator('.rtx-reading-panel');
+  expect(await panel.locator('[data-t="navy"] span:not(.rtx-swatch)').textContent(), 'a theme with a label of its own').toBe('Night blue');
   await panel.locator('[data-t="sepia"]').click();
   await panel.locator('[data-w="wide"]').click();
   await panel.locator('[data-z="in"]').click();

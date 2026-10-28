@@ -32,7 +32,7 @@ below.
     border: 1px solid color-mix(in srgb, currentColor 30%, transparent); transition: background .15s ease; }
   .accuracy-tools a:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
   .accuracy-tools a.primary { background: var(--lt-primary); color: #fff; border-color: transparent; }
-  html.dark .accuracy-tools a.primary { color: #0c0a09; }
+  html.dark .accuracy-tools a.primary, html.navy .accuracy-tools a.primary { color: #0c0a09; }
   .accuracy-tools a.primary:hover { background: var(--lt-primary-strong); }
 </style>
 

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The viewer's own colour map: the looks of the themes light, dark, sepia and
-// contrast, as data (the README's Theming). Data only, with no browser code,
-// so a site generator's build can read it too (the Hugo integration's
-// prebuild writes it out for templates that show a map).
+// The viewer's own colour map: the looks of the themes light, dark, navy
+// (night blue), sepia and contrast, as data (the README's Theming). Data
+// only, with no browser code, so a site generator's build can read it too
+// (the Hugo integration's prebuild writes it out for templates that show a
+// map).
 //
 // The theme `default` is not here and never has a map: it draws TeX's colours
 // exactly, as the PDF has them.
@@ -44,6 +45,9 @@ export const BUILTIN_COLOR_MAPS: Record<string, ColorMap> = {
             light: { '#000000': '#333333', '#ffffff': PAPER },
             dark: { '#000000': '#e7e5e4', '#ffffff': PAPER, '#ff0000': '#ff7b72', '#0000ff': '#79c0ff',
                     '#4f4f54': '#9c9ca3', '#fcc712': '#7a5c00' },
+            // night blue: soft off-white on a deep blue-green (#0f2735, the page's CSS)
+            navy: { '#000000': '#dde5ea', '#ffffff': PAPER, '#ff0000': '#ff8f85', '#0000ff': '#8cc8ff',
+                    '#4f4f54': '#9babb8', '#fcc712': '#6b5a14' },
             sepia: { '#000000': '#453a26', '#ffffff': PAPER, '#ff0000': '#c02d0c', '#0000ff': '#155e97',
                      '#4f4f54': '#544f45' },
             contrast: { '#000000': '#000000', '#ffffff': PAPER, '#ff0000': '#b30000', '#0000ff': '#0000b3' },
@@ -51,6 +55,7 @@ export const BUILTIN_COLOR_MAPS: Record<string, ColorMap> = {
         links: {
             light: { color: '#2f2ccd', hover: '#221f99', active: ACTIVE, underline: 'hover' },
             dark: { color: '#9d9bff', hover: '#c3c2ff', active: ACTIVE, underline: 'hover' },
+            navy: { color: '#b3b0ff', hover: '#d4d2ff', active: ACTIVE, underline: 'hover' },
             sepia: { color: '#3431b0', hover: '#25238a', active: ACTIVE, underline: 'hover' },
             contrast: { color: '#1f1ca8', hover: '#000000', active: ACTIVE, underline: 'hover' },
         },

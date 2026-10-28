@@ -45,7 +45,7 @@ export { colorFill, linkFill } from './colour-css.ts';
 //   in every theme but default.
 //
 // The viewer ships one map, `reflowtex` (builtin-colour-maps.ts), with the
-// themes light, dark, sepia and contrast. A block uses it unless it names
+// themes light, dark, navy, sepia and contrast. A block uses it unless it names
 // another with [data-color-map="<name>"]; a named map falls back to it theme
 // by theme (a theme the map gives replaces the built-in's, colours and links
 // separately), and the page's own map named `reflowtex` replaces the

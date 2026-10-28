@@ -38,7 +38,7 @@
             border-radius: 0; cursor: pointer; color: #fff; background: var(--lt-primary, var(--accent, #0b57d0));
             transition: background .15s ease; }
           .rtx-privacy button:hover { background: var(--lt-primary-strong, var(--lt-primary, var(--accent, #0b57d0))); }
-          html.dark .rtx-privacy button { color: #0c0a09; }
+          html.dark .rtx-privacy button, html.navy .rtx-privacy button { color: #0c0a09; }
           :root[data-theme="dark"]:not(.dark) .rtx-privacy button { color: #1f2023; }   /* (the render tests page) */
           @media (max-width: 600px) { .rtx-privacy { font-size: 16px; gap: .8rem; } }
           @media print { .rtx-privacy { display: none; } }`;

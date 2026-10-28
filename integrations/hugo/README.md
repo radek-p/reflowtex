@@ -208,7 +208,7 @@ blocks that show it.
 Colours and themes. A block draws TeX's colours exactly in the theme
 `default` (no class on `<html>`): black is `#000000`, and links look as TeX
 drew them. The viewer's built-in colour map gives the themes `light`, `dark`,
-`sepia` and `contrast` (a class on `<html>`), links included, so a site needs
+`navy`, `sepia` and `contrast` (a class on `<html>`), links included, so a site needs
 no map of its own; see [src/viewer/README.md](../../src/viewer/README.md)'s
 Theming section for the themes, the reader's choice of one (or of the system
 mode) and what a map can express. To let readers choose, put the attributes

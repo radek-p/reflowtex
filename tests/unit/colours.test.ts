@@ -30,12 +30,13 @@ test('a block with no map: TeX black is #000000, set by no rule outside a theme'
   }
 });
 
-test('the built-in map gives light, dark, sepia and contrast, links included; a page map replaces a theme whole', () => {
+test('the built-in map gives light, dark, navy, sepia and contrast, links included; a page map replaces a theme whole', () => {
   const maps = { site: { colors: { dark: { '#0000ff': '#99ccff' } }, links: { dark: { color: '#ff00ff' } } } };
   const sheet = css(maps);
   const at = (sel: string) => rules(sheet).find(([s]) => s === sel)?.[1] ?? '';
   const theme = (t: string) => at(`:root.${t}, [data-latex-theme="${t}"]`);
-  assert.deepEqual(mapThemes(maps), ['default', 'light', 'dark', 'sepia', 'contrast']);
+  assert.deepEqual(mapThemes(maps), ['default', 'light', 'dark', 'navy', 'sepia', 'contrast']);
+  assert.match(theme('navy'), /--latex-color-000000: #dde5ea;/);
   // on the themed element: the built-in's, as the blocks' own properties ...
   assert.match(theme('light'), /--latex-color-000000: #333333;/);
   assert.match(theme('light'), /--latex-link-underline: hover;/);

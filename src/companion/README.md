@@ -199,7 +199,7 @@ setters: `reading.theme` (the theme shown), `.choice` (a theme, or
 and `reading.setTheme(t)` (a theme or `'system'`), `.setSystemThemes({ light,
 dark })`, `.zoomBy(±1 | 0)` and `.setWidth(w)`. The themes are the viewer's
 (its README's Theming): `default`, TeX's colours as they are, then light,
-dark, sepia and contrast, and System offers a theme for each of the system's
+dark, navy (labelled Night blue), sepia and contrast, and System offers a theme for each of the system's
 modes. The page follows it through `<html>`:
 - the theme is a class (none for default) plus `data-theme`, set by the
   viewer alone: `reading.setTheme` and `.setSystemThemes` call

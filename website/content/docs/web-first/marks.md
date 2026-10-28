@@ -83,7 +83,7 @@ author's marks are drawn, with its classes in \texttt{data-mark}.
 
 <style>
   :root { --mark-highlight: #fff176; }
-  html.dark, [data-latex-theme="dark"] { --mark-highlight: #5c5000; }
+  html.dark, [data-latex-theme="dark"], html.navy, [data-latex-theme="navy"] { --mark-highlight: #5c5000; }
   .latex-block rect.latex-mark[data-mark~="key"] {
     fill: var(--mark-highlight); stroke: var(--mark-highlight); stroke-width: 3px; stroke-linejoin: round;
   }

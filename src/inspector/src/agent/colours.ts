@@ -75,7 +75,7 @@ export const resetColourMaps = (): string => applyMaps(originalMaps === null ? i
 // README, Theming) a theme other than light is a class on <html>, which the
 // maps' rules key on; data-theme says the same for the page's own CSS. A
 // page's switcher (the companion's reading options, say) follows the change.
-const themeNames = (maps: Maps): Set<string> => new Set(['light', 'dark', 'sepia', 'contrast',
+const themeNames = (maps: Maps): Set<string> => new Set(['light', 'dark', 'navy', 'sepia', 'contrast',
     ...Object.values(maps).flatMap(m => [...Object.keys(m.colors || {}), ...Object.keys(m.links || {})])].filter(t => t !== 'default'));
 function pageTheme(maps: Maps = currentMaps()): string {
     const root = document.documentElement, a = root.getAttribute('data-theme');

@@ -10,7 +10,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ctext%20x='3'%20y='13'%20font-size='15'%20font-family='Georgia,serif'%20fill='%23888'%3E%E2%88%AB%3C/text%3E%3C/svg%3E">
 
 <!-- Theme: a class on <html> (none for `default`, TeX's colours exactly; `light`,
-     `dark`, `sepia`, `contrast` are the viewer's colour maps) and data-theme.
+     `dark`, `navy`, `sepia`, `contrast` are the viewer's colour maps) and data-theme.
      The viewer keeps the reader's choice – a theme, or `system`: one theme
      while the system is light (data-latex-theme-light), another while it is
      dark (data-latex-theme-dark) – and the attributes below are this page's
@@ -19,7 +19,7 @@
      window.__setTheme to change it live. -->
 <script>
   (function () {
-    var root = document.documentElement, THEMES = ['light', 'dark', 'sepia', 'contrast'];
+    var root = document.documentElement, THEMES = ['light', 'dark', 'navy', 'sepia', 'contrast'];
     root.setAttribute('data-latex-theme-choice', 'system');
     root.setAttribute('data-latex-theme-light', 'default');
     root.setAttribute('data-latex-theme-dark', 'dark');
@@ -100,7 +100,7 @@
 
 <style>
   :root { color-scheme: light; }
-  html.dark { color-scheme: dark; }
+  html.dark, html.navy { color-scheme: dark; }
   /* Page palette lives on <html> (not <body>) so it also fills the strip a
      fixed-width column reveals when it overflows into a horizontal scroll.
      Driven by html.dark etc. (set by the theme script), which the viewer keys
@@ -112,6 +112,7 @@
   }
   html.light    { background: #fafaf9; color: #333333; }
   html.dark     { background: #0c0a09; color: #e7e5e4; }
+  html.navy     { background: #0f2735; color: #dde5ea; }
   html.sepia    { background: #f4ecd8; color: #453a26; }
   html.contrast { background: #ffffff; color: #000000; }
   /* The page's colour, for the viewer: the footnote popover is filled with
@@ -120,6 +121,7 @@
   html          { --latex-page-bg: #ffffff; }
   html.light    { --latex-page-bg: #fafaf9; }
   html.dark     { --latex-page-bg: #0c0a09; }
+  html.navy     { --latex-page-bg: #0f2735; }
   html.sepia    { --latex-page-bg: #f4ecd8; }
   html.contrast { --latex-page-bg: #ffffff; }
   body {
@@ -155,6 +157,7 @@
   html          { --lt-glass: rgba(255, 255, 255, .80); --lt-seg-on: #ffffff; }
   html.light    { --lt-glass: rgba(250, 250, 249, .74); --lt-seg-on: #ffffff; }
   html.dark     { --lt-glass: rgba(34, 31, 29, .74);    --lt-seg-on: #4a4541; }
+  html.navy     { --lt-glass: rgba(24, 52, 68, .76);    --lt-seg-on: #2c4f63; }
   html.sepia    { --lt-glass: rgba(244, 236, 216, .80); --lt-seg-on: #fbf6ea; }
   html.contrast { --lt-glass: rgba(255, 255, 255, .92); --lt-seg-on: #ffffff; }
   #lt-reader {
@@ -230,6 +233,7 @@
   [data-t="default"]  .lt-swatch { background: #fff; color: #000; }
   [data-t="light"]    .lt-swatch { background: #fafaf9; color: #333; }
   [data-t="dark"]     .lt-swatch { background: #1c1917; color: #e7e5e4; }
+  [data-t="navy"]     .lt-swatch { background: #0f2735; color: #dde5ea; }
   [data-t="sepia"]    .lt-swatch { background: #f4ecd8; color: #453a26; }
   [data-t="contrast"] .lt-swatch { background: #fff; color: #000; box-shadow: inset 0 0 0 1.5px #000; }
   .lt-themes button[aria-checked="true"] .lt-swatch { outline: 2.5px solid var(--lt-accent); outline-offset: 2.5px; }
@@ -355,6 +359,7 @@
       <button type="button" role="radio" data-t="default" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Default</span></button>
       <button type="button" role="radio" data-t="light" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Light</span></button>
       <button type="button" role="radio" data-t="dark" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Dark</span></button>
+      <button type="button" role="radio" data-t="navy" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Night blue</span></button>
       <button type="button" role="radio" data-t="sepia" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Sepia</span></button>
       <button type="button" role="radio" data-t="contrast" aria-checked="false"><span class="lt-swatch" aria-hidden="true">Aa</span><span>Contrast</span></button>
     </div>
@@ -398,7 +403,7 @@
   var root = document.getElementById('lt-reader');
   var btn = document.getElementById('lt-reader-button'), panel = document.getElementById('lt-reader-panel');
   var html = document.documentElement;
-  var THEMES = [['default', 'Default'], ['light', 'Light'], ['dark', 'Dark'], ['sepia', 'Sepia'], ['contrast', 'Contrast']];
+  var THEMES = [['default', 'Default'], ['light', 'Light'], ['dark', 'Dark'], ['navy', 'Night blue'], ['sepia', 'Sepia'], ['contrast', 'Contrast']];
   root.querySelectorAll('select[data-slot]').forEach(function (s) {
     THEMES.forEach(function (t) { var o = document.createElement('option'); o.value = t[0]; o.textContent = t[1]; s.appendChild(o); });
     s.addEventListener('change', function () {

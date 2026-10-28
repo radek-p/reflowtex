@@ -33,7 +33,7 @@ const KEYS = { zoom: 'reflowtex-zoom', width: 'reflowtex-width', selection: 'ref
 const ZOOM = { min: 0.5, max: 3, step: 1.1 };
 
 export interface Theme { name: string; label?: string }
-export const THEMES: Theme[] = [{ name: 'default' }, { name: 'light' }, { name: 'dark' }, { name: 'sepia' }, { name: 'contrast' }];
+export const THEMES: Theme[] = [{ name: 'default' }, { name: 'light' }, { name: 'dark' }, { name: 'navy', label: 'Night blue' }, { name: 'sepia' }, { name: 'contrast' }];
 /** The choice that follows the system: one theme while it is light, another while it is dark. */
 export const SYSTEM = 'system';
 export const WIDTHS = ['auto', 'narrow', 'normal', 'wide'];
@@ -333,7 +333,8 @@ export function PreviewOptions({ themes = 'light,dark', element }: { themes?: st
     if (!state.current && element) {
         const target = (element.closest('.latex-example-preview') as HTMLElement) || element.parentElement!;
         const stage = (target.querySelector('.latex-example-stage') as HTMLElement) || target;
-        state.current = scopedReading(target, themes.split(',').map(t => ({ name: t.trim() })).filter(t => t.name), stage);
+        state.current = scopedReading(target, themes.split(',').map(t => t.trim()).filter(Boolean)
+            .map(name => THEMES.find(t => t.name === name) || { name }), stage);
     }
     return state.current ? <ReadingOptions state={state.current} inspect={false} class="rtx-reading-preview" /> : null;
 }

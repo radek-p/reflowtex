@@ -30,7 +30,7 @@ inspector open on it.
   /* the home page's primary button (layouts/partials/head.html) */
   .render-tests .open { display: inline-block; padding: .5rem 1.1rem; border: 1px solid transparent; background: var(--lt-primary); color: #fff; text-decoration: none; font-weight: 600; transition: background .15s ease; }
   .render-tests .open:hover { background: var(--lt-primary-strong); }
-  html.dark .render-tests .open { color: #0c0a09; }
+  html.dark .render-tests .open, html.navy .render-tests .open { color: #0c0a09; }
 </style>
 
 {{< latex preamble="about" >}}

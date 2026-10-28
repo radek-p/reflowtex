@@ -14,9 +14,9 @@
 {{- $m := index (hugo.Data.latex_color_maps | default dict) (.Get "map") | default (index (hugo.Data.latex_builtin_color_maps | default dict) (.Get "map")) -}}
 {{- $only := slice -}}
 {{- with .Get "colors" }}{{ range split . "," }}{{ $only = $only | append (strings.TrimSpace . | lower) }}{{ end }}{{ end -}}
-{{- $themes := slice "default" "light" "dark" "sepia" "contrast" -}}
-{{- $bg := dict "default" "#ffffff" "light" "#fafaf9" "dark" "#0c0a09" "sepia" "#f4ecd8" "contrast" "#ffffff" -}}
-{{- $label := dict "default" "Default" "light" "Light" "dark" "Dark" "sepia" "Sepia" "contrast" "High contrast" -}}
+{{- $themes := slice "default" "light" "dark" "navy" "sepia" "contrast" -}}
+{{- $bg := dict "default" "#ffffff" "light" "#fafaf9" "dark" "#0c0a09" "navy" "#0f2735" "sepia" "#f4ecd8" "contrast" "#ffffff" -}}
+{{- $label := dict "default" "Default" "light" "Light" "dark" "Dark" "navy" "Night blue" "sepia" "Sepia" "contrast" "High contrast" -}}
 {{- $names := dict "#000000" "black" "#0000ff" "blue" "#ff0000" "red" "#4f4f54" "grey" "#fcc712" "yellow" "#808080" "grey" -}}
 {{- $srcs := slice -}}
 {{- range $t, $cm := $m.colors }}{{ range $k, $_ := $cm }}{{ if and (not (in $srcs $k)) (or (not $only) (in $only $k)) }}{{ $srcs = $srcs | append $k }}{{ end }}{{ end }}{{ end -}}
@@ -41,7 +41,7 @@
       <th scope="row"><span class="cmap-cell" style="background:#ffffff;color:#333333"><span class="cmap-swatch" style="background:{{ $tint | safeCSS }}"></span><span class="cmap-hex">{{ with index $names $base }}{{ . }}{{ else }}{{ $base }}{{ end }}!{{ $pct }} = {{ $tint }}</span></span></th>
       {{- range $t := $themes }}
       {{- $to := index (index $m.colors $t | default dict) $base | default $base -}}
-      <td><span class="cmap-cell" style="background:{{ index $bg $t | safeCSS }};color:{{ if eq $t "dark" }}#e7e5e4{{ else }}#333333{{ end }}"><span class="cmap-swatch" style="background:color-mix(in srgb, {{ $to | safeCSS }} {{ $pct }}%, {{ index $bg $t | safeCSS }})"></span><span class="cmap-hex">{{ $pct }}% {{ $to }}</span></span></td>
+      <td><span class="cmap-cell" style="background:{{ index $bg $t | safeCSS }};color:{{ if eq $t "dark" }}#e7e5e4{{ else if eq $t "navy" }}#dde5ea{{ else }}#333333{{ end }}"><span class="cmap-swatch" style="background:color-mix(in srgb, {{ $to | safeCSS }} {{ $pct }}%, {{ index $bg $t | safeCSS }})"></span><span class="cmap-hex">{{ $pct }}% {{ $to }}</span></span></td>
       {{- end }}
     </tr>
     {{- end }}

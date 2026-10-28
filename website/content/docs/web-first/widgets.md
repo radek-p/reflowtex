@@ -56,12 +56,12 @@ reflowtex.host.define('lean', {    // \webwidget[decl=…]{lean}: instance.attrs
     border-radius: calc(.8em - 1px); overflow: hidden; cursor: default;
     font: 600 .6em/1.75 ui-sans-serif, system-ui, sans-serif; letter-spacing: .01em;
     background: var(--lt-primary); color: #fff; transition: background-color .15s ease; }
-  html.dark .lean-badge { color: #0c0a09; }
+  html.dark .lean-badge, html.navy .lean-badge { color: #0c0a09; }
   .lean-badge .t { padding: 1px .6em; }
   /* Still checking: the text's own colour on a faint wash of it – in the dark
      theme too, where a filled badge's text is dark – and a ring turning
      before the words. */
-  .lean-badge.checking, html.dark .lean-badge.checking {
+  .lean-badge.checking, html.dark .lean-badge.checking, html.navy .lean-badge.checking {
     background: color-mix(in srgb, currentColor 13%, transparent); color: inherit; }
   .lean-badge .spin { flex: none; box-sizing: border-box; width: .8em; height: .8em; margin-left: .6em;
     border: .14em solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor;
