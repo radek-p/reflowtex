@@ -9,7 +9,9 @@
 // and, if pages/<name>/companion exists, the companion package's browser side
 // (installed by the vanilla build: src/companion, Preact bundled in) with an import map naming it
 // 'reflowtex/companion'. A pages/<name>/build-args file gives the build more
-// options (--a11y).
+// options (--a11y). A pages/<name>/site-partials file names partials of the
+// project's website (website/layouts/partials/), one a line, added before
+// </body> too with their Hugo comments dropped: for the few that are plain HTML.
 /// <reference lib="dom" />
 import { execFile } from 'node:child_process';
 import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -62,6 +64,11 @@ export async function build(name: string): Promise<string> {
   // replaced by a function, so no $ in the page's own code is taken for a pattern
   if (head) html = html.replace('</head>', () => head + '</head>');
   if (existsSync(join(src, 'body.html'))) html = html.replace('</body>', () => readFileSync(join(src, 'body.html'), 'utf8') + '</body>');
+  if (existsSync(join(src, 'site-partials'))) {
+    const partials = readFileSync(join(src, 'site-partials'), 'utf8').split(/\s+/).filter(Boolean)
+      .map(p => readFileSync(join(REPO, 'website/layouts/partials', p), 'utf8').replace(/\{\{-? *\/\*[\s\S]*?\*\/ *-?\}\}/g, ''));
+    html = html.replace('</body>', () => partials.join('\n') + '</body>');
+  }
   writeFileSync(page, html);
   return out;
 }

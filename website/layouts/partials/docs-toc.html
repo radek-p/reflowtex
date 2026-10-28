@@ -8,18 +8,89 @@
   level with the top of that block and sticks while the block is scrolled
   through. Only the section being read is open, showing its
   subsections; only the subsection being read shows its theorems.
+
+  Where that column is hidden (a narrower window, or the reader's width
+  leaving no room for it: docs-shell.html's toc-gives-way), the same list
+  becomes a rail at the window's right edge: a short line per heading,
+  shorter for deeper ones, the one being read in the accent colour. Pointed
+  at or focused, it opens into the list with its titles. No rail on a phone.
 */ -}}
-<aside class="docs-toc" aria-label="Contents of the document">
-  <nav>
-    <p class="docs-nav-group">Contents</p>
+<style>
+  .docs-toc { flex: 0 0 14rem; min-width: 0; }
+  .docs-toc nav {
+    position: sticky; top: 3rem; max-height: calc(100vh - 5rem - var(--rtx-dock-bottom, 0px)); overflow-y: auto;
+    font-size: 0.85rem; line-height: 1.35; padding: 0 0.25rem 2rem 0;
+    scrollbar-width: thin;
+  }
+  .docs-toc nav .docs-nav-group { margin-top: 0; }
+  .docs-toc ul { list-style: none; margin: 0; padding: 0; }
+  .docs-toc ul ul { display: none; padding-left: 0.85rem; }
+  .docs-toc li.open > ul { display: block; }
+  .docs-toc a {
+    display: block; padding: 0.28rem 0 0.28rem 0.8rem; text-decoration: none;
+    border-left: 2px solid color-mix(in srgb, currentColor 10%, transparent); opacity: 0.66;
+  }
+  .docs-toc a:hover { opacity: 1; }
+  .docs-toc li.open > a { opacity: 0.9; }
+  .docs-toc a.current { opacity: 1; font-weight: 600; border-left-color: var(--lt-primary); }
+  .docs-toc .toc-theorem > a { font-size: 0.8rem; font-style: italic; }
+  @media (max-width: 88rem) { .docs-toc:not(.rail) { display: none; } }
+  .docs-layout.toc-gives-way .docs-toc:not(.rail) { display: none; }
+
+  /* The rail: fixed, so the page around it never moves. Headings only (no
+     theorems), every level shown; the titles are there for screen readers,
+     out of sight until it opens. */
+  .docs-toc.rail { position: fixed; z-index: 40; right: 0; top: 50%; transform: translateY(-50%); }
+  .docs-toc.rail nav {
+    position: static; box-sizing: border-box; width: 2.75rem; max-height: 70vh; overflow: hidden;
+    padding: 0.6rem 0.7rem 0.6rem 0.9rem; border-radius: 0.75rem 0 0 0.75rem; }
+  .docs-toc.rail .docs-nav-group, .docs-toc.rail .toc-theorem { display: none; }
+  .docs-toc.rail ul ul { display: block; }
+  .docs-toc.rail a {
+    --w: 1.15rem; height: 2px; padding: 3px 0; border: 0; opacity: 0.35; font-weight: 400;
+    white-space: nowrap; overflow: hidden; text-indent: 100%;
+    background: linear-gradient(currentColor, currentColor) right center / var(--w) 2px no-repeat; }
+  .docs-toc.rail ul ul { padding-left: 0; }
+  .docs-toc.rail ul ul a { --w: 0.75rem; }
+  .docs-toc.rail ul ul ul a { --w: 0.45rem; }
+  .docs-toc.rail a[aria-current] { opacity: 1; color: var(--lt-primary, LinkText); }
+  /* Open: the list, in the reading options' glass. */
+  .docs-toc.rail:is(:hover, :focus-within) nav {
+    width: min(20rem, calc(100vw - 2rem)); overflow-y: auto; padding: 0.8rem 0.9rem;
+    background: var(--lt-glass, Canvas); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
+    box-shadow: 0 10px 34px -8px rgb(0 0 0 / 0.3), 0 0 0 0.5px color-mix(in srgb, currentColor 18%, transparent); }
+  .docs-toc.rail:is(:hover, :focus-within) .docs-nav-group { display: block; margin: 0 0 0.4rem 0.5rem; }
+  .docs-toc.rail:is(:hover, :focus-within) a {
+    height: auto; padding: 0.28rem 0.5rem; white-space: normal; text-indent: 0; background: none;
+    border-radius: 0.35rem; opacity: 0.75; }
+  .docs-toc.rail:is(:hover, :focus-within) ul ul { padding-left: 0.85rem; }
+  .docs-toc.rail:is(:hover, :focus-within) a:is(:hover, :focus-visible) { opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent); }
+  .docs-toc.rail:is(:hover, :focus-within) a[aria-current] { opacity: 1; font-weight: 600; }
+  @media print { .docs-toc.rail { display: none; } }
+</style>
+<div class="docs-toc">
+  <nav aria-label="Contents of the document">
+    <p class="docs-nav-group" aria-hidden="true">Contents</p>
     <div class="docs-toc-tree"></div>
   </nav>
-</aside>
+</div>
 <script>
 (function () {
   var aside = document.currentScript.previousElementSibling;
   var nav = aside.querySelector('nav'), tree = aside.querySelector('.docs-toc-tree');
   var block = null, size = 0, flat = [], scheduled = false, wired = false;
+  // The rail, wherever the column is not shown (head.html's breakpoint, or
+  // toc-gives-way) and the window is wider than a phone's.
+  var lay = aside.closest('.docs-layout'), narrow = matchMedia('(max-width: 88rem)'), room = matchMedia('(min-width: 40rem)');
+  function mode() {
+    var column = lay && !narrow.matches && !lay.classList.contains('toc-gives-way');
+    aside.classList.toggle('rail', !column && room.matches);
+    place();
+  }
+  // whether the last press was a pointer's (Enter on a link clicks it too)
+  var pointed = false;
+  aside.addEventListener('pointerdown', function () { pointed = true; });
+  aside.addEventListener('keydown', function () { pointed = false; });
 
   function label(e) {
     if (e.kind !== 'theorem') return (e.number ? e.number + ' ' : '') + e.title;
@@ -53,6 +124,7 @@
         var t = document.getElementById(n.e.id);
         if (!t) return;
         ev.preventDefault();
+        if (pointed && aside.classList.contains('rail')) a.blur();   // a click closes the rail; a key leaves it open
         t.scrollIntoView({ behavior: 'smooth', block: 'start' });
         history.replaceState(null, '', '#' + n.e.id);
       });
@@ -65,6 +137,7 @@
   }
   // Level with the block's top; sticky from there on (CSS).
   function place() {
+    if (aside.classList.contains('rail')) { nav.style.marginTop = ''; return; }
     if (!block) return;
     var off = block.getBoundingClientRect().top - aside.getBoundingClientRect().top;
     nav.style.marginTop = Math.max(0, off) + 'px';
@@ -78,9 +151,13 @@
       var t = document.getElementById(flat[i].e.id);
       if (t && t.getBoundingClientRect().top <= line) current = flat[i]; else if (t) break;
     }
-    flat.forEach(function (n) { n.li.classList.remove('open'); n.a.classList.remove('current'); });
+    flat.forEach(function (n) { n.li.classList.remove('open'); n.a.classList.remove('current'); n.a.removeAttribute('aria-current'); });
     if (!current) return;
     current.a.classList.add('current');
+    // the heading being read (a theorem's, for a theorem)
+    var head = current;
+    while (head.e.kind === 'theorem' && head.parent && head.parent.a) head = head.parent;
+    head.a.setAttribute('aria-current', 'location');
     for (var n = current; n && n.li; n = n.parent) n.li.classList.add('open');
     var ar = current.a.getBoundingClientRect(), nr = nav.getBoundingClientRect();
     if (ar.top < nr.top + 40 || ar.bottom > nr.bottom - 20) nav.scrollTop += ar.top - nr.top - nr.height / 3;
@@ -91,9 +168,11 @@
     if (ev.detail.entries.length <= size) return;           // keep the largest outline
     block = ev.detail.block; size = ev.detail.entries.length;
     build(ev.detail.entries);
-    place(); spy();
+    mode(); spy();
     if (wired) return;
     wired = true;
+    narrow.addEventListener('change', mode); room.addEventListener('change', mode);
+    if (lay) new MutationObserver(mode).observe(lay, { attributes: true, attributeFilter: ['class'] });
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', function () { place(); schedule(); });
     new ResizeObserver(function () { place(); schedule(); }).observe(document.getElementById('lt-content'));
