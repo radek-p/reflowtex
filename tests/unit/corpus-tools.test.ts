@@ -14,7 +14,8 @@ import { applyPatch, parsePatch, patchReason } from '../../tools/corpus/patch.ts
 import { cached, prepare } from '../../tools/corpus/source.ts';
 import { loaded, notable, type Loaded } from '../../tools/corpus/packages.ts';
 import { checkManifest, safeRelative, loadManifest, CORPUS_DIR, type Manifest, type Paper } from '../../tools/corpus/manifest.ts';
-import { paperEntry, totals, pc, compareLink } from '../../tools/corpus/report.ts';
+import { paperEntry, totals, pc, compareLink, reflowsDisplays } from '../../tools/corpus/report.ts';
+import { messageType } from '../../src/pipeline/schema.ts';
 import { batchHref, batchRoot, chooseBatch, listed, opening, readBatches, DEFAULT_BATCHES } from '../../tests/render/report/batches.ts';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'corpus-test-'));
@@ -155,4 +156,14 @@ test('the report lists what stopped last, and opens on a result unless the URL n
   assert.equal(l[opening(l, '')].id, 'a');
   assert.equal(l[opening(l, 'y')].id, 'y');
   assert.equal(opening(listed([{ id: 'x', status: 'error' }]), ''), 0);
+});
+
+test('a published block with displays carries the display model, or they would stay at the width TeX compiled', () => {
+  const Document = messageType('Document');
+  const doc = (o: Record<string, unknown>) => Document.encode(Document.fromObject(o)).finish() as Uint8Array;
+  const display = { kind: 'display' }, para = { kind: 'paragraph', para: 1 };
+  assert.equal(reflowsDisplays(doc({ content: [para, display] })), false);
+  assert.equal(reflowsDisplays(doc({ content: [para], streams: [{ content: [display] }] })), false);
+  assert.equal(reflowsDisplays(doc({ content: [para, display], display_model: true })), true);
+  assert.equal(reflowsDisplays(doc({ content: [para] })), true);
 });

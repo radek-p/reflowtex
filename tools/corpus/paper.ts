@@ -16,7 +16,9 @@
 //   capture  pageless.ts: the paper in reflowtex's template, captured, and its
 //            pageless PDF – one page as tall as the paper, every glyph where
 //            TeX put it
-//   site     site-from-run.ts --single-width: the page, from the same run
+//   site     site-from-run.ts: the page, from the same run, with the display
+//            model (more runs at wider widths): the site shows the paper at
+//            other widths than its own
 //   compare  vector-compare.ts in Chromium, at the paper's own width, glyph
 //            by glyph against the pageless PDF; then lines.ts, the scores
 //
@@ -153,7 +155,7 @@ async function capture(): Promise<void> {
 }
 async function site(): Promise<void> {
   rmSync(join(BUILD, 'site'), { recursive: true, force: true });
-  await siteFromRun(BUILD, join(BUILD, 'site'), { log: logger('site'), singleWidth: true, title: paper!.title });
+  await siteFromRun(BUILD, join(BUILD, 'site'), { log: logger('site'), title: paper!.title });
 }
 interface FullVector extends Vector { strip_unmatched: unknown[]; viewer_unmatched: unknown[] }
 async function compare(): Promise<FullVector> {
