@@ -1,0 +1,39 @@
+% Paragraphs whose lines differ in measure: \hangindent with positive and negative \hangafter, hung on the left and on the right, an explicit \parshape, a shape resumed after a display, and numbered section titles long enough to wrap, whose later lines LaTeX hangs by the number's width.
+\documentclass{article}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+\section{A section title long enough to wrap onto a second line, which hangs by the number}
+
+\hangindent=3em \hangafter=2
+A paragraph whose first two lines are set across the whole column and whose
+later lines are indented by three ems from the left, as \verb|\hangafter=2|
+asks, long enough to run on to a fourth or fifth line of the column, so that
+several of its lines are hung and a few are not, gladly and quickly.
+
+\hangindent=-6em \hangafter=-3
+A paragraph whose first three lines stop six ems short of the right edge, as
+a picture beside them would make them, with \verb|\hangindent=-6em| and
+\verb|\hangafter=-3|, and whose later lines take the whole column again, long
+enough to run on to a fifth line, with words like overfull and justified.
+
+\parshape 4 0pt 345pt 2em 300pt 4em 260pt 1em 330pt
+A paragraph with an explicit \verb|\parshape| of four lines: the first across
+the column, the second indented two ems and narrower, the third four ems and
+narrower still, and every line after the fourth as the fourth is, one em in
+from the left; long enough to have six or seven lines, so that its last
+pair holds for several of them, quickly and gladly, as TeX sets it.
+
+\hangindent=4em \hangafter=-8
+A paragraph hung on the left for eight lines, interrupted by a display after
+a few words of its text:
+\[ a^2 + b^2 = c^2 \]
+and resumed after it, where its line numbers go on from the lines before the
+display and the display's three, so that only a few more lines are hung
+before the rest take the whole column again, as TeX numbers them, with
+enough text after the display to run on to several lines.
+
+\section{Another section title, long enough to wrap onto a second line of the column at this width}
+A last paragraph after the second title, long enough to break onto a second
+line of the column.
+\end{document}

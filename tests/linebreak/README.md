@@ -39,14 +39,17 @@ for every fixture set in a directory here. The breaker chooses the breaks and
 sets each line's glue; the replay does the rest of LuaTeX's
 `post_line_break` around them – the end of each line by the kind of break,
 what a break discards, the line packed to `\hsize`, the interline glue and
-penalties. It replays what the viewer models: no `\parshape` or
-`\hangindent`, no stretch in `\leftskip` or `\rightskip`, no protrusion,
-expansion or directions; a fixture with any of them is refused.
+penalties. It replays what the viewer models: no stretch in `\leftskip` or
+`\rightskip`, no protrusion, expansion or directions; a fixture with any of
+them is refused. A `\parshape` or `\hangindent` reaches the breaker as the
+serializer records it, one measure per line (`shapeOf`), and each line is
+packed to its own width and shifted by its own indent.
 
 | Set | Source | What it holds |
 |---|---|---|
 | `tolerance/` | `tolerance.tex` | `\sloppy` paragraphs, long unbreakable words and links, TeX's third pass with `\emergencystretch`, `\tolerance 10000`, no first pass, the demerits and hyphenation penalties, each at several measures |
 | `fills/` | `fills.tex` | glue of infinite stretch inside a paragraph: `\hfill` between boxes, boxes joined by `\hskip 1em plus .17fil` (LaTeX's `\and`), `\hfill` and `\hfil` between words, a break at a penalty before an `\hfill`, `\\` in mid-paragraph, each at several measures |
+| `shapes/` | `shapes.tex` | paragraphs whose lines differ in measure: `\hangindent` with `\hangafter` positive, negative and zero, on either side, explicit `\parshape` (the lines beside a wrapped figure on either side, shapes shorter and longer than the paragraph), a shape with `\leftskip` and `\rightskip`, a shape resumed after a display, numbered section titles that wrap (`\@hangfrom`), each at several measures |
 | `negative-glue/` | `negative-glue.tex` | paragraphs ending in negative glue (`\hspace{-1cm}` before a blank line), where a start whose line has become overfull must be dropped in every pass, and a break at that glue leaves an empty last line with no `\parfillskip` stretch; paragraphs ending in `\\` and `\break`; each at several measures |
 
 A new set is a directory of fixtures captured from its source, in the CI

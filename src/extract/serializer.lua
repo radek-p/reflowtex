@@ -459,6 +459,10 @@ function Serializer.note_display(id)
         below_short = skip("belowdisplayshortskip"),
         -- the em TeX measures \predisplaysize with: the font current at the $$
         quad        = (font.getparameters(font.current()) or {}).quad or 0,
+        -- the band TeX gave the display, from the shape of the paragraph it
+        -- interrupts at the line after the one before it (TeX82 §1149)
+        width       = tex.displaywidth,
+        indent      = tex.displayindent,
     }
     display_open = true
 end
@@ -1132,22 +1136,52 @@ local function find_para(n)
     return nil
 end
 
--- List indentation never appears in the node list. LaTeX's list environments
--- leave \leftskip at zero and indent via \parshape instead, whose first pair
--- is {indent, linewidth} – so an item at depth 1 reports {25pt, 320pt} of a
--- 345pt \hsize. The indent must be recorded here, while the paragraph is
--- being broken, and is an absolute typographic measure (\leftmargin), so the
--- renderer keeps it fixed and narrows the text column rather than scaling it.
--- Without it, item text starts at x=0 and the label – which hangs a fixed
--- distance to the *left* of the text – lands at negative x and is clipped.
--- The band this paragraph occupies: {indent, width}. Doubles as the band any
--- display inside it inherits (see the \displaywidth note below).
-local function para_band()
+-- The shape TeX breaks this paragraph with (TeX82 §848-849): the band of each
+-- of its lines, {indent, width}. List indentation never appears in the node
+-- list: LaTeX's list environments leave \leftskip at zero and indent via
+-- \parshape, whose one pair is {\leftmargin, \linewidth} – an item at depth 1
+-- reports {25pt, 320pt} of a 345pt \hsize; a wrapped figure gives the lines
+-- beside it a \parshape of their own, and a numbered heading hangs its later
+-- lines by \hangindent. Line l takes \parshape's l-th pair, the last pair
+-- every line after; with \hangindent instead, the first |\hangafter| lines are
+-- set full or hung (\hangafter < 0) and the rest the other way; with neither,
+-- every line is {0, \hsize}. The lines are numbered on from \prevgraf: a
+-- paragraph resumed after a display goes on with its shape where it was.
+-- So TeX tells a paragraph's lines apart by number up to its last special
+-- line, and every line after it is the same: the list returned holds one band
+-- per line from the paragraph's first to that line, and one more, the band of
+-- every line after it. It is never empty; one entry means every line has the
+-- same band. These are absolute typographic measures, so the renderer keeps
+-- them fixed and narrows the text column rather than scaling them: without
+-- the indent, item text would start at x=0 and its label – which hangs a
+-- fixed distance to the *left* of the text – land at negative x.
+local function para_shape()
     local ok, ps = pcall(function() return tex.parshape end)
-    if ok and type(ps) == "table" and ps[1] and ps[1][1] and ps[1][2] then
-        return ps[1][1], ps[1][2]
+    local hsize = tex.hsize or 0
+    local last_special, line
+    if ok and type(ps) == "table" and #ps > 0 then
+        local n = #ps
+        last_special = n - 1
+        line = function(l) local q = ps[math.min(l, n)]; return { q[1] or 0, q[2] or 0 } end
+    elseif (tex.hangindent or 0) ~= 0 then
+        local hi, ha = tex.hangindent, tex.hangafter or 1
+        last_special = math.abs(ha)
+        local hung = { hi >= 0 and hi or 0, hsize - math.abs(hi) }
+        local full = { 0, hsize }
+        line = function(l)
+            if (l <= last_special) == (ha < 0) then return hung end
+            return full
+        end
+    else
+        last_special = 0
+        line = function() return { 0, hsize } end
     end
-    return 0, tex.hsize or 0
+    -- nest 1 is this paragraph, the one below it the list it goes onto
+    local enclosing = tex.nest[tex.nest.ptr - 1]
+    local first = ((enclosing and enclosing.prevgraf) or 0) + 1
+    local shape = {}
+    for l = first, math.max(first, last_special + 1) do shape[#shape + 1] = line(l) end
+    return shape
 end
 
 -- TeX's interline spacing parameters, active when this paragraph is broken. The
@@ -1226,15 +1260,23 @@ local function capture_paragraph(head, groupcode)
     local in_box = tex.nest.ptr > 1
     local colors = in_box and save_colors() or nil
     local idx = #all_paragraphs + 1
-    local indent, width = para_band()
+    local shape = para_shape()
+    local indent, width = shape[1][1], shape[1][2]
     local ls, rs = skip_width("leftskip"), skip_width("rightskip")
     all_paragraphs[idx] = {
         index  = idx,
-        -- where its text is set: the band less the margin skips' fixed parts
+        -- where its first line's text is set: the band less the margin
+        -- skips' fixed parts
         indent = indent + ls,
         width  = width - ls - rs,
-        -- the band itself, which a display inside the paragraph takes
-        -- (TeX's \displayindent comes from \parshape alone); not encoded
+        -- the same for each line, where they differ (see para_shape)
+        shape  = #shape > 1 and json_array((function()
+            local out = {}
+            for k, b in ipairs(shape) do out[k] = { indent = b[1] + ls, width = b[2] - ls - rs } end
+            return out
+        end)()) or nil,
+        -- the band itself, which a display after the paragraph's first line
+        -- takes when TeX's own is not known; not encoded
         band_indent = indent,
         band_width  = width,
         baselineskip  = param_dimen("baselineskip"),
@@ -1536,12 +1578,12 @@ local GLUE_ABOVEDISPLAYSHORT, GLUE_BELOWDISPLAYSHORT = 6, 7
 -- the ink correctly within it. So we record that band and let the renderer
 -- centre *it*, preserving everything TeX decided inside.
 --
--- \displaywidth itself is long gone by the vertical-list walk, but it does not
--- need to be captured: TeX derives it from the enclosing paragraph's shape (TeX82 §1145
--- – with no \parshape and no \hangindent, \displaywidth = \hsize and
--- \displayindent = 0; otherwise both come from \parshape). Since every
--- paragraph already records its \parshape band, a display simply inherits the
--- band of the paragraph it interrupts.
+-- \displaywidth itself is long gone by the vertical-list walk, so it is read
+-- as the display opens (Serializer.note_display). TeX derives it from the
+-- enclosing paragraph's shape at the display's line (TeX82 §1149 – with no
+-- \parshape and no \hangindent, \displaywidth = \hsize and \displayindent = 0;
+-- beside a wrapped figure, the width of the lines there). A display the
+-- template did not number takes the band of the paragraph it interrupts.
 --
 -- Reading the value from append_to_vlist_filter would be the obvious
 -- alternative and is a trap: returning a box from that callback makes the
@@ -1575,7 +1617,8 @@ local function has_visible_nodes(nodes)
     return false
 end
 
--- The band of the most recent paragraph; displays inherit it. And its
+-- The band of the most recent paragraph, for a display TeX's own is not
+-- known for (see display_width). And its
 -- leading, which a fixed box (emit_fixed) is set with.
 local cur_band = { indent = 0, width = 0 }
 local cur_leading = {}
@@ -2028,6 +2071,8 @@ local function walk_flow(head, pending, ctx, box)
             local out = stream_out(ctx, stream_attr(n))
             ctx.last_sid, ctx.last_kind = stream_attr(n), "display"
             local note = display_notes[node.get_attribute(n, DISPLAY_ATTR) or -1]
+            -- (a display the template did not see: its paragraph's band)
+            local band = (note and note.width) and note or cur_band
             out[#out + 1] = {
                 kind = "display",
                 -- the display's number: its formula's, or the one an
@@ -2039,8 +2084,8 @@ local function walk_flow(head, pending, ctx, box)
                 -- displacement, whereas the renderer reaches the box through
                 -- its hlist path, where shift means a vertical offset –
                 -- passing it through would push displays down the page.
-                display_width  = cur_band.width > 0 and cur_band.width or n.width,
-                display_indent = cur_band.indent,
+                display_width  = band.width > 0 and band.width or n.width,
+                display_indent = band.indent,
                 display_shift  = n.shift or 0,
                 -- What TeX chose this display's skips with (Serializer.note_display),
                 -- the above skip it did use (part of the vspace before the display;
