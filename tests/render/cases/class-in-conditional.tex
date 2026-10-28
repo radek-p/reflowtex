@@ -1,7 +1,8 @@
 % A document whose class line is behind a conditional, as in real papers:
 % \ifnum\short=1 one class \else another, with its own setup, \fi. Then
 % graphicx and xcolor with options of the document's own, which clashed with
-% packages the capture used to load first.
+% packages the capture used to load first. (xcolor converts its colours to RGB:
+% CMYK ones are cmyk-colours.)
 \def\short{0}
 \ifnum\short=1
   \documentclass{amsart}
@@ -10,7 +11,7 @@
   \newcommand\variant{the long version}
 \fi
 \usepackage[final]{graphicx}
-\usepackage[dvipsnames]{xcolor}
+\usepackage[dvipsnames,rgb]{xcolor}
 % one page with nothing but the text: checked against plain lualatex too (cases.ts)
 \pagestyle{empty}
 \begin{document}

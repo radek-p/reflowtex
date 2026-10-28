@@ -1,11 +1,11 @@
-% Rule leaders with running dimensions: colortbl paints a cell's background as \leaders\vrule\hskip, a rule as tall and deep as the cell's box (\columncolor, \cellcolor, \rowcolor); the same by hand in boxes; \leaders\hrule\vfill in a \vbox in a line, a rule as wide as the box; and a line that holds only \hrulefill.
+% Rule leaders with running dimensions (colours in RGB and gray; CMYK is cmyk-colours): colortbl paints a cell's background as \leaders\vrule\hskip, a rule as tall and deep as the cell's box (\columncolor, \cellcolor, \rowcolor); the same by hand in boxes; \leaders\hrule\vfill in a \vbox in a line, a rule as wide as the box; and a line that holds only \hrulefill.
 \documentclass{article}
 \usepackage{colortbl}
 \pagestyle{empty}
 \begin{document}
 A table whose first column is coloured, one row grey and one cell red:
 
-\begin{tabular}{|>{\columncolor{yellow}}c|c|c|}
+\begin{tabular}{|>{\columncolor[rgb]{1,1,0}}c|c|c|}
 \hline
 Name & Kind & Step \\ \hline
 \rowcolor[gray]{0.8} Small & Solitary & 4 \\ \hline
