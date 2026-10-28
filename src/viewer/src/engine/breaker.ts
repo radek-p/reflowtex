@@ -18,10 +18,13 @@ export interface BreakCandidate {
     nodeIdx: number;
     penalty: number;
     pre: Widths; post: Widths; replace: Widths;
-    leadW: number; leadS: number; leadZ: number; leadFill: number;
+    leadW: number; leadS: number; leadZ: number; leadFill: Fills;
     trailW: number; trailN: number;
-    cumW: number; cumS: number; cumZ: number; cumGlyphW: number; cumFS: number; cumFZ: number; cumFill: number;
+    cumW: number; cumS: number; cumZ: number; cumGlyphW: number; cumFS: number; cumFZ: number; cumFill: Fills;
     rightProtrusion: number;
+    /** Where in the paragraph the search for the right protrusion ended
+     *  (lastProtChar): it counts on a line that starts before that. */
+    rightAt: number;
     leftProtrusion: number;
     /** The end: the last line's right protrusion, counted when it is packed. */
     packRightProtrusion?: number;
@@ -31,6 +34,12 @@ export interface BreakCandidate {
     preNodes?: TexNode[];
     postNodes?: TexNode[];
 }
+/** Glue stretch of infinite order, summed per order as TeX sums it (the line
+ *  breaker's active widths, hpack's total_stretch): index 1 to 4 for sfi,
+ *  fil, fill and filll (0 is unused). Glues of one order cancel: \hskip 0pt
+ *  plus -1filll and \hskip 0pt plus 1filll make no fill. */
+export type Fills = readonly number[];
+const NO_FILLS: Fills = [0, 0, 0, 0, 0];
 /** A paragraph's candidates, and its expansion limits when it expands. */
 export type BreakCandidates = BreakCandidate[] & { expansion?: Expansion | null; adjustSpacing?: number };
 /** A line's measures between two candidates (lineMetrics). */
@@ -51,10 +60,15 @@ export function lineWidthAt(measure: Measure, k: number): number {
 // ── Protrusion ────────────────────────────────────────────────────────────────
 
 // What LuaTeX steps over looking for the character at a line's edge
-// (cp_skipable): penalties, a \vadjust, empty glue, a font kern or an empty
-// one, a math node without surround, an empty discretionary. An italic
-// correction or an explicit kern stops the search, so the character before
-// it does not hang.
+// (cp_skipable, linebreak.h): penalties, a \vadjust, empty glue, a font kern
+// or an empty one, a math node without surround, an empty discretionary, a
+// rule of size zero, and a box of size zero with nothing in it (the empty
+// nucleus of $^1$, a \label's anchor, an empty \hbox{}). LuaTeX also steps
+// over whatsits, marks, inserts, boundaries and direction nodes, which reach
+// the viewer as such empty boxes (pipeline: stripUnsupportedNodes). An
+// italic correction or an explicit kern stops the search, so the character
+// before it does not hang.
+const zeroSize = (n: { width: number; height: number; depth: number }) => !n.width && !n.height && !n.depth;
 export function protSkipable(n: TexNode): boolean {
     switch (n.type) {
         case 'penalty': case 'adjust': case 'local_par': return true;
@@ -62,47 +76,68 @@ export function protSkipable(n: TexNode): boolean {
         case 'kern':    return !n.kern || (n.subtype || 0) === 0;
         case 'math':    return !n.surround;
         case 'disc':    return !(n.pre || []).length && !(n.post || []).length && !(n.replace || []).length;
-        case 'glyph': case 'rule': case 'hlist': case 'vlist': case 'picture': case 'transform':
-        case 'widget': case 'wdisc':
+        case 'rule':    return zeroSize(n);
+        case 'hlist':   return !isCharBox(n) && !(n.children || []).length && zeroSize(n);
+        case 'glyph': case 'vlist': case 'picture': case 'transform': case 'widget': case 'wdisc':
             return false;
         default:        return unreachable(n, 'node');
     }
 }
+// A box the search goes into: one with something in it. (A virtual font's
+// character in its box is that character: core.ts, isCharBox.)
+const searchedInto = (n: TexNode): n is TexNode & { children: TexNode[] } =>
+    n.type === 'hlist' && !isCharBox(n) && !!(n.children || []).length;
 // The character at the right edge of nodes[0..idx), as LuaTeX's
 // find_protchar_right finds it: stepping back over what protSkipable allows,
-// into a box to its last character, and over a box with nothing in it but
-// such things (an anchor, an empty \hbox). A virtual font's character in its
-// box is that character (core.ts, isCharBox).
-export function findLastGlyph(nodes: TexNode[], idx: number): TexNode | null {
-    for (let k=idx-1;k>=0;k--) {
-        const n=nodes[k];
-        if (protSkipable(n)) continue;
-        if (isCharBox(n)) return n;
-        if (n.type==='hlist') {
-            const kids=n.children||[];
-            if (kids.every(protSkipable)) continue;
-            return findLastGlyph(kids, kids.length);
-        }
-        return n.type==='glyph'?n:null;
+// into a box to its last character. A box that holds nothing but such things
+// (thm-restate's anchor, a box holding a box holding a penalty) is left at
+// its start, and the search goes on before it. `at` is the place in `nodes`
+// where the search ended: LuaTeX searches back to the line's start only, so
+// a character found before it is no line's (rightProtrusion).
+export function lastProtChar(nodes: TexNode[], idx: number): { node: TexNode | null; at: number } {
+    if (idx <= 0) return { node: null, at: -1 };
+    const up: [TexNode[], number][] = [];
+    let list = nodes, k = idx - 1;
+    for (;;) {
+        const n = list[k];
+        if (searchedInto(n)) { up.push([list, k]); list = n.children; k = list.length - 1; continue; }
+        if (!protSkipable(n)) break;
+        while (k === 0 && up.length) [list, k] = up.pop()!;
+        if (k === 0) break;
+        k--;
     }
-    return null;
+    const n = list[k];
+    return { node: isChar(n) ? n : null, at: up.length ? up[0][1] : k };
 }
-// The character at the left edge from nodes[idx], as find_protchar_left
-// finds it: past empty boxes, then over what protSkipable allows, into a box
-// to its first character – but a box with nothing to protrude ends the
-// search there. A virtual font's character in its box is that character.
+export function findLastGlyph(nodes: TexNode[], idx: number): TexNode | null {
+    return lastProtChar(nodes, idx).node;
+}
+// The character at the left edge from nodes[idx], as LuaTeX's
+// find_protchar_left finds it: over what protSkipable allows, into a box to
+// its first character. A box that holds nothing but such things ends the
+// search: LuaTeX steps out of it (and of every box it ends) to the node
+// after, and takes that node as it is – a character protrudes, anything else
+// does not. LuaTeX first steps over the empty boxes and the local_par a
+// paragraph starts with, which protSkipable steps over too. Called from a
+// break, it then skips the discardables there (its `d` pass, which also
+// takes every kern); the viewer looks from where the break's discards end
+// (lead), as post_line_break does.
 export function findFirstGlyph(nodes: TexNode[], idx: number): TexNode | null {
-    let k=idx;
-    const emptyBox = (n: TexNode) => n.type==='hlist' && !(n.children||[]).length && !n.width && !n.height && !n.depth;
-    while (k<nodes.length-1 && emptyBox(nodes[k])) k++;
-    for (;k<nodes.length;k++) {
-        const n=nodes[k];
-        if (protSkipable(n)) continue;
-        if (isCharBox(n)) return n;
-        if (n.type==='hlist' && (n.children||[]).length) return findFirstGlyph(n.children!, 0);
-        return n.type==='glyph'?n:null;
+    if (idx >= nodes.length) return null;
+    const up: [TexNode[], number][] = [];
+    let list = nodes, k = idx;
+    for (;;) {
+        const n = list[k];
+        if (searchedInto(n)) { up.push([list, k]); list = n.children; k = 0; continue; }
+        if (!protSkipable(n)) break;
+        if (k + 1 < list.length) { k++; continue; }
+        if (!up.length) break;
+        while (k + 1 >= list.length && up.length) [list, k] = up.pop()!;
+        if (k + 1 < list.length) k++;
+        break;
     }
-    return null;
+    const n = list[k];
+    return isChar(n) ? n : null;
 }
 
 // TeX's round_xn_over_d: x·n/d rounded half away from zero, in integers.
@@ -223,8 +258,8 @@ export function discardable(n: TexNode): boolean {
 export const PRECEDES_BREAK = new Set<string>(['glyph', 'hlist', 'vlist', 'rule', 'disc', 'wdisc', 'picture', 'widget', 'transform', 'adjust']);
 
 // Every candidate carries the running totals up to its node: natural width
-// (cumW), finite stretch and shrink (cumS, cumZ), infinite fills (cumFill:
-// how many glues of infinite stretch order),
+// (cumW), finite stretch and shrink (cumS, cumZ), infinite stretch per order
+// (cumFill),
 // *expandable* width (cumGlyphW, per unit of expansion as the renderer
 // applies it – see expandableSp) and TeX's font stretch and shrink at the
 // full expansion limit (cumFS, cumFZ); a discretionary has the same four
@@ -245,28 +280,31 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
         return r;
     };
     const prot = (g: TexNode | null, left: boolean) => protrusionOf(fontInfo, para, g, left);
+    const right = (idx: number) => { const r = lastProtChar(nodes, idx); return { rightProtrusion: prot(r.node, false), rightAt: r.at }; };
     const NONE: Widths = { w: 0, g: 0, fs: 0, fz: 0 };
-    let cumW=0, cumS=0, cumZ=0, cumGlyphW=0, cumFS=0, cumFZ=0, cumFill=0;
+    let cumW=0, cumS=0, cumZ=0, cumGlyphW=0, cumFS=0, cumFZ=0;
+    const fill = [0, 0, 0, 0, 0];
     const cand = (kind: BreakCandidate['kind'], i: number, penalty: number, extra?: Partial<BreakCandidate>): BreakCandidate => ({
         kind, nodeIdx: i, penalty, pre: NONE, post: NONE, replace: NONE,
-        leadW: 0, leadS: 0, leadZ: 0, leadFill: 0, trailW: 0, trailN: 0,
-        cumW, cumS, cumZ, cumGlyphW, cumFS, cumFZ, cumFill,
-        rightProtrusion: 0, leftProtrusion: 0, ...extra,
+        leadW: 0, leadS: 0, leadZ: 0, leadFill: NO_FILLS, trailW: 0, trailN: 0,
+        cumW, cumS, cumZ, cumGlyphW, cumFS, cumFZ, cumFill: fill.slice(),
+        rightProtrusion: 0, rightAt: -1, leftProtrusion: 0, ...extra,
     });
     // What a break at node i discards after itself (discardable), up to the
-    // next thing that is kept – an infinite fill among them too, so the next
+    // next thing that is kept – infinite stretch among them too, so the next
     // line does not count it as its own. A break that discards everything up
     // to the paragraph's end discards its \parfillskip too: the line after it
     // is empty, and has no fill (§837).
     const lead = (from: number) => {
-        let W = 0, S = 0, Z = 0, F = 0, k = from;
+        let W = 0, S = 0, Z = 0, k = from;
+        const F = [0, 0, 0, 0, 0];
         for (; k < nodes.length; k++) {
             const m = nodes[k];
             if (!discardable(m)) break;
             W += nodeWidthSp(m);
             if (m.type === 'glue') {
                 S += !m.stretch_order ? m.stretch : 0; Z += !m.shrink_order ? m.shrink : 0;
-                if (m.stretch_order) F++;
+                if (m.stretch_order) F[m.stretch_order] += m.stretch;
             }
         }
         return { leadW: W, leadS: S, leadZ: Z, leadFill: F, leftProtrusion: prot(findFirstGlyph(nodes, k), true) };
@@ -295,9 +333,10 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
         // (ext_try_break) has no character to look from at the end.
         if (n.type==='glue' && n.subtype===15) {
             cumW+=n.width; cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0;
-            if (n.stretch_order) cumFill+=1;
+            if (n.stretch_order) fill[n.stretch_order]+=n.stretch;
             // (the breaker leaves it out, but the line is packed with it)
-            bcs.push(cand('end', i, -10000, { packRightProtrusion: prot(findLastGlyph(nodes, i), false) }));
+            const r = right(i);
+            bcs.push(cand('end', i, -10000, { packRightProtrusion: r.rightProtrusion, rightAt: r.rightAt }));
             break;
         }
         if (n.type==='glue') {
@@ -308,9 +347,8 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
             // correction, \,) or a math node TeX breaks at that node instead,
             // which drops it from the end of the line. Its stretch does not
             // matter (§866): LaTeX's \and between authors is \hskip 1em plus
-            // .17fil, and a row of them too wide for the line breaks there. An
-            // infinite fill marks the line that keeps it as filled (cumFill):
-            // its slack goes to the fill, as on a last line.
+            // .17fil, and a row of them too wide for the line breaks there. Its
+            // infinite stretch counts in the line that keeps it (cumFill).
             const prev = nodes[i-1];
             let ok = false, trailN = 0;
             if (!inMath && prev) {
@@ -321,10 +359,10 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
             if (ok) {
                 const trailW = trailN ? nodeWidthSp(prev) : 0;
                 bcs.push(cand('space', i, 0, { trailW, trailN,
-                    rightProtrusion: prot(findLastGlyph(nodes, i - trailN), false), ...lead(i) }));
+                    ...right(i - trailN), ...lead(i) }));
             }
             cumW+=n.width; cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0;
-            if (n.stretch_order) cumFill+=1;
+            if (n.stretch_order) fill[n.stretch_order]+=n.stretch;
         } else if (n.type==='disc') {
             const pre=part(n.pre), post=part(n.post), replace=part(n.replace);
             const preGs=(n.pre||[]).filter(isChar), postGs=(n.post||[]).filter(isChar);
@@ -332,7 +370,7 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
             // the source; 3 and up are its own hyphenation. A break with no
             // post-break text discards what follows, as a break at glue does.
             bcs.push(cand('disc', i, n.penalty??50, { pre, post, replace, explicit: (n.subtype||0) <= 2,
-                rightProtrusion: prot(preGs.length>0?preGs[preGs.length-1]:findLastGlyph(nodes,i), false),
+                ...(preGs.length>0 ? { rightProtrusion: prot(preGs[preGs.length-1], false), rightAt: i } : right(i)),
                 ...((n.post||[]).length ? { leftProtrusion: prot(postGs.length>0?postGs[0]:findFirstGlyph(nodes,i+1), true) } : lead(i+1)) }));
             cumW+=replace.w; cumGlyphW+=replace.g; cumFS+=replace.fs; cumFZ+=replace.fz;
         } else if (n.type==='wdisc') {
@@ -346,7 +384,7 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
             }
             cumW+=replace.w;
         } else if (n.type==='penalty' && n.penalty<10000) {
-            bcs.push(cand('penalty', i, n.penalty, { rightProtrusion: prot(findLastGlyph(nodes,i), false), ...lead(i+1) }));
+            bcs.push(cand('penalty', i, n.penalty, { ...right(i), ...lead(i+1) }));
         } else {
             if (n.type==='math') inMath = (n.subtype||0) === 0;
             cumW+=nodeWidthSp(n);
@@ -360,20 +398,27 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
 // A paragraph's margin skips, \leftskip and \rightskip, are in every line
 // (TeX's background, §827): their fixed parts are out of the measure
 // already, their finite stretch and their shrink (which TeX makes finite,
-// §826) count in every line's, and an infinite stretch in either makes
-// every line filled.
+// §826) count in every line's, and their infinite stretch is in every
+// line's fills (lineFilled).
 const finiteStretch = (g: GlueNode | undefined) => g && !(g.stretch_order || 0) ? g.stretch || 0 : 0;
 export const marginStretch = (p: Params): number => finiteStretch(p.leftSkip) + finiteStretch(p.rightSkip);
 export const marginShrink = (p: Params): number => (p.leftSkip?.shrink || 0) + (p.rightSkip?.shrink || 0);
 const fills = (g: GlueNode | undefined) => !!g && (g.stretch_order || 0) > 0 && !!g.stretch;
-export const marginFilled = (p: Params): boolean => fills(p.leftSkip) || fills(p.rightSkip);
+
+// The right protrusion of a line from candidate a to candidate b: LuaTeX's
+// search for it goes back to the line's start, no further. The breaker has
+// none at the paragraph's end (packed: the line as it is set).
+export function rightProtrusionOf(a: BreakCandidate, b: BreakCandidate, packed: boolean): number {
+    if (b.rightAt <= a.nodeIdx) return 0;
+    return (packed && b.kind === 'end' ? b.packRightProtrusion : b.rightProtrusion) || 0;
+}
 
 // A line from candidate a to candidate b, as TeX measures it: natural width
 // (w, less the protrusion at both ends), finite glue stretch and shrink
 // (s, z, the margin skips' with them), font stretch and shrink (fs, fz) and
 // the expandable width the renderer's expansion factor acts on (g).
 export function lineMetrics(a: BreakCandidate, b: BreakCandidate, p: Params): LineMetrics {
-    const protrude = p.useProtrusion ? a.leftProtrusion + b.rightProtrusion : 0;
+    const protrude = p.useProtrusion ? a.leftProtrusion + rightProtrusionOf(a, b, false) : 0;
     // Where the line starts (after the break at a, less what that break
     // discards) and ends (at b, with a discretionary's pre-break text).
     const from = (key: 'cumW' | 'cumGlyphW' | 'cumFS' | 'cumFZ', lead: keyof Widths) => a[key] + (a.kind==='disc' ? a.replace[lead] - a.post[lead] : 0);
@@ -435,15 +480,21 @@ export function expansionShortfall(shortfall: number, m: LineMetrics, ex: Expans
     return shortfall;
 }
 
-// A line carrying an infinite-order fill (\hfil from \\, \hfill, the
-// \parfillskip of the last line) absorbs positive slack instead of justifying:
-// badness 0. So does every line of a paragraph whose margin skips stretch
-// infinitely: \raggedright, \centering and \raggedleft set \rightskip or
+// A line whose stretch of some infinite order does not sum to zero (\hfil
+// from \\, \hfill, the \parfillskip of the last line) absorbs positive slack
+// instead of justifying: badness 0 (§852). The margin skips' stretch is in
+// every line's: \raggedright, \centering and \raggedleft set \rightskip or
 // \leftskip to 0pt plus 1fil, so any line that fits costs nothing and TeX
-// takes the fewest lines, hyphenating only when it must. An empty last line
-// after a break that discarded the \parfillskip has no fill (§837).
+// takes the fewest lines, hyphenating only when it must. Stretch of one order
+// cancels: a line with \hskip 0pt plus -1filll and plus 1filll (breqn's,
+// around its break points) has no fill, and is justified by its finite glue.
+// An empty last line after a break that discarded the \parfillskip has no
+// fill (§837).
+const stretchAt = (g: GlueNode | undefined, order: number) => g && (g.stretch_order || 0) === order ? g.stretch || 0 : 0;
 export function lineFilled(a: BreakCandidate, b: BreakCandidate, p: Params): boolean {
-    return marginFilled(p) || b.cumFill > a.cumFill + a.leadFill;
+    for (let o = 1; o < NO_FILLS.length; o++)
+        if (b.cumFill[o] - a.cumFill[o] - a.leadFill[o] + stretchAt(p.leftSkip, o) + stretchAt(p.rightSkip, o) !== 0) return true;
+    return false;
 }
 
 // ── KP DP (one pass) ─────────────────────────────────────────────────────────
@@ -604,7 +655,7 @@ export function kpPass(bcs: BreakCandidates, measure: Measure, threshold: number
 export function packLine(bcs: BreakCandidates, a: BreakCandidate, b: BreakCandidate, lineWidthSp: number, p: Params, hasFill: boolean):
         { ratio: number; expand: number } {
     const m = lineMetrics(a, b, p);
-    const x = lineWidthSp - m.w + (p.useProtrusion ? b.packRightProtrusion || 0 : 0);
+    const x = lineWidthSp - m.w + (p.useProtrusion && b.kind === 'end' ? rightProtrusionOf(a, b, true) : 0);
     if (x === 0 || (hasFill && x > 0)) return { ratio: 0, expand: 0 };
     let expand = 0, rest = x;
     const ex = bcs.expansion;
@@ -702,7 +753,7 @@ export function setLines(bcs: BreakCandidates, breaks: Break[], nodes: TexNode[]
         const startBC=k===0?bcs[0]:bcs[breaks[k-1].bcIdx], endBC=bcs[breaks[k].bcIdx];
         const hasFill = lineFilled(startBC, endBC, p);
         const { ratio, expand } = packLine(bcs, startBC, endBC, lineWidthAt(measure, k), p, hasFill);
-        const rightProtrusion = (endBC.kind==='end' ? endBC.packRightProtrusion : endBC.rightProtrusion) || 0;
+        const rightProtrusion = rightProtrusionOf(startBC, endBC, true);
         lines.push({nodes:extractLineNodes(startBC,endBC,nodes),ratio,expand,fitness:breaks[k].fc,leftProtrusion:startBC.leftProtrusion,rightProtrusion});
     }
     return lines;

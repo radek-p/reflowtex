@@ -26,7 +26,7 @@ for (const set of sets) {
 // The breaker is imported by a path the Node project does not follow (see
 // node-kinds.test.ts); the few signatures used are written out.
 type Node = Record<string, unknown> & { type: string };
-interface Candidate { kind: string; nodeIdx: number; cumFill: number; leadFill: number }
+interface Candidate { kind: string; nodeIdx: number; cumFill: number[]; leadFill: number[] }
 interface Breaker {
   buildBreakCandidates(nodes: Node[], fontInfo: object, para: object): Candidate[];
   kpBreakpoints(bcs: Candidate[], nodes: Node[], lineWidthSp: number, p: object): { bcIdx: number }[];
@@ -59,8 +59,9 @@ test('glue of infinite stretch after a box is a breakpoint, and a break there di
   const bcs = breaker.buildBreakCandidates(nodes, {}, {});
   assert.deepEqual(bcs.map(b => [b.kind, b.nodeIdx]), [['start', -1], ['space', 1], ['space', 3], ['end', 5]]);
   // a line ending there does not hold the fill; one starting there neither;
-  // the last line holds the \parfillskip's
-  assert.deepEqual(bcs.map(b => [b.cumFill, b.leadFill]), [[0, 0], [0, 1], [1, 1], [3, 0]]);
+  // the last line holds the \parfillskip's (fil stretch, summed)
+  const a = Math.round(0.17 * PT);
+  assert.deepEqual(bcs.map(b => [b.cumFill[2], b.leadFill[2]]), [[0, 0], [0, a], [a, a], [2 * a + PT, 0]]);
 });
 
 test("the \\hfil of \\\\ is no breakpoint: it follows a \\nobreak", () => {
@@ -130,4 +131,32 @@ test('a break before a formula discards its surround and its opening glue', asyn
   assert.deepEqual(line.map(n => n.type), ['math', 'hlist']);
   assert.equal(line[0].surround, 0);
   assert.equal(paragraphNode(line[0]), nodes[2]);
+});
+
+// TeX sums infinite stretch per order (§852, hpack's total_stretch): glues of
+// one order that cancel make no fill, so the line is justified by its finite
+// glue, as breqn's \hskip 0pt plus -1filll ... plus 1filll around its break
+// points leave it.
+test('infinite stretch is summed per order: a fill and its negative cancel', async () => {
+  const { lineFilled } = await import(`${VIEWER}engine/breaker.ts`) as
+    { lineFilled(a: Candidate, b: Candidate, p: object): boolean };
+  const space = glue(4, 2 * PT, 0);
+  const rigidEnd = glue(0, 0, 0, 15);
+  const filledWith = (fils: number[], skips: object = {}) => {
+    const nodes = [box(50), space, ...fils.map(k => glue(0, k * PT, 2)), box(50), rigidEnd];
+    const bcs = breaker.buildBreakCandidates(nodes, {}, {});
+    const p = breaker.paragraphParams(paramsFromData({}, 'justify'), skips);
+    return lineFilled(bcs[0], bcs[bcs.length - 1], p);
+  };
+  assert.equal(filledWith([]), false);
+  assert.equal(filledWith([1]), true);
+  assert.equal(filledWith([1, -1]), false, '+1fil -1fil');
+  assert.equal(filledWith([2, -1]), true, '+2fil -1fil');
+  assert.equal(filledWith([-1]), true, 'a negative fill is a fill, as TeX tests it');
+  // a margin skip's fill is in every line's, and cancels with the line's own
+  const rightFil = { right_skip: { type: 'glue', width: 0, stretch: PT, stretch_order: 2, shrink: 0 } };
+  assert.equal(filledWith([], rightFil), true);
+  assert.equal(filledWith([-1], rightFil), false);
+  // and a glue of infinite order that stretches by nothing is no fill
+  assert.equal(filledWith([0]), false);
 });

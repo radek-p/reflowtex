@@ -108,6 +108,33 @@ export const cases: Record<string, CaseSettings> = {
   // hang, so each line drifted from its first space on (281 glyphs over 0.7
   // pt off). Worst attained 2026-10-28.
   'microtype-boxes': { tolerance: 0.014 },
+  // Lines that start with a superscript ($^1$, \textsuperscript) under
+  // microtype: TeX steps over the formula's empty nucleus and protrudes the
+  // digit; the browser stopped at the empty box, and each such line sat up to
+  // 0.41 pt right of TeX's. Worst attained 2026-10-28.
+  'protrusion-superscript-start': { tolerance: 0.039 },
+  // Lines ending in a full stop and a box holding only a box holding a
+  // penalty (a restated theorem's anchor) under microtype: TeX steps back out
+  // of the box and hangs the full stop; the browser found nothing to hang, and
+  // lines that fit only by it were shrunk or broken otherwise (179 glyphs past
+  // 0.7 pt). At the document's width only: the lines are set to overfill that
+  // measure. Worst attained 2026-10-28.
+  'protrusion-anchor-at-end': { widths: [0], tolerance: 0.018 },
+  // Paragraphs ending in \index entries, a \label or a \special after the
+  // last word, with the line nearly full: TeX keeps the whatsits at a break,
+  // breaks at the space after the word and sets an empty last line. The
+  // pipeline dropped them, the browser kept the word's line last, and
+  // everything below sat higher (835 glyphs past 0.7 pt). At the document's
+  // width only: the lines are set to fill that measure. Worst attained
+  // 2026-10-28.
+  'whatsits-paragraph-end': { widths: [0], tolerance: 0.010, rule_tolerance: 0.005 },
+  // Infinite glues that cancel (\hskip 0pt plus -1filll then plus 1filll, as
+  // breqn sets them) in a justified line and between a finite \rightskip and
+  // a rigid \parfillskip: TeX sums the stretch of each order and justifies
+  // the line by its finite glue; the browser counted each such glue as a
+  // fill and set the line at its natural width (179 glyphs past 0.7 pt).
+  // Worst attained 2026-10-28.
+  'fill-cancelling': { tolerance: 0.010 },
   paragraph: { tolerance: 0.010 },
   // The paragraph at widths that are no whole number of pixels (2 px per pt):
   // a real paper's \hsize rarely is one. The column must be the exact width,

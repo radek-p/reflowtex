@@ -3,9 +3,9 @@
 // search for the character that protrudes stops at the glyph – a character
 // with no protrusion codes – so the comma before it does not hang into the
 // margin, nor a quotation mark after it at a line's start. The serializer
-// writes the glyph as a box of its size holding a rule of size 0, which
-// stops the viewer's search too; an empty box (a label's anchor) is stepped
-// over, as TeX steps over it.
+// writes the glyph as a box of its size holding an empty vlist, which stops
+// the viewer's search too (a rule of size 0 would not: LuaTeX steps over
+// one); an empty box (a label's anchor) is stepped over, as TeX steps over it.
 //
 // The viewer's module, imported by a path the Node project does not follow
 // (see node-kinds.test.ts); the signatures used are written out here.
@@ -26,7 +26,7 @@ const glue: TexNode = { type: 'glue', width: 3 * PT, stretch: PT, shrink: PT };
 /** what serializer.lua writes for a glyph TeX draws nothing for */
 const missing = (width = 0): TexNode => ({
   type: 'hlist', subtype: 2, width, height: 0, depth: 0, shift: 0, glue_set: 0, glue_sign: 0, glue_order: 0,
-  children: [{ type: 'rule', width: 0, height: 0, depth: 0 }],
+  children: [{ type: 'vlist', width: 0, height: 0, depth: 0, shift: 0, glue_set: 0, glue_sign: 0, glue_order: 0, children: [] }],
 });
 const anchor: TexNode = { type: 'hlist', subtype: 2, width: 0, height: 0, depth: 0, children: [] };
 

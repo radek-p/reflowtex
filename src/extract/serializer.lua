@@ -688,8 +688,9 @@ end
 -- item not discarded at a line's start, so the space after it is kept there
 -- (without it TeX breaks such a paragraph otherwise), and a character with
 -- no protrusion at a line's edge, where the search for one stops. So the
--- box holds a rule of size 0, which draws nothing and stops that search, as
--- an empty box would not. Each missing character is also recorded, by
+-- box holds an empty vlist of size 0, which draws nothing and stops that
+-- search (LuaTeX steps over an empty hlist and a rule of size 0, never over
+-- a vlist). Each missing character is also recorded, by
 -- font, character and stream, with a few words around it, for the block's
 -- warnings (src/pipeline/warnings.ts).
 
@@ -872,7 +873,8 @@ local function serialize_nodelist(head)
             if not char_info(n.font, n.char) then note_missing(n) end
             cur[#cur + 1] = { type = "hlist", subtype = 2, width = expanded_width(n), height = n.height, depth = n.depth,
                               shift = 0, glue_set = 0, glue_sign = 0, glue_order = 0,
-                              children = { { type = "rule", width = 0, height = 0, depth = 0 } } }
+                              children = { { type = "vlist", width = 0, height = 0, depth = 0, shift = 0,
+                                              glue_set = 0, glue_sign = 0, glue_order = 0, children = {} } } }
 
         elseif t == "glyph" then
             note_font(n.font)

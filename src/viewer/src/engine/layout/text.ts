@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { alignOf, blockRigidParFill, buildBreakCandidates, kpBreak, paragraphParams } from '../breaker.ts';
-import { HL_ALIGNMENT, IGNORE_DEPTH_SP, SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
+import { HL_ALIGNMENT, IGNORE_DEPTH_SP, SP_TO_PX, ZOOM, gD, gH, gW, stretchByOrder, sumExpandableSp, sumWidthSp } from '../core.ts';
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
 import { mergeWidgetRuns } from '../../host/widgets.ts';
 import { paragraphLeading } from './lines.ts';
@@ -12,7 +12,6 @@ import type { Params } from '../../runtime/params.ts';
 
 // A margin skip's stretch order when it stretches (LuaTeX's: 0 finite, 1 fi,
 // 2 fil, 3 fill, 4 filll), and its stretch at an order.
-const stretchOrder = (g: GlueNode | undefined) => g && g.stretch ? g.stretch_order || 0 : 0;
 const stretchAt = (g: GlueNode | undefined, order: number) => g && (g.stretch_order || 0) === order ? g.stretch || 0 : 0;
 
 // A paragraph whose margin skips are a share of the measure (0pt plus
@@ -411,11 +410,12 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
             const leftKernSp  = p.useProtrusion ? (ln.leftProtrusion || 0) : 0;
             const rightKernSp = p.useProtrusion ? (ln.rightProtrusion || 0) : 0;
             const slackSp = availSp - (natSp - leftKernSp - rightKernSp);
-            const fi = fillInfo(ln.nodes);
-            const order = Math.max(fi.stretch ? fi.order : 0, stretchOrder(L), stretchOrder(R));
+            const sums = stretchByOrder(ln.nodes).map((t, o) => t + stretchAt(L, o) + stretchAt(R, o));
+            let order = sums.length - 1;
+            while (order > 0 && !sums[order]) order--;
             let x0 = protX, fillRatio = 0, fillOrder = 0;
             if (slackSp > 0 && order > 0) {
-                const total = (fi.order === order ? fi.stretch : 0) + stretchAt(L, order) + stretchAt(R, order);
+                const total = sums[order];
                 if (total > 0) { fillRatio = slackSp / total; fillOrder = order; x0 += fillRatio * stretchAt(L, order) * SP_TO_PX; }
             } else if (ratio > 0) x0 += ratio * stretchAt(L, 0) * SP_TO_PX;
             else if (ratio < 0) x0 += ratio * (L?.shrink || 0) * SP_TO_PX;

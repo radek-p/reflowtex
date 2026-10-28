@@ -1,0 +1,38 @@
+% Paragraphs under microtype whose last line ends in a full stop followed by a
+% box holding only a box holding a penalty, the anchor a restated theorem
+% leaves (thm-restate with hyperref). TeX's search for the character that
+% protrudes goes into the box, finds nothing but penalties, steps back out and
+% goes on before it: the full stop hangs into the margin. Each line overfills
+% the measure by 0 to 3.5 pt before protrusion, so the protrusion decides
+% whether it has to shrink; the last paragraph, without the box, is the
+% control.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\newcommand\T{The result stated again below follows from the two lemmas above.}
+\newcommand\A{\penalty10000\hbox{\raise13pt\hbox{\penalty10000}}}
+\setbox0\hbox{\T}
+\begin{document}
+\noindent\hspace*{\dimexpr\linewidth-\wd0+0.0pt\relax}\T\A
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0+0.5pt\relax}\T\A
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0+1.0pt\relax}\T\A
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0+1.5pt\relax}\T\A
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0+2.0pt\relax}\T\A
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0+2.5pt\relax}\T\A
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0+3.0pt\relax}\T\A
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0+3.5pt\relax}\T\A
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0+1.5pt\relax}\T
+
+Running text whose lines end in boxes of nothing: a line may end in such a box\A{} after a full stop.\A{} Another
+sentence follows it, and then another,\A{} with a comma before the box, and so on until the paragraph has a few
+lines.\A{} The browser breaks it again at other widths.
+\end{document}
