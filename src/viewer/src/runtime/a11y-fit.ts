@@ -93,9 +93,7 @@ function textBoxRatio(layer: Element): number {
     probe.textContent = 'Hxgy';
     probe.style.cssText = 'position:absolute;font-size:100px;line-height:normal;white-space:pre;opacity:0';
     layer.appendChild(probe);
-    const range = document.createRange();
-    range.selectNodeContents(probe);
-    const r = range.getBoundingClientRect().height / 100 || 1.2;
+    const r = textRect(probe).height / 100 || 1.2;
     probe.remove();
     ratios.set(layer, r);
     return r;
@@ -108,7 +106,7 @@ export function fitRuns(items: FitItem[]): void {
     for (const it of items) if (it.scale) it.el.style.transform = 'none'; else it.el.style.letterSpacing = '0px';
     const sizes = items.map(({ el }) => {
         const r = el.localName === 'math' ? el.getBoundingClientRect()
-            : (() => { const g = document.createRange(); g.selectNodeContents(el); return g.getBoundingClientRect(); })();
+            : textRect(el);
         return [r.width, r.height];
     });
     items.forEach((it, k) => {
@@ -133,7 +131,19 @@ export function fitRuns(items: FitItem[]): void {
     const final = spaced.map(it => textWidth(it.el));
     spaced.forEach((it, k) => { if (final[k] > it.w + 0.25) it.el.style.marginRight = `${it.w - final[k]}px`; });
 }
-function textWidth(el: Element): number { const g = document.createRange(); g.selectNodeContents(el); return g.getBoundingClientRect().width; }
+function textWidth(el: Element): number { return textRect(el).width; }
+/** Where an element's text lies, measured with one Range kept for it. A
+ *  Range made per measurement stays live until it is collected, and every
+ *  change to the page updates every live Range: thousands of them, from one
+ *  placement, made painting the glyphs after it several times slower. */
+let range: Range | null = null;
+function textRect(el: Element): DOMRect {
+    range = range || document.createRange();
+    range.selectNodeContents(el);
+    const r = range.getBoundingClientRect();
+    range.collapse(true);
+    return r;
+}
 
 /** Each element scaled from its natural size onto w × h – all measured first,
  *  then all scaled: one layout. The scale a layout before left is taken off

@@ -182,6 +182,45 @@ test('however large a piece\'s text, the page is as long as its blocks', async (
   for (const p of r.pieces) expect(p.past, `"${p.text}" ends inside its piece`).toBeLessThanOrEqual(3);
 });
 
+// The layer follows the drawing: a resize lays out, fits or scales again only
+// the pieces whose segments it repaints – those near the window – as it
+// redraws only their glyphs. Every piece of a long page refitted on every
+// width change (and placed again by every slice of the layout after it)
+// made a resize of a fifty-page paper take seconds.
+test('a resize fits again only the pieces near the window', async ({ openPage }) => {
+  const page = await openPage('a11y-segments', { width: 700, height: 400 });
+  const fits = () => page.evaluate(() => (window as any).reflowtex.inspect.layerFits as number);
+  const before = await fits();
+  await page.setViewportSize({ width: 520, height: 400 });
+  await idle(page);
+  const refitted = await fits() - before;
+  const { pieces, near } = await page.evaluate(() => {
+    const h = innerHeight, all = [...document.querySelectorAll('.latex-a11y > *')];
+    // (the viewer paints what lies within a window's height of the window)
+    return { pieces: all.length, near: all.filter(p => { const r = p.getBoundingClientRect(); return r.bottom > -h && r.top < 2 * h; }).length };
+  });
+  expect(pieces, 'a long page: most of its pieces far').toBeGreaterThan(3 * near);
+  expect(refitted, 'the pieces near the window fitted again').toBeGreaterThan(0);
+  expect(refitted, 'no piece far from the window fitted').toBeLessThanOrEqual(near);
+});
+
+// Measuring the layer's runs made a Range for each, and a Range stays live
+// until it is collected: every change to the page then updates every live
+// one, and the glyphs painted after a placement went several times slower.
+// One Range measures them all.
+test('placing the layer makes no Range per run', async ({ openPage }) => {
+  const page = await openPage('a11y-segments', { width: 700, height: 400, init: `{
+    const make = Document.prototype.createRange;
+    window.__ranges = 0;
+    Document.prototype.createRange = function () { window.__ranges++; return make.call(this); };
+  }` });
+  await page.setViewportSize({ width: 520, height: 400 });
+  await idle(page);
+  const r = await page.evaluate(() => ({ ranges: (window as any).__ranges as number, fits: (window as any).reflowtex.inspect.layerFits as number }));
+  expect(r.fits, 'runs were measured').toBeGreaterThan(5);
+  expect(r.ranges, 'one Range for them all').toBeLessThanOrEqual(1);
+});
+
 // Inside each piece, the text a screen reader reads is laid out to fill the
 // piece as the drawn paragraph fills its lines: VoiceOver frames the words it
 // reads, so text wrapped at another size puts its frame beside the

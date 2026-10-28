@@ -12,6 +12,7 @@ import { scopeSizes } from './slots.ts';
 import { sliceState } from '../runtime/slices.ts';
 import type { SliceState } from '../runtime/slices.ts';
 import { faceRecords } from '../runtime/fonts.ts';
+import { layerFits } from '../runtime/a11y.ts';
 import type { BlockData } from '../runtime/block-data.ts';
 import type { TexNode } from '../engine/model.ts';
 import type { LayoutCache, Line } from '../engine/layout/types.ts';
@@ -34,6 +35,7 @@ export interface Inspect {
     blocks(): HTMLElement[];
     state(el: Element): BlockData | undefined;
     readonly paints: number;
+    readonly layerFits: number;
     idle(): Promise<void>;
     pending(): string[];
     scopes(): Record<string, number>;
@@ -55,6 +57,9 @@ export interface Inspect {
 //   spToPx                  scaled points → the svg user units below
 //   paints                  a counter, bumped by every segment paint: a tool
 //                           polls it to notice a reflow
+//   layerFits               a counter, bumped for every piece of the
+//                           accessible layer laid out, fitted or scaled: a
+//                           test sees what a resize redid (runtime/a11y.ts)
 //   idle()                  a promise, resolved once the viewer has nothing
 //                           still to come – no frame, timer, set-up or face it
 //                           waits for, the fonts loaded, no animation running
@@ -95,6 +100,7 @@ const inspect: Inspect = {
     blocks: () => [...inspectable].filter(el => el.isConnected),
     state: el => blockData.get(el),
     get paints() { return paintCount; },
+    get layerFits() { return layerFits; },
     idle,
     pending,
     scopes: () => scopeSizes(),   // scope → how many blocks it holds
