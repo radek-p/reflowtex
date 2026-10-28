@@ -123,6 +123,13 @@ export const cases: Record<string, CaseSettings> = {
   // glyphs. Worst attained 2026-10-27 (0.082 until then, when the strip's
   // Type 1 glyphs were read by MuPDF's whole-number widths: see type1-text).
   'virtual-fonts': { tolerance: 0.009 },
+  // T1 Times through its virtual fonts under microtype: small capitals (each
+  // a character moved by letterspacing) and the ligatures ff, ffi and ffl
+  // (each two characters) are boxes of pieces in the page, which hung and
+  // expanded as nothing until they kept the character TeX set: headings 0.47
+  // pt right of TeX's, justified lines up to 0.47 pt off. One page, so
+  // against_plain too. Worst attained 2026-10-27.
+  'times-microtype': { against_plain: true, tolerance: 0.022 },
   // Long justified lines in T1 Latin Modern, whose widths are no whole
   // thousandths of an em, against the same text in OpenType. The strip's
   // glyphs used to be read by MuPDF's whole-number widths, which put TeX's own

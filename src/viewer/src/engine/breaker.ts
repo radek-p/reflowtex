@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    BREAK_NODES, breakKind, LEFT_PROTRUSION, RIGHT_PROTRUSION, expandableSp, gW, nodeWidthSp, sumWidthSp,
+    BREAK_NODES, breakKind, LEFT_PROTRUSION, RIGHT_PROTRUSION, charW, expandableSp, gW, isChar, isCharBox, nodeWidthSp,
+    sumWidthSp,
 } from './core.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
 import type { Expansion, FontTable, Paragraph, TexNode, ViewerFont } from './model.ts';
@@ -74,11 +75,13 @@ export function protSkipable(n: TexNode): boolean {
 // The character at the right edge of nodes[0..idx), as LuaTeX's
 // find_protchar_right finds it: stepping back over what protSkipable allows,
 // into a box to its last character, and over a box with nothing in it but
-// such things (an anchor, an empty \hbox).
+// such things (an anchor, an empty \hbox). A virtual font's character in its
+// box is that character (core.ts, isCharBox).
 export function findLastGlyph(nodes: TexNode[], idx: number): TexNode | null {
     for (let k=idx-1;k>=0;k--) {
         const n=nodes[k];
         if (protSkipable(n)) continue;
+        if (isCharBox(n)) return n;
         if (n.type==='hlist') {
             const kids=n.children||[];
             if (kids.every(protSkipable)) continue;
@@ -91,7 +94,7 @@ export function findLastGlyph(nodes: TexNode[], idx: number): TexNode | null {
 // The character at the left edge from nodes[idx], as find_protchar_left
 // finds it: past empty boxes, then over what protSkipable allows, into a box
 // to its first character – but a box with nothing to protrude ends the
-// search there.
+// search there. A virtual font's character in its box is that character.
 export function findFirstGlyph(nodes: TexNode[], idx: number): TexNode | null {
     let k=idx;
     const emptyBox = (n: TexNode) => n.type==='hlist' && !(n.children||[]).length && !n.width && !n.height && !n.depth;
@@ -99,6 +102,7 @@ export function findFirstGlyph(nodes: TexNode[], idx: number): TexNode | null {
     for (;k<nodes.length;k++) {
         const n=nodes[k];
         if (protSkipable(n)) continue;
+        if (isCharBox(n)) return n;
         if (n.type==='hlist' && (n.children||[]).length) return findFirstGlyph(n.children!, 0);
         return n.type==='glyph'?n:null;
     }
@@ -162,18 +166,18 @@ export function expandLimit(fontInfo: FontTable | null | undefined, n: TexNode, 
 }
 export function fontStretchSp(fontInfo: FontTable, ns: TexNode[], i: number, shrink: boolean): number {
     const n = ns[i];
-    if (n.type === 'glyph') {
+    if (isChar(n)) {
         const m = expandLimit(fontInfo, n, shrink);
         if (!(m > 0) || n.text !== undefined) return 0;
         const ef = efCodeOf(fontInfo[String(n.font)], n);
         if (!(ef > 0)) return 0;
-        const w = gW(n);
+        const w = charW(n);
         const dw = shrink ? w - roundXnOverD(w, 1000 - m, 1000) : roundXnOverD(w, 1000 + m, 1000) - w;
         return dw > 0 ? roundXnOverD(dw, ef, 1000) : 0;
     }
     if (n.type === 'kern' && (n.subtype || 0) === 0 && n.kern) {
         const l = ns[i - 1], r = ns[i + 1];
-        if (!l || !r || l.type !== 'glyph' || r.type !== 'glyph') return 0;
+        if (!l || !r || !isChar(l) || !isChar(r)) return 0;
         const m = Math.trunc((expandLimit(fontInfo, l, shrink) + expandLimit(fontInfo, r, shrink)) / 2);
         if (!m) return 0;
         const w = n.kern, d = roundXnOverD(w, shrink ? 1000 - m : 1000 + m, 1000);
@@ -189,7 +193,7 @@ export function fontStretchSp(fontInfo: FontTable, ns: TexNode[], i: number, shr
 export function paragraphExpansion(fontInfo: FontTable, nodes: TexNode[]): Expansion | null {
     const walk = (ns: TexNode[] | undefined): Expansion | null => {
         for (const n of ns || []) {
-            if (n.type === 'glyph') {
+            if (isChar(n)) {
                 const fi = fontInfo && fontInfo[String(n.font)];
                 if (fi && fi.expand && fi.expand.step > 0) return fi.expand;
             } else if (n.type === 'disc') {
@@ -306,7 +310,7 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
             if (n.stretch_order) cumFill+=1;
         } else if (n.type==='disc') {
             const pre=part(n.pre), post=part(n.post), replace=part(n.replace);
-            const preGs=(n.pre||[]).filter(x=>x.type==='glyph'), postGs=(n.post||[]).filter(x=>x.type==='glyph');
+            const preGs=(n.pre||[]).filter(isChar), postGs=(n.post||[]).filter(isChar);
             // LuaTeX subtypes 0–2 (\discretionary, \-, an explicit hyphen) were in
             // the source; 3 and up are its own hyphenation.
             bcs.push(cand('disc', i, n.penalty??50, { pre, post, replace, explicit: (n.subtype||0) <= 2,

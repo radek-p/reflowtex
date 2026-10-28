@@ -14,10 +14,13 @@
 //    the virtual character's size holding the pieces where the packet puts
 //    them – a kern to each piece's place, a lowered box for a piece moved
 //    down or up – each glyph carrying the virtual glyph's attributes. The
-//    box notes the character it stands for (`virtual_char`); once its
-//    pieces are in Unicode, compositeTexts gives one that is a letter and
-//    accents (ae's é: an acute and an e) that letter as its text, so it is
-//    read, searched and found as one.
+//    box keeps the character's `font` (the virtual face) and `char`: TeX set
+//    it as that one character, and the viewer protrudes and expands it by
+//    that character's codes, as TeX did (an expanded ff ligature, a small
+//    capital hanging into the margin). Once its pieces are in Unicode,
+//    compositeTexts gives a box that is a letter and accents (ae's é: an
+//    acute and an e) that letter as its text, so it is read, searched and
+//    found as one.
 // The fonts the pieces are in join the font table, an entry per face and
 // size, a classic font yet to be given its face (ClassicFace): the
 // classic-font conversion that follows gives it its outline. The virtual
@@ -198,7 +201,7 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
       delete n.gindex;
       return;
     }
-    const virtualChar = n.char;
+    const virtualChar = n.char, virtualFont = n.font;
     const attrs = Object.fromEntries(Object.entries(n).filter(([k]) => !GLYPH_OWN.has(k)));
     const children: Node[] = [];
     let at = 0;
@@ -215,7 +218,7 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
       at = q.x + width;
     }
     for (const k of Object.keys(n)) if (k !== 'width' && k !== 'height' && k !== 'depth') delete n[k];
-    Object.assign(n, hbox(n.width as number, n.height as number, n.depth as number, children, 0), { virtual_char: virtualChar });
+    Object.assign(n, hbox(n.width as number, n.height as number, n.depth as number, children, 0), { font: virtualFont, char: virtualChar });
   });
   // each virtual face is drawn from the fonts its packets name, not itself
   for (const f of virtual.values()) f.face = { kind: 'virtual' };
@@ -263,8 +266,7 @@ export function compositeText(nodes: Node[]): string | null {
 export function compositeTexts(each: (visit: (n: Node) => void) => void): number {
   let named = 0;
   each(n => {
-    if (n.virtual_char === undefined) return;
-    delete n.virtual_char;
+    if (n.type !== 'hlist' || n.char === undefined) return;
     const text = compositeText((n.children as Node[]) ?? []);
     if (text !== null) { n.actual_text = text; named++; }
   });

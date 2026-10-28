@@ -41,8 +41,8 @@ enum NodeType {
 
 message Node {
   optional NodeType type          = 1;
-  optional int32    char          = 2;   // glyph: Unicode codepoint
-  optional uint32   font          = 3;   // glyph: font ID
+  optional int32    char          = 2;   // glyph: Unicode codepoint; hlist: the virtual font's character it draws (its code there)
+  optional uint32   font          = 3;   // glyph: font ID; hlist: that character's (virtual) font
   optional int32    width         = 4;   // glue/kern/rule/hlist/vlist (glyphs use `metrics`)
   optional int32    height        = 5;   // rule/hlist/vlist/adjust
   optional int32    depth         = 6;   // rule/hlist/vlist

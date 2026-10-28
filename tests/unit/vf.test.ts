@@ -64,13 +64,13 @@ test('one character at the origin: the glyph node itself, in the base font, its 
   assert.deepEqual(fonts.get('4')!.codes, [{ char: 66, lp: 50, rp: 0, ef: 1000 }], 'its protrusion code goes along');
 });
 
-test('a moved character: a box of the virtual character\'s size, a kern to the piece', { skip: NO_CM }, () => {
+test('a moved character: a box of the virtual character\'s size, a kern to the piece; the box is still that character', { skip: NO_CM }, () => {
   const { nodes } = resolve([66]);
   const tenth = texScale(TENTH, SIZE);
   assert.deepEqual(nodes[0], { type: 'hlist', subtype: 2, width: 300000, height: 400000, depth: 1000, shift: 0, glue_set: 0, glue_sign: 0, glue_order: 0, children: [
     { type: 'kern', kern: tenth, subtype: 1 },
     { type: 'glyph', char: 65, font: 4, width: w(cmr, 65), height: cmr.char(65, SIZE)!.height, depth: 0, color: '#c2410c', link: 2 },
-  ], virtual_char: 66 });
+  ], font: 3, char: 66 });
 });
 
 test('several characters in two fonts and a rule, each where the packet sets it', { skip: NO_CM }, () => {
@@ -134,7 +134,7 @@ test('a composite\'s text: a letter and spacing accents, composed', () => {
 
 test('the box a virtual character became gets its text once its pieces are in Unicode; other nodes are left alone', { skip: NO_CM }, () => {
   const { nodes } = resolve([69, 67]);               // E: an acute over e; C: a, alpha, a rule
-  assert.equal(nodes[0].virtual_char, 69);
+  assert.deepEqual([nodes[0].font, nodes[0].char], [3, 69], 'the character it stands for');
   // the pieces' slots as their Unicode (as the classic-font conversion does)
   const uni: Record<number, number> = { 0x13: 0xB4, 101: 0x65, 97: 0x61, 11: 0x3B1 };
   const each = (visit: (n: N) => void) => { const go = (ns: N[]) => { for (const n of ns) { visit(n); go((n.children as N[]) ?? []); } }; go(nodes); };
@@ -144,7 +144,7 @@ test('the box a virtual character became gets its text once its pieces are in Un
   assert.equal(compositeTexts(each), 1);
   assert.equal(nodes[0].actual_text, 'é');
   assert.equal(nodes[1].actual_text, undefined, 'several letters: read as its pieces');
-  assert.ok(!('virtual_char' in nodes[0]) && !('virtual_char' in nodes[1]), 'the note is gone');
+  assert.deepEqual([nodes[0].char, nodes[1].char], [69, 67], 'each still the character TeX set');
   assert.equal(plain.actual_text, undefined, 'a box TeX made is read as its glyphs');
   assert.deepEqual((nodes[0].children as N[]).filter(c => c.type === 'glyph').map(c => c.char), [0xB4, 0x65], 'still drawn as its pieces');
 });
