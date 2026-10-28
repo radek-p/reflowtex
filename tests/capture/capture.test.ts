@@ -390,6 +390,20 @@ test('Lean: the parts are marked, decl and url on the widget', async () => {
   assert.match(streams.find(s => attrsOf(s.attrs)['rtx-part'] === 'code')!.text!, /example : 1 = 1 := rfl/);
 });
 
+// An aside's text is set as LaTeX sets a \marginpar: with the paragraph
+// settings restored. Under \raggedright, \\ ends the paragraph, and a second
+// \\ after it is "There's no line here to end"; in the aside it breaks lines.
+test('an aside restores the paragraph settings: \\\\ \\\\ under \\raggedright is no error', async () => {
+  const body = '\\raggedright Some text\\marginpar{One\\\\ \\\\ Two} more text.';
+  const d = await capture(body);
+  const key = contentKey(body, '');
+  const errors = pipeLog.records().filter(r => r.code === 'tex-error' && r.details.block === `${key} (${key})`);
+  assert.deepEqual(errors.map(r => r.details.error), []);
+  const aside = (d as unknown as { streams: { kind: string; content?: Item[] }[] }).streams.find(s => s.kind === 'marginpar');
+  const paras = (aside?.content ?? []).filter(i => i.kind === 'paragraph').map(i => glyphText(d.paragraphs[i.para! - 1].nodes));
+  assert.deepEqual(paras, ['OneTwo'], 'one paragraph, its lines broken by \\\\');
+});
+
 // ── Classic fonts ───────────────────────────────────────────────────────────
 // A Type 1 face is converted for the browser (src/pipeline/fonts/type1.ts)
 // and its glyphs readdressed; what each glyph then draws is checked in the
