@@ -62,7 +62,10 @@ import { screenCTM } from './screen-ctm.ts';
 // sideways at the block's width: a run fitted to its line can still be much
 // wider than the line (letter spacing only goes so far below zero, see
 // fitRuns), and unclipped it would widen the page.
-const ANCHOR = 'position:relative;height:0;margin:0;padding:0;border:0;overflow-x:clip;overflow-y:visible';
+// overflow-anchor:none: the layer is never the browser's scroll anchor. It lies over the viewport before
+// its block, and its pieces move on every layout; anchored on one, the browser would suspend anchoring and
+// the page drift as slices land above (the README's scroll anchoring).
+const ANCHOR = 'position:relative;height:0;margin:0;padding:0;border:0;overflow-x:clip;overflow-y:visible;overflow-anchor:none';
 const PIECE  = 'position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;overflow:clip;'
              + 'white-space:normal;pointer-events:none;user-select:none;-webkit-user-select:none';
 const LINE_HEIGHT = 1.15;          // the pieces' line-height, as in PIECE

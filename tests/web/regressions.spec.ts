@@ -262,8 +262,9 @@ test('margin notes when fonts come late', async ({ openPage }) => {
 // After a resize the reader saw different content: the viewer's rewrites
 // defeated the browser's scroll anchoring (fde0a25); and the page scrolled
 // sideways during the drag (a25c334).
-test('a resize keeps the reader in place', async ({ openPage }) => {
-  const page = await openPage('long', { width: 1100, height: 800 });
+for (const name of ['long', 'a11y-segments']) test(`a resize keeps the reader in place: ${name}`, async ({ openPage }) => {
+  // a11y-segments has the accessible layer, which must never be the scroll anchor
+  const page = await openPage(name, { width: 1100, height: 800 });
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
   await idle(page);
   await page.evaluate(() => { window.__first = [...document.querySelectorAll('.latex-block svg')].find(s => s.getBoundingClientRect().bottom > 40); });
@@ -278,5 +279,5 @@ test('a resize keeps the reader in place', async ({ openPage }) => {
   await idle(page);
   const r = await page.evaluate(() => ({ connected: window.__first.isConnected as boolean, top: window.__first.getBoundingClientRect().top as number }));
   expect(r.connected, 'the segment on screen was replaced').toBe(true);
-  expect(Math.abs(r.top - top0) < 5 || (r.top >= 0 && r.top < 800), `the reader lost their place: ${top0.toFixed(0)} → ${r.top.toFixed(0)} px`).toBe(true);
+  expect(Math.abs(r.top - top0) < 5 || (name === "long" && r.top >= 0 && r.top < 800), `the reader lost their place: ${top0.toFixed(0)} → ${r.top.toFixed(0)} px`).toBe(true);
 });
