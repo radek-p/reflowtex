@@ -133,7 +133,7 @@ function buildFar(build: string): string {
   mkdirSync(src, { recursive: true });
   mkdirSync(join(dir, 'vector'), { recursive: true });
   writeFileSync(join(src, 'a-long.tex'), FAR_TEX);
-  execFileSync('node', [join(REPO, 'integrations/vanilla/build.ts'), src, '-o', join(dir, 'site'), '--title', 'far'], { cwd: REPO, stdio: 'pipe' });
+  execFileSync('node', [join(REPO, 'integrations/vanilla/build.ts'), src, '--snippet', '-o', join(dir, 'site'), '--title', 'far'], { cwd: REPO, stdio: 'pipe' });
   return dir;
 }
 /** What the measurement saw on the page (dom-dump.ts), as the TeX side: the
