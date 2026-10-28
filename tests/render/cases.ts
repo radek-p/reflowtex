@@ -102,6 +102,12 @@ export const cases: Record<string, CaseSettings> = {
   // Worst attained 2026-10-28 (0.61 before \leaders were aligned on their
   // box's grid).
   leaders: { tolerance: 0.012 },
+  // Paragraphs set wider than the column: a page under \newgeometry with
+  // smaller margins, a list with a negative \rightmargin, negative margin
+  // skips. Worst attained 2026-10-28 (0.70 before, when a paragraph was never
+  // set wider than the column).
+  'newgeometry-wider': { tolerance: 0.011 },
+  'wide-paragraphs': { tolerance: 0.010 },
   // Formulas at line starts with \mathsurround 0.1pt and an opening \,: TeX
   // discards both at a break. Worst attained 2026-10-28 (0.689 before).
   mathsurround: { tolerance: 0.010 },

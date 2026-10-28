@@ -5,7 +5,8 @@ import { HL_ALIGNMENT, IGNORE_DEPTH_SP, SP_TO_PX, ZOOM, gD, gH, gW, stretchByOrd
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
 import { mergeWidgetRuns } from '../../host/widgets.ts';
 import { paragraphLeading } from './lines.ts';
-import type { BoxNode, ContentItem, Doc, FontTable, GlueNode, LineBand, Paragraph, TexNode } from '../model.ts';
+import { lineBandAtWidth } from './band.ts';
+import type { BoxNode, ContentItem, Doc, FontTable, GlueNode, Paragraph, TexNode } from '../model.ts';
 import type { Line, LineAdjust, LineMeta, LinePlacement, Segment, Segments, SegmentGeometry, TextSegment } from './types.ts';
 import type { LayoutCache } from './types.ts';
 import type { Params } from '../../runtime/params.ts';
@@ -268,26 +269,6 @@ export function lineAdjust(nodes: TexNode[]): LineAdjust {
         else below += (n.height || 0) * SP_TO_PX;
     }
     return { above, below };
-}
-
-// Where a paragraph's line is set at the reader's width: its indent and the
-// measure it is broken to (sp). A list item's indent is a fixed measure
-// (\leftmargin), so it stays put and the text column narrows around it – the
-// item's label hangs a fixed distance to the left of it, and at x0=0 would
-// sit at negative x and be clipped away. A paragraph's measure can be
-// narrower than the column on the right too: a quote environment sets \hsize
-// = \textwidth - 2\leftmargin, and a wrapped figure takes the right or left
-// of the lines beside it. That margin is what remains of the source width,
-// as fixed a measure as the left one, so it narrows the column the same way.
-// (At the source width, keeping only the left indent set a 295pt quote at
-// 320pt: a line TeX had to shrink came out at its natural width, 22pt wider
-// than in the PDF.) This is the one rule for widths other than TeX's: each
-// line keeps its distances from both edges of the column, so a wrapped
-// figure keeps its size and the number of lines beside it.
-export function lineBandAtWidth(band: LineBand, widthSp: number, sourceWidthSp: number): { indentSp: number; rightSp: number; availSp: number } {
-    const indentSp = band.indent || 0;
-    const rightSp = (sourceWidthSp > 0 && band.width! > 0) ? Math.max(0, sourceWidthSp - indentSp - band.width!) : 0;
-    return { indentSp, rightSp, availSp: widthSp - indentSp - rightSp };
 }
 
 export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt: number, p: Params, cache: LayoutCache): SegmentGeometry {
