@@ -119,3 +119,18 @@ Paragraph 59 of a long page, with a formula in it, $x_{59}^2 + y_{59} = \frac{59
 
 Paragraph 60 of a long page, with a formula in it, $x_{60}^2 + y_{60} = \frac{60}{2}$, and a few more words after it so that it wraps.
 
+
+% A paragraph drawn as one tall line: a box of lines, as a listing set in a
+% box is. Its piece of the layer is that one line's height, full of text.
+\noindent\begin{minipage}{\linewidth}
+\obeylines\ttfamily
+1 defs: the first line of a listing set in a box
+2 llm: and its second line, with a few more words
+3 model: the third line of the listing in the box
+4 input: the fourth line, as long as the others are
+5 parser: the fifth line of the listing in the box
+6 spec: the sixth line, and a few more words after it
+7 body: the seventh line of the listing in the box
+8 text: the eighth line, the last but one of them all
+9 end: the ninth and last line of the listing in the box
+\end{minipage}

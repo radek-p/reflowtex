@@ -155,6 +155,33 @@ test('however wide a run of the layer, the page does not widen', async ({ openPa
   expect(widths.page).toBeLessThanOrEqual(widths.window);
 });
 
+// A piece far from the window once kept a rough size: a line's height from
+// its height over its lines, which for a paragraph drawn as one tall line (a
+// box of lines, as a listing set in a box) is the whole box. Its text, a
+// hundred times too large, ran down past the block, and the page grew to
+// thirty times its length until the layer was placed again. Far or near,
+// each piece's text fits its box, and the layer never makes the page larger.
+test('however large a piece\'s text, the page is as long as its blocks', async ({ openPage }) => {
+  const page = await openPage('mathml-long', { height: 400 });   // the tall box far from the window
+  const r = await page.evaluate(() => {
+    const pieces = [...document.querySelectorAll<HTMLElement>('.latex-a11y > *')].filter(p => !p.querySelector('[data-run]')).map(p => {
+      const box = p.getBoundingClientRect(), range = document.createRange();
+      range.selectNodeContents(p);
+      return { text: (p.textContent ?? '').trim().slice(0, 30), past: range.getBoundingClientRect().bottom - box.bottom };
+    });
+    const page = [document.documentElement.scrollHeight, document.documentElement.scrollWidth];
+    const style = document.createElement('style');
+    style.textContent = '.latex-a11y { display: none !important }';
+    document.head.appendChild(style);
+    const without = [document.documentElement.scrollHeight, document.documentElement.scrollWidth];
+    style.remove();
+    return { pieces, page, without };
+  });
+  expect(r.pieces.some(p => p.text.startsWith('1 defs')), 'the box has its piece').toBe(true);
+  expect(r.page, 'the page is as large as without the layer').toEqual(r.without);
+  for (const p of r.pieces) expect(p.past, `"${p.text}" ends inside its piece`).toBeLessThanOrEqual(3);
+});
+
 // Inside each piece, the text a screen reader reads is laid out to fill the
 // piece as the drawn paragraph fills its lines: VoiceOver frames the words it
 // reads, so text wrapped at another size puts its frame beside the

@@ -30,11 +30,12 @@
 // remembered): as MathML – explorable; VoiceOver stops at each part – or as
 // their spoken form (the alttext the build wrote), read on with the sentence.
 //
-// Pieces far from the window keep the shipped text, sized roughly, until they
-// come near (the viewer places the layer again whenever it draws lines
-// there); until then they do not clip vertically, so nothing in them is hidden
-// (a screen reader skips clipped text). Without the viewer the layer keeps its
-// shipped form.
+// Pieces far from the window keep the shipped text, fitted into the piece
+// whole as a stream's is, until they come near (the viewer places the layer
+// again whenever it draws lines there): so nothing in them is cut off (a
+// screen reader skips clipped text). Every piece clips at its box, in both
+// directions: whatever its text does, the layer never makes the page any
+// larger. Without the viewer the layer keeps its shipped form.
 
 import { api } from './page.ts';
 import { allData } from './block-data.ts';
@@ -56,12 +57,10 @@ import { screenCTM } from './screen-ctm.ts';
 // wider than the line (letter spacing only goes so far below zero, see
 // fitRuns), and unclipped it would widen the page.
 const ANCHOR = 'position:relative;height:0;margin:0;padding:0;border:0;overflow-x:clip;overflow-y:visible';
-const PIECE  = 'position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;'
+const PIECE  = 'position:absolute;margin:0;padding:0;opacity:0;line-height:1.15;overflow:clip;'
              + 'white-space:normal;pointer-events:none;user-select:none;-webkit-user-select:none';
 const LINE_HEIGHT = 1.15;          // the pieces' line-height, as in PIECE
-const FITTED   = ';overflow:hidden';
-const UNFITTED = ';overflow-x:clip;overflow-y:visible';   // no sideways page scroll from wide maths
-const LINED    = ';overflow:visible;font-size:0;line-height:0;white-space:nowrap';   // the runs' flow sets the lines
+const LINED    = ';font-size:0;line-height:0;white-space:nowrap';   // the runs' flow sets the lines
 /** Near the window: within this many window heights above or below it. */
 const NEAR = 2;
 
@@ -316,14 +315,16 @@ export function placeAccessibleLayer(data: BlockData | undefined): void {
         const near = top + p.height > -NEAR * h && top < (NEAR + 1) * h;
         const box = `${PIECE};top:${p.top}px;left:${p.left}px;width:${p.width}px;height:${p.height}px`;
         // A paragraph near the window whose lines are laid out: line by line.
-        if (near && p.a >= 0 && p.ctm) {
+        // (Laid out so before, on the lines it still has, it stays so, near
+        // or far.)
+        if (p.a >= 0 && p.ctm) {
             const key = `${Math.round(p.width)}x${Math.round(p.height)}@${p.a}-${p.b}/${mode}`;
-            piece.style.cssText = box + LINED;
-            if (piece.dataset.lines !== key) {
-                const runs = runsOf(data!, p.seg, p.a, p.b);
-                if (runs) { piece.dataset.lines = key; lined.push({ piece, p, runs, origin }); return; }
-            } else return;
+            if (piece.dataset.lines === key) { piece.style.cssText = box + LINED; return; }
+            const runs = near && runsOf(data!, p.seg, p.a, p.b);
+            if (runs) { piece.style.cssText = box + LINED; piece.dataset.lines = key; lined.push({ piece, p, runs, origin }); return; }
         }
+        // (laid out line by line for lines it no longer has: as shipped again)
+        if (piece.dataset.lines) { restore(piece); inMode(piece); delete piece.dataset.lines; delete piece.dataset.size; }
         // A display near the window: its MathML scaled onto the drawing's ink
         // (the piece spans the display's whole band; the formula is narrower).
         if (near && p.display && p.ctm) {
@@ -332,7 +333,7 @@ export function placeAccessibleLayer(data: BlockData | undefined): void {
             if (ink) {
                 const m = p.ctm, left = m.a * ink.x0 + m.e - origin.left, top = m.d * ink.y0 + m.f - origin.top;
                 const w = Math.max(1, m.a * (ink.x1 - ink.x0)), hh = Math.max(1, m.d * (ink.y1 - ink.y0));
-                piece.style.cssText = `${PIECE};top:${top}px;left:${left}px;width:${w}px;height:${hh}px;overflow:visible`;
+                piece.style.cssText = `${PIECE};top:${top}px;left:${left}px;width:${w}px;height:${hh}px`;
                 math!.dataset.run = math!.localName === 'math' ? 'display' : 'spoken';
                 if (math!.localName !== 'math') math!.style.whiteSpace = 'nowrap';   // one line, scaled onto the formula
                 // its own size, not the piece's width, on the piece's corner: out of
@@ -344,15 +345,16 @@ export function placeAccessibleLayer(data: BlockData | undefined): void {
                 return;
             }
         }
+        // Any other piece: its text fitted into its box, near or far. (A
+        // piece far off once kept a rough size, a line's height from the
+        // piece's height over its lines – the whole box for a piece drawn as
+        // one line, a listing set in a box, or with no lines laid out yet – and
+        // its text ran far past the block.)
         const size = `${Math.round(p.width)}x${Math.round(p.height)}`;
-        const fitted = piece.dataset.size === size && !piece.dataset.lines;
+        const fitted = piece.dataset.size === size;
         const guess = Math.max(MIN_PX, p.height / p.lines / LINE_HEIGHT);
-        const font = fitted ? piece.style.fontSize : `${guess}px`;
-        piece.style.cssText = `${box};font-size:${font}` + (fitted || near ? FITTED : UNFITTED);
-        if (!fitted) {
-            if (near) { piece.dataset.size = size; refit.push({ piece, px: guess }); }
-            else delete piece.dataset.size;
-        }
+        piece.style.cssText = `${box};font-size:${fitted ? piece.style.fontSize : `${guess}px`}`;
+        if (!fitted) { piece.dataset.size = size; refit.push({ piece, px: guess }); }
     });
     const runs: FitItem[] = [];
     for (const l of lined) runs.push(...layOutRuns(l, mode));
