@@ -511,44 +511,6 @@
       "supported": true
     },
     {
-      "id": "arxiv-2602.13120",
-      "title": "Scoped MSO, Register Automata, and Expressions: Equivalence over Data Words",
-      "authors": [
-        "Radosław Piórkowski"
-      ],
-      "year": 2026,
-      "venue": "ICALP 2026 (LIPIcs, vol. 374)",
-      "class": "lipics-v2021 (or a renamed copy)",
-      "domain": "Computer science",
-      "field": "Theoretical computer science: Automata, logic, semantics and theory of programming",
-      "licence": "CC-BY-4.0",
-      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
-      "attribution": "“Scoped MSO, Register Automata, and Expressions: Equivalence over Data Words” by Radosław Piórkowski, arXiv:2602.13120v1 (published in ICALP 2026, LIPIcs vol. 374, 10.4230/LIPIcs.ICALP.2026.188). Licensed under CC BY 4.0. Typeset here by reflowtex from the authors' source, with a recorded patch.",
-      "original_page": "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ICALP.2026.188",
-      "original_url": "https://arxiv.org/pdf/2602.13120v1",
-      "published": {
-        "venue": "53rd International Colloquium on Automata, Languages, and Programming (ICALP 2026), LIPIcs vol. 374, paper 188",
-        "doi": "10.4230/LIPIcs.ICALP.2026.188",
-        "url": "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ICALP.2026.188"
-      },
-      "arxiv": "2602.13120v1",
-      "source": {
-        "url": "https://arxiv.org/src/2602.13120v1",
-        "sha256": "c12f49b0128f308291d05f2f660086d2662ef0c9c5d1fff5ccb5d21ca5357c52"
-      },
-      "main": "main.tex",
-      "bibliography": "bibtex",
-      "patch": "patches/arxiv-2602.13120.patch",
-      "packages": [
-        "lipics-v2021",
-        "stackengine",
-        "colonequals",
-        "dcolumn",
-        "xparse"
-      ],
-      "supported": true
-    },
-    {
       "id": "arxiv-2512.04614",
       "title": "On Tight FPT Time Approximation Algorithms for k-Clustering Problems",
       "authors": [

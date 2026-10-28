@@ -2,9 +2,6 @@
 # Documents in Showcase's grid besides the corpus's papers (data/corpus.json,
 # which CI writes): the same fields, written by hand. testmath.tex is on its
 # own page (content/docs/showcase/testmath.md) and among the render tests.
-# Corpus papers left out of the grid because "On other sites" (content/docs/showcase.md) already lists them;
-# they stay in Accuracy, as measured.
-elsewhere: [arxiv-2602.13120]
 papers:
   - id: testmath
     title: "Sample Paper for the amsmath Package"

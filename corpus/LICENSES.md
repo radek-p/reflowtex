@@ -111,18 +111,6 @@ Emilio Cruciani, Sebastian Forster, Antonis Skarlatos
 - Not built: Needs pdfTeX: \pdfoutput=1 on its first line, and ocgcolorlinks uses pdfTeX's \pdfpageheight.
 - Credit: “Incremental (k, z)-Clustering on Graphs” by Emilio Cruciani, Sebastian Forster, Antonis Skarlatos, arXiv:2602.08542v3 (published in ICALP 2026, LIPIcs vol. 374, 10.4230/LIPIcs.ICALP.2026.70). Licensed under CC BY 4.0. Typeset here by reflowtex from the authors' source.
 
-## arxiv-2602.13120
-
-**Scoped MSO, Register Automata, and Expressions: Equivalence over Data Words**
-
-Radosław Piórkowski
-
-- Licence: [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)
-- Published: https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ICALP.2026.188 (53rd International Colloquium on Automata, Languages, and Programming (ICALP 2026), LIPIcs vol. 374, paper 188, doi:10.4230/LIPIcs.ICALP.2026.188)
-- Source: https://arxiv.org/src/2602.13120v1 (sha256 `c12f49b0128f308291d05f2f660086d2662ef0c9c5d1fff5ccb5d21ca5357c52`)
-- Changed: [patches/arxiv-2602.13120.patch](patches/arxiv-2602.13120.patch). The paper's own loop defines \fa .. \fz as \mathfrak letters with \cs_new and already skips \fi. lipics-v2021 loads fontawesome5, which defines \fa, so \cs_new stops with an error. The paper uses neither \fa nor any fontawesome icon, so the loop now skips 'a' as it skips 'i'; nothing in the paper changes. Also: the paper was written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log). Replaced outside comments, verbatim, listings and URLs:   ł (U+0142) -> \l: 3 in the source (11 missing-character lines in the log before)   ń (U+0144) -> \'n: 1 in the source (4 missing-character lines in the log before)   – (U+2013) -> \textendash: 1 in the source (4 missing-character lines in the log before) After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged. The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
-- Credit: “Scoped MSO, Register Automata, and Expressions: Equivalence over Data Words” by Radosław Piórkowski, arXiv:2602.13120v1 (published in ICALP 2026, LIPIcs vol. 374, 10.4230/LIPIcs.ICALP.2026.188). Licensed under CC BY 4.0. Typeset here by reflowtex from the authors' source, with a recorded patch.
-
 ## arxiv-2604.01211
 
 **Making Every Bit Count for A-Optimal State Estimation**

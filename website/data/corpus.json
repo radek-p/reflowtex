@@ -8,10 +8,10 @@
   "jumps": 0
  },
  "totals": {
-  "papers": 50,
-  "displayed": 45,
-  "at_goal": 45,
-  "mean_placement": 0.99979,
+  "papers": 49,
+  "displayed": 44,
+  "at_goal": 44,
+  "mean_placement": 0.9998,
   "jumps": 0
  },
  "papers": [
@@ -578,49 +578,6 @@
    "at_goal": true,
    "page": "docs/showcase/papers/arxiv-2604.27966/",
    "compare": "render-tests/?batch=corpus#arxiv-2604.27966"
-  },
-  {
-   "id": "arxiv-2602.13120",
-   "title": "Scoped MSO, Register Automata, and Expressions: Equivalence over Data Words",
-   "authors": [
-    "Radosław Piórkowski"
-   ],
-   "year": 2026,
-   "venue": "ICALP 2026 (LIPIcs, vol. 374)",
-   "domain": "Computer science",
-   "field": "Theoretical computer science: Automata, logic, semantics and theory of programming",
-   "class": "lipics-v2021 (or a renamed copy)",
-   "packages": [
-    "lipics-v2021",
-    "stackengine",
-    "colonequals",
-    "dcolumn",
-    "xparse"
-   ],
-   "licence": "CC-BY-4.0",
-   "licence_url": "https://creativecommons.org/licenses/by/4.0/",
-   "attribution": "“Scoped MSO, Register Automata, and Expressions: Equivalence over Data Words” by Radosław Piórkowski, arXiv:2602.13120v1 (published in ICALP 2026, LIPIcs vol. 374, 10.4230/LIPIcs.ICALP.2026.188). Licensed under CC BY 4.0. Typeset here by reflowtex from the authors' source, with a recorded patch.",
-   "source_url": "https://arxiv.org/src/2602.13120v1",
-   "original_url": "https://arxiv.org/pdf/2602.13120v1",
-   "original_page": "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ICALP.2026.188",
-   "published": {
-    "venue": "53rd International Colloquium on Automata, Languages, and Programming (ICALP 2026), LIPIcs vol. 374, paper 188",
-    "doi": "10.4230/LIPIcs.ICALP.2026.188",
-    "url": "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ICALP.2026.188"
-   },
-   "arxiv": "2602.13120v1",
-   "bibliography": "bibtex",
-   "status": "displayed",
-   "patched": "The paper's own loop defines \\fa .. \\fz as \\mathfrak letters with \\cs_new and already skips \\fi. lipics-v2021 loads fontawesome5, which defines \\fa, so \\cs_new stops with an error. The paper uses neither \\fa nor any fontawesome icon, so the loop now skips 'a' as it skips 'i'; nothing in the paper changes. The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.",
-   "placement": 0.9997,
-   "absolute": 0.9997,
-   "jumps": 0,
-   "max_jump_pt": 0,
-   "glyphs": 69524,
-   "lost_glyphs": 0,
-   "at_goal": true,
-   "page": "docs/showcase/papers/arxiv-2602.13120/",
-   "compare": "render-tests/?batch=corpus#arxiv-2602.13120"
   },
   {
    "id": "arxiv-2512.04614",
