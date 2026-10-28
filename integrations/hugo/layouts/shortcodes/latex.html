@@ -5,14 +5,14 @@
     inline    {{< latex >}} $e^{i\pi} + 1 = 0$ {{< /latex >}}
     file ref  {{< latex file="01-inline-math.tex" />}}   (self-closing)
 
-  The file ref points at a shared .tex source (resolved by prebuild.py against
+  The file ref points at a shared .tex source (resolved by prebuild.ts against
   its --demos-dir), so the same snippet can feed several integrations. prebuild
   records file→key in hugo.Data.latex_files; the inline form is hashed here.
   An inline block can register in that same lookup with as="name" instead –
   for a snippet with no natural .tex file of its own (a page's short title, a
   handful of one-line labels a sidebar looks up from every page, …) that
   another template wants to find later by name, without a --demos-dir entry
-  per snippet. See prebuild.py's module docstring.
+  per snippet. See the header of prebuild.ts.
 
   Optional attributes (all forwarded to latex-viewer.js as data-* on the block):
     preamble="name"    use latex-preambles/name.tex (inline form; also hashed)
@@ -22,7 +22,7 @@
                        preamble.tex
     as="name"          inline form only: also register under this name in
                        hugo.Data.latex_files, as if it were a file="name" ref
-    color-map="name"   use latex-color-maps/name.json (see prebuild.py); does
+    color-map="name"   use latex-color-maps/name.json (see prebuild.ts); does
                        not affect compilation, so file refs need it repeated
                        per shortcode call the same as any other data-* option.
                        Default: the site's params.latexColorMap, if set
@@ -35,7 +35,7 @@
                        and a .latex-example-source. Side by side when the
                        figure is wide, tabs when narrow (the behaviour is in
                        the viewer partial). A file ref's text comes from
-                       data/latex_sources.json (prebuild.py); a leading SPDX
+                       data/latex_sources.json (prebuild.ts); a leading SPDX
                        comment line is left out
     batch="name"       compile this block together with every other block of
                        the same batch, as ONE LaTeX document (a book's
@@ -61,7 +61,7 @@
     emergency-tolerance, last-line-min, last-line-penalty, max-expand,
     max-shrink, protrusion, expansion.
 
-  Run prebuild.py before `hugo` to populate the data. */ -}}
+  Run prebuild.ts before `hugo` to populate the data. */ -}}
 {{- $file := .Get "file" -}}
 {{- $batch := .Get "batch" -}}
 {{- $key := "" -}}
@@ -77,7 +77,7 @@
     {{- if strings.HasSuffix . ".tex" -}}{{- $pre = index (hugo.Data.latex_sources | default dict) . | default "" -}}
     {{- else -}}{{- $pre = os.ReadFile (printf "latex-preambles/%s.tex" .) -}}{{- end -}}
   {{- end -}}
-  {{- /* Boundaries must match pipeline.content_key and prebuild.batch_key. */ -}}
+  {{- /* Boundaries must match contentKey (pipeline.ts) and batchKey (prebuild.ts). */ -}}
   {{- $hashInput := $inner -}}
   {{- if $batch -}}
     {{- $hashInput = printf "%s\n===REFLOWTEX-BATCH===\n%s\n===REFLOWTEX-PREAMBLE-BOUNDARY===\n%s" $pre $batch $inner -}}

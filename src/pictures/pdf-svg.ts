@@ -31,6 +31,7 @@
 // that more can come with it (the page's text, for a text layer).
 import type * as Mupdf from 'mupdf';
 import { rewritePictureSvg, type Picture } from './rewrite.ts';
+import { g6 } from '../shared/numbers.ts';
 
 export interface PdfSvgOptions {
   /** where mupdf-wasm.wasm is served (default: beside the mupdf package's
@@ -65,9 +66,6 @@ export function dropForbiddenCharRefs(svg: string): string {
 
 /** sqrt(|det|): how much a matrix scales lengths, as MuPDF reckons it. */
 const expansion = (m: Mupdf.Matrix) => Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
-
-/** As C's %g writes a number (6 significant digits), which the writer uses. */
-const g6 = (x: number) => String(Number(x.toPrecision(6)));
 
 const STROKED_GLYPH_RE = /(<use data-text="[^"]*" xlink:href="[^"]*" stroke-width=")([^"]*)(")/g;
 

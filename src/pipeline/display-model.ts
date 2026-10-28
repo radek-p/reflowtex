@@ -9,6 +9,7 @@
 // `*_floor` marks on the gaps that may close only so far. The viewer evaluates
 // them at the reader's width. Every tree walk here is src/shared/tree.ts's.
 import { walk1, some, walkParallel, type ChildKey } from '../shared/tree.ts';
+import { g6 } from '../shared/numbers.ts';
 import type { ContentItem, SerializerOutput, TexNode, FontInfo } from './nodes.ts';
 
 const NODE_GEOMETRY = ['width', 'height', 'depth', 'stretch', 'shrink', 'kern', 'shift',
@@ -28,56 +29,8 @@ const GAP_FIELD: Record<string, string> = { glue: 'width', kern: 'kern', math: '
 type Rec = Record<string, unknown>;
 const num = (o: Rec, k: string): number => (o[k] as number | undefined) ?? 0;
 
-// ── Python's formatting, for messages that read the same ────────────────────
-
-/** Python's `format(x, 'g')`. */
-export function pyG(x: number): string {
-  if (!Number.isFinite(x)) return Number.isNaN(x) ? 'nan' : x > 0 ? 'inf' : '-inf';
-  if (x === 0) return Object.is(x, -0) ? '-0' : '0';
-  const exp = Math.floor(Math.log10(Math.abs(Number(x.toPrecision(6)))));
-  if (exp < -4 || exp >= 6) {
-    const [m, e] = x.toExponential(5).split('e');
-    const mant = m.includes('.') ? m.replace(/0+$/, '').replace(/\.$/, '') : m;
-    const en = Number(e);
-    return `${mant}e${en < 0 ? '-' : '+'}${String(Math.abs(en)).padStart(2, '0')}`;
-  }
-  const s = x.toFixed(Math.max(0, 5 - exp));
-  return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
-}
-
-/** Python's repr() of JSON-shaped data. (A float that happens to be integral
- *  prints as an int: JSON cannot tell 1.0 from 1.) */
-export function pyRepr(v: unknown): string {
-  if (v === null || v === undefined) return 'None';
-  if (v === true) return 'True';
-  if (v === false) return 'False';
-  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : pyFloat(v);
-  if (typeof v === 'string') {
-    const q = v.includes("'") && !v.includes('"') ? '"' : "'";
-    const body = v.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
-      .replace(new RegExp(q, 'g'), `\\${q}`)
-      // what Python counts as not printable (other and separator characters
-      // but the space), escaped as it writes them
-      .replace(/(?! )[\p{C}\p{Z}]/gu, c => {
-        const n = c.codePointAt(0)!, h = n.toString(16);
-        return n <= 0xff ? `\\x${h.padStart(2, '0')}` : n <= 0xffff ? `\\u${h.padStart(4, '0')}` : `\\U${h.padStart(8, '0')}`;
-      });
-    return q + body + q;
-  }
-  if (Array.isArray(v)) return `[${v.map(pyRepr).join(', ')}]`;
-  if (v instanceof Map) return `{${[...v].map(([k, x]) => `${pyRepr(k)}: ${pyRepr(x)}`).join(', ')}}`;
-  return `{${Object.entries(v as Rec).map(([k, x]) => `${pyRepr(k)}: ${pyRepr(x)}`).join(', ')}}`;
-}
-function pyFloat(x: number): string {
-  const s = String(x);
-  const e = Math.floor(Math.log10(Math.abs(x)));
-  if (e < -4 || e >= 16) {
-    const [m, ex] = x.toExponential().split('e');
-    const en = Number(ex);
-    return `${m}e${en < 0 ? '-' : '+'}${String(Math.abs(en)).padStart(2, '0')}`;
-  }
-  return s.includes('e') ? x.toFixed(20).replace(/0+$/, '') : s;
-}
+// Only tools/pageless-pdf/check-against-paged.ts imports pyRepr from here.
+export { pyRepr } from './python-format.ts';
 
 // ── Items ───────────────────────────────────────────────────────────────────
 
@@ -100,7 +53,7 @@ export function topologyError(a: TexNode, b: TexNode, path: string): string | nu
   return walkParallel<TexNode>([a, b], {
     node([x, y], p) {
       const sx = identity(x), sy = identity(y);
-      if (!sameRecord(sx, sy)) return `${p}: node identity changed (${pyRepr(sx)} != ${pyRepr(sy)})`;
+      if (!sameRecord(sx, sy)) return `${p}: node identity changed (${JSON.stringify(sx)} != ${JSON.stringify(sy)})`;
     },
     list(key: ChildKey, [la, lb], p) {
       if (key === 'leader') { if (la.length !== lb.length) return `${p}: presence changed`; }
@@ -126,7 +79,7 @@ export function affineError(a: TexNode, b: TexNode, c: TexNode, xa: number, xb: 
         const va = num(na, f), vb = num(nb, f), vc = num(nc, f);
         const err = affineResidual(va, vb, vc, xa, xb, xc);
         const tol = RATIO_FIELDS.has(f) ? tolRatio * Math.max(1.0, Math.abs(va), Math.abs(vb), Math.abs(vc)) : tolSp;
-        if (err > tol) return `${p}.${f}: non-affine residual ${pyG(err)} (tolerance ${pyG(tol)})`;
+        if (err > tol) return `${p}.${f}: non-affine residual ${g6(err)} (tolerance ${g6(tol)})`;
       }
     },
   }, path);
@@ -148,7 +101,7 @@ export function checkSamples(a: SerializerOutput, b: SerializerOutput, c: Serial
     if (err) return [false, err];
     for (const f of ITEM_GEOMETRY) {
       const r = affineResidual(num(ia, f), num(ib, f), num(ic, f), xa, xb, xc);
-      if (r > 3) return [false, `display[${i}].${f}: non-affine residual ${pyG(r)}`];
+      if (r > 3) return [false, `display[${i}].${f}: non-affine residual ${g6(r)}`];
     }
     const e2 = affineError(ia.box!, ib.box!, ic.box!, xa, xb, xc, `display[${i}].box`);
     if (e2) return [false, e2];

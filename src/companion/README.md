@@ -258,4 +258,4 @@ The sources are TypeScript in [src/](src/), bundled into `companion.js`
 stale; `make build-companion` builds it on demand.
 `make typecheck` checks them against the viewer's host API
 ([src/viewer/src/host/types.ts](../viewer/src/host/types.ts)). Tests:
-`tests/web/test_accordion_v2.py`, `test_companion.py`.
+`tests/web/accordion-v2.spec.ts`, `companion.spec.ts`.
