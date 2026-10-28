@@ -7,7 +7,9 @@
 // tracking and \textls, each character moved right by half the letterspace),
 // whose packets the capture records with the font (serializer.lua, "Virtual
 // fonts LuaTeX made"): its pieces are characters of fonts of the document's
-// font table, by id, each with its box.
+// font table, by id, each with its box. Packets that set no character and
+// no rule draw nothing: such a font is not drawn by them, but stays a font
+// without a face of its own (its glyphs' space and text kept, and a warning).
 // TeX typesets with the virtual face; only the driver (pdfTeX's and LuaTeX's
 // backends, xdvipdfmx) looks inside. A capture sees the virtual face, which
 // the browser cannot draw (its glyphs would stay metric boxes), so each glyph
@@ -181,6 +183,10 @@ export type PacketCommand =
   | ['char', number, number, number, number, number, number?];
 export interface RecordedPacket { char: number; commands: PacketCommand[] }
 
+/** Whether recorded packets draw anything: a character or a rule. */
+const drawsSomething = (packets: RecordedPacket[]): boolean =>
+  packets.some(p => p.commands.some(c => c[0] === 'char' || c[0] === 'rule'));
+
 /** What character `char` of font `id` draws by the packet the capture
  *  recorded for it, local fonts that are virtual again followed through
  *  (recorded too, or a classic face's .vf); null when the font has no
@@ -232,7 +238,10 @@ const GLYPH_OWN = new Set(['type', 'char', 'font', 'gindex', 'width', 'height', 
 export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit: (n: Node) => void) => void,
                                     files: FontFiles): number {
   const virtual = new Map<string, FontEntry>();
-  for (const [id, f] of fonts) if (f.packets || (f.face.kind === 'tfm' && files.vf(f.name))) virtual.set(id, f);
+  for (const [id, f] of fonts) {
+    const recorded = f.packets as RecordedPacket[] | undefined;
+    if ((recorded && drawsSomething(recorded)) || (f.face.kind === 'tfm' && files.vf(f.name))) virtual.set(id, f);
+  }
   if (!virtual.size) return 0;
   let next = Math.max(0, ...[...fonts.keys()].map(Number).filter(Number.isFinite)) + 1;
   const ids = new Map<string, string>();
