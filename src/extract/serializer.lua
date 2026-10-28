@@ -18,6 +18,9 @@ local SHAPE = {}          -- metatable key: "array" | "object"
 local function json_array(t)  return setmetatable(t or {}, { [SHAPE] = "array" })  end
 local function json_object(t) return setmetatable(t or {}, { [SHAPE] = "object" }) end
 
+local JSON_ESCAPES = { ['"'] = '\\"', ['\\'] = '\\\\', ['\n'] = '\\n', ['\r'] = '\\r', ['\t'] = '\\t' }
+local function json_escape(c) return JSON_ESCAPES[c] or string.format('\\u%04x', c:byte()) end
+
 local function json_encode(val)
     local t = type(val)
     if t == "nil" then
@@ -27,13 +30,9 @@ local function json_encode(val)
     elseif t == "number" then
         return tostring(val)
     elseif t == "string" then
-        return '"' ..
-            val:gsub('\\', '\\\\')
-               :gsub('"',  '\\"')
-               :gsub('\n', '\\n')
-               :gsub('\r', '\\r')
-               :gsub('\t', '\\t')
-            .. '"'
+        -- JSON wants every character below U+0020 escaped, not only the three
+        -- with a short form (a missing \char1 is named in a string)
+        return '"' .. val:gsub('[%c"\\]', json_escape) .. '"'
     elseif t == "table" then
         local mt = getmetatable(val)
         local shape = mt and mt[SHAPE]

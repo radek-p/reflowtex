@@ -525,6 +525,13 @@ test('a METAFONT-only font (bbm) is drawn from its bitmaps, as double-struck let
   assert.deepEqual(drawnGlyphNames(d).filter(([face]) => face.startsWith('bbm')).map(([, g]) => g), ['g82', 'g49', 'g78']);
 });
 
+// A string in output.json may hold any character: one below U+0020 is
+// escaped, as JSON wants (here a missing \char1, named with the words around it).
+test('a control character in a string: output.json is valid JSON', async () => {
+  const d = await capture('Before \\char1 after.') as Output & { missing_chars: { char: number; where: string[] }[] };
+  assert.deepEqual(d.missing_chars.map(m => [m.char, m.where[0]]), [[1, 'Before \u0001after.']]);
+});
+
 // A character the font lacks ("Missing character" in TeX's log) is drawn by
 // nothing in TeX's PDF; luaotfload sets the OpenType font's .notdef after it.
 // Both become empty boxes of their size, and the block's warnings list the
