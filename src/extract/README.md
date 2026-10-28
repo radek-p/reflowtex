@@ -7,13 +7,13 @@ This stage turns a LaTeX document or snippet into `output.json`, the finished no
   the font lookup, the serializer and the picture capture, and loads no package:
   `\DocumentMetadata` may still follow, and the document's own options for the
   packages it loads are the only ones. What needs the class runs at the end of
-  the outermost class (floats and captions); the graphics record is installed
-  when graphics is loaded (`package/graphics/after`).
+  the outermost class (floats and captions).
 - **`reflowtex-capture-late.tex`** is read at `begindocument/before`, after the
   document's whole preamble, as the document's own code: the wrappers that must
   see a package's redefinitions (references, labels, footnotes, the outline, the
-  TikZ capture when TikZ is loaded, `\marginpar`), the one-column layout and the
-  width increment. Its `\AtBeginDocument` code runs after every package's.
+  TikZ capture when TikZ is loaded, the graphics record when graphics is,
+  `\marginpar`), the one-column layout and the width increment. Its
+  `\AtBeginDocument` code runs after every package's.
 - **`serializer.lua`** walks LuaTeX's node list and writes `output.json`.
 
 ## Hooks the capture installs

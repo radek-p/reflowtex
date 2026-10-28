@@ -28,9 +28,9 @@ lualatex compiles a driver (`reflowtex-driver.tex`), not the document. The
 driver issues the caller's `\DocumentMetadata` when it applies (below), then
 reads reflowtex's capture code (`src/extract/reflowtex-capture.tex`), then the
 document with the primitive `\input`. The capture code loads no package. What
-it needs from the class, from graphicx or from the preamble it installs through
-LaTeX's hooks: the end of the class, `package/graphics/after` and
-`begindocument/before`, where `reflowtex-capture-late.tex` is read.
+it needs from the class or from the preamble it installs through LaTeX's
+hooks: the end of the class and `begindocument/before`, where
+`reflowtex-capture-late.tex` is read.
 
 The run is set up as the author's own:
 
