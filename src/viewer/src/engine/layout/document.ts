@@ -195,7 +195,7 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
     // Point the glyph-metrics reader at this document's table, and stash it on the
     // cache so paintDocument (which is handed only the cache) reads the same one.
     // fontInfo is stashed too, so the IntersectionObserver – which is handed only a
-    // segment reference – can repaint it (see observeSegments / segIO).
+    // segment reference – can repaint it (see observeSegments, runtime/visibility.ts).
     useGlyphMetrics(doc.glyph_metrics);
     cache.metrics = doc.glyph_metrics;
     cache.sourceWidthSp = doc.source_width || 0;   // the \hsize the paragraphs' widths refer to

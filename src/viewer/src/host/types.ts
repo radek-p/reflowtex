@@ -521,8 +521,9 @@ export interface Host {
     /** Render a block element added after the page loaded (a framework's,
      *  say): one carrying data-nodelist-b64, as the integrations write it.
      *  Resolves when it is laid out: its faces loaded (or failed), and its
-     *  segments within a window's height of the viewport painted, when the
-     *  element is rendered (visibility: hidden counts; display: none does
+     *  segments near the screen painted (within a window's height of the
+     *  viewport, or, in a scroll box of the page's, within the box's height
+     *  of what it shows), when the element is rendered (visibility: hidden counts; display: none does
      *  not, and those are painted once it is shown). So a host may mount a
      *  new result into a hidden element and swap it in at once, with no
      *  frame drawn without its text. A block already rendered resolves at
