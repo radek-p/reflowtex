@@ -190,13 +190,21 @@ test('display samples: the document\'s own errors again at a wider width are no 
   assert.ok(log.records().some(r => r.code === 'display-model-stable'), lines(log));
 });
 
-test('display samples: an error TeX reports at a wider width and not at the document\'s own fails that width (TexError)', async () => {
+// TeX failing at a width, for the display samples: no usable output there, or
+// an error there that TeX does not report at the document's own width (its
+// node list is TeX's repair of the text, not the text). Either way the width
+// is replaced by the widest below it that compiles (sampleDisplays).
+test('display samples: an error TeX reports at a wider width and not at the document\'s own fails that width; the sample is taken below it', async () => {
   const wide: Diagnostic = { severity: 'error', message: 'Too wide.', file: './reflowtex-document.tex', line: 3, count: 1, pass: 1 };
   const b = memoryBackend({ widthResampling: true }, r => output({ display: true, width: 300 * 65536 + r.widthExtraSp }),
     r => (r.widthExtraSp >= 256 * 65536 ? [wide] : []));
-  const { pipe } = pipeline(b);
-  await assert.rejects(pipe.compile('\\[x\\]', { kind: 'snippet', key: 'e4' }), (e: Error) => e instanceof TexError && e.texError === '! Too wide.' &&
-    /TeX reported 1 error\(s\) with the text 256 pt wider that it does not at the document's own width:\n  ! Too wide\./.test(e.message));
+  const { pipe, log } = pipeline(b);
+  await pipe.compile('\\[x\\]', { kind: 'snippet', key: 'e4' });
+  // +256 pt fails; (128, 256) bisected to 4 pt: 192, 224, 240, 248, 252
+  assert.deepEqual(b.runs.map(r => r.widthExtraSp / 65536), [0, 128, 256, 192, 224, 240, 248, 252]);
+  assert.deepEqual(log.records().filter(r => r.level === 'warning').map(r => [r.code, r.details.failed, r.details.error, r.details.used]),
+    [['display-sample-replaced', '556', '! Too wide.', '552']], lines(log));
+  assert.deepEqual(log.records().filter(r => r.code === 'display-model-stable').map(r => r.details.widths), ['300, 428, 552']);
 });
 
 test('the kind the caller gives reaches the backend with the preamble and metadata, ', async () => {
