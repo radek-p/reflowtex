@@ -1,8 +1,91 @@
 # Removes \usepackage[all,cmtip,2cell]{xy}, which no file of the paper uses (no \xymatrix, \xy or \ar[...]):
 # with these options xy loads xypdf, which stops under LuaTeX.
+# Also: the paper was written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   ż (U+017C) -> \.z: 4 in the source (55 missing-character lines in the log before)
+#   – (U+2013) -> \textendash: 4 in the source (15 missing-character lines in the log before)
+#   ’ (U+2019) -> \textquoteright: 1 in the source (3 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
 # The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/icalp.bib
++++ b/icalp.bib
+@@ -131,7 +131,7 @@
+   url          = {https://ruor.uottawa.ca/items/80895bb8-8e36-4f26-b08f-2726f8d2a581},
+ }
+ 
+-@article{Joyal:1996:Traced, title={Traced monoidal categories}, volume={119}, DOI={10.1017/S0305004100074338}, number={3}, journal={Mathematical Proceedings of the Cambridge Philosophical Society}, author={Joyal, André and Street, Ross and Verity, Dominic}, year={1996}, pages={447–468}}
++@article{Joyal:1996:Traced, title={Traced monoidal categories}, volume={119}, DOI={10.1017/S0305004100074338}, number={3}, journal={Mathematical Proceedings of the Cambridge Philosophical Society}, author={Joyal, André and Street, Ross and Verity, Dominic}, year={1996}, pages={447{\textendash}468}}
+ 
+ @article{Baldan:2018:Coalgebraic,
+   author       = {Paolo Baldan and
+@@ -236,7 +236,7 @@
+ abstract = {Since a nondeterministic and concurrent program may, in general, communicate repeatedly with its environment, its meaning cannot be presented naturally as an input/output function (as is often done in the denotational approach to semantics). In this paper, an alternative is put forth. First, a definition is given of what it is for two programs or program parts to be equivalent for all observers; then two program parts are said to be observation congruent if they are, in all program contexts, equivalent. The behavior of a program part, that is, its meaning, is defined to be its observation congruence class.The paper demonstrates, for a sequence of simple languages expressing finite (terminating) behaviors, that in each case observation congruence can be axiomatized algebraically. Moreover, with the addition of recursion and another simple extension, the algebraic language described here becomes a calculus for writing and specifying concurrent programs and for proving their properties.},
+ journal = {J. ACM},
+ month = jan,
+-pages = {137–161},
++pages = {137{\textendash}161},
+ numpages = {25}
+ }
+ 
+@@ -771,13 +771,13 @@
+ publisher = {Academic Press Professional, Inc.},
+ address = {USA},
+ volume = {57},
+-number = {2–3},
++number = {2{\textendash}3},
+ issn = {0019-9958},
+ url = {https://doi.org/10.1016/S0019-9958(83)80039-4},
+ doi = {10.1016/S0019-9958(83)80039-4},
+ journal = {Inf. Control},
+ month = may,
+-pages = {102–124},
++pages = {102{\textendash}124},
+ numpages = {23}
+ }
+ 
+--- a/icalp.tex
++++ b/icalp.tex
+@@ -47,15 +47,15 @@
+ %
+ % \author{Joan R. Public\footnote{Optional footnote, e.g. to mark corresponding author}}{Department of Informatics, Dummy College, [optional: Address], Country}{joanrpublic@dummycollege.org}{[orcid]}{[funding]}
+ % \author{ }{ }{ }{ }{ }
+-\author{Wojciech Różowski}{Lean FRO, United Kingdom\and \url{https://wkrozowski.github.io}}{wojciech@lean-fro.org}{https://orcid.org/0000-0002-8241-7277}{}
++\author{Wojciech Ró{\.z}owski}{Lean FRO, United Kingdom\and \url{https://wkrozowski.github.io}}{wojciech@lean-fro.org}{https://orcid.org/0000-0002-8241-7277}{}
+ \author{Robin Piedeleu}{Department of Computer Science, University College London, United Kingdom\and \url{https://piedeleu.com}}{r.piedeleu@ucl.ac.uk}{https://orcid.org/0000-0002-3945-2704}{}
+ \author{Alexandra Silva}{Department of Computer Science, Cornell University, United States of America\and \url{https://alexandrasilva.org}}{alexandra.silva@cornell.edu}{https://orcid.org/0000-0001-5014-9784}{}
+ \author{Fabio Zanasi}{Department of Computer Science, University College London, United Kingdom\and \url{https://fzanasi.github.io}}{f.zanasi@ucl.ac.uk}{https://orcid.org/0000-0001-6457-1345}{}
+-\authorrunning{Różowski et al.} %TODO mandatory. First: Use abbreviated first/middle names. Second (only in severe cases): Use first author plus 'et al.'
++\authorrunning{Ró{\.z}owski et al.} %TODO mandatory. First: Use abbreviated first/middle names. Second (only in severe cases): Use first author plus 'et al.'
+ % \authorrunning{Anonymous authors} %TODO mandatory. First: Use abbreviated first/middle names. Second (only in severe cases): Use first author plus 'et al.'
+ 
+ 
+-\Copyright{Wojciech Różowski, Robin Piedleu, Alexandra Silva, and Fabio Zanasi} %TODO mandatory, please use full first names. LIPIcs license is "CC-BY";  http://creativecommons.org/licenses/by/3.0/
++\Copyright{Wojciech Ró{\.z}owski, Robin Piedleu, Alexandra Silva, and Fabio Zanasi} %TODO mandatory, please use full first names. LIPIcs license is "CC-BY";  http://creativecommons.org/licenses/by/3.0/
+ 
+ \begin{CCSXML}
+ <ccs2012>
+@@ -78,9 +78,9 @@
+ %\supplement{}%optional, e.g. related research data, source code, ... hosted on a repository like zenodo, figshare, GitHub, ...
+ %\supplementdetails[linktext={opt. text shown instead of the URL}, cite=DBLP:books/mk/GrayR93, subcategory={Description, Subcategory}, swhid={Software Heritage Identifier}]{General Classification (e.g. Software, Dataset, Model, ...)}{URL to related version} %linktext, cite, and subcategory are optional
+ 
+-\funding{ This work was partially supported by ERC grant Autoprobe (no. 101002697; Różowski, Piedeleu and Silva) and ARIA Safeguarded AI programme (Zanasi).}%optional, to capture a funding statement, which applies to all authors. Please enter author specific funding statements as fifth argument of the \author macro.
++\funding{ This work was partially supported by ERC grant Autoprobe (no. 101002697; Ró{\.z}owski, Piedeleu and Silva) and ARIA Safeguarded AI programme (Zanasi).}%optional, to capture a funding statement, which applies to all authors. Please enter author specific funding statements as fifth argument of the \author macro.
+ 
+-\acknowledgements{The authors are grateful to Filippo Bonchi, Florence Clerc, Clemens Kupke, and Ralph Sarkis for valuable discussions that refined the paper’s presentation.}
++\acknowledgements{The authors are grateful to Filippo Bonchi, Florence Clerc, Clemens Kupke, and Ralph Sarkis for valuable discussions that refined the paper{\textquoteright}s presentation.}
+ 
+ \nolinenumbers %uncomment to disable line numbering
+ 
 --- a/macros.tex
 +++ b/macros.tex
-@@ -13 +13 @@
+@@ -10,7 +10,7 @@
+ \usepackage{bm}
+ %\usepackage[backend=bibtex,firstinits=true]{biblatex}
+ %\usepackage[svgnames]{xcolor}
 -\usepackage[all,cmtip,2cell]{xy}
 +% \usepackage[all,cmtip,2cell]{xy}  (removed for the test corpus: unused, and its xypdf needs pdfTeX)
+ \usepackage{enumerate}
+ \usepackage{graphicx}
+ \usepackage{stmaryrd}

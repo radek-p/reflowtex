@@ -1,0 +1,30 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   Ł (U+0141) -> \L: 1 in the source (3 missing-character lines in the log before)
+#   ł (U+0142) -> \l: 2 in the source (8 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/main__22_.tex
++++ b/main__22_.tex
+@@ -72,7 +72,7 @@
+ 
+ \title{Theta-duality and Prym-Torelli for cyclic covers of hyperelliptic curves}
+ \author[A. Shatsila]{Anatoli Shatsila}
+-\address{\textit{Anatoli Shatsila} \newline Doctoral School of Exact and Natural Sciences, Jagiellonian University in Krak\'ow, ul. prof. Stanisława Łojasiewicza 6, 
++\address{\textit{Anatoli Shatsila} \newline Doctoral School of Exact and Natural Sciences, Jagiellonian University in Krak\'ow, ul. prof. Stanis{\l}awa {\L}ojasiewicza 6, 
+ 30-348 Kraków, Poland}
+ \email{anatoli.shatsila@doctoral.uj.edu.pl}
+ \subjclass[2020]{14H30, 14H40, 14H45, 14K12}
+--- a/references.bib
++++ b/references.bib
+@@ -53,7 +53,7 @@
+ 
+ @misc{BNOS,
+       title={Finiteness and injectivity of Prym maps for cyclic coverings}, 
+-      author={Paweł Borówka and Juan Carlos Naranjo and Angela Ortega and Anatoli Shatsila},
++      author={Pawe{\l} Borówka and Juan Carlos Naranjo and Angela Ortega and Anatoli Shatsila},
+       year={arXiv 2510.01330, 2026},
+       eprint={2510.01330},
+       archivePrefix={arXiv},

@@ -1,0 +1,30 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   – (U+2013) -> \textendash: 1 in the source (3 missing-character lines in the log before)
+#   ﬀ (U+FB00) -> ff: 1 in the source (4 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/improved_RPC_ArXiv.bbl
++++ b/improved_RPC_ArXiv.bbl
+@@ -164,7 +164,7 @@
+ Michael Dinitz and Caleb Robelle.
+ \newblock {Efficient and Simple Algorithms for Fault-Tolerant Spanners}.
+ \newblock In {\em Proceedings of the 39th Symposium on Principles of
+-  Distributed Computing (PODC)}, page 493–500, 2020.
++  Distributed Computing (PODC)}, page 493{\textendash}500, 2020.
+ \newblock \href {https://doi.org/10.1145/3382734.3405735}
+   {\path{doi:10.1145/3382734.3405735}}.
+ 
+--- a/improved_RPC_ArXiv.tex
++++ b/improved_RPC_ArXiv.tex
+@@ -1222,7 +1222,7 @@
+ The size of the subfamily $\G_F$ is $K = O(fe^f(L/f)^{o(1)} \ln n)$ in the worst case.
+ However, with high probability the number of subgraphs relevant to a query $F$ is smaller.
+ In~\autoref{lem:correctness}, we showed that in any tree $T_i$ the probability of finding a leaf node $x$ satisfying $F \subseteq A_x$ is $(1{-}\frac{1}{e})^h = 1/C^h$. Thus, the expected size of ${\cal G}_F$ is $K/C^h=O(fe^f\log n)$. Further recall that each $T_i$ adds a graph to ${\cal G}_F$ independently of other trees. 
+-Applying a standard Chernoﬀ bound
++Applying a standard Chernoff bound
+ shows that also with high probability $\G_F$ contains $O(fe^f\log n)$ graphs.
+ 
+ 

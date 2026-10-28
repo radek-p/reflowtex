@@ -1,0 +1,46 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   – (U+2013) -> \textendash: 3 in the source (9 missing-character lines in the log before)
+#   ’ (U+2019) -> \textquoteright: 2 in the source (8 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/main.tex
++++ b/main.tex
+@@ -687,7 +687,7 @@
+ 
+ 
+ 
+-Bogomol'nyi–Prasad–Sommerfield Bound can be achieved via \cite{BPST}, \cite{BPST2}:
++Bogomol'nyi{\textendash}Prasad{\textendash}Sommerfield Bound can be achieved via \cite{BPST}, \cite{BPST2}:
+ \begin{dmath}
+ S=-\frac{1}{2g^2} \int d^4 {x} \Tr_N \{F^2\} = -\frac{1}{4g^2} \int d^4 {x} \Tr_N \{(F \mp F^*)^2\} \mp \frac{1}{2g^2} \int d^4 {x} \Tr_N \{F{F^*}\} \geq \mp \frac{1}{2g^2} \int d^4 {x} \Tr{F F^*} = \frac{8 {\pi}^2}{g^2} (\pm k)
+ \end{dmath}
+@@ -6416,7 +6416,7 @@
+ \bibitem[6]{SYM Constrained instantons}
+ N. K. Nielsen (2018), Instanton constraints in supersymmetric gauge theories I. Supersymmetric QCD \href{https://arxiv.org/pdf/hep-th/0503119}{hep-th/0503119}, Instanton constraints in supersymmetric gauge theories II. {$N=2$} Yang-Mills theory \href{https://arxiv.org/pdf/hep-th/0503120}{hep-th/0503120}
+ \bibitem[7]{EM duality}
+-J. M. Figueroa-O’Farrill (1998), \href{https://webhomes.maths.ed.ac.uk/~jmf/Teaching/Lectures/EDC.pdf}{Electromagnetic Duality for Children}: The University of Edinburgh 
++J. M. Figueroa-O{\textquoteright}Farrill (1998), \href{https://webhomes.maths.ed.ac.uk/~jmf/Teaching/Lectures/EDC.pdf}{Electromagnetic Duality for Children}: The University of Edinburgh 
+ \bibitem[8]{Projective Vector Field}
+ R. A. Poor (1991), Differential Geometric Structures: American Mathematical Society
+ \bibitem[9]{NSD YM Instantons}
+@@ -6459,7 +6459,7 @@
+ \bibitem[27]{Instanton Calculus}
+ N. Dorey, T. J. Hollowood, V. V. Khoze, M. P. Mattis (2002), The Calculus of Many Instantons \href{https://arxiv.org/abs/hep-th/0206063}{arXiv:hep-th/0206063}
+ \bibitem[28]{Modular curves}
+-A. Soliman (?), \href{http://math.uchicago.edu/~may/REU2021/REUPapers/Soliman.pdf}{A Beginner’s guide to modular curves}: The University of Chicago Department of Mathematics 
++A. Soliman (?), \href{http://math.uchicago.edu/~may/REU2021/REUPapers/Soliman.pdf}{A Beginner{\textquoteright}s guide to modular curves}: The University of Chicago Department of Mathematics 
+ \bibitem[29]{Breaking SUSY}
+ O. Aharony, N. Seiberg, Y. Tachikawa (2022), Reading between the lines of four-dimensional gauge theories \href{https://arxiv.org/abs/1305.0318}{arXiv:1305.0318}
+ \bibitem[30]{Non-commutative GT}
+@@ -6507,7 +6507,7 @@
+ Al. B. Zamolodchikov (1987), \href{https://link.springer.com/article/10.1007/BF01022967}{Conformal symmetry in two-dimensional space: Recursion representation of conformal block}
+ 
+ \bibitem[51]{ZM2}
+-Al. B. Zamolodchikov (1984), \href{https://link.springer.com/article/10.1007/BF01214585}{Conformal symmetry in two dimensions: An explicit recurrence formula for the conformal partial wave amplitude}: Commun.Math. Phys. 96, 419–422 
++Al. B. Zamolodchikov (1984), \href{https://link.springer.com/article/10.1007/BF01214585}{Conformal symmetry in two dimensions: An explicit recurrence formula for the conformal partial wave amplitude}: Commun.Math. Phys. 96, 419{\textendash}422 
+ 
+ \bibitem[52]{Tachikawa}
+ 

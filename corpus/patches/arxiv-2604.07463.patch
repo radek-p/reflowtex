@@ -1,0 +1,18 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   ’ (U+2019) -> \textquoteright: 1 in the source (4 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/paperJHEP_current.tex
++++ b/paperJHEP_current.tex
+@@ -602,7 +602,7 @@
+ 
+ 
+ \begin{acknowledgments}
+-We thank Costas Bachas, Marco Meineri, Mihail Mintchev and Baishali Roy for valuable discussions and comments on the manuscript. AC, AM and MM acknowledge support from FONDECYT postdoctoral grant no. 3230222, FONDECYT regular grant no. 1240955 and ``Doctorado Nacional'' grant no. 21250596 of La Agencia Nacional de Investigaci\'{o}n y Desarrollo (ANID), Chile, respectively. TK is supported by a Simons Foundation’s fellowship through the Targeted Grant to Instituto Balseiro. AM gratefully acknowledges the hospitality of LPENS, where a substantial part of this work was carried out during his tenure as a CNRS invited professor.
++We thank Costas Bachas, Marco Meineri, Mihail Mintchev and Baishali Roy for valuable discussions and comments on the manuscript. AC, AM and MM acknowledge support from FONDECYT postdoctoral grant no. 3230222, FONDECYT regular grant no. 1240955 and ``Doctorado Nacional'' grant no. 21250596 of La Agencia Nacional de Investigaci\'{o}n y Desarrollo (ANID), Chile, respectively. TK is supported by a Simons Foundation{\textquoteright}s fellowship through the Targeted Grant to Instituto Balseiro. AM gratefully acknowledges the hospitality of LPENS, where a substantial part of this work was carried out during his tenure as a CNRS invited professor.
+ \end{acknowledgments}
+ 
+ \begin{appendix}

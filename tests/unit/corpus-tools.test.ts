@@ -10,9 +10,10 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { writeTar } from '../../tools/lib/tar.ts';
 import { members, unpack } from '../../tools/corpus/archive.ts';
-import { applyPatch, patchReason } from '../../tools/corpus/patch.ts';
+import { applyPatch, parsePatch, patchReason } from '../../tools/corpus/patch.ts';
+import { cached, prepare } from '../../tools/corpus/source.ts';
 import { loaded, notable, type Loaded } from '../../tools/corpus/packages.ts';
-import { checkManifest, safeRelative, loadManifest, type Manifest, type Paper } from '../../tools/corpus/manifest.ts';
+import { checkManifest, safeRelative, loadManifest, CORPUS_DIR, type Manifest, type Paper } from '../../tools/corpus/manifest.ts';
 import { paperEntry, totals, pc, compareLink } from '../../tools/corpus/report.ts';
 import { batchHref, batchRoot, chooseBatch, listed, opening, readBatches, DEFAULT_BATCHES } from '../../tests/render/report/batches.ts';
 
@@ -98,6 +99,18 @@ test('the manifest in the repository passes its checks; a bad one does not', () 
   const twice = structuredClone(m) as Manifest;
   twice.papers.push(twice.papers[0]);
   assert.throws(() => checkManifest(twice), /twice/);
+});
+
+test('every recorded patch exists, parses and says why; where the source is cached, it applies', () => {
+  for (const p of loadManifest().papers.filter(q => q.patch)) {
+    const text = readFileSync(join(CORPUS_DIR, p.patch!), 'utf8');
+    assert.ok(patchReason(text).length > 20, p.id);
+    assert.ok(parsePatch(text).length >= 1, p.id);
+    if (!existsSync(cached(p.source.sha256))) continue;
+    const d = tmp();
+    try { assert.ok(prepare(p, readFileSync(cached(p.source.sha256)), join(d, 'src')).patched.length >= 1, p.id); }
+    finally { rmSync(d, { recursive: true, force: true }); }
+  }
 });
 
 test('a paper\'s entry: displayed with its scores, or stopped with why; the totals', () => {

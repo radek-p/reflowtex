@@ -1,0 +1,146 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   Ł (U+0141) -> \L: 3 in the source (4 missing-character lines in the log before)
+#   Ż (U+017B) -> \.Z: 3 in the source (4 missing-character lines in the log before)
+#   – (U+2013) -> \textendash: 12 in the source (15 missing-character lines in the log before)
+#   “ (U+201C) -> \textquotedblleft: 1 in the source (3 missing-character lines in the log before)
+#   ” (U+201D) -> \textquotedblright: 1 in the source (3 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/PublishedVersion.bbl
++++ b/PublishedVersion.bbl
+@@ -60,7 +60,7 @@
+   \bibfield  {author} {\bibinfo {author} {\bibfnamefont {M.}~\bibnamefont {Herrero-Collantes}}\ and\ \bibinfo {author} {\bibfnamefont {J.~C.}\ \bibnamefont {Garcia-Escartin}},\ }\bibinfo {title} {\emph {Quantum random number generators}},\ \href {https://doi.org/10.1103/RevModPhys.89.015004} {\bibfield  {journal} {\bibinfo  {journal} {Rev. Mod. Phys.}\ }\textbf {\bibinfo {volume} {89}},\ \bibinfo {pages} {015004} (\bibinfo {year} {2017})}\BibitemShut {NoStop}%
+ \bibitem [{\citenamefont {Acín}\ and\ \citenamefont {Masanes}(2016)}]{Acin2016}%
+   \BibitemOpen
+-  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {A.}~\bibnamefont {Acín}}\ and\ \bibinfo {author} {\bibfnamefont {L.}~\bibnamefont {Masanes}},\ }\bibinfo {title} {\emph {Certified randomness in quantum physics}},\ \href {https://doi.org/10.1038/nature20119} {\bibfield  {journal} {\bibinfo  {journal} {Nature}\ }\textbf {\bibinfo {volume} {540}},\ \bibinfo {pages} {213–219} (\bibinfo {year} {2016})}\BibitemShut {NoStop}%
++  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {A.}~\bibnamefont {Acín}}\ and\ \bibinfo {author} {\bibfnamefont {L.}~\bibnamefont {Masanes}},\ }\bibinfo {title} {\emph {Certified randomness in quantum physics}},\ \href {https://doi.org/10.1038/nature20119} {\bibfield  {journal} {\bibinfo  {journal} {Nature}\ }\textbf {\bibinfo {volume} {540}},\ \bibinfo {pages} {213{\textendash}219} (\bibinfo {year} {2016})}\BibitemShut {NoStop}%
+ \bibitem [{\citenamefont {Myrvold}\ and\ \citenamefont {Christian}(2009)}]{Myrvold_2009}%
+   \BibitemOpen
+   \bibfield  {author} {\bibinfo {author} {\bibfnamefont {W.~C.}\ \bibnamefont {Myrvold}}\ and\ \bibinfo {author} {\bibfnamefont {J.}~\bibnamefont {Christian}},\ }\href {https://doi.org/10.1007/978-1-4020-9107-0} {\emph {\bibinfo {title} {Quantum Reality, Relativistic Causality, and Closing the Epistemic Circle: Essays in Honour of Abner Shimony}}}\ (\bibinfo  {publisher} {Springer Netherlands},\ \bibinfo {year} {2009})\BibitemShut {NoStop}%
+@@ -171,10 +171,10 @@
+   \bibfield  {author} {\bibinfo {author} {\bibfnamefont {R.}~\bibnamefont {Horodecki}}, \bibinfo {author} {\bibfnamefont {P.}~\bibnamefont {Horodecki}}, \bibinfo {author} {\bibfnamefont {M.}~\bibnamefont {Horodecki}},\ and\ \bibinfo {author} {\bibfnamefont {K.}~\bibnamefont {Horodecki}},\ }\bibinfo {title} {\emph {Quantum entanglement}},\ \href {https://doi.org/10.1103/RevModPhys.81.865} {\bibfield  {journal} {\bibinfo  {journal} {Rev. Mod. Phys.}\ }\textbf {\bibinfo {volume} {81}},\ \bibinfo {pages} {865} (\bibinfo {year} {2009})}\BibitemShut {NoStop}%
+ \bibitem [{\citenamefont {G\"{u}hne}\ and\ \citenamefont {Tóth}(2009)}]{Guehne2009}%
+   \BibitemOpen
+-  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {O.}~\bibnamefont {G\"{u}hne}}\ and\ \bibinfo {author} {\bibfnamefont {G.}~\bibnamefont {Tóth}},\ }\bibinfo {title} {\emph {Entanglement detection}},\ \href {https://doi.org/10.1016/j.physrep.2009.02.004} {\bibfield  {journal} {\bibinfo  {journal} {Physics Reports}\ }\textbf {\bibinfo {volume} {474}},\ \bibinfo {pages} {1–75} (\bibinfo {year} {2009})}\BibitemShut {NoStop}%
+-\bibitem [{\citenamefont {Horodecki}\ \emph {et~al.}(2024)\citenamefont {Horodecki}, \citenamefont {Łukasz Rudnicki},\ and\ \citenamefont {Życzkowski}}]{horodecki2024multipartiteentanglement}%
++  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {O.}~\bibnamefont {G\"{u}hne}}\ and\ \bibinfo {author} {\bibfnamefont {G.}~\bibnamefont {Tóth}},\ }\bibinfo {title} {\emph {Entanglement detection}},\ \href {https://doi.org/10.1016/j.physrep.2009.02.004} {\bibfield  {journal} {\bibinfo  {journal} {Physics Reports}\ }\textbf {\bibinfo {volume} {474}},\ \bibinfo {pages} {1{\textendash}75} (\bibinfo {year} {2009})}\BibitemShut {NoStop}%
++\bibitem [{\citenamefont {Horodecki}\ \emph {et~al.}(2024)\citenamefont {Horodecki}, \citenamefont {{\L}ukasz Rudnicki},\ and\ \citenamefont {{\.Z}yczkowski}}]{horodecki2024multipartiteentanglement}%
+   \BibitemOpen
+-  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {P.}~\bibnamefont {Horodecki}}, \bibinfo {author} {\bibnamefont {Łukasz Rudnicki}},\ and\ \bibinfo {author} {\bibfnamefont {K.}~\bibnamefont {Życzkowski}},\ }\href {https://doi.org/10.48550/ARXIV.2409.04566} {\bibinfo {title} {\emph {Multipartite entanglement}}} (\bibinfo {year} {2024}),\ \Eprint{https://arxiv.org/abs/2409.04566} {arXiv:2409.04566 [quant-ph]} \BibitemShut {NoStop}%
++  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {P.}~\bibnamefont {Horodecki}}, \bibinfo {author} {\bibnamefont {{\L}ukasz Rudnicki}},\ and\ \bibinfo {author} {\bibfnamefont {K.}~\bibnamefont {{\.Z}yczkowski}},\ }\href {https://doi.org/10.48550/ARXIV.2409.04566} {\bibinfo {title} {\emph {Multipartite entanglement}}} (\bibinfo {year} {2024}),\ \Eprint{https://arxiv.org/abs/2409.04566} {arXiv:2409.04566 [quant-ph]} \BibitemShut {NoStop}%
+ \bibitem [{\citenamefont {Luo}(2020)}]{Luo2020}%
+   \BibitemOpen
+   \bibfield  {author} {\bibinfo {author} {\bibfnamefont {M.}~\bibnamefont {Luo}},\ }\bibinfo {title} {\emph {New genuinely multipartite entanglement}},\ \bibfield  {journal} {\bibinfo  {journal} {Advanced Quantum Technologies}\ }\textbf {\bibinfo {volume} {4}},\ \href {https://doi.org/10.1002/qute.202000123} {10.1002/qute.202000123} (\bibinfo {year} {2020})\BibitemShut {NoStop}%
+@@ -207,7 +207,7 @@
+   \bibfield  {author} {\bibinfo {author} {\bibfnamefont {R.~F.}\ \bibnamefont {Werner}},\ }\bibinfo {title} {\emph {Optimal cloning of pure states}},\ \href {https://doi.org/10.1103/PhysRevA.58.1827} {\bibfield  {journal} {\bibinfo  {journal} {Phys. Rev. A}\ }\textbf {\bibinfo {volume} {58}},\ \bibinfo {pages} {1827} (\bibinfo {year} {1998})}\BibitemShut {NoStop}%
+ \bibitem [{\citenamefont {Ali}\ \emph {et~al.}(2009)\citenamefont {Ali}, \citenamefont {Carmeli}, \citenamefont {Heinosaari},\ and\ \citenamefont {Toigo}}]{Ali2009}%
+   \BibitemOpen
+-  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {S.~T.}\ \bibnamefont {Ali}}, \bibinfo {author} {\bibfnamefont {C.}~\bibnamefont {Carmeli}}, \bibinfo {author} {\bibfnamefont {T.}~\bibnamefont {Heinosaari}},\ and\ \bibinfo {author} {\bibfnamefont {A.}~\bibnamefont {Toigo}},\ }\bibinfo {title} {\emph {Commutative povms and fuzzy observables}},\ \href {https://doi.org/10.1007/s10701-009-9292-y} {\bibfield  {journal} {\bibinfo  {journal} {Foundations of Physics}\ }\textbf {\bibinfo {volume} {39}},\ \bibinfo {pages} {593–612} (\bibinfo {year} {2009})}\BibitemShut {NoStop}%
++  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {S.~T.}\ \bibnamefont {Ali}}, \bibinfo {author} {\bibfnamefont {C.}~\bibnamefont {Carmeli}}, \bibinfo {author} {\bibfnamefont {T.}~\bibnamefont {Heinosaari}},\ and\ \bibinfo {author} {\bibfnamefont {A.}~\bibnamefont {Toigo}},\ }\bibinfo {title} {\emph {Commutative povms and fuzzy observables}},\ \href {https://doi.org/10.1007/s10701-009-9292-y} {\bibfield  {journal} {\bibinfo  {journal} {Foundations of Physics}\ }\textbf {\bibinfo {volume} {39}},\ \bibinfo {pages} {593{\textendash}612} (\bibinfo {year} {2009})}\BibitemShut {NoStop}%
+ \bibitem [{\citenamefont {Fine}(1982)}]{PhysRevLett.48.291}%
+   \BibitemOpen
+   \bibfield  {author} {\bibinfo {author} {\bibfnamefont {A.}~\bibnamefont {Fine}},\ }\bibinfo {title} {\emph {Hidden variables, joint probability, and the bell inequalities}},\ \href {https://doi.org/10.1103/PhysRevLett.48.291} {\bibfield  {journal} {\bibinfo  {journal} {Phys. Rev. Lett.}\ }\textbf {\bibinfo {volume} {48}},\ \bibinfo {pages} {291} (\bibinfo {year} {1982})}\BibitemShut {NoStop}%
+@@ -219,7 +219,7 @@
+   \bibfield  {author} {\bibinfo {author} {\bibfnamefont {P.}~\bibnamefont {Busch}},\ }\bibinfo {title} {\emph {Unsharp reality and joint measurements for spin observables}},\ \href {https://doi.org/10.1103/PhysRevD.33.2253} {\bibfield  {journal} {\bibinfo  {journal} {Phys. Rev. D}\ }\textbf {\bibinfo {volume} {33}},\ \bibinfo {pages} {2253} (\bibinfo {year} {1986})}\BibitemShut {NoStop}%
+ \bibitem [{\citenamefont {Haapasalo}\ \emph {et~al.}(2011)\citenamefont {Haapasalo}, \citenamefont {Heinosaari},\ and\ \citenamefont {Pellonp\"{a}\"{a}}}]{Haapasalo2011QuantumMeasurements}%
+   \BibitemOpen
+-  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {E.}~\bibnamefont {Haapasalo}}, \bibinfo {author} {\bibfnamefont {T.}~\bibnamefont {Heinosaari}},\ and\ \bibinfo {author} {\bibfnamefont {J.-P.}\ \bibnamefont {Pellonp\"{a}\"{a}}},\ }\bibinfo {title} {\emph {Quantum measurements on finite dimensional systems: relabeling and mixing}},\ \href {https://doi.org/10.1007/s11128-011-0330-2} {\bibfield  {journal} {\bibinfo  {journal} {Quantum Information Processing}\ }\textbf {\bibinfo {volume} {11}},\ \bibinfo {pages} {1751–1763} (\bibinfo {year} {2011})}\BibitemShut {NoStop}%
++  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {E.}~\bibnamefont {Haapasalo}}, \bibinfo {author} {\bibfnamefont {T.}~\bibnamefont {Heinosaari}},\ and\ \bibinfo {author} {\bibfnamefont {J.-P.}\ \bibnamefont {Pellonp\"{a}\"{a}}},\ }\bibinfo {title} {\emph {Quantum measurements on finite dimensional systems: relabeling and mixing}},\ \href {https://doi.org/10.1007/s11128-011-0330-2} {\bibfield  {journal} {\bibinfo  {journal} {Quantum Information Processing}\ }\textbf {\bibinfo {volume} {11}},\ \bibinfo {pages} {1751{\textendash}1763} (\bibinfo {year} {2011})}\BibitemShut {NoStop}%
+ \bibitem [{\citenamefont {Oszmaniec}\ \emph {et~al.}(2017)\citenamefont {Oszmaniec}, \citenamefont {Guerini}, \citenamefont {Wittek},\ and\ \citenamefont {Ac\'{\i}n}}]{Osmaniec2017Simulating}%
+   \BibitemOpen
+   \bibfield  {author} {\bibinfo {author} {\bibfnamefont {M.}~\bibnamefont {Oszmaniec}}, \bibinfo {author} {\bibfnamefont {L.}~\bibnamefont {Guerini}}, \bibinfo {author} {\bibfnamefont {P.}~\bibnamefont {Wittek}},\ and\ \bibinfo {author} {\bibfnamefont {A.}~\bibnamefont {Ac\'{\i}n}},\ }\bibinfo {title} {\emph {Simulating positive-operator-valued measures with projective measurements}},\ \href {https://doi.org/10.1103/PhysRevLett.119.190501} {\bibfield  {journal} {\bibinfo  {journal} {Phys. Rev. Lett.}\ }\textbf {\bibinfo {volume} {119}},\ \bibinfo {pages} {190501} (\bibinfo {year} {2017})}\BibitemShut {NoStop}%
+@@ -237,7 +237,7 @@
+   \bibfield  {author} {\bibinfo {author} {\bibfnamefont {M.~M.}\ \bibnamefont {Wolf}}, \bibinfo {author} {\bibfnamefont {D.}~\bibnamefont {Perez-Garcia}},\ and\ \bibinfo {author} {\bibfnamefont {C.}~\bibnamefont {Fernandez}},\ }\bibinfo {title} {\emph {Measurements incompatible in quantum theory cannot be measured jointly in any other no-signaling theory}},\ \href {https://doi.org/10.1103/PhysRevLett.103.230402} {\bibfield  {journal} {\bibinfo  {journal} {Phys. Rev. Lett.}\ }\textbf {\bibinfo {volume} {103}},\ \bibinfo {pages} {230402} (\bibinfo {year} {2009})}\BibitemShut {NoStop}%
+ \bibitem [{\citenamefont {Plávala}(2023)}]{Pl_vala_2023}%
+   \BibitemOpen
+-  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {M.}~\bibnamefont {Plávala}},\ }\bibinfo {title} {\emph {General probabilistic theories: An introduction}},\ \href {https://doi.org/10.1016/j.physrep.2023.09.001} {\bibfield  {journal} {\bibinfo  {journal} {Physics Reports}\ }\textbf {\bibinfo {volume} {1033}},\ \bibinfo {pages} {1–64} (\bibinfo {year} {2023})}\BibitemShut {NoStop}%
++  \bibfield  {author} {\bibinfo {author} {\bibfnamefont {M.}~\bibnamefont {Plávala}},\ }\bibinfo {title} {\emph {General probabilistic theories: An introduction}},\ \href {https://doi.org/10.1016/j.physrep.2023.09.001} {\bibfield  {journal} {\bibinfo  {journal} {Physics Reports}\ }\textbf {\bibinfo {volume} {1033}},\ \bibinfo {pages} {1{\textendash}64} (\bibinfo {year} {2023})}\BibitemShut {NoStop}%
+ \bibitem [{cod(2025)}]{code-repo-R1}%
+   \BibitemOpen
+   \href@noop {} {\bibinfo {title} {\emph {Online repository for code used in the proof of result 1}}},\ \bibinfo {howpublished} {\url{https://github.com/LucasTendick/measurement_simulability}} (\bibinfo {year} {2025})\BibitemShut {NoStop}%
+--- a/PublishedVersion.tex
++++ b/PublishedVersion.tex
+@@ -134,7 +134,7 @@
+ \affiliation[1]{Inria, CPHT, LIX, CNRS, École polytechnique, Institut Polytechnique de Paris, Palaiseau, France}
+ \orcid{https://orcid.org/0000-0001-5210-6710}
+ \author[2]{Costantino Budroni}
+-\affiliation[2]{Department of Physics “E. Fermi”, University of Pisa, Largo B. Pontecorvo 3, 56127 Pisa, Italy}
++\affiliation[2]{Department of Physics {\textquotedblleft}E. Fermi{\textquotedblright}, University of Pisa, Largo B. Pontecorvo 3, 56127 Pisa, Italy}
+ \orcid{0000-0002-6562-7862}
+ \author[3]{Marco Túlio Quintino}
+ \affiliation[3]{Sorbonne Université, CNRS, LIP6, F-75005 Paris, France}
+--- a/bibliography_2.bib
++++ b/bibliography_2.bib
+@@ -1262,7 +1262,7 @@
+  author    = {K.C. Toh and M.J. Todd and R.H. Tutuncu},    
+  title     = {SDPT3 --- a {M}atlab software package for semidefinite programming},
+  howpublished   = {Optimization Methods and Software},
+- pages     = {545–-581},
++ pages     = {545{\textendash}-581},
+  volume    = {11},
+  year      = {1999},
+  url ={https://blog.nus.edu.sg/mattohkc/softwares/sdpt3/},
+@@ -1424,7 +1424,7 @@
+    publisher={Elsevier BV},
+    author={Plávala, Martin},
+    year={2023},
+-   month=sep, pages={1–64} }
++   month=sep, pages={1{\textendash}64} }
+ 
+ @article{Zhu2010,
+   doi = {10.1088/1367-2630/12/8/083002},
+@@ -2285,7 +2285,7 @@
+   author = {Ali,  S. Twareque and Carmeli,  Claudio and Heinosaari,  Teiko and Toigo,  Alessandro},
+   year = {2009},
+   month = mar,
+-  pages = {593–612}
++  pages = {593{\textendash}612}
+ }
+ 
+ @InProceedings{10.1007/978-3-540-24633-6_10,
+@@ -2849,7 +2849,7 @@
+ 
+ @misc{horodecki2024multipartiteentanglement,
+       title={Multipartite entanglement}, 
+-      author={Pawel Horodecki and Łukasz Rudnicki and Karol Życzkowski},
++      author={Pawel Horodecki and {\L}ukasz Rudnicki and Karol {\.Z}yczkowski},
+       year={2024},
+       eprint={2409.04566},
+       archivePrefix={arXiv},
+@@ -2896,13 +2896,13 @@
+   ISSN = {0370-1573},
+   url = {http://dx.doi.org/10.1016/j.physrep.2009.02.004},
+   DOI = {10.1016/j.physrep.2009.02.004},
+-  number = {1–6},
++  number = {1{\textendash}6},
+   journal = {Physics Reports},
+   publisher = {Elsevier BV},
+   author = {G\"{u}hne,  Otfried and Tóth,  Géza},
+   year = {2009},
+   month = apr,
+-  pages = {1–75}
++  pages = {1{\textendash}75}
+ }
+ 
+ @article{PhysRevLett.104.060401,
+@@ -3145,7 +3145,7 @@
+   author = {Acín,  Antonio and Masanes,  Lluis},
+   year = {2016},
+   month = dec,
+-  pages = {213–219}
++  pages = {213{\textendash}219}
+ }
+ 
+ @book{Myrvold_2009,
+@@ -3201,7 +3201,7 @@
+   author = {Haapasalo,  Erkka and Heinosaari,  Teiko and Pellonp\"{a}\"{a},  Juha-Pekka},
+   year = {2011},
+   month = nov,
+-  pages = {1751–1763}
++  pages = {1751{\textendash}1763}
+ }
+ 
+ @article{Osmaniec2017Simulating,

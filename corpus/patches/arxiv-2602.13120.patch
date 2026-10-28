@@ -1,9 +1,54 @@
 # The paper's own loop defines \fa .. \fz as \mathfrak letters with \cs_new and already skips \fi.
 # lipics-v2021 loads fontawesome5, which defines \fa, so \cs_new stops with an error. The paper uses neither \fa
 # nor any fontawesome icon, so the loop now skips 'a' as it skips 'i'; nothing in the paper changes.
+# Also: the paper was written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   ł (U+0142) -> \l: 3 in the source (11 missing-character lines in the log before)
+#   ń (U+0144) -> \'n: 1 in the source (4 missing-character lines in the log before)
+#   – (U+2013) -> \textendash: 1 in the source (4 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
 # The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/bibliography.bib
++++ b/bibliography.bib
+@@ -183,7 +183,7 @@
+     abstract = {Motivated by formal models recently proposed in the context of XML, we study automata and logics on strings over infinite alphabets. These are conservative extensions of classical automata and logics defining the regular languages on finite alphabets. Specifically, we consider register and pebble automata, and extensions of first-order logic and monadic second-order logic. For each type of automaton we consider one-way and two-way variants, as well as deterministic, nondeterministic, and alternating control. We investigate the expressiveness and complexity of the automata and their connection to the logics, as well as standard decision problems. Some of our results answer open questions of Kaminski and Francez on register automata.},
+     journal = {ACM Trans. Comput. Logic},
+     month = jul,
+-    pages = {403–435},
++    pages = {403{\textendash}435},
+     numpages = {33},
+     keywords = {registers, pebbles, monadic second-order logic, infinite alphabets, first-order logic, expressiveness, XML, Automata}
+ }
+@@ -230,7 +230,7 @@
+ 
+ @article{BojanczykKlinLasotaNominalAutomata,
+ title      = {Automata theory in nominal sets},
+-author     = {Mikołaj Bojańczyk and Bartek Klin and Sławomir Lasota},
++author     = {Miko{\l}aj Boja{\'n}czyk and Bartek Klin and S{\l}awomir Lasota},
+ url        = {https://lmcs.episciences.org/1157},
+ doi        = {10.2168/LMCS-10(3:4)2014},
+ journal    = {Logical Methods in Computer Science},
+--- a/cfg/document-config.tex
++++ b/cfg/document-config.tex
+@@ -20,7 +20,7 @@
+ 
+ %\titlerunning{Dummy short title} %TODO optional, please use if title is longer than one line
+ 
+-\author{Radosław Pi{\'{o}}rkowski}{University of Warwick}{radoslaw.piorkowski@warwick.ac.uk}{}{}
++\author{Rados{\l}aw Pi{\'{o}}rkowski}{University of Warwick}{radoslaw.piorkowski@warwick.ac.uk}{}{}
+ 
+ \authorrunning{R. Pi{\'{o}}rkowski} %TODO mandatory. First: Use abbreviated first/middle names. Second (only in severe cases): Use first author plus 'et al.'
+ 
 --- a/cfg/macros-mathmode.tex
 +++ b/cfg/macros-mathmode.tex
-@@ -236 +236 @@
+@@ -233,7 +233,7 @@
+ \seq_set_from_clist:Nn \l_capital_letter_seq {A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z}
+ \seq_map_inline:Nn \l_letter_seq {
+ % \cs_new:cpn { v#1 } { \v{#1} }
 -    \str_if_eq:nnTF { #1 } { i }
 +    \bool_lazy_or:nnTF { \str_if_eq_p:nn { #1 } { i } } { \str_if_eq_p:nn { #1 } { a } }
+     {
+     % Skip defining \fi
+     }

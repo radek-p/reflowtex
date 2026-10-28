@@ -1,0 +1,84 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   č (U+010D) -> \v c: 1 in the source (4 missing-character lines in the log before)
+#   ń (U+0144) -> \'n: 2 in the source (4 missing-character lines in the log before)
+#   ř (U+0159) -> \v r: 1 in the source (4 missing-character lines in the log before)
+#   – (U+2013) -> \textendash: 5 in the source (6 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/references.bib
++++ b/references.bib
+@@ -106,7 +106,7 @@
+ url = {https://doi.org/10.1145/276698.276749},
+ doi = {10.1145/276698.276749},
+ booktitle = {Proceedings of the Thirtieth Annual ACM Symposium on Theory of Computing},
+-pages = {234–240},
++pages = {234{\textendash}240},
+ numpages = {7},
+ location = {Dallas, Texas, USA},
+ series = {STOC '98}
+@@ -569,7 +569,7 @@
+ xxdoi = {10.1145/1013560.1013562},
+ journal = {ACM Trans. Comput. Logic},
+ month = {Jul},
+-pages = {403–435},
++pages = {403{\textendash}435},
+ numpages = {33}
+ }
+ 
+@@ -695,7 +695,7 @@
+ 
+ @article{BL12,
+   TITLE = {{An extension of data automata that captures XPath}},
+-  AUTHOR = {Mikołaj Bojańczyk and Sławomir Lasota},
++  AUTHOR = {Mikołaj Boja{\'n}czyk and Sławomir Lasota},
+   xxURL = {http://lmcs.episciences.org/672},
+   xxDOI = {10.2168/LMCS-8(1:5)2012},
+   JOURNAL = {{Logical Methods in Computer Science}},
+@@ -720,7 +720,7 @@
+ 
+ @misc{GL22,
+       title={Register Set Automata (Technical Report)}, 
+-      author={Sabína Gulčíková and Ondřej Lengál},
++      author={Sabína Gul{\v c}íková and Ond{\v r}ej Lengál},
+       year={2022},
+       eprint={2205.12114},
+       archivePrefix={arXiv},
+@@ -738,7 +738,7 @@
+ doi = {10.1145/1926385.1926420},
+ abstract = {What is a basic automata-theoretic model of computation with names and fresh-name generation? We introduce Fresh-Register Automata (FRA), a new class of automata which operate on an infinite alphabet of names and use a finite number of registers to store fresh names, and to compare incoming names with previously stored ones. These finite machines extend Kaminski and Francez's Finite-Memory Automata by being able to recognise globally fresh inputs, that is, names fresh in the whole current run. We examine the expressivity of FRA's both from the aspect of accepted languages and of bisimulation equivalence. We establish primary properties and connections between automata of this kind, and answer key decidability questions. As a demonstrating example, we express the theory of the pi-calculus in FRA's and characterise bisimulation equivalence by an appropriate, and decidable in the finitary case, notion in these automata.},
+ booktitle = {Proceedings of the 38th Annual ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages},
+-pages = {295–306},
++pages = {295{\textendash}306},
+ numpages = {12},
+ keywords = {register automata, finite-memory automata, computation with fresh-name generation},
+ location = {Austin, Texas, USA},
+@@ -829,7 +829,7 @@
+ publisher = {AAAI Press},
+ abstract = {In this paper we look into the assumption of interpreting LTL over finite traces. In particular we show that LTLf, i.e., LTL under this assumption, is less expressive than what might appear at first sight, and that at essentially no computational cost one can make a significant increase in expressiveness while maintaining the same intuitiveness of LTLf. Indeed, we propose a logic, LDLf for Linear Dynamic Logic over finite traces, which borrows the syntax from Propositional Dynamic Logic (PDL), but is interpreted over finite traces. Satisfiability, validity and logical implication (as well as model checking) for LTLf. are PSPACE-complete as for LTLf. (and LTL).},
+ booktitle = {Proceedings of the Twenty-Third International Joint Conference on Artificial Intelligence},
+-pages = {854–860},
++pages = {854{\textendash}860},
+ numpages = {7},
+ series = {IJCAI '13}
+ }
+@@ -874,7 +874,7 @@
+ xxdoi = {10.1016/j.entcs.2008.12.042},
+ journal = {Electron. Notes Theor. Comput. Sci.},
+ month = {Dec},
+-pages = {239–264},
++pages = {239{\textendash}264},
+ xxnumpages = {26}
+ }
+ 
+@@ -913,7 +913,7 @@
+ }
+ 
+ @INPROCEEDINGS{BL10,
+-  author={Bojańczyk, Mikolaj and Lasota, S{\l}awomir},
++  author={Boja{\'n}czyk, Mikolaj and Lasota, S{\l}awomir},
+   booktitle={{LICS}}, 
+   title={An Extension of Data Automata that Captures XPath}, 
+   year={2010},

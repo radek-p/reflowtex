@@ -1,0 +1,74 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   ł (U+0142) -> \l: 1 in the source (4 missing-character lines in the log before)
+#   – (U+2013) -> \textendash: 5 in the source (7 missing-character lines in the log before)
+#   — (U+2014) -> \textemdash: 1 in the source (5 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/literature.bib
++++ b/literature.bib
+@@ -5504,7 +5504,7 @@
+ 
+ @misc{GorskySW2025polynomialboundsgraphminor,
+       title={Polynomial Bounds for the Graph Minor Structure Theorem}, 
+-      author={Maximilian Gorsky and Michał T. Seweryn and Sebastian Wiederrecht},
++      author={Maximilian Gorsky and Micha{\l} T. Seweryn and Sebastian Wiederrecht},
+       year={2025},
+       eprint={2504.02532},
+       archivePrefix={arXiv},
+@@ -13949,7 +13949,7 @@
+ 
+ @article{Gerards1995Tutt,
+ author = {Gerards, A. M. H.},
+-title = {On Tutt's Characterization of graphic matroids—a graphic proof},
++title = {On Tutt's Characterization of graphic matroids{\textemdash}a graphic proof},
+ journal = {Journal of Graph Theory},
+ volume = {20},
+ number = {3},
+@@ -13972,7 +13972,7 @@
+ doi = {https://doi.org/10.1002/jgt.20037},
+ url = {https://onlinelibrary.wiley.com/doi/abs/10.1002/jgt.20037},
+ eprint = {https://onlinelibrary.wiley.com/doi/pdf/10.1002/jgt.20037},
+-abstract = {Abstract The key to Seymour's Regular Matroid Decomposition Theorem is his result that each 3-connected regular matroid with no R10- or R12-minor is graphic or cographic. We present a proof of this in terms of signed graphs. © 2004 Wiley Periodicals, Inc. J Graph Theory 48: 74–84, 2005},
++abstract = {Abstract The key to Seymour's Regular Matroid Decomposition Theorem is his result that each 3-connected regular matroid with no R10- or R12-minor is graphic or cographic. We present a proof of this in terms of signed graphs. © 2004 Wiley Periodicals, Inc. J Graph Theory 48: 74{\textendash}84, 2005},
+ year = {2005}
+ }
+ 
+@@ -13987,7 +13987,7 @@
+ doi = {10.1145/3055399.3055473},
+ abstract = {We present a strongly polynomial algorithm to solve integer programs of the form max{cT x: Ax≤ b, xεℤn }, for AεℤmXn with rank(A)=n, bε≤m, cε≤n, and where all determinants of (nXn)-sub-matrices of A are bounded by 2 in absolute value. In particular, this implies that integer programs max{cT x : Q x≤ b, xεℤ≥0n}, where Qε ℤmXn has the property that all subdeterminants are bounded by 2 in absolute value, can be solved in strongly polynomial time. We thus obtain an extension of the well-known result that integer programs with constraint matrices that are totally unimodular are solvable in strongly polynomial time.},
+ booktitle = {Proceedings of the 49th Annual ACM SIGACT Symposium on Theory of Computing},
+-pages = {1206–1219},
++pages = {1206{\textendash}1219},
+ numpages = {14},
+ keywords = {Integer programming, bounded subdeterminants, combinatorial optimization, total unimodularity},
+ location = {Montreal, Canada},
+@@ -14107,7 +14107,7 @@
+     doi = {10.1145/322276.322287},
+     journal = {J. ACM},
+     month = oct,
+-    pages = {765–768},
++    pages = {765{\textendash}768},
+     numpages = {4}
+ }
+ 
+@@ -14239,7 +14239,7 @@
+     doi = {10.1145/3313276.3316303},
+     abstract = {This paper shows how to solve linear programs of the form minAx=b,x≥0 c⊤x with n variables in time O*((nω+n2.5−α/2+n2+1/6) log(n/δ)) where ω is the exponent of matrix multiplication, α is the dual exponent of matrix multiplication, and δ is the relative accuracy. For the current value of ω∼2.37 and α∼0.31, our algorithm takes O*(nω log(n/δ)) time. When ω = 2, our algorithm takes O*(n2+1/6 log(n/δ)) time. Our algorithm utilizes several new concepts that we believe may be of independent interest: (1) We define a stochastic central path method. (2) We show how to maintain a projection matrix       √W A⊤(AWA⊤)−1A √W in sub-quadratic time under ℓ2 multiplicative changes in the diagonal matrix W.},
+     booktitle = {Proceedings of the 51st Annual ACM SIGACT Symposium on Theory of Computing},
+-    pages = {938–942},
++    pages = {938{\textendash}942},
+     numpages = {5},
+     keywords = {matrix multiplication, linear program, interior point method},
+     location = {Phoenix, AZ, USA},
+@@ -14303,7 +14303,7 @@
+     author={Schaefer, Marcus and {\v{S}}tefankovi{\v{c}}, Daniel},
+     year={2022},
+     month={Jan.},
+-    pages={35–58}
++    pages={35{\textendash}58}
+ }
+ 
+ @INPROCEEDINGS{DonafeeM2003planarity,

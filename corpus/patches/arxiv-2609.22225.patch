@@ -1,0 +1,104 @@
+# Written for pdfLaTeX: UTF-8 text in an 8-bit font encoding; characters replaced by LaTeX's own definitions
+# (t1enc.dfu, what pdfLaTeX's inputenc gives them), braced where the definition is a command. Under LuaLaTeX
+# these characters reached the 8-bit font unchanged and were lost ("Missing character" in the log).
+# Replaced outside comments, verbatim, listings and URLs:
+#   ć (U+0107) -> \'c: 1 in the source (8 missing-character lines in the log before)
+#   ě (U+011B) -> \v e: 1 in the source (4 missing-character lines in the log before)
+#   ő (U+0151) -> \H o: 1 in the source (5 missing-character lines in the log before)
+#   ’ (U+2019) -> \textquoteright: 12 in the source (5 missing-character lines in the log before)
+# After the change the plain LuaLaTeX build reports none of these characters missing, and its page count is unchanged.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/main.tex
++++ b/main.tex
+@@ -303,7 +303,7 @@
+ 
+ \section*{Supplemental Materials}
+ 
+-This work’s supplemental materials, including questions, model responses, and analysis code, are available at \href{https://github.com/johnathansun/llm-cognitive-choice}{github.com/johnathansun/llm-cognitive-choice}.
++This work{\textquoteright}s supplemental materials, including questions, model responses, and analysis code, are available at \href{https://github.com/johnathansun/llm-cognitive-choice}{github.com/johnathansun/llm-cognitive-choice}.
+ 
+ \section*{Acknowledgments}
+ 
+--- a/references.bib
++++ b/references.bib
+@@ -119,7 +119,7 @@
+ 
+ @article{binz_foundation_2025,
+     title = {A foundation model to predict and capture human cognition},
+-    author = {Binz, Marcel and Akata, Elif and Bethge, Matthias and Brändle, Franziska and Callaway, Fred and Coda-Forno, Julian and Dayan, Peter and Demircan, Can and Eckstein, Maria K. and Éltető, Noémi and Griffiths, Thomas L. and Haridi, Susanne and Jagadish, Akshay K. and Ji-An, Li and Kipnis, Alexander and Kumar, Sreejan and Ludwig, Tobias and Mathony, Marvin and Mattar, Marcelo and Modirshanechi, Alireza and Nath, Surabhi S. and Peterson, Joshua C. and Rmus, Milena and Russek, Evan M. and Saanum, Tankred and Schubert, Johannes A. and Schulze Buschoff, Luca M. and Singhi, Nishad and Sui, Xin and Thalmann, Mirko and Theis, Fabian J. and Truong, Vuong and Udandarao, Vishaal and Voudouris, Konstantinos and Wilson, Robert and Witte, Kristin and Wu, Shuchen and Wulff, Dirk U. and Xiong, Huadong and Schulz, Eric},
++    author = {Binz, Marcel and Akata, Elif and Bethge, Matthias and Brändle, Franziska and Callaway, Fred and Coda-Forno, Julian and Dayan, Peter and Demircan, Can and Eckstein, Maria K. and Éltet{\H o}, Noémi and Griffiths, Thomas L. and Haridi, Susanne and Jagadish, Akshay K. and Ji-An, Li and Kipnis, Alexander and Kumar, Sreejan and Ludwig, Tobias and Mathony, Marvin and Mattar, Marcelo and Modirshanechi, Alireza and Nath, Surabhi S. and Peterson, Joshua C. and Rmus, Milena and Russek, Evan M. and Saanum, Tankred and Schubert, Johannes A. and Schulze Buschoff, Luca M. and Singhi, Nishad and Sui, Xin and Thalmann, Mirko and Theis, Fabian J. and Truong, Vuong and Udandarao, Vishaal and Voudouris, Konstantinos and Wilson, Robert and Witte, Kristin and Wu, Shuchen and Wulff, Dirk U. and Xiong, Huadong and Schulz, Eric},
+     journal = {Nature},
+     volume = {644},
+     number = {8078},
+@@ -128,7 +128,7 @@
+     year = {2025},
+     doi = {10.1038/s41586-025-09215-4},
+     url = {https://www.nature.com/articles/s41586-025-09215-4},
+-    abstract = {Establishing a unified theory of cognition has been an important goal in psychology1,2. A first step towards such a theory is to create a computational model that can predict human behaviour in a wide range of settings. Here we introduce Centaur, a computational model that can predict and simulate human behaviour in any experiment expressible in natural language. We derived Centaur by fine-tuning a state-of-the-art language model on a large-scale dataset called Psych-101. Psych-101 has an unprecedented scale, covering trial-by-trial data from more than 60,000 participants performing in excess of 10,000,000 choices in 160 experiments. Centaur not only captures the behaviour of held-out participants better than existing cognitive models, but it also generalizes to previously unseen cover stories, structural task modifications and entirely new domains. Furthermore, the model’s internal representations become more aligned with human neural activity after fine-tuning. Taken together, our results demonstrate that it is possible to discover computational models that capture human behaviour across a wide range of domains. We believe that such models provide tremendous potential for guiding the development of cognitive theories, and we present a case study to demonstrate this.},
++    abstract = {Establishing a unified theory of cognition has been an important goal in psychology1,2. A first step towards such a theory is to create a computational model that can predict human behaviour in a wide range of settings. Here we introduce Centaur, a computational model that can predict and simulate human behaviour in any experiment expressible in natural language. We derived Centaur by fine-tuning a state-of-the-art language model on a large-scale dataset called Psych-101. Psych-101 has an unprecedented scale, covering trial-by-trial data from more than 60,000 participants performing in excess of 10,000,000 choices in 160 experiments. Centaur not only captures the behaviour of held-out participants better than existing cognitive models, but it also generalizes to previously unseen cover stories, structural task modifications and entirely new domains. Furthermore, the model{\textquoteright}s internal representations become more aligned with human neural activity after fine-tuning. Taken together, our results demonstrate that it is possible to discover computational models that capture human behaviour across a wide range of domains. We believe that such models provide tremendous potential for guiding the development of cognitive theories, and we present a case study to demonstrate this.},
+ }
+ 
+ @techreport{bordalo_ads_2025,
+@@ -150,7 +150,7 @@
+     number = {3},
+     url = {https://doi.org/10.1093/qje/qjag023},
+     doi = {10.1093/qje/qjag023},
+-    abstract = {We present a theory of choice in which attention to the features of options is determined by the decision maker’s categorization of the current problem in a set of problems she solved in the past. Categorization depends on goal-relevant and contextual problem-level features. The model yields heterogeneity in attention and choice in a given problem based on different past experiences and instability when changes in irrelevant context cause recategorization. We show that heterogeneous and unstable representations of a choice problem unify major biases in judgment and decision making.},
++    abstract = {We present a theory of choice in which attention to the features of options is determined by the decision maker{\textquoteright}s categorization of the current problem in a set of problems she solved in the past. Categorization depends on goal-relevant and contextual problem-level features. The model yields heterogeneity in attention and choice in a given problem based on different past experiences and instability when changes in irrelevant context cause recategorization. We show that heterogeneous and unstable representations of a choice problem unify major biases in judgment and decision making.},
+     journal = {The Quarterly Journal of Economics},
+     author = {Bordalo, Pedro and Gennaioli, Nicola and Lanzani, Giacomo and Shleifer, Andrei},
+     month = aug,
+@@ -206,7 +206,7 @@
+     number = {5},
+     url = {https://www.jstor.org/stable/10.1086/673885},
+     doi = {10.1086/673885},
+-    abstract = {We present a theory of context-dependent choice in which a consumer’s attention is drawn to salient attributes of goods, such as quality or price. An attribute is salient for a good when it stands out among the good’s attributes relative to that attribute’s average level in the choice set (or, more broadly, the choice context). Consumers attach disproportionately high weight to salient attributes, and their choices are tilted toward goods with higher quality/price ratios. The model accounts for a variety of disparate evidence, including decoy effects and context-dependent willingness to pay. It also suggests a novel theory of misleading sales.},
++    abstract = {We present a theory of context-dependent choice in which a consumer{\textquoteright}s attention is drawn to salient attributes of goods, such as quality or price. An attribute is salient for a good when it stands out among the good{\textquoteright}s attributes relative to that attribute{\textquoteright}s average level in the choice set (or, more broadly, the choice context). Consumers attach disproportionately high weight to salient attributes, and their choices are tilted toward goods with higher quality/price ratios. The model accounts for a variety of disparate evidence, including decoy effects and context-dependent willingness to pay. It also suggests a novel theory of misleading sales.},
+     journal = {Journal of Political Economy},
+     author = {Bordalo, Pedro and Gennaioli, Nicola and Shleifer, Andrei},
+     month = oct,
+@@ -220,7 +220,7 @@
+     number = {4},
+     url = {https://academic.oup.com/qje/article/131/4/1753/2468882},
+     doi = {10.1093/qje/qjw029},
+-    abstract = {We present a model of stereotypes based on Kahneman and Tversky’s representativeness heuristic. A decision maker assesses a target group by overweighting its representative types, defined as the types that occur more frequently in that group than in a baseline reference group. Stereotypes formed this way contain a “kernel of truth”: they are rooted in true differences between groups. Because stereotypes focus on differences, they cause belief distortions, particularly when groups are similar. Stereotypes are also context dependent: beliefs about a group depend on the characteristics of the reference group. In line with our predictions, beliefs in the lab about abstract groups and beliefs in the field about political groups are context dependent and distorted in the direction of representative types.},
++    abstract = {We present a model of stereotypes based on Kahneman and Tversky{\textquoteright}s representativeness heuristic. A decision maker assesses a target group by overweighting its representative types, defined as the types that occur more frequently in that group than in a baseline reference group. Stereotypes formed this way contain a “kernel of truth”: they are rooted in true differences between groups. Because stereotypes focus on differences, they cause belief distortions, particularly when groups are similar. Stereotypes are also context dependent: beliefs about a group depend on the characteristics of the reference group. In line with our predictions, beliefs in the lab about abstract groups and beliefs in the field about political groups are context dependent and distorted in the direction of representative types.},
+     journal = {The Quarterly Journal of Economics},
+     author = {Bordalo, Pedro and Coffman, Katherine and Gennaioli, Nicola and Shleifer, Andrei},
+     month = nov,
+@@ -253,7 +253,7 @@
+     year = {2023},
+     doi = {10.1073/pnas.2316205120},
+     url = {https://www.pnas.org/doi/10.1073/pnas.2316205120},
+-    abstract = {As large language models (LLMs) like GPT become increasingly prevalent, it is essential that we assess their capabilities beyond language processing. This paper examines the economic rationality of GPT by instructing it to make budgetary decisions in four domains: risk, time, social, and food preferences. We measure economic rationality by assessing the consistency of GPT’s decisions with utility maximization in classic revealed preference theory. We find that GPT’s decisions are largely rational in each domain and demonstrate higher rationality score than those of human subjects in a parallel experiment and in the literature. Moreover, the estimated preference parameters of GPT are slightly different from human subjects and exhibit a lower degree of heterogeneity. We also find that the rationality scores are robust to the degree of randomness and demographic settings such as age and gender but are sensitive to contexts based on the language frames of the choice situations. These results suggest the potential of LLMs to make good decisions and the need to further understand their capabilities, limitations, and underlying mechanisms.},
++    abstract = {As large language models (LLMs) like GPT become increasingly prevalent, it is essential that we assess their capabilities beyond language processing. This paper examines the economic rationality of GPT by instructing it to make budgetary decisions in four domains: risk, time, social, and food preferences. We measure economic rationality by assessing the consistency of GPT{\textquoteright}s decisions with utility maximization in classic revealed preference theory. We find that GPT{\textquoteright}s decisions are largely rational in each domain and demonstrate higher rationality score than those of human subjects in a parallel experiment and in the literature. Moreover, the estimated preference parameters of GPT are slightly different from human subjects and exhibit a lower degree of heterogeneity. We also find that the rationality scores are robust to the degree of randomness and demographic settings such as age and gender but are sensitive to contexts based on the language frames of the choice situations. These results suggest the potential of LLMs to make good decisions and the need to further understand their capabilities, limitations, and underlying mechanisms.},
+ }
+ 
+ @article{cheung_large_2025,
+@@ -267,7 +267,7 @@
+     year = {2025},
+     doi = {10.1073/pnas.2412015122},
+     url = {https://www.pnas.org/doi/10.1073/pnas.2412015122},
+-    abstract = {As large language models (LLMs) become more widely used, people increasingly rely on them to make or advise on moral decisions. Some researchers even propose using LLMs as participants in psychology experiments. It is, therefore, important to understand how well LLMs make moral decisions and how they compare to humans. We investigated these questions by asking a range of LLMs to emulate or advise on people’s decisions in realistic moral dilemmas. In Study 1, we compared LLM responses to those of a representative U.S. sample (N = 285) for 22 dilemmas, including both collective action problems that pitted self-interest against the greater good, and moral dilemmas that pitted utilitarian cost–benefit reasoning against deontological rules. In collective action problems, LLMs were more altruistic than participants. In moral dilemmas, LLMs exhibited stronger omission bias than participants: They usually endorsed inaction over action. In Study 2 (N = 474, preregistered), we replicated this omission bias and documented an additional bias: Unlike humans, most LLMs were biased toward answering “no” in moral dilemmas, thus flipping their decision/advice depending on how the question is worded. In Study 3 (N = 491, preregistered), we replicated these biases in LLMs using everyday moral dilemmas adapted from forum posts on Reddit. In Study 4, we investigated the sources of these biases by comparing models with and without fine-tuning, showing that they likely arise from fine-tuning models for chatbot applications. Our findings suggest that uncritical reliance on LLMs’ moral decisions and advice could amplify human biases and introduce potentially problematic biases.},
++    abstract = {As large language models (LLMs) become more widely used, people increasingly rely on them to make or advise on moral decisions. Some researchers even propose using LLMs as participants in psychology experiments. It is, therefore, important to understand how well LLMs make moral decisions and how they compare to humans. We investigated these questions by asking a range of LLMs to emulate or advise on people{\textquoteright}s decisions in realistic moral dilemmas. In Study 1, we compared LLM responses to those of a representative U.S. sample (N = 285) for 22 dilemmas, including both collective action problems that pitted self-interest against the greater good, and moral dilemmas that pitted utilitarian cost–benefit reasoning against deontological rules. In collective action problems, LLMs were more altruistic than participants. In moral dilemmas, LLMs exhibited stronger omission bias than participants: They usually endorsed inaction over action. In Study 2 (N = 474, preregistered), we replicated this omission bias and documented an additional bias: Unlike humans, most LLMs were biased toward answering “no” in moral dilemmas, thus flipping their decision/advice depending on how the question is worded. In Study 3 (N = 491, preregistered), we replicated these biases in LLMs using everyday moral dilemmas adapted from forum posts on Reddit. In Study 4, we investigated the sources of these biases by comparing models with and without fine-tuning, showing that they likely arise from fine-tuning models for chatbot applications. Our findings suggest that uncritical reliance on LLMs{\textquoteright} moral decisions and advice could amplify human biases and introduce potentially problematic biases.},
+ }
+ 
+ @techreport{cook_what_2026,
+@@ -466,7 +466,7 @@
+     year = {2023},
+     doi = {10.1038/s43588-023-00527-x},
+     url = {https://www.nature.com/articles/s43588-023-00527-x},
+-    abstract = {We design a battery of semantic illusions and cognitive reflection tests, aimed to elicit intuitive yet erroneous responses. We administer these tasks, traditionally used to study reasoning and decision-making in humans, to OpenAI’s generative pre-trained transformer model family. The results show that as the models expand in size and linguistic proficiency they increasingly display human-like intuitive system 1 thinking and associated cognitive errors. This pattern shifts notably with the introduction of ChatGPT models, which tend to respond correctly, avoiding the traps embedded in the tasks. Both ChatGPT-3.5 and 4 utilize the input–output context window to engage in chain-of-thought reasoning, reminiscent of how people use notepads to support their system 2 thinking. Yet, they remain accurate even when prevented from engaging in chain-of-thought reasoning, indicating that their system-1-like next-word generation processes are more accurate than those of older models. Our findings highlight the value of applying psychological methodologies to study large language models, as this can uncover previously undetected emergent characteristics.},
++    abstract = {We design a battery of semantic illusions and cognitive reflection tests, aimed to elicit intuitive yet erroneous responses. We administer these tasks, traditionally used to study reasoning and decision-making in humans, to OpenAI{\textquoteright}s generative pre-trained transformer model family. The results show that as the models expand in size and linguistic proficiency they increasingly display human-like intuitive system 1 thinking and associated cognitive errors. This pattern shifts notably with the introduction of ChatGPT models, which tend to respond correctly, avoiding the traps embedded in the tasks. Both ChatGPT-3.5 and 4 utilize the input–output context window to engage in chain-of-thought reasoning, reminiscent of how people use notepads to support their system 2 thinking. Yet, they remain accurate even when prevented from engaging in chain-of-thought reasoning, indicating that their system-1-like next-word generation processes are more accurate than those of older models. Our findings highlight the value of applying psychological methodologies to study large language models, as this can uncover previously undetected emergent characteristics.},
+ }
+ 
+ @article{hamilton_low_2013,
+@@ -678,7 +678,7 @@
+ 
+ @article{mackowiak_rational_2023,
+     title = {Rational inattention: {A} review},
+-    author = {Maćkowiak, Bartosz and Matějka, Filip and Wiederholt, Mirko},
++    author = {Ma{\'c}kowiak, Bartosz and Mat{\v e}jka, Filip and Wiederholt, Mirko},
+     journal = {Journal of Economic Literature},
+     volume = {61},
+     number = {1},
