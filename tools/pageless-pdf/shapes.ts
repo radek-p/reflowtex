@@ -4,7 +4,7 @@
 // LuaTeX strokes a rule along its centre line; a picture (TikZ's lines, its
 // fills and arrow tips, the paths of an included PDF) draws the same shapes.
 // The strip's paths come from MuPDF (traceStrip), the viewer's from its SVG
-// (dom-dump.ts: TeX's rules as <rect>, a picture's drawing as dvisvgm's
+// (dom-dump.ts: TeX's rules as <rect>, a picture's drawing as MuPDF's
 // <path>), and both are read by this one definition, so that each side counts
 // the same things in the same way.
 export type Pt = [number, number];

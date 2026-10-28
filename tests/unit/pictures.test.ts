@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// dvisvgm as the pipeline calls it, on a captured TikZ picture: three circled
-// nodes labelled $a$, $b$, $c$ (fixtures/tikz-node-labels.pdf, page 1 of a
-// build's input.pdf). With dvisvgm 3.4.4's collapse-groups the labels lost
-// their group's transform and stood a picture height above their circles.
+// Pictures as the pipeline makes them: a captured TikZ picture drawn by
+// MuPDF – three circled nodes labelled $a$, $b$, $c$
+// (fixtures/tikz-node-labels.pdf, page 1 of a build's input.pdf), whose
+// labels once stood a picture height above their circles –, included PNG and
+// JPEG files, included PDFs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -10,10 +11,11 @@ import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DVISVGM_OPTIMIZE, bitmapPicture, convertPictures, pictureFormat, rewritePictureSvg, type Picture } from '../../src/pipeline/pictures.ts';
+import { bitmapPicture, convertPictures, pictureFormat, rewritePictureSvg, type Picture } from '../../src/pipeline/pictures.ts';
 import { DEFAULT_PREAMBLE, Pipeline } from '../../src/pipeline/pipeline.ts';
 import { forEachNode, readSerializerOutput, type SerializerOutput, type TexNode } from '../../src/pipeline/nodes.ts';
 import { PictureError } from '../../src/pipeline/errors.ts';
+import { pdfPageSvg } from '../../src/pictures/pdf-svg.ts';
 import { Log } from '../../src/shared/log.ts';
 
 const FIXTURE = fileURLToPath(new URL('fixtures/tikz-node-labels.pdf', import.meta.url));
@@ -25,7 +27,7 @@ const mul = ([a, b, c, d, e, f]: Matrix, [A, B, C, D, E, F]: Matrix): Matrix =>
   [a * A + c * B, b * A + d * B, a * C + c * D, b * C + d * D, a * E + c * F + e, b * E + d * F + f];
 
 /** An SVG transform attribute as one matrix: translate, scale and matrix, the
- *  forms dvisvgm writes. */
+ *  forms SVG writers use. */
 function parseTransform(s: string): Matrix {
   let m = IDENTITY;
   for (const [, fn, args] of s.matchAll(/(\w+)\(([^)]*)\)/g)) {
@@ -44,42 +46,33 @@ function glyphPositions(svg: string): [number, number][] {
   const out: [number, number][] = [];
   for (const [tag] of svg.matchAll(/<\/?(?:g|use)\b[^>]*>/g)) {
     if (tag.startsWith('</')) { stack.pop(); continue; }
-    const t = /transform='([^']*)'/.exec(tag);
+    const t = /transform=["']([^"']*)["']/.exec(tag);
     const m = t ? mul(stack.at(-1)!, parseTransform(t[1])) : stack.at(-1)!;
     if (tag.startsWith('<use')) {
-      const x = Number(/\bx='([^']*)'/.exec(tag)?.[1] ?? 0), y = Number(/\by='([^']*)'/.exec(tag)?.[1] ?? 0);
+      const x = Number(/\bx=["']([^"']*)["']/.exec(tag)?.[1] ?? 0), y = Number(/\by=["']([^"']*)["']/.exec(tag)?.[1] ?? 0);
       out.push([m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]);
     } else if (!tag.endsWith('/>')) stack.push(m);
   }
   return out;
 }
 
-const hasDvisvgm = (() => { try { execFileSync('dvisvgm', ['--version']); return true; } catch { return false; } })();
-
-test('a TikZ node label stays inside its picture after dvisvgm', { skip: !hasDvisvgm && 'dvisvgm not installed' }, () => {
-  const dir = mkdtempSync(join(tmpdir(), 'rtx-pictures-'));
-  try {
-    const out = join(dir, 'p.svg');
-    execFileSync('dvisvgm', ['--pdf', '--page=1', '--no-fonts', DVISVGM_OPTIMIZE, `--tmpdir=${dir}`, `--output=${out}`, FIXTURE],
-      { stdio: 'pipe' });
-    const svg = readFileSync(out, 'utf8');
-    const [, , w, h] = /viewBox='([^']*)'/.exec(svg)![1].split(' ').map(Number);
-    const glyphs = glyphPositions(svg);
-    assert.equal(glyphs.length, 3, 'the three labels');
-    // Each label's baseline is below its circle's centre, within the picture:
-    // the circles are 20 pt across, centred at y = 49.8 (a, b) and 10.1 (c).
-    for (const [x, y] of glyphs) {
-      assert.ok(x >= 0 && x <= w && y >= 0 && y <= h, `glyph at (${x.toFixed(2)}, ${y.toFixed(2)}) outside the ${w} × ${h} picture`);
-    }
-    const ys = glyphs.map(([, y]) => y).sort((p, q) => p - q);
-    assert.ok(Math.abs(ys[0] - 12.3) < 1 && Math.abs(ys[2] - 53.3) < 1, `baselines ${ys.map(y => y.toFixed(2)).join(', ')}`);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+test('a TikZ node label stays inside its picture', async () => {
+  const { svg } = await pdfPageSvg(readFileSync(FIXTURE), 1);
+  const [, , w, h] = /viewBox="([^"]*)"/.exec(svg)![1].split(' ').map(Number);
+  const glyphs = glyphPositions(svg);
+  assert.equal(glyphs.length, 3, 'the three labels');
+  // Each label's baseline is below its circle's centre, within the picture:
+  // the circles are 20 pt across, centred at y = 49.8 (a, b) and 10.1 (c).
+  for (const [x, y] of glyphs) {
+    assert.ok(x >= 0 && x <= w && y >= 0 && y <= h, `glyph at (${x.toFixed(2)}, ${y.toFixed(2)}) outside the ${w} × ${h} picture`);
+  }
+  const ys = glyphs.map(([, y]) => y).sort((p, q) => p - q);
+  assert.ok(Math.abs(ys[0] - 12.3) < 1 && Math.abs(ys[2] - 53.3) < 1, `baselines ${ys.map(y => y.toFixed(2)).join(', ')}`);
 });
 
 // ── Included bitmaps ────────────────────────────────────────────────────────
 // A PNG or JPEG \includegraphics is drawn as an <image> holding the file's
-// bytes, sized to TeX's box. dvisvgm draws a bitmap inside a PDF as a
-// <symbol> and a <use> with no size, which filled the whole block.
+// bytes, sized to TeX's box.
 
 const PNG = fileURLToPath(new URL('fixtures/bitmap-6x4.png', import.meta.url));
 const JPEG = fileURLToPath(new URL('fixtures/bitmap-8x8.jpg', import.meta.url));
@@ -102,14 +95,18 @@ test('a bitmap picture: one <image> of the bytes, the size of the box', () => {
   assert.match(bitmapPicture(readFileSync(JPEG), 'jpeg', SP_PER_BP, SP_PER_BP, 'x').svg, /href='data:image\/jpeg;base64,\/9j\//);
 });
 
-test('a <use> of a symbol gets the symbol\'s size; other uses are left alone', () => {
-  const svg = `<svg viewBox='0 0 612 792'><defs><symbol id='img1-ab' viewBox='0 0 6 4'><image width='6' height='4' xlink:href='data:image/png;base64,AA'/></symbol>`
-    + `<path id='g1-5' d='M0 0'/></defs><g id='page1'><use x='0' y='0' xlink:href='#img1-ab' transform='matrix(14 0 0 14 148 124)'/>`
-    + `<use x='1' y='2' xlink:href='#g1-5'/><use xlink:href='#img1-ab' width='3' height='2'/></g></svg>`;
-  const { svg: out } = rewritePictureSvg(svg, 'p1-');
-  assert.match(out, /<use width='6' height='4' x='0' y='0' xlink:href='#p1-img1-ab' transform='matrix\(14 0 0 14 148 124\)'\/>/);
-  assert.match(out, /<use x='1' y='2' xlink:href='#p1-g1-5'\/>/, 'a glyph\'s <use> is unchanged');
-  assert.match(out, /<use xlink:href='#p1-img1-ab' width='3' height='2'\/>/, 'a size already there is kept');
+test('ids prefixed and colours themed, in either quote style', () => {
+  // MuPDF writes double quotes; a backend's picture source may write single
+  const svg = `<svg viewBox='0 0 100 50'><defs><path id='g1-5' d='M0 0'/><clipPath id="clip_1"><path d='M0 0H9V9Z'/></clipPath></defs>`
+    + `<g clip-path="url(#clip_1)"><use xlink:href='#g1-5' fill='#f00'/><use data-text="x" xlink:href="#g1-5" fill="#00FF00"/>`
+    + `<path d='M0 0' stroke="#000000" data-id='g1-5'/><use href='#elsewhere'/></g></svg>`;
+  const { svg: out, vb_w, vb_h } = rewritePictureSvg(svg, 'p1-');
+  assert.deepEqual([vb_w, vb_h], [100, 50]);
+  assert.match(out, /<path id='p1-g1-5' d='M0 0'\/><clipPath id="p1-clip_1">/);
+  assert.match(out, /<g clip-path="url\(#p1-clip_1\)"><use xlink:href='#p1-g1-5' fill='var\(--latex-color-ff0000, #ff0000\)'\/>/);
+  assert.match(out, /<use data-text="x" xlink:href="#p1-g1-5" fill="var\(--latex-color-00ff00, #00ff00\)"\/>/);
+  assert.match(out, /stroke="var\(--latex-color-000000, currentColor\)" data-id='g1-5'/, 'black follows the text colour; data-id is no id');
+  assert.match(out, /<use href='#elsewhere'\/>/, 'a reference to no id here is left alone');
 });
 
 const tmpPipeline = (root: string, searchDirs: string[]) =>
@@ -217,7 +214,7 @@ test('\\includegraphics options braced whole, holding a `]`', { skip: !hasLualat
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('\\includegraphics[page=2] draws the PDF\'s second page', { skip: (!hasLualatex || !hasDvisvgm) && 'lualatex or dvisvgm not installed' }, async () => {
+test('\\includegraphics[page=2] draws the PDF\'s second page', { skip: !hasLualatex && 'lualatex not installed' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'rtx-pdf-page-'));
   try {
     // two pages, 100 × 50 bp and 40 × 80 bp
@@ -232,7 +229,7 @@ test('\\includegraphics[page=2] draws the PDF\'s second page', { skip: (!hasLual
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('a PDF holding a bitmap: dvisvgm\'s <use> sized to its symbol', { skip: (!hasLualatex || !hasDvisvgm) && 'lualatex or dvisvgm not installed' }, async () => {
+test('a PDF holding a bitmap: the bitmap drawn where the PDF puts it', { skip: !hasLualatex && 'lualatex not installed' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'rtx-bitmap-pdf-'));
   try {
     const figs = join(root, 'figures');
@@ -245,14 +242,14 @@ test('a PDF holding a bitmap: dvisvgm\'s <use> sized to its symbol', { skip: (!h
     await pipe.compile('\\includegraphics[width=100pt]{photo.pdf}', { kind: 'snippet', key: 'bitmap-pdf' });
     const { pictures } = picturesOf(root, 'bitmap-pdf');
     assert.equal(pictures.length, 1);
-    const uses = pictures[0].svg.match(/<use\b[^>]*>/g) ?? [];
-    assert.equal(uses.length, 1, pictures[0].svg.slice(0, 400));
-    assert.match(uses[0], /^<use width='6' height='4' /);
-    assert.match(pictures[0].svg, /<symbol id='pbitmappd-[^']+' viewBox='0 0 6 4'>/, 'ids prefixed as before');
+    // the PNG's 6 × 4 pixels, scaled to the 3 cm graphicx gave them
+    const img = /<g transform="matrix\(([^,]+),0,0,([^,]+),[^)]*\)">\s*<image id="pbitmappd-1-[^"]+" width="6" height="4" xlink:href="data:image\/png;base64,/.exec(pictures[0].svg);
+    assert.ok(img, pictures[0].svg.slice(0, 400));
+    assert.ok(Math.abs(Number(img[1]) * 6 - 85.039) < 0.01, `${Number(img[1]) * 6} bp wide`);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('a renamed PDF is read as the PDF it is', { skip: (!hasLualatex || !hasDvisvgm) && 'lualatex or dvisvgm not installed' }, async () => {
+test('a renamed PDF is read as the PDF it is', { skip: !hasLualatex && 'lualatex not installed' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'rtx-bitmap-renamed-'));
   try {
     // LuaTeX reads an image by its bytes, so a PDF named .png compiles
@@ -261,7 +258,23 @@ test('a renamed PDF is read as the PDF it is', { skip: (!hasLualatex || !hasDvis
     await pipe.compile('\\includegraphics[width=50pt]{renamed.png}', { kind: 'snippet', key: 'renamed' });
     const svg = picturesOf(root, 'renamed').pictures[0].svg;
     assert.doesNotMatch(svg, /<image/);
-    assert.match(svg, /<use\b/, 'drawn by dvisvgm: the labels');
+    assert.equal((svg.match(/<use data-text=/g) ?? []).length, 3, 'drawn: the three labels');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a captured TikZ picture and an included figure draw a full-size white rectangle alike, in the page\'s colour', async () => {
+  // the capture's page is a picture of its own (generated: a page of the
+  // build's PDF); both are drawn as their PDF paints them, themed alike
+  const root = mkdtempSync(join(tmpdir(), 'rtx-page-rect-'));
+  try {
+    const { figmaFramePdf } = await import('./figure-pdfs.ts');
+    writeFileSync(join(root, 'input.pdf'), figmaFramePdf());
+    const node = (o: object) => ({ type: 'picture', width: 200 * 65781.76, height: 100 * 65781.76, depth: 0, page: 1, ...o });
+    const data = { paragraphs: [{ nodes: [node({ file: 'input.pdf', generated: true }), node({ file: join(root, 'input.pdf') })] }], content: [], streams: [] } as unknown as SerializerOutput;
+    assert.equal(await convertPictures(data, root, 'b', 'd'), 2);
+    const [captured, included] = (data.pictures as Picture[]).map(p => p.svg);
+    for (const svg of [captured, included]) assert.match(svg, /d="M0 0H200V100H0Z" fill="var\(--latex-color-ffffff, #ffffff\)"/);
+    assert.equal(captured.replace(/pd-1-/g, 'pd-2-'), included, 'the same picture');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

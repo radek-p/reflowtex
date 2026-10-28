@@ -135,25 +135,29 @@ function readSegments(page: Page, marginPx: number, from: number, to: number): P
         glyphs.push({ x: gx, y: gy, w: bb ? bb.width / 2 : 0, text: t.textContent ?? '', font: ff, size: fs / 2 });
       }
       // Only what is drawn: not the definitions a picture's markup keeps in
-      // <defs> (glyph outlines, and the same glyph at another size, a <use>
-      // of it scaled), nor a clip path or the like.
+      // <defs> (glyph outlines, a soft mask's drawing), nor a clip path or
+      // the like.
       const unseen = (e: Element) => e.closest('defs, clipPath, mask, pattern, marker, symbol') !== null;
-      // A picture's glyphs (TikZ labels, text in an included PDF): dvisvgm
-      // draws each as a <use> of a glyph outline ("g1-4", prefixed per
-      // picture), its origin at the use's x, y. They have no text; ◊ stands
-      // for one, in the font "picture".
-      for (const u of svg.querySelectorAll('.latex-picture use')) {
-        if (unseen(u) || !/-g\d+-\d+$/.test(u.getAttribute('href') ?? u.getAttribute('xlink:href') ?? '')) continue;
+      // A picture's glyphs (TikZ labels, text in an included PDF): MuPDF
+      // draws each as a <use data-text="…"> of the glyph's outline, its
+      // origin at the use's own (0, 0) through its transform; the text is
+      // the character the PDF maps the glyph to (◊ when it maps it to none),
+      // in the font "picture". A glyph's stroke (fake bold, outlined text) is
+      // a <use> of its own, with no fill: not counted, as the strip's trace
+      // counts filled text only (vector-compare.ts).
+      for (const u of svg.querySelectorAll<SVGUseElement>('.latex-picture use[data-text]')) {
+        if (unseen(u) || u.getAttribute('fill') === 'none') continue;
         const x = parseFloat(u.getAttribute('x') ?? '0'), y = parseFloat(u.getAttribute('y') ?? '0');
-        const [gx, gy] = at(toFrame(u as SVGGraphicsElement), x, y);
-        glyphs.push({ x: gx, y: gy, w: 0, text: '◊', font: 'picture', size: 0 });
+        const [gx, gy] = at(toFrame(u), x, y);
+        glyphs.push({ x: gx, y: gy, w: 0, text: u.dataset.text?.trim() ? u.dataset.text : '◊', font: 'picture', size: 0 });
       }
       // What may be a rule (shapes.ts decides): TeX's rules, drawn as
       // <rect> – not a link's transparent hit area, nor the empty mark a
-      // \webaside leaves where it stood – and a picture's paths. Each as its
+      // \webaside leaves where it stood, nor a bitmap drawn through a mask (an
+      // image mask) – and a picture's paths. Each as its
       // path data, how it is painted, and the map from its own coordinates
       // to the strip's frame.
-      for (const e of svg.querySelectorAll<SVGGraphicsElement>('rect:not(.latex-link-hit):not(.latex-aside-mark), .latex-picture path')) {
+      for (const e of svg.querySelectorAll<SVGGraphicsElement>('rect:not(.latex-link-hit):not(.latex-aside-mark):not([mask]), .latex-picture path')) {
         if (unseen(e)) continue;
         let d = e.getAttribute('d') ?? '';
         if (e.tagName === 'rect') {

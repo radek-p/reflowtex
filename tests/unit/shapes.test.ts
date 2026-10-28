@@ -7,7 +7,7 @@ import { Outline, filledRule, strokedRule, svgOutline, type Affine } from '../..
 
 const I: Affine = [1, 0, 0, 1, 0, 0];
 
-test('SVG path data: absolute, relative, H and V, as dvisvgm writes them', () => {
+test('SVG path data: absolute, relative, H and V, as SVG writers write them', () => {
   assert.deepEqual(svgOutline('M.39896 34.91104V.89496H34.41504V34.91104Z').subpaths,
     [{ pts: [[.39896, 34.91104], [.39896, .89496], [34.41504, .89496], [34.41504, 34.91104]], closed: true }]);
   assert.deepEqual(svgOutline('m1 2l3 0 0 4h-3z').subpaths,

@@ -125,14 +125,16 @@ is encoded:
   combining accents, unencoded variants) can't be addressed by their Unicode
   codepoint in the served font, so they are rewritten to private-use codepoints
   and the served font's cmap is patched to match;
-- **convert pictures** – each captured TikZ page or included PDF page becomes
-  inline SVG (ids prefixed per picture, colours mapped to CSS custom properties
-  for theming). Ghostscript first normalises ordinary included PDFs to DeviceRGB:
-  Figma encodes all its fills with ICC `scn`, which current `dvisvgm` otherwise
-  drops and renders as black. An exact white or legacy fill-less full-viewBox page
-  rectangle is then removed wherever it occurs in the page group. Generated TikZ
-  pages are deliberately exempt from both operations.
-  An included PNG or JPEG skips dvisvgm: it becomes one `<image>` holding its
+- **convert pictures** – each captured TikZ page or included PDF page is drawn
+  as SVG by MuPDF (the `mupdf` package, in WebAssembly; `src/pictures/`, which
+  uses no Node API and is loaded only when a picture needs it, so that the
+  modules a browser may bundle never import it) and inlined: ids prefixed per picture, colours mapped to CSS
+  custom properties for theming (a mask's content keeps its own). MuPDF draws
+  every font kind (Type 3 among them), ICC colour, images, shadings (as images)
+  and patterns; glyphs are outlines, each a `<use data-text>` carrying its
+  character. Every picture is drawn as its PDF paints it, a white page
+  included: the theme maps white to the page's colour.
+  An included PNG or JPEG is not converted: it becomes one `<image>` holding its
   bytes unchanged (a data: URI), the size of its box in TeX, and is not themed.
 
 Then `encode.ts` serialises the result to Protocol Buffers against

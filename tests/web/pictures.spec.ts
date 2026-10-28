@@ -38,3 +38,32 @@ test('a PNG and a JPEG are drawn at their TeX size', async ({ openPage }) => {
     expect(img.h).toBeCloseTo(m.images[k].h, 1);
   });
 });
+
+// Pictures drawn as their PDF paints them (pages/pictures/d-backgrounds.tex):
+// an included figure's opaque white page (white-page.pdf, as Figma exports
+// one) and a TikZ picture's white rectangle as large as itself are white,
+// which a theme shows as the page's colour; a coloured square keeps its
+// colour, as the colour map gives it.
+test('a white page in a picture is the page\'s colour in every theme; colours are mapped', async ({ openPage }) => {
+  const fills = async (theme?: string) => {
+    const page = await openPage('pictures', theme ? { theme } : {});
+    return page.evaluate(() => {
+      const pics = [...document.querySelectorAll('.latex-picture')].filter(g => g.querySelector('[fill*="--latex-color-ffffff"]'));
+      const fill = (e: Element | null) => (e ? getComputedStyle(e).fill : null);
+      return {
+        pageBg: getComputedStyle(document.documentElement).backgroundColor,
+        whites: pics.map(g => fill(g.querySelector('[fill*="--latex-color-ffffff"]'))),
+        red: fill(document.querySelector('.latex-picture [fill*="--latex-color-ff0000"]')),
+        blue: fill(document.querySelector('.latex-picture [fill*="--latex-color-000099"]')),
+      };
+    });
+  };
+  const light = await fills(), dark = await fills('dark');
+  expect(light.whites, 'the included figure\'s page and the TikZ rectangle').toHaveLength(2);
+  // the page's colour in each theme (the page's own: near white, near black)
+  expect(light.whites).toEqual([light.pageBg, light.pageBg]);
+  expect(dark.whites).toEqual([dark.pageBg, dark.pageBg]);
+  expect(dark.pageBg).not.toBe(light.pageBg);
+  expect([light.red, dark.red]).toEqual(['rgb(255, 0, 0)', 'rgb(255, 0, 0)']);
+  expect([light.blue, dark.blue]).toEqual(['rgb(0, 0, 153)', 'rgb(153, 204, 255)']);
+});

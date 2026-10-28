@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Reflow TeX build environment: LuaTeX + Ghostscript + dvisvgm + Node on top of a
+# Reflow TeX build environment: LuaTeX + Node on top of a
 # small TeX Live scheme (scheme-basic, ~350MB) instead of scheme-full (~2.5GB).
 # Used both as the Dev Container image (see .devcontainer/devcontainer.json)
 # and standalone (docker build/run, CI) for anyone who doesn't want to install
@@ -23,8 +23,8 @@ FROM texlive/texlive:latest-basic@sha256:d54587cc7093dee8cc41c3a6317a37eb33164ba
 # start the same way. fontspec, xcolor, unicode-math and lm-math cover what
 # this repo's examples and integrations add on top (examples/demo/preamble.tex,
 # the unicode-math path as an alternative to the legacy Type1 math route). amsmath, amscls, amsfonts, lm and luaotfload ship
-# with scheme-basic already. dvisvgm (converts externalised TikZ pictures to
-# SVG) is a separate tlmgr package, not part of any scheme-basic install.
+# with scheme-basic already. Pictures (captured TikZ pages, included PDFs)
+# are drawn as SVG by MuPDF, an npm package (package.json), not a tool here.
 # microtype is loaded by every website preamble (website/latex-preambles/).
 # luamml is not a LaTeX package here: src/extract/mathml.lua uses its Lua
 # converter for the MathML of every formula (without it, no MathML).
@@ -44,15 +44,13 @@ RUN tlmgr update --self && \
         tikz-cd \
         xcolor \
         microtype \
-        luamml \
-        dvisvgm; \
+        luamml; \
       missing=; \
       for f in mathtools.sty fontspec.sty unicode-math.sty lualatex-math.sty \
                filehook.sty latinmodern-math.otf pgf.sty tikz-cd.sty xcolor.sty \
                microtype.sty luamml-convert.lua; do \
         kpsewhich "$f" >/dev/null || missing="$missing $f"; \
       done; \
-      [ -x "$(kpsewhich -var-value SELFAUTOLOC)/dvisvgm" ] || missing="$missing dvisvgm"; \
       [ -z "$missing" ] && break; \
       echo "tlmgr install left out:$missing (attempt $attempt/3)" >&2; \
       [ "$attempt" -lt 3 ] || exit 1; \
@@ -61,18 +59,10 @@ RUN tlmgr update --self && \
     tlmgr path add
 
 # ── Node + PDF tools ─────────────────────────────────────────────────────────
-# mutool (mupdf-tools): dvisvgm's PDF backend needs Ghostscript < 10.01.0 or
-# mutool – the Debian testing Ghostscript this image's base pulls in (10.07.1)
-# is too new for dvisvgm to drive directly, so mutool is what dvisvgm shells
-# out to for reading the externalised TikZ picture PDFs it converts to SVG.
-# Ghostscript itself normalises ICC-coloured included PDFs to DeviceRGB before
-# dvisvgm sees them; without that pass, Figma fills are silently lost.
 # Node comes from nodejs.org, below, not from here.
 # Poppler's pdftotext: tools/pageless-pdf/check-against-paged.ts.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ghostscript \
       poppler-utils \
-      mupdf-tools \
       git \
       make \
     && rm -rf /var/lib/apt/lists/*

@@ -153,13 +153,13 @@ so a picture the capture got wrong would be wrong on both sides. A case
 with `tex_pictures` (`tikz-labels`, `tikz-nested`, `tikz-fills`,
 `nicematrix`, `page-offsets`) has its PDFs compiled with TikZ's own `\tikzpicture`
 (`pageless.ts --tex-pictures`): TeX draws the pictures in the text, and the
-capture, dvisvgm and the viewer's placing of each picture are all tested
+capture, the conversion to SVG (MuPDF) and the viewer's placing of each picture are all tested
 against it. Its page is built from a run of its own,
 `build/<case>/site-run/`.
 
 A picture's straight lines and four-cornered fills (arrow tips among them)
 are the shapes a rule is, and are compared as rules: TeX strokes and fills
-them in the PDF, and the browser draws them as dvisvgm's paths. Both sides
+them in the PDF, and the browser draws them as MuPDF's paths. Both sides
 take a shape for a rule by the same test (`tools/pageless-pdf/shapes.ts`),
 so a curve, a triangle or a stroked outline is a rule on neither.
 

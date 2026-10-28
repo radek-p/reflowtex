@@ -17,6 +17,7 @@
     "esbuild": "0.28.2",
     "harfbuzzjs": "^1.6.2",
     "htm": "3.1.1",
+    "mupdf": "1.28.1",
     "opentype.js": "^2.0.0",
     "preact": "10.29.8",
     "protobufjs": "^8.8.0",
@@ -25,7 +26,6 @@
   "devDependencies": {
     "@playwright/test": "1.58.2",
     "@types/node": "^26.6.3",
-    "mupdf": "^1.28.1",
     "pdf-lib": "^1.17.1",
     "playwright": "1.58.2",
     "sharp": "^0.35.4",

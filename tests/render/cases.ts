@@ -30,7 +30,7 @@ export interface CaseSettings {
   /** TikZ pictures in the PDF drawn by TeX, not stacked back from the
    *  capture's private pages (pageless.ts --tex-pictures): the browser's
    *  pictures – their labels' glyphs – are then checked against TeX itself,
-   *  with the capture and dvisvgm under test; the page is built from a run of
+   *  with the capture and the conversion to SVG under test; the page is built from a run of
    *  its own */
   tex_pictures?: boolean;
   /** also compile the document with plain lualatex, as its author would, and
@@ -224,9 +224,10 @@ export const cases: Record<string, CaseSettings> = {
   // after them out of place). Worst attained 2026-09-26.
   unusual: { tolerance: 0.009, rule_tolerance: 0.005 },
   // Labels in TikZ pictures against TeX's own drawing of them (tex_pictures):
-  // the capture, dvisvgm and the viewer's placing of a picture all under test.
+  // the capture, the conversion to SVG and the viewer's placing of a picture all
+  // under test.
   // A picture's straight lines are rules on both sides, TeX's strokes against
-  // dvisvgm's paths (until 2026-10-25 only TeX's counted: 12 not drawn).
+  // the SVG's paths (until 2026-10-25 only TeX's counted: 12 not drawn).
   // Worst attained 2026-10-25.
   'tikz-labels': { tex_pictures: true, tolerance: 0.009, rule_tolerance: 0.005 },
   // A picture inside another, and a pgfplots axis: the inner one used to be
@@ -238,8 +239,8 @@ export const cases: Record<string, CaseSettings> = {
   sloppy: { tolerance: 0.013 },
   // Fills, straight lines and arrow tips in pictures, counted alike on both
   // sides, and labels under a rotation, a scale and a mirror; at 11pt, one
-  // font at two sizes, whose scaled glyph copies dvisvgm keeps out of sight
-  // (they used to be counted, at the picture's corner). Worst attained
+  // font at two sizes (glyph outlines kept out of sight used to be counted,
+  // at the picture's corner). Worst attained
   // 2026-10-25.
   'tikz-fills': { tex_pictures: true, tolerance: 0.010, rule_tolerance: 0.004 },
   // nicematrix's environment captured as one picture, against TeX's own

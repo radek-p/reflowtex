@@ -300,7 +300,7 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
                 // Always set the fill inline rather than leaving it to page
                 // CSS: a blanket `rect { fill: currentColor }` would also hit
                 // the shapes inside a tikzpicture and flatten their colours,
-                // since CSS outranks the presentation attributes dvisvgm emits.
+                // since CSS outranks the presentation attributes a picture's SVG has.
                 el.style.fill = n.color ? colorFill(n.color)
                                         : 'var(--latex-color-000000, currentColor)';
                 byNode.set(n, el); stats.created++;
@@ -371,7 +371,7 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
                 // and for anyone inspecting the DOM.
                 el = svgEl('g', { class: 'latex-picture' });
                 if (pic) insertPictureSvg(el as SVGGElement, pic.svg);
-                // dvisvgm omits fill on black paths (SVG's initial fill is
+                // MuPDF omits fill on black paths (SVG's initial fill is
                 // black), so the theme's default text colour is supplied here
                 // by inheritance rather than rewritten into every path.
                 el.setAttribute('fill', 'var(--latex-color-000000, currentColor)');

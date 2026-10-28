@@ -24,7 +24,7 @@ export class TexError extends BuildError {
   }
 }
 /** A picture could not be converted (a missing file, an unsupported format,
- *  Ghostscript or dvisvgm failing). */
+ *  MuPDF failing to draw a page). */
 export class PictureError extends BuildError {}
 /** A font could not be provisioned, patched or verified. */
 export class FontError extends BuildError {}
