@@ -164,6 +164,17 @@ test('a recorded packet: a rule, push and pop, a glyph index kept', () => {
   assert.equal(kids[2].gindex, 73);
 });
 
+test('recorded packets that draw nothing (moves only): the font is not drawn by them, it stays a font without a face', () => {
+  const fonts = new Map<string, FontInfo>([['7', { name: 'rtxnoface10', size_sp: SIZE, face: { kind: 'tfm' },
+    packets: [{ char: 65, commands: [['right', 0]] }, { char: 66, commands: [['push'], ['down', EM], ['pop']] }] }]]);
+  const nodes: N[] = [{ type: 'glyph', char: 65, font: 7, width: 400000 }, { type: 'glyph', char: 66, font: 7, width: 400000 }];
+  assert.equal(resolveVirtualFonts(fonts, visit => nodes.forEach(visit), files), 0);
+  assert.deepEqual(nodes, [{ type: 'glyph', char: 65, font: 7, width: 400000 }, { type: 'glyph', char: 66, font: 7, width: 400000 }],
+    'the glyphs stay, with their characters (their text)');
+  assert.deepEqual(fonts.get('7')!.face, { kind: 'tfm' }, 'not made virtual: the face is still to be found, or warned about');
+  assert.equal(fonts.size, 1);
+});
+
 test('a face that is not virtual is left alone', () => {
   const fonts = new Map<string, FontInfo>([['1', { name: 'cmr10', size_sp: SIZE, face: { kind: 'tfm' } }]]);
   const nodes: N[] = [{ type: 'glyph', char: 65, font: 1 }];
