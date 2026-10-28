@@ -26,14 +26,31 @@ export function dropUnreferencedParagraphs(data: SerializerOutput): number {
 }
 
 // ── Unsupported nodes ───────────────────────────────────────────────────────
-// Node types latex.proto can encode. Anything else (the whatsits xcolor's
-// colour stack leaves, local_par markers) is zero-width, means nothing to the
-// renderer, and goes before encoding.
+// Node types latex.proto can encode. Anything else (a \write from \index or
+// \label, a \special, a PDF literal, a mark, an insertion) is zero-width,
+// means nothing to the renderer, and goes before encoding.
+//
+// But not from a paragraph's own list, which the browser breaks again: there
+// each such node is one TeX's line breaker keeps (none of them is
+// discardable), and a glue after it is a breakpoint whose discards stop at
+// the next one. A paragraph ending "word. \index{a} \index{b}" can then
+// break at the space after the word, and TeX takes that break, with an empty
+// last line, when the space would make the word's line overfull; without the
+// whatsits the same break would discard the \parfillskip too. So each run of
+// them in a paragraph's list gives way to one empty box of size zero, which
+// is the same to every rule the viewer applies – kept at a break, a node a
+// glue may break after, stepped over by the search for the character that
+// protrudes, of no width, drawing nothing – and needs no node kind of its
+// own in the wire format. Inside a box nothing is broken again, and they go.
 
 export const SUPPORTED_NODE_TYPES = new Set(['glyph', 'glue', 'kern', 'rule', 'hlist', 'vlist',
   'disc', 'penalty', 'math', 'picture', 'transform', 'adjust']);
 
-/** Remove unsupported nodes (with whatever they held); returns how many. */
+const standIn = (): TexNode => ({ type: 'hlist', subtype: 2, width: 0, height: 0, depth: 0, shift: 0,
+  glue_set: 0, glue_sign: 0, glue_order: 0, children: [] });
+
+/** Remove unsupported nodes (with whatever they held), each run of them in
+ *  a paragraph's own list leaving a stand-in; returns how many. */
 export function stripUnsupportedNodes(data: SerializerOutput): number {
   let stripped = 0;
   const keep = (n: TexNode) => {
@@ -41,7 +58,16 @@ export function stripUnsupportedNodes(data: SerializerOutput): number {
     stripped++;
     return false;
   };
-  for (const p of data.paragraphs) p.nodes = filterNodes(p.nodes ?? [], keep);
+  for (const p of data.paragraphs) {
+    const nodes: TexNode[] = [];
+    let run = false;
+    for (const n of p.nodes ?? []) {
+      if (keep(n)) nodes.push(...filterNodes([n], keep));
+      else if (!run) nodes.push(standIn());
+      run = !SUPPORTED_NODE_TYPES.has(n.type);
+    }
+    p.nodes = nodes;
+  }
   for (const item of contentItems(data)) if (item.box) item.box.children = filterNodes(item.box.children ?? [], keep);
   return stripped;
 }

@@ -1,0 +1,129 @@
+% Paragraphs ending in \index entries, a \label or a \special after the last
+% word, as in books and manuals. Each is a whatsit, which TeX's line breaker
+% keeps: the space after the last word is then a breakpoint whose discards
+% stop at the whatsit, and a break there leaves an empty last line that keeps
+% its \parfillskip. When the text nearly fills the line, so that the trailing
+% space would make it overfull, TeX takes that break: the word's line is
+% justified and an empty line follows. Each paragraph leaves 0 to 6.5 pt at
+% its line's end; a rule below each shows where the next item starts.
+\documentclass{article}
+\usepackage{makeidx}
+\makeindex
+\newcommand\T{Some words that end the paragraph here.}
+\newcommand\R{\begin{center}\rule{40pt}{20pt}\end{center}}
+\setbox0\hbox{\T}
+\begin{document}
+\noindent\hspace*{\dimexpr\linewidth-\wd0-0.0pt\relax}\T \index{a0} \index{b0}
+\index{c0}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-0.5pt\relax}\T \index{a1} \index{b1}
+\index{c1}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-1.0pt\relax}\T \index{a2} \index{b2}
+\index{c2}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-1.5pt\relax}\T \index{a3} \index{b3}
+\index{c3}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-2.0pt\relax}\T \index{a4} \index{b4}
+\index{c4}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-2.5pt\relax}\T \index{a5} \index{b5}
+\index{c5}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-3.0pt\relax}\T \index{a6} \index{b6}
+\index{c6}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-3.5pt\relax}\T \index{a7} \index{b7}
+\index{c7}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-4.0pt\relax}\T \index{a8} \index{b8}
+\index{c8}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-4.5pt\relax}\T \index{a9} \index{b9}
+\index{c9}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-5.0pt\relax}\T \index{a10} \index{b10}
+\index{c10}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-5.5pt\relax}\T \index{a11} \index{b11}
+\index{c11}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-6.0pt\relax}\T \index{a12} \index{b12}
+\index{c12}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-6.5pt\relax}\T \index{a13} \index{b13}
+\index{c13}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-0.0pt\relax}\T \label{l0}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-0.5pt\relax}\T \label{l1}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-1.0pt\relax}\T \label{l2}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-1.5pt\relax}\T \label{l3}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-3.0pt\relax}\T \label{l4}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-0.0pt\relax}\T \special{}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-0.5pt\relax}\T \special{}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-1.0pt\relax}\T \special{}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-1.5pt\relax}\T \special{}
+
+\R
+
+\noindent\hspace*{\dimexpr\linewidth-\wd0-3.0pt\relax}\T \special{}
+
+\R
+
+\noindent Control without whatsits: words that end the paragraph here.
+
+\R
+\end{document}
