@@ -19,14 +19,27 @@
   .corpus-domains-nav a:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
   .corpus-domains-nav span { font-size: .78rem; opacity: .6; font-variant-numeric: tabular-nums; }
 
-  /* A domain: its name in small capitals over a hairline, then the cards. */
-  .corpus-domain { margin: 2.25rem 0 0; scroll-margin-top: 1.25rem; }
+  /* The domains share rows: each is as many columns wide as it has cards,
+     up to the columns there are (3 in a wide column, 2, 1 on a phone), and
+     its cards sit on the same columns (a subgrid), so they line up across
+     domains. Domains come largest first; a narrow one moves up into a gap
+     a wider one left (dense), so no row has a hole it could fill. */
+  .corpus { container: corpus / inline-size; }
+  .corpus-domains { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2.25rem 1rem; grid-auto-flow: row dense; margin-top: 2.25rem; }
+  @container corpus (min-width: 35rem) {
+    .corpus-domains { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .corpus-domain.cg-2, .corpus-domain.cg-3 { grid-column: span 2; } }
+  @container corpus (min-width: 53rem) {
+    .corpus-domains { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .corpus-domain.cg-3 { grid-column: span 3; } }
+  /* A domain: its name in small capitals over a hairline, as wide as the
+     domain, then the cards. */
+  .corpus-domain { display: grid; grid-template-columns: subgrid; row-gap: 1rem; align-content: start; min-width: 0; scroll-margin-top: 1.25rem; }
   .corpus-domain > h3 {
-    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
-    margin: 0 0 1rem; padding-bottom: .45rem; border-bottom: 1px solid var(--cc-line);
+    grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+    margin: 0; padding-bottom: .45rem; border-bottom: 1px solid var(--cc-line);
     font-size: .78rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
   .corpus-domain > h3 span { font-weight: 400; letter-spacing: .02em; text-transform: none; opacity: .6; }
-  .corpus-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 1rem; }
 
   /* A card: a field of the faint tint the home page's cards have. */
   .corpus-card {

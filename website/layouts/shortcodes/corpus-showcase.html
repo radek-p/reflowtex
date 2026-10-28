@@ -20,10 +20,10 @@
       {{- end }}
     </ul>
   </nav>
+  <div class="corpus-domains">
   {{- range $groups }}
-  <section class="corpus-domain" id="{{ .anchor }}" aria-labelledby="{{ .anchor }}-h">
+  <section class="corpus-domain cg-{{ cond (gt (len .papers) 2) 3 (len .papers) }}" id="{{ .anchor }}" aria-labelledby="{{ .anchor }}-h">
     <h3 id="{{ .anchor }}-h">{{ .name }} <span>{{ len .papers }} {{ cond (eq (len .papers) 1) "paper" "papers" }}</span></h3>
-    <div class="corpus-grid">
       {{- range .papers }}
       {{- $p := . }}
       {{- $pub := partial "corpus/published.html" . }}
@@ -56,9 +56,9 @@
         </p>
       </article>
       {{- end }}
-    </div>
   </section>
   {{- end }}
+  </div>
 </div>
 {{- else -}}
 <p class="corpus-missing">The corpus's results are not part of this build.</p>
