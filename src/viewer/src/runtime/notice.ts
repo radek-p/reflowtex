@@ -4,7 +4,8 @@
 // fonts that failed to download, unless set). A bar at the bottom of the
 // window, as a cookie notice is, with a line per kind of record (its latest
 // message: the font line names every font that failed so far), Reload and
-// Dismiss. A new record shows it again. A page styles it with .latex-notice.
+// Dismiss. A new record shows it again; a line whose cause has gone is changed
+// or taken away (amendNotice). A page styles it with .latex-notice.
 import type { LogRecord } from '../../../shared/log.ts';
 
 let bar: HTMLDivElement | null = null;
@@ -47,12 +48,26 @@ export function presentNotice(r: LogRecord): void {
         document.body.appendChild(bar);
     }
     lines.set(r.code, r.message);
-    const text = bar.querySelector('.latex-notice-text')!;
-    text.replaceChildren(...[...lines].map(([code, message]) => {
+    drawLines();
+    bar.hidden = false;
+}
+
+/** Change the line a kind of record has in the bar, when it has one: to
+ *  `message`, or (null) take it away, and the bar with its last line. Not a
+ *  new record: a bar the reader dismissed stays dismissed. */
+export function amendNotice(code: string, message: string | null): void {
+    if (!bar || !lines.has(code)) return;
+    if (message === null) lines.delete(code);
+    else lines.set(code, message);
+    drawLines();
+    if (!lines.size) bar.hidden = true;
+}
+
+function drawLines(): void {
+    bar!.querySelector('.latex-notice-text')!.replaceChildren(...[...lines].map(([code, message]) => {
         const p = document.createElement('p');
         p.dataset.code = code;
         p.textContent = message;
         return p;
     }));
-    bar.hidden = false;
 }

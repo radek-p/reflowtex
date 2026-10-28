@@ -7,7 +7,8 @@
 // again. A face comes from the font map's served file beside the script
 // (fontBase, data-fonts-base, #latex-font-map), or from what the page gave
 // (host.fonts.provide: bytes or a URL). A font given again replaces its face
-// only once the new file has loaded, and the blocks are drawn again.
+// only once the new file has loaded, and the blocks are drawn again; one that
+// had failed to load is no longer counted as failed.
 //
 //   registerFonts(fontsData) -> FontTable    a block's fonts: faces made (or shared), loaded
 //   provideFont(file, source) -> Promise      host.fonts.provide
@@ -16,6 +17,7 @@
 import { ZOOM } from '../engine/core.ts';
 import { SCRIPT_URL } from './page.ts';
 import { report } from './log.ts';
+import { amendNotice } from './notice.ts';
 import { scheduleFontRepaint } from './blocks.ts';
 import { faceFromWire } from '../../../shared/font-face.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
@@ -94,7 +96,8 @@ export function provideFont(file: string, source: FontSource): Promise<boolean> 
     const old = faces.get(family);
     if (!old) { given.set(file, source); return Promise.resolve(true); }
     const next = makeFace(file, family, source);
-    if (old.url !== null && old.url === next.url) return old.settled.then(() => old.face.status === 'loaded');
+    // the same URL again: the face it made (one that failed is fetched again)
+    if (old.url !== null && old.url === next.url && old.face.status !== 'error') return old.settled.then(() => old.face.status === 'loaded');
     latest.set(family, next.face);
     const swap = next.face.load().then(() => {
         if (latest.get(family) !== next.face) return false;          // a newer one was given meanwhile
@@ -102,6 +105,7 @@ export function provideFont(file: string, source: FontSource): Promise<boolean> 
         document.fonts.add(next.face);
         document.fonts.delete(old.face);
         faces.set(family, next);
+        clearFontFailure(family);
         scheduleFontRepaint();
         return true;
     }, (e: unknown) => {
@@ -205,10 +209,10 @@ export async function registerFonts(fontsData: Record<string, DocFont>): Promise
 
     // A font that fails to load (a missing file, a network blip) must not
     // reject and blank the whole block – its glyphs fall back. Tell the
-    // reader about a failed one, once per page, by the font's own name.
+    // reader about a failed one, by the font's own name.
     await Promise.all(families.map(fam => whenFamilyLoaded(fam)));
-    const failed = families.filter(fam => faces.get(fam)?.face.status === 'error')
-        .map(fam => { const file = Object.keys(fileToFamily).find(k => fileToFamily[k] === fam); return file ? fileToName[file] : fam; });
+    const failed = Object.keys(fileToFamily).filter(file => faces.get(fileToFamily[file])?.face.status === 'error')
+        .map(file => ({ family: fileToFamily[file], file, name: fileToName[file] }));
     if (failed.length) reportFontFailure(failed);
     return fontInfo;
 }
@@ -218,15 +222,35 @@ export async function registerFonts(fontsData: Record<string, DocFont>): Promise
 // document) but draws its glyphs in a stand-in face, or not at all for the
 // symbol fonts of mathematics – which a reader cannot tell from a broken page.
 // So a failed download is logged (font-load-failed, an error) naming every
-// font that failed so far; the page's log shows it to readers unless the page
-// is configured otherwise (log.ts).
-export const failedFonts = new Set<string>();
-export function reportFontFailure(names: string[]): void {
-    for (const n of names) failedFonts.add(n);
-    const list = [...failedFonts];
-    const shown = list.slice(0, 4).join(', ') + (list.length > 4 ? ` and ${list.length - 4} more` : '');
-    report('error', 'font-load-failed', `Some fonts could not be downloaded (${shown}). `
-        + 'Text may appear in a stand-in font, and mathematics may be missing.', { fonts: list.join(', ') });
+// font that failed so far – details fonts, by their own names, and files, by
+// the original file names host.fonts takes – and the page's log shows it to
+// readers unless the page is configured otherwise (log.ts). A failed font
+// whose file loads later (host.fonts.provide) is failed no more: an info
+// record says so (font-loaded-after-failure), and the notice bar's line
+// names only the fonts still failed, or goes.
+
+/** A font whose face failed to load: the file the blocks name it by, and its own name. */
+export interface FailedFont { file: string; name: string }
+/** The fonts that failed to load and have not loaded since, by family. */
+export const failedFonts = new Map<string, FailedFont>();
+const failureMessage = (): string => {
+    const names = [...failedFonts.values()].map(f => f.name);
+    const shown = names.slice(0, 4).join(', ') + (names.length > 4 ? ` and ${names.length - 4} more` : '');
+    return `Some fonts could not be downloaded (${shown}). Text may appear in a stand-in font, and mathematics may be missing.`;
+};
+export function reportFontFailure(failed: readonly (FailedFont & { family: string })[]): void {
+    for (const { family, file, name } of failed) failedFonts.set(family, { file, name });
+    const list = [...failedFonts.values()];
+    report('error', 'font-load-failed', failureMessage(),
+        { fonts: list.map(f => f.name).join(', '), files: list.map(f => f.file).join(', ') });
+}
+/** A family's face has loaded: if it had failed, it is failed no more. */
+function clearFontFailure(family: string): void {
+    const f = failedFonts.get(family);
+    if (!f) return;
+    failedFonts.delete(family);
+    report('info', 'font-loaded-after-failure', `font ${f.name} has loaded, though it had failed to before`, { font: f.name, file: f.file });
+    amendNotice('font-load-failed', failedFonts.size ? failureMessage() : null);
 }
 
 // Optional: {original filename → served filename} written into the page as a JSON

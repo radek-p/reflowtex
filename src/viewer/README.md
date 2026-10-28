@@ -109,9 +109,16 @@ meanwhile. `host.fonts.loaded(file)` says whether a face has loaded, and
 If a font file cannot be downloaded, the block still lays out (the metrics
 travel with it) but draws in a stand-in face, and the symbol fonts of
 mathematics may draw nothing. So the viewer logs it (`font-load-failed`, an
-error, naming the fonts), and by default shows it to readers in the notice
-bar at the bottom of the window, with Reload and Dismiss (see The log; style
-it with `.latex-notice`). To show it no more, leave `font-load-failed` out of
+error, naming every font that failed so far: `details.fonts` by their own
+names, the TeX name of a Type 1 font and the file's stem of an OpenType one,
+and `details.files` by their original file names, as `host.fonts` takes
+them; each a comma-separated list), and by default shows it to readers in
+the notice bar at the bottom of the window, with Reload and Dismiss (see The
+log; style it with `.latex-notice`). A failed font whose file loads later,
+given with `host.fonts.provide` (the same URL again is fetched again), is
+failed no more: an `info` record, `font-loaded-after-failure` (`details.font`,
+`details.file`), says so, and the notice bar's line names only the fonts
+still failed, or goes with the last. To show it no more, leave `font-load-failed` out of
 the log's `show`; `window.reflowtex = { fontWarning: false }`, set before
 the viewer runs, does the same.
 
@@ -122,7 +129,7 @@ the blocks' data (each block carries its `warnings`: a font with no face to
 draw it, an error TeX carried on past, say), and the viewer's own (a font
 that failed to download, a kind whose component threw). Each record has a
 level (`error`, `warning`, `info`, `debug`), a stable `code` for its kind
-(`font-load-failed`, `font-without-face`, `tex-error`, `kind-failed`), its message, its particulars
+(`font-load-failed`, `font-loaded-after-failure`, `font-without-face`, `tex-error`, `kind-failed`), its message, its particulars
 (`details`, strings by name), where it comes from (`pipeline`, `viewer`,
 `companion` or `page`), the block it is about (its key) and its time. The
 type is `LogRecord` in [src/shared/log.ts](../shared/log.ts).

@@ -17,6 +17,7 @@ import type { SerializerOutput } from '../nodes.ts';
 import type { Log } from '../../shared/log.ts';
 import type { Capabilities } from './capabilities.ts';
 import type { DocumentKind, DocumentMetadataOption } from '../driver.ts';
+import type { PipelineOnlyKeys } from '../encode.ts';
 
 export interface CaptureDocument {
   /** what `content` is, as the caller says: a complete document, or a
@@ -160,6 +161,11 @@ export interface CaptureBackend {
   readonly name: string;
   readonly runtime: BackendRuntime;
   readonly capabilities: Capabilities;
+  /** keys its captures carry for the pipeline's own use that the wire format
+   *  does not (by latex.proto message name: Node, Paragraph, ContentItem, …),
+   *  left out when the pipeline encodes a block; any other key the schema has
+   *  no field for is an error (encode.ts) */
+  readonly pipelineOnly?: PipelineOnlyKeys;
   /** whether this build can use it (not whether its tools are installed:
    *  a missing program fails the capture, with a message saying so) */
   availability(): Availability;

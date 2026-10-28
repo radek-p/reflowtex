@@ -4,14 +4,16 @@
 // schema has a field of that name, so the .proto stays the single source of
 // truth for what the wire format carries; proto2 presence is kept by setting
 // only the keys the data has. A key the schema has no field for is an error,
-// unless it is one the pipeline keeps for itself (PIPELINE_ONLY): data the
-// wire format cannot carry is never dropped without a word.
+// unless it is one the pipeline keeps for itself (PIPELINE_ONLY, and those a
+// caller declares: EncodeOptions.pipelineOnly): data the wire format cannot
+// carry is never dropped without a word.
 import protobuf from 'protobufjs';
 import { messageType } from './schema.ts';
 import { walkNodes, contentItems, type SerializerOutput, type TexNode } from './nodes.ts';
 import { faceToWire } from '../shared/font-face.ts';
 import { SchemaMismatch } from './errors.ts';
-import { missingCharWarnings } from './warnings.ts';
+import { missingCharWarnings, type Warning } from './warnings.ts';
+import { fontWarnings } from './fonts/fonts.ts';
 
 export { SchemaMismatch };
 
@@ -28,6 +30,31 @@ const PIPELINE_ONLY: Record<string, ReadonlySet<string>> = {
   Paragraph: new Set(['index', 'band_indent', 'band_width']),
 };
 const NONE: ReadonlySet<string> = new Set();
+
+/** Keys data carries for the pipeline's own use beyond PIPELINE_ONLY, by
+ *  latex.proto message name (Node, Paragraph, ContentItem, …): what a capture
+ *  backend records for its own passes. Each is left out of the wire format
+ *  without a word; a key the message has a field for cannot be one. */
+export type PipelineOnlyKeys = Readonly<Record<string, readonly string[]>>;
+
+export interface EncodeOptions {
+  /** keys left out besides PIPELINE_ONLY (a backend's: CaptureBackend.pipelineOnly) */
+  pipelineOnly?: PipelineOnlyKeys;
+}
+
+/** PIPELINE_ONLY with the caller's keys, each checked against the schema. */
+function pipelineOnlyKeys(extra: PipelineOnlyKeys = {}): Record<string, ReadonlySet<string>> {
+  const out: Record<string, ReadonlySet<string>> = { ...PIPELINE_ONLY };
+  for (const [name, keys] of Object.entries(extra)) {
+    let type: protobuf.Type;
+    try { type = messageType(name); }
+    catch { throw new SchemaMismatch(`pipeline-only keys for ${name}: latex.proto has no message ${name}`); }
+    for (const k of keys)
+      if (type.fields[k]) throw new SchemaMismatch(`pipeline-only key ${name}.${k}: latex.proto's ${name} has a field ${k}, which the page would not get`);
+    out[name] = new Set([...(out[name] ?? NONE), ...keys]);
+  }
+  return out;
+}
 
 // ── Glyph metrics ───────────────────────────────────────────────────────────
 // A glyph's width/height/depth are interned into Document.glyph_metrics (the
@@ -79,10 +106,11 @@ export function texToText(s: string): string {
 // pipeline's own. Enum names are checked here: fromObject would ignore an
 // unknown one, and a node type the schema lacks means the transforms did not
 // run (or the schema is behind the serializer).
-function prune(type: protobuf.Type, d: Record<string, unknown>, metrics: Map<TexNode, number>, path: string): Record<string, unknown> {
+function prune(type: protobuf.Type, d: Record<string, unknown>, metrics: Map<TexNode, number>, ownKeys: Record<string, ReadonlySet<string>>,
+               path: string): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const glyph = type.name === 'Node' && d.type === 'glyph';
-  const own = PIPELINE_ONLY[type.name] ?? NONE;
+  const own = ownKeys[type.name] ?? NONE;
   for (const [k, v] of Object.entries(d)) {
     if (v === null || v === undefined || own.has(k)) continue;
     if (glyph && (k === 'width' || k === 'height' || k === 'depth')) continue;
@@ -92,8 +120,8 @@ function prune(type: protobuf.Type, d: Record<string, unknown>, metrics: Map<Tex
     f.resolve();
     const rt = f.resolvedType;
     if (rt instanceof protobuf.Type) {
-      out[k] = f.repeated ? (v as Record<string, unknown>[]).map((x, i) => prune(rt, x, metrics, `${path}.${k}[${i}]`))
-                          : prune(rt, v as Record<string, unknown>, metrics, `${path}.${k}`);
+      out[k] = f.repeated ? (v as Record<string, unknown>[]).map((x, i) => prune(rt, x, metrics, ownKeys, `${path}.${k}[${i}]`))
+                          : prune(rt, v as Record<string, unknown>, metrics, ownKeys, `${path}.${k}`);
     } else if (rt instanceof protobuf.Enum) {
       if (typeof v === 'string' && !(v in rt.values))
         throw new SchemaMismatch(`${path}.${k}: "${v}" is not a ${rt.name} in latex.proto`);
@@ -104,8 +132,20 @@ function prune(type: protobuf.Type, d: Record<string, unknown>, metrics: Map<Tex
   return out;
 }
 
+/** The warnings a block carries: the build's own, then those the encoder
+ *  derives from the data – one per font with no face that it sets glyphs in
+ *  (fontWarnings) and one per character TeX could not set – each left out
+ *  when the build's own already has it (a caller that added it itself). */
+function blockWarnings(data: SerializerOutput): Warning[] {
+  const own = data.warnings ?? [];
+  const has = new Set(own.map(w => `${w.code}\u0000${w.message}`));
+  const derived = [...fontWarnings(data), ...missingCharWarnings(data.missing_chars ?? [])];
+  return [...own, ...derived.filter(w => !has.has(`${w.code}\u0000${w.message}`))];
+}
+
 /** The Document message's fields from the transformed data. */
-export function documentObject(data: SerializerOutput): Record<string, unknown> {
+export function documentObject(data: SerializerOutput, o: EncodeOptions = {}): Record<string, unknown> {
+  const ownKeys = pipelineOnlyKeys(o.pipelineOnly);
   const { table, index } = internGlyphMetrics(data);
   const doc: Record<string, unknown> = {
     fonts: [...data.fonts].map(([id, f]) => {
@@ -126,15 +166,14 @@ export function documentObject(data: SerializerOutput): Record<string, unknown> 
     anchors: data.anchors ?? [],
     slots: data.slots ?? [],
     marks: data.marks ?? [],
-    // the build's warnings, and one per character TeX could not set
-    warnings: [...(data.warnings ?? []), ...missingCharWarnings(data.missing_chars ?? [])],
+    warnings: blockWarnings(data),
     glyph_metrics: table,
   };
-  return prune(messageType('Document'), doc, index, 'document');
+  return prune(messageType('Document'), doc, index, ownKeys, 'document');
 }
 
 /** Encode: output.json (transformed) → the bytes a page embeds. */
-export function encodeDocument(data: SerializerOutput): Uint8Array {
+export function encodeDocument(data: SerializerOutput, o: EncodeOptions = {}): Uint8Array {
   const Document = messageType('Document');
-  return Document.encode(Document.fromObject(documentObject(data))).finish();
+  return Document.encode(Document.fromObject(documentObject(data, o))).finish();
 }

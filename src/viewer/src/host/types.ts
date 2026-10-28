@@ -596,7 +596,12 @@ export interface Fonts {
      *  (no blank or stand-in frame; a file that fails leaves the old face, with
      *  a warning), and every block is drawn again. Resolves then: true once
      *  the file is in effect (at once for a font no block uses yet), false
-     *  when it could not be loaded or a newer one was given meanwhile. */
+     *  when it could not be loaded or a newer one was given meanwhile. A font
+     *  whose face had failed to load (the font-load-failed record names it
+     *  in details.files, by this name) is failed no more once its new file
+     *  is in effect: an info record, font-loaded-after-failure (details
+     *  font, file), says so. The same URL given again for a face that failed
+     *  is fetched again. */
     provide(file: string, source: ArrayBuffer | Uint8Array | string): Promise<boolean>;
     /** Whether the font's face has loaded. */
     loaded(file: string): boolean;
