@@ -21,6 +21,8 @@ export interface Result {
   hsize_pt?: number;
   /** relative to build/: the width's folder (pageless.pdf, vector/) and the page's */
   dir: string; page?: string;
+  /** whether the build has its lines paired (vector/lines.json): the report then compares by placement */
+  lines?: boolean;
 }
 
 export function writeResult(dir: string, r: Omit<Result, 'at' | 'dir'>, build: string): void {
@@ -37,7 +39,9 @@ export function writeIndex(build: string, order: string[]): Result[] {
     try { widths = readdirSync(caseDir).filter(w => /^w[+-]?\d+$/.test(w)); } catch { continue; }
     for (const w of widths) {
       const f = join(caseDir, w, 'result.json');
-      if (existsSync(f)) results.push(JSON.parse(readFileSync(f, 'utf8')));
+      if (!existsSync(f)) continue;
+      const r = JSON.parse(readFileSync(f, 'utf8')) as Result;
+      results.push(existsSync(join(caseDir, w, 'vector', 'lines.json')) ? { ...r, lines: true } : r);
     }
   }
   const rank = (r: Result) => { const i = order.indexOf(r.case); return i < 0 ? order.length : i; };

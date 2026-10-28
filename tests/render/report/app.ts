@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Render report: a render test's pageless PDF (TeX) on the left, the page the
 // browser reflowed on the right, and every glyph or rule that does not match
-// boxed in red on both (see README.md).
+// boxed in red on both (see README.md): by default once each line is set on
+// TeX's baseline (placement.ts), where the build has its lines paired
+// (lines.json), the vertical jumps between lines marked in amber; or in
+// absolute position, as vector-compare.ts matched them.
 //
 // Both sides are in the frame vector-compare.ts measures in: pt from the left
 // edge of the margin and from the top of the block. strip.svg (MuPDF's drawing
@@ -15,30 +18,32 @@
 import type { ComponentChildren, RefObject } from 'preact';
 import type { Result } from './results.ts';
 import type { InspectorApi } from '../../../src/inspector/src/protocol.ts';
+import { BAND_PT, PX_PER_PT, bandsIn, cutStrip, indexBoxes, type Box, type BoxIndex, type Strip } from './bands.ts';
+import { summarise, type Fact, type Place, type Step, type Summary } from './summary.ts';
+import { placementOf, type Glyph, type LineData, type VectorGlyphs } from './placement.ts';
 
 /** What the report reads of a comparison (vector.json, written by
  *  tools/pageless-pdf/vector-compare.ts): positions in pt. */
-interface Vector {
+interface Vector extends VectorGlyphs {
     error?: string;
-    hsize_pt?: number;
-    margin_pt?: number;
     glyphs?: { strip: number; viewer: number; matched: number };
-    matched?: { x: number; y: number; w: number; size: number; text: string; font?: string; dx: number; dy: number }[];
-    viewer_unmatched?: { x: number; y: number; w: number; size: number; text: string }[];
-    strip_unmatched?: { x: number; y: number }[];
     rules?: { x?: number; y: number; w?: number; h?: number; unmatched?: boolean; off: number; dx: number; dy: number }[];
-    rules_missing?: { x: number; y: number; w?: number; h?: number }[];
 }
-/** A box in pt. */
-interface Box { x: number; y: number; w: number; h: number }
-/** Something that does not match: its kind, a label, its place and note,
- *  and its box on either side. */
-interface Item { k: string; what: string; y: number; note: string; off?: number; allowed?: boolean; viewer?: Box; strip?: Box }
+/** Something that does not match: its kind, a label, its place (on the
+ *  browser's side; `texY`: on TeX's, where it differs) and note, and its box
+ *  on either side; `jump`: a vertical jump, its change as a label. */
+interface Item { k: string; what: string; y: number; texY?: number; note: string; off?: number; allowed?: boolean; jump?: string; viewer?: Box; strip?: Box }
 /** The TeX side and the browser's. */
 type Side = 'left' | 'right';
 type Marks = ReturnType<typeof makeMarks>;
 /** What the tested page offers the report (the website's page script). */
-interface PageHooks { __setTheme?: (theme: string) => void; __zoom?: (step: number) => void }
+interface PageHooks {
+    __setTheme?: (theme: string) => void; __zoom?: (step: number) => void;
+    /** The viewer's host API, of which the report needs one call: idle() resolves once nothing more is to come. */
+    reflowtex?: { host?: { idle?: () => Promise<void> } };
+}
+/** How long the live page is waited for to settle before it is shown anyway. */
+const SETTLE_CAP_MS = 20000;
 
 const INSPECTOR = document.querySelector<HTMLMetaElement>('meta[name="rr-inspector"]')!.content;
 // (the inspector's copy of Preact, htm and Signals: src/inspector/src/vendor/preact.d.ts)
@@ -46,7 +51,6 @@ const { html, render, useState, useEffect, useLayoutEffect, useMemo, useRef, use
     await import(new URL(`${INSPECTOR}vendor/preact.js`, document.baseURI).href) as typeof import('../../../src/inspector/src/vendor/preact.js');
 
 const BUILD = 'build/';
-const PX_PER_PT = 2;
 const RED = '#d93025', AMBER = '#e37400', BLUE = '#0b57d0';
 
 // ── Data ───────────────────────────────────────────────────────────────────────
@@ -76,7 +80,7 @@ function mismatches(v: Vector, glyphThr: number, ruleThr: number, rulesAllowed: 
     for (const g of v.viewer_unmatched ?? [])
         out.push({ k: '+', what: `${JSON.stringify(g.text)} browser only`, y: g.y, note: 'no TeX glyph', viewer: glyphBox(g.x, g.y, g.w, g.size) });
     for (const p of v.strip_unmatched ?? [])
-        out.push({ k: '−', what: 'glyph TeX only', y: p.y, note: 'not drawn', strip: glyphBox(p.x, p.y, 0, 0) });
+        out.push({ k: '−', what: `${p.text ? JSON.stringify(p.text) : 'glyph'} TeX only`, y: p.y, note: 'not drawn', strip: glyphBox(p.x, p.y, p.w ?? 0, p.size ?? 0) });
     for (const r of v.rules ?? []) {
         const b: Box = { x: r.x ?? 0, y: r.y, w: r.w ?? 1, h: r.h ?? 1 };
         if (r.unmatched) out.push({ k: '+', what: 'rule browser only', y: r.y, note: `${r.w} × ${r.h}`, viewer: b });
@@ -86,25 +90,180 @@ function mismatches(v: Vector, glyphThr: number, ruleThr: number, rulesAllowed: 
     for (const r of missing)
         out.push({ k: '−', what: 'rule TeX only', y: r.y, note: 'not drawn', allowed: missing.length <= rulesAllowed,
                    strip: { x: r.x, y: r.y, w: r.w ?? 2, h: r.h ?? 2 } });
+    return sorted(out);
+}
+const sorted = (items: Item[]): Item[] => {
     const x = (it: Item) => (it.viewer ?? it.strip)!.x;
-    return out.sort((a, b) => a.y - b.y || x(a) - x(b));
+    return items.sort((a, b) => a.y - b.y || x(a) - x(b));
+};
+const signedPt2 = (x: number): string => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x).toFixed(2)} pt`;
+
+/** The same, by placement (placement.ts): glyphs off along their line once it
+ *  is set on TeX's baseline, or on one side only; rules moved by their line's
+ *  dy; and each vertical jump, once, where it is. */
+function placementItems(v: Vector, l: LineData, glyphThr: number, ruleThr: number, rulesAllowed: number): Item[] {
+    const p = placementOf(v, l, glyphThr, ruleThr);
+    const width = (v.hsize_pt ?? 345) + 2 * (v.margin_pt ?? 36);
+    const gb = (g: Glyph) => glyphBox(g.x, g.y, g.w, g.size), q = (t: string) => (t ? JSON.stringify(t) : 'glyph');
+    const missing = p.off.filter(o => o.kind === 'rule-strip').length;
+    // (a jump's mark: just above the line it happens at, clear of its glyphs)
+    const above = (y: number) => Math.max(1, y - 11);
+    const out: Item[] = p.off.map((o): Item => {
+        switch (o.kind) {
+            case 'along': return { k: 'g', what: `${q(o.viewer.text)} along its line`, y: o.viewer.y, texY: o.strip.y, note: `${signed(o.dx)} along`,
+                                   off: Math.abs(o.dx), viewer: gb(o.viewer), strip: gb(o.strip) };
+            case 'viewer': return { k: '+', what: `${q(o.viewer.text)} browser only`, y: o.viewer.y, note: o.lone ? 'its line has no partner' : 'no TeX glyph in its line',
+                                    viewer: gb(o.viewer) };
+            case 'strip': return { k: '−', what: `${q(o.strip.text)} TeX only`, y: o.strip.y, note: o.lone ? 'its line has no partner' : 'not drawn in its line',
+                                   strip: gb(o.strip) };
+            case 'rule': return { k: 'r', what: 'rule', y: o.viewer.y, texY: o.strip.y, note: `corners ${f3(o.off)}`, off: o.off, viewer: o.viewer, strip: o.strip };
+            case 'rule-viewer': return { k: '+', what: 'rule browser only', y: o.viewer.y, note: `${o.viewer.w} × ${o.viewer.h}`, viewer: o.viewer };
+            case 'rule-strip': return { k: '−', what: 'rule TeX only', y: o.strip.y, note: 'not drawn', allowed: missing <= rulesAllowed, strip: o.strip };
+        }
+    });
+    for (const j of p.jumps)
+        out.push({ k: '↕', what: `jump ${signedPt2(j.change)}`, y: j.viewer_y, texY: j.strip_y, note: `dy ${j.before} → ${j.after}`, jump: signedPt2(j.change),
+                   viewer: { x: 0, y: above(j.viewer_y), w: width, h: 0 }, strip: { x: 0, y: above(j.strip_y), w: width, h: 0 } });
+    return sorted(out);
 }
 
-/** The boxes of one side as SVG markup, in pt: at least 3 pt across and a
- *  point clear of what they mark, so a hairline or a dot shows. */
-function boxesSvg(items: Item[], side: 'viewer' | 'strip', sel: number): string {
-    let s = '';
-    items.forEach((it, i) => {
-        const b = it[side];
-        if (!b) return;
+/** Boxes of one side as SVG markup, in pt: at least 3 pt across and a point
+ *  clear of what they mark, so a hairline or a dot shows. One path for those
+ *  in red and one for those in amber (a long document can have hundreds of
+ *  thousands: as many elements would be slow to draw), and the selected one
+ *  on top. */
+function boxesSvg(items: Item[], which: number[], side: 'viewer' | 'strip', sel: number): string {
+    let red = '', amber = '', on = '', jumps = '';
+    const r = (n: number) => +n.toFixed(3);
+    for (const i of which) {
+        const it = items[i], b = it[side];
+        if (!b) continue;
+        if (it.jump) {
+            const c = i === sel ? BLUE : AMBER;
+            jumps += `<rect x="${r(b.x)}" y="${r(b.y - .6)}" width="${r(b.w)}" height="1.2" fill="${c}"/>` +
+                `<text x="${r(b.x + b.w - 4)}" y="${r(b.y - 2.5)}" text-anchor="end" font-size="9" font-family="system-ui, sans-serif" fill="${c}">${it.jump}</text>`;
+            continue;
+        }
         const w = Math.max(b.w, 3), h = Math.max(b.h, 3);
         const x = b.x - (w - b.w) / 2 - 1, y = b.y - (h - b.h) / 2 - 1;
-        const on = i === sel;
-        const colour = on ? BLUE : it.allowed ? AMBER : RED;
-        s += `<rect x="${x}" y="${y}" width="${w + 2}" height="${h + 2}" fill="${on ? 'rgba(11,87,208,.15)' : 'none'}" stroke="${colour}"` +
-             ` stroke-width="${on ? 2.5 : 1.5}" vector-effect="non-scaling-stroke"${it.allowed ? ' stroke-dasharray="4 3"' : ''}/>`;
-    });
-    return s;
+        if (i === sel) on = `<rect x="${x}" y="${y}" width="${w + 2}" height="${h + 2}" fill="rgba(11,87,208,.15)" stroke="${BLUE}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`;
+        else if (it.allowed) amber += `M${r(x)} ${r(y)}h${r(w + 2)}v${r(h + 2)}h${r(-w - 2)}z`;
+        else red += `M${r(x)} ${r(y)}h${r(w + 2)}v${r(h + 2)}h${r(-w - 2)}z`;
+    }
+    const path = (d: string, colour: string, more = '') => (d ? `<path d="${d}" fill="none" stroke="${colour}" stroke-width="1.5" vector-effect="non-scaling-stroke"${more}/>` : '');
+    return path(red, RED) + path(amber, AMBER, ' stroke-dasharray="4 3"') + jumps + on;
+}
+
+// ── Drawing near the view only ──────────────────────────────────────────────
+// A long document's stage is tens of thousands of pt tall, and what is drawn
+// of it is what is near the pane's view. The TeX side and the boxes come in
+// bands across (bands.ts): those within NEAR views of the view are drawn at
+// once; then, while the page is idle, those within FAR, nearest first, one at
+// a time, so that a scroll finds them drawn; a band beyond FAR is let go. The
+// live page is a frame over the view and NEAR views either side, moved on in
+// one step when the view comes within NEAR_EDGE of a view of its edge (Live).
+const NEAR = .5, FAR = 2, NEAR_EDGE = .25;
+/** How long after the live page last scrolled itself it is taken to be
+ *  scrolling still (a smooth scroll moves it every frame). */
+const FOLLOWING_MS = 250;
+/** The pane's view, in the stage's pt: top, bottom, height. */
+function viewOf(p: HTMLElement, scale: number): [number, number, number] {
+    const h = Math.max(p.clientHeight, 1) / scale, v0 = p.scrollTop / scale;
+    return [v0, v0 + h, h];
+}
+/** Something to do while the page is idle (where there is no idle callback,
+ *  soon after); returns how to call it off. */
+function whenIdle(f: () => void): () => void {
+    if (typeof requestIdleCallback === 'function') { const id = requestIdleCallback(f, { timeout: 1000 }); return () => cancelIdleCallback(id); }
+    const id = setTimeout(f, 50);
+    return () => clearTimeout(id);
+}
+/** Which bands to draw, of those whose content reaches down to `bottom`
+ *  (bands.ts), on a pane at this scale; `top`: where band 0 starts on the
+ *  stage (pt). Top to bottom. */
+function useBands(pane: RefObject<HTMLElement>, scale: number, bottom: number[], top = 0): number[] {
+    const [shown, setShown] = useState<number[]>([]);
+    const cur = useRef(shown), of = useRef(bottom);
+    cur.current = shown;
+    useLayoutEffect(() => {
+        const p = pane.current;
+        if (!p) return;
+        let cancel: (() => void) | null = null;
+        const within = (n: number) => { const [v0, v1, h] = viewOf(p, scale); return bandsIn(bottom, v0 - top - h * n, v1 - top + h * n); };
+        const show = (next: number[]) => {
+            next.sort((a, b) => a - b);
+            const was = cur.current;
+            if (next.length === was.length && next.every((k, i) => k === was[i])) return;
+            cur.current = next;
+            setShown(next);
+        };
+        // one more band within FAR, the nearest, while the page is idle
+        const more = () => {
+            cancel = null;
+            const have = new Set(cur.current), [v0, v1] = viewOf(p, scale), mid = (v0 + v1) / 2 - top;
+            const want = within(FAR).filter(k => !have.has(k));
+            if (!want.length) return;
+            const k = want.reduce((a, b) => (Math.abs((b + .5) * BAND_PT - mid) < Math.abs((a + .5) * BAND_PT - mid) ? b : a));
+            show([...cur.current, k]);
+            cancel = whenIdle(more);
+        };
+        const check = () => {
+            const keep = new Set(within(FAR));
+            show([...new Set([...cur.current.filter(k => keep.has(k)), ...within(NEAR)])]);
+            cancel ??= whenIdle(more);
+        };
+        if (of.current !== bottom) { of.current = bottom; cur.current = []; }      // (other bands)
+        check();
+        p.addEventListener('scroll', check, { passive: true });
+        const ro = new ResizeObserver(check);
+        ro.observe(p);
+        return () => { p.removeEventListener('scroll', check); ro.disconnect(); cancel?.(); };
+    }, [pane.current, scale, bottom, top]);
+    // (until the effect has run for other bands, those shown before that there are not)
+    return of.current === bottom ? shown : shown.filter(k => k < bottom.length);
+}
+/** The part of the stage the live page is drawn over, in pt (top, bottom):
+ *  the view and NEAR views either side, until the view comes near its edge;
+ *  null until the pane is there. */
+function useNear(pane: RefObject<HTMLElement>, scale: number): [number, number] | null {
+    const [near, setNear] = useState<[number, number] | null>(null);
+    const cur = useRef(near);
+    cur.current = near;
+    useLayoutEffect(() => {
+        const p = pane.current;
+        if (!p) return;
+        const check = () => {
+            const [v0, v1, h] = viewOf(p, scale), n = cur.current, edge = h * NEAR_EDGE;
+            if (n && (v0 >= n[0] + edge || n[0] <= 0) && v1 <= n[1] - edge) return;
+            cur.current = [Math.max(0, v0 - h * NEAR), v1 + h * NEAR];
+            setNear(cur.current);
+        };
+        cur.current = null;
+        check();
+        p.addEventListener('scroll', check, { passive: true });
+        const ro = new ResizeObserver(check);
+        ro.observe(p);
+        return () => { p.removeEventListener('scroll', check); ro.disconnect(); };
+    }, [pane.current, scale]);
+    return near;
+}
+
+/** One side's boxes over its content: the bands of them near the view, in
+ *  the stage's pt; `at`: where the content's origin is on the stage. */
+function Boxes({ pane, items, index, side, sel, scale, stagePt, at = [0, 0] }: {
+        pane: RefObject<HTMLDivElement>; items: Item[]; index: BoxIndex; side: 'viewer' | 'strip'; sel: number; scale: number;
+        stagePt: [number, number]; at?: [number, number] }) {
+    const shown = useBands(pane, scale, index.bottom, at[1]);
+    const drawn = useMemo(() => new Map<number, string>(), [items, index]);    // each band's markup, with none selected
+    const selBand = sel >= 0 ? index.bandOf[sel] ?? -1 : -1;
+    const band = (k: number): string => {
+        if (k === selBand) return boxesSvg(items, index.bands[k], side, sel);
+        let s = drawn.get(k);
+        if (s === undefined) drawn.set(k, s = boxesSvg(items, index.bands[k], side, -1));
+        return s;
+    };
+    return html`<svg class="boxes" viewBox=${`${-at[0]} ${-at[1]} ${stagePt[0]} ${stagePt[1]}`} width=${stagePt[0] * scale} height=${stagePt[1] * scale}>
+        ${shown.map(k => html`<g key=${k} dangerouslySetInnerHTML=${{ __html: band(k) }}/>`)}</svg>`;
 }
 
 // ── Icons (the inspector's: 16px on a 20px grid) ─────────────────────────────────
@@ -363,31 +522,63 @@ function makeMarks({ scale, status }: { scale: () => number; status: () => HTMLE
     };
 }
 
-/** An image of one side, with its boxes. */
-function Sheet({ src, size, items, side, sel, scale }:
-        { src: string | null; size: [number, number] | null | false; items: Item[]; side: 'viewer' | 'strip'; sel: number; scale: number }) {
-    const svg = useMemo(() => boxesSvg(items, side, sel), [items, side, sel]);
+/** strip.svg, read and cut (cutStrip): null while it loads, false if there is none. */
+function useStrip(src: string | null): Strip | null | false {
+    const [strip, setStrip] = useState<Strip | null | false>(null);
+    useEffect(() => {
+        setStrip(null);
+        if (!src) return;
+        let live = true;
+        fetch(src, { cache: 'no-store' }).then(r => (r.ok ? r.text() : null)).then(t => { if (live) setStrip((t && cutStrip(t)) || false); },
+            () => { if (live) setStrip(false); });
+        return () => { live = false; };
+    }, [src]);
+    return strip;
+}
+
+const NONE: number[] = [];
+/** The TeX side: the strip's bands near the view. */
+function StripSheet({ strip, pane, scale }: { strip: Strip | null | false; pane: RefObject<HTMLDivElement>; scale: number }) {
+    const shown = useBands(pane, scale, strip ? strip.bottom : NONE);
+    if (strip === false) return html`<p class="empty">No image: run the test again (make test-render) to make one.</p>`;
+    if (!strip) return null;
+    return html`<svg class="sheet" viewBox=${strip.viewBox} width=${strip.size[0] * scale} height=${strip.size[1] * scale}
+            aria-hidden="true">
+        <defs dangerouslySetInnerHTML=${{ __html: strip.defs }}/>
+        ${strip.always ? html`<g dangerouslySetInnerHTML=${{ __html: strip.always }}/>` : null}
+        ${shown.map(i => html`<g key=${i} dangerouslySetInnerHTML=${{ __html: strip.bands[i] }}/>`)}
+    </svg>`;
+}
+
+/** An image of one side. */
+function Sheet({ src, size, scale }: { src: string | null; size: [number, number] | null | false; scale: number }) {
     if (size === false) return html`<p class="empty">No image: run the test again (make test-render) to make one.</p>`;
     if (!size) return null;
-    return html`<img class="sheet" src=${src!} alt="" draggable="false" style=${{ width: `${size[0] * scale}px`, height: `${size[1] * scale}px` }}/>
-        <svg class="boxes" viewBox=${`0 0 ${size[0]} ${size[1]}`} width=${size[0] * scale} height=${size[1] * scale}
-            dangerouslySetInnerHTML=${{ __html: svg }}/>`;
+    return html`<img class="sheet" src=${src!} alt="" draggable="false" style=${{ width: `${size[0] * scale}px`, height: `${size[1] * scale}px` }}/>`;
 }
 
 // What dom-dump.ts does to the page, so that it is laid out as it was
 // measured; and transparent past its end, so the pane's pattern shows there.
-function pinPage(win: Window & PageHooks, colPx: number, marginPx: number): void {
+function pinPage(win: Window & PageHooks, colPx: number, marginPx: number, hsizePt: number): void {
     const doc = win.document;
     if (win.__setTheme) win.__setTheme('light');
     if (win.__zoom) win.__zoom(0);
+    // the block is given its width in pt, as dom-dump.ts gives it: its own pixel width would be rounded, and the
+    // viewer would break the paragraphs at a measure TeX never used
+    for (const b of doc.querySelectorAll<HTMLElement>('#lt-content > .latex-block')) b.dataset.latexWidth = String(hsizePt);
+    // laid out whole, as the measurement lays it out (dom-dump.ts: for print). Sliced, the viewer lays out what is on
+    // its screen and places the rest by an estimate of its height until a slice of idle time lays it out; the frame,
+    // only as tall as the view and scrolled to it, would show at a height whatever the estimates put there – another
+    // part of the document than TeX's at that height – until the slices are done.
+    doc.documentElement.dataset.latexLayout = 'sync';
     const css = doc.createElement('style');
     css.textContent = `:root { color-scheme: light !important }
         html, body { margin:0 !important; padding:0 !important; background: transparent !important }
-        body > :not(#lt-content):not(#rr-overlay) { display:none !important }
+        body > :not(#lt-content) { display:none !important }
         #lt-content > :not(.latex-block) { display:none !important }
         #lt-content { max-width:none !important; width:${colPx}px !important; margin:0 !important; padding:0 ${marginPx}px !important; background: var(--latex-page-bg, #fff) !important }
         .latex-block { margin:0 !important; width:${colPx}px !important }
-        #rr-overlay { position:absolute; pointer-events:none; overflow:visible; z-index:2147483646 }
+        html { overflow: hidden !important; overflow-anchor: none !important }
         html, html * { cursor: default !important }
         html, html * { user-select: none !important; -webkit-user-select: none !important; -webkit-user-drag: none !important }`;
     doc.head.appendChild(css);
@@ -414,50 +605,89 @@ function pageColours(win: (Window & PageHooks) | null | undefined, mode: string)
     style.textContent = tex ? 'html { --latex-page-bg: #fff !important }' : '';
 }
 
-/** The page itself, as the test measured it: live, for the inspector. As tall
- *  as the stage and scaled to it, so it never scrolls on its own – the pane
- *  does. `onPage(win, block)` when it is ready; `onHeight(pt)` as it settles. */
-function Live({ src, items, sel, scale, stagePt, marginPt, hsizePt, colours, frameRef, onPage, onHeight }: {
-        src: string; items: Item[]; sel: number; scale: number; stagePt: [number, number]; marginPt: number; hsizePt: number; colours: string;
-        frameRef: RefObject<HTMLIFrameElement>; onPage: (win: Window, block: Element | null) => void; onHeight: (pt: number) => void }) {
+/** The page itself, as the test measured it: live, for the inspector. Scaled
+ *  to the stage, and only as tall as the part of it near the pane's view
+ *  (useNear): the frame sits there on the stage, its page scrolled to the same
+ *  place, so that the page draws what a reader's would – what is on its screen
+ *  and near it – not a whole long document at once. It never scrolls on its
+ *  own: the pane does, and the frame follows; where the page scrolls itself (a
+ *  link, the inspector showing a node), the pane follows it. `onPage(win,
+ *  block)` when it is ready; `onPlace(at, height)`: where the block's origin
+ *  is on the stage, and its height (pt), as it settles. */
+function Live({ src, pane, scale, marginPt, hsizePt, colours, frameRef, onPage, onPlace }: {
+        src: string; pane: RefObject<HTMLDivElement>; scale: number; marginPt: number; hsizePt: number; colours: string;
+        frameRef: RefObject<HTMLIFrameElement>; onPage: (win: Window, block: Element | null) => void;
+        onPlace: (at: [number, number], height: number) => void }) {
     // hidden until pinned: the page as it loads (its header and title, its own
     // layout) is not the page the test measured
     const [ready, setReady] = useState(false);
-    const colPx = Math.round(hsizePt * PX_PER_PT), marginPx = Math.round(marginPt * PX_PER_PT);
+    const colPx = hsizePt * PX_PER_PT, marginPx = marginPt * PX_PER_PT;
+    const k = scale / PX_PER_PT;
+    const near = useNear(pane, scale);
+    const shown = useRef(0);                                   // the page's scroll, in its px, as set here
     const place = useCallback(() => {
-        const win = frameRef.current?.contentWindow, doc = win?.document;
-        const block = doc?.querySelector('.latex-block');
+        const win = frameRef.current?.contentWindow;
+        const block = win?.document.querySelector('.latex-block');
         if (!block) return;
-        let svg = doc!.getElementById('rr-overlay') as SVGSVGElement | null;
-        if (!svg) { svg = doc!.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.id = 'rr-overlay'; doc!.body.appendChild(svg); }
         const r = block.getBoundingClientRect();
-        const wPt = (colPx + 2 * marginPx) / PX_PER_PT, hPt = r.height / PX_PER_PT;
-        Object.assign(svg.style, { left: `${r.left + win!.scrollX - marginPx}px`, top: `${r.top + win!.scrollY}px` });
-        svg.setAttribute('width', String(wPt * PX_PER_PT)); svg.setAttribute('height', String(hPt * PX_PER_PT));
-        svg.setAttribute('viewBox', `0 0 ${wPt} ${hPt}`);
-        svg.innerHTML = boxesSvg(items, 'viewer', sel);
-        onHeight(hPt);
-    }, [items, sel, colPx, marginPx]);
-    useEffect(place, [place]);
+        onPlace([(r.left + win!.scrollX - marginPx) / PX_PER_PT, (r.top + win!.scrollY) / PX_PER_PT], r.height / PX_PER_PT);
+    }, [marginPx, onPlace]);
+    const kNow = useRef(k), followed = useRef(-Infinity);
+    kNow.current = k;
+    /** Where the page has scrolled itself (a link, the inspector showing a
+     *  node): the frame moves as far, and the pane with it. Whether it had. */
+    const follow = (): boolean => {
+        const f = frameRef.current, win = f?.contentWindow;
+        if (!f || !win) return false;
+        const y = win.scrollY, d = y - shown.current;
+        if (!d) return false;
+        shown.current = y;
+        followed.current = performance.now();
+        f.style.top = `${y * kNow.current}px`;
+        if (pane.current) pane.current.scrollTop += d * kNow.current;
+        return true;
+    };
+    // the frame over the part near the view, and its page scrolled to it: in
+    // one go, so that nothing moves (at the end of the page, the page scrolls
+    // less, and the frame sits as far up) – unless the page is scrolling
+    // itself (a smooth scroll to a link's target), which the pane follows,
+    // and which a scroll from here would stop
+    useLayoutEffect(() => {
+        const f = frameRef.current, win = f?.contentWindow;
+        if (!f || !near) return;
+        f.style.height = `${Math.ceil((near[1] - near[0]) * PX_PER_PT)}px`;
+        let y = 0;
+        if (win && ready) {
+            if (follow() || performance.now() - followed.current < FOLLOWING_MS) return;
+            win.scrollTo(0, Math.floor(near[0] * PX_PER_PT));
+            y = win.scrollY;
+            // (the page paints what is now on its screen: the viewer looks again on a resize)
+            if (y !== shown.current) win.dispatchEvent(new Event('resize'));
+        }
+        shown.current = y;
+        f.style.top = `${y * k}px`;
+    }, [near?.[0], near?.[1], k, ready]);
     useEffect(() => pageColours(frameRef.current?.contentWindow, colours), [colours]);
     const onLoad = () => {
-        const win = frameRef.current!.contentWindow! as Window & PageHooks & typeof globalThis;
-        pinPage(win, colPx, marginPx);
+        const f = frameRef.current!, win = f.contentWindow! as Window & PageHooks & typeof globalThis;
+        pinPage(win, colPx, marginPx, hsizePt);
         pageColours(win, colours);
-        requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
-        requestAnimationFrame(() => requestAnimationFrame(() => setReady(true)));
-        // the block settles as its fonts arrive
+        // shown once the page is as it will stay: laid out at the pinned width (a resize settles a moment later) and
+        // with its fonts
+        const idle = win.reflowtex?.host?.idle?.() ?? Promise.resolve();
+        const cap = new Promise(done => setTimeout(done, SETTLE_CAP_MS));
+        Promise.race([idle, cap]).catch(() => {}).then(() => requestAnimationFrame(() => requestAnimationFrame(() => setReady(true))));
+        // the block settles as its fonts arrive, and as the page lays out what
+        // is further from its screen
         const block = win.document.querySelector('.latex-block');
         if (block) new win.ResizeObserver(() => place()).observe(block);
         setTimeout(place, 300);
+        win.addEventListener('scroll', follow, { passive: true });
         onPage(win, block);
     };
-    const k = scale / PX_PER_PT;
-    return html`<iframe class="page" ref=${frameRef} src=${src} title="The reflowed page" onLoad=${onLoad} scrolling="no"
-        style=${{ width: `${colPx + 2 * marginPx}px`, height: `${stagePt[1] * PX_PER_PT}px`, transform: `scale(${k})`,
-                 visibility: ready ? 'visible' : 'hidden' }}/>`;
+    return html`<iframe class="page" ref=${frameRef} src=${src} title="The reflowed page" onLoad=${onLoad}
+        style=${{ width: `${colPx + 2 * marginPx}px`, transform: `scale(${k})`, visibility: ready ? 'visible' : 'hidden' }}/>`;
 }
-
 
 // ── Side by side, or stacked ────────────────────────────────────────────────
 // A pane loses its heading's height and its padding across (report.css).
@@ -468,6 +698,55 @@ const HEADING_PX = 30, PANE_PAD_PX = 18;
 function betterSplit(w: number, h: number, [cw, ch]: number[]): 'row' | 'column' {
     const fit = (pw: number, ph: number) => { const s = Math.max(0, Math.min((pw - PANE_PAD_PX) / cw, (ph - HEADING_PX) / ch)); return s * s * cw * ch; };
     return fit(w / 2, h) >= fit(w, h / 2) ? 'row' : 'column';
+}
+
+// ── What the test says ─────────────────────────────────────────────────────────
+// Above the two sides, one line: the verdict and a few numbers (summary.ts),
+// or where the test stopped, in full. All of what it says is in the list's
+// Summary tab, in groups, each place it names a click away.
+
+/** The line above the two sides; `onMore` opens the Summary tab. */
+function Headline({ r, summary, onMore }: { r: Result; summary: Summary; onMore: () => void }) {
+    if (!r.problems?.length) return null;
+    if (r.status === 'error')
+        return html`<div class="headline error"><span class="st error">${STATUS.error}</span><span class="msg">${r.problems.join('\n')}</span></div>`;
+    const nums = summary.headline.length ? summary.headline : [r.problems[0]];
+    return html`<div class=${`headline ${r.status}`}>
+        <span class=${`st ${r.status}`}>${STATUS[r.status]}</span>
+        <span class="nums">${nums.map((n, i) => html`${i ? html`<span class="dot"> · </span>` : null}${n}`)}</span>
+        <button type="button" class="ib text" title="All the test says, in the list's Summary tab" onClick=${onMore}>Summary (${r.problems.length})</button>
+    </div>`;
+}
+
+/** A list's first FEW, and the rest on "show all". */
+const FEW = 5;
+function Few<T>({ items, row }: { items: T[]; row: (it: T, i: number) => ComponentChildren }) {
+    const [all, setAll] = useState(false);
+    return html`${(all ? items : items.slice(0, FEW)).map(row)}
+        ${items.length > FEW ? html`<button type="button" class="showall" onClick=${() => setAll(!all)}>${all ? 'show fewer' : `show all ${items.length}`}</button>` : null}`;
+}
+const signedPt = (x: number): string => `${x > 0 ? '+' : ''}${x} pt`;
+
+/** The Summary tab: what the test says, in groups; a step, or a place a
+ *  line names, goes there on both sides (`go`: browser y, TeX y). */
+function SummaryList({ summary, status, sel, go }: { summary: Summary; status: string; sel: string; go: (key: string, y: number, texY?: number) => void }) {
+    if (!summary.groups.length) return html`<p class="empty">${status === 'pass' ? 'Nothing to report: the test passes.' : 'The test says nothing more.'}</p>`;
+    const place = (key: string) => (p: Place, i: number) => html`<button type="button" class="srow place" aria-pressed=${String(sel === `${key}.${i}`)}
+        title=${`Go to y ${p.y} pt`} onClick=${() => go(`${key}.${i}`, p.y)}><span class="y">y ${p.y}</span><span class="what">${p.label}</span></button>`;
+    const fact = (key: string) => (f: Fact, i: number) => html`<div class="fact">
+        <div class="text">${f.head}</div>
+        ${f.places.length ? html`<div class="places"><${Few} items=${f.places} row=${place(`${key}.${i}`)}/></div>` : null}</div>`;
+    const step = (s: Step, i: number) => html`<button type="button" class="srow step" aria-pressed=${String(sel === `step.${i}`)} title=${s.text}
+        onClick=${() => go(`step.${i}`, s.y, s.texY)}>
+        <span class="y">y ${s.y}</span><span class="by">${signedPt(s.change)}</span>
+        <span class="what">${s.quote || '(no text)'}</span></button>`;
+    return html`<div class="summary">${summary.groups.map(g => html`<section class="group" data-group=${g.key}>
+        <h3>${g.title}</h3>
+        ${g.facts.map(fact(g.key))}
+        ${g.steps.length ? html`<div class="steps">
+            <div class="caption">${g.steps.length} ${g.steps[0].word}${g.steps.length > 1 ? 's' : ''}: browser y, dy's change, the line</div>
+            <${Few} items=${g.steps} row=${step}/></div>` : null}
+    </section>`)}</div>`;
 }
 
 // ── The page ───────────────────────────────────────────────────────────────────
@@ -481,6 +760,8 @@ function App() {
     const [report, setReport] = useState<{ results: Result[] } | null>(null), [error, setError] = useState<string | null>(null);
     const [id, setId] = useState(idFromHash());
     const [vec, setVec] = useState<Vector | null>(null);
+    const [lineData, setLineData] = useState<LineData | null>(null);
+    const [measure, setMeasure] = useSetting('measure', 'placement');        // placement, absolute
     const [thr, setThr] = useState<Record<string, [number, number]>>({});                   // per test: [glyph, rule]
     const [zoom, setZoom] = useState<'fit' | number>('fit');
     const [mode, setMode] = useState('live');
@@ -491,8 +772,11 @@ function App() {
     const lock = lockKept === 'on', setLock = (on: boolean) => setLockKept(on ? 'on' : 'off');
     const [inspecting, setInspecting] = useState(false);
     const [sel, setSel] = useState(-1);
+    const [tab, setTab] = useSetting('tab', 'mismatches');            // the list's: mismatches, summary
+    const [sumSel, setSumSel] = useState('');
     const [fitScale, setFitScale] = useState(1);
     const [liveH, setLiveH] = useState(0);
+    const [liveAt, setLiveAt] = useState<[number, number]>([0, 0]);
     const [autoDir, setAutoDir] = useState('row');
     const left = useRef<HTMLDivElement>(null), right = useRef<HTMLDivElement>(null), frame = useRef<HTMLIFrameElement>(null);
     const compare = useRef<HTMLDivElement>(null);
@@ -520,24 +804,39 @@ function App() {
     const idx = Math.max(0, results.findIndex(r => r.id === id));
     const r = results[idx];
     const go = (i: number) => { const t = results[(i + results.length) % results.length]; if (t) location.hash = encodeURIComponent(t.id); };
+    const summary = useMemo(() => summarise(r?.problems ?? []), [r?.id, r?.at]);
 
     useEffect(() => {
-        setVec(null); setSel(-1); setLiveH(0);
+        setVec(null); setLineData(null); setSel(-1); setSumSel(''); setLiveH(0); setLiveAt([0, 0]);
         if (!r || r.status === 'error') return;
         getJson<Vector>(`${BUILD}${r.dir}/vector/vector.json`).then(setVec, e => setVec({ error: String(e) }));
+        if (r.lines) getJson<LineData>(`${BUILD}${r.dir}/vector/lines.json`).then(setLineData, () => setLineData(null));
     }, [r?.id, r?.at]);
 
     const glyphThr = thr[r?.id]?.[0] ?? r?.tolerance ?? 0.05;
     const ruleThr = thr[r?.id]?.[1] ?? r?.rule_tolerance ?? r?.tolerance ?? 0.05;
     const setGlyphThr = (n: number) => setThr({ ...thr, [r.id]: [n, ruleThr] });
     const setRuleThr = (n: number) => setThr({ ...thr, [r.id]: [glyphThr, n] });
-    const items = useMemo(() => (vec && !vec.error ? mismatches(vec, glyphThr, ruleThr, r?.rules_missing ?? 0) : []), [vec, glyphThr, ruleThr]);
+    // by placement where the build has its lines paired, else in absolute position
+    const byPlacement = measure === 'placement' && !!lineData;
+    const items = useMemo(() => (!vec || vec.error ? []
+        : byPlacement ? placementItems(vec, lineData!, glyphThr, ruleThr, r?.rules_missing ?? 0)
+        : mismatches(vec, glyphThr, ruleThr, r?.rules_missing ?? 0)), [vec, lineData, byPlacement, glyphThr, ruleThr]);
+    const jumpCount = useMemo(() => items.filter(it => it.jump).length, [items]);
+    const index = useMemo(() => ({ strip: indexBoxes(items.map(it => it.strip)), viewer: indexBoxes(items.map(it => it.viewer)) }), [items]);
+    const onPlace = useCallback((at: [number, number], h: number) => {
+        setLiveH(h);
+        setLiveAt(was => (was[0] === at[0] && was[1] === at[1] ? was : at));
+    }, []);
 
     const stamp = r ? `?t=${encodeURIComponent(r.at)}` : '';
     const vdir = r ? `${BUILD}${r.dir}/vector/` : '';
     const noVec = !r ? null : r.status === 'error' ? 'The test stopped before a comparison: see above.' : vec?.error ? `No comparison: ${vec.error}` : null;
-    const stripSrc = r && !noVec ? `${vdir}strip.svg${stamp}` : null, viewerSrc = r && !noVec ? `${vdir}viewer.png${stamp}` : null;
-    const stripSize = useImageSize(stripSrc), viewerSize = useImageSize(viewerSrc);
+    // (the snapshot only when it is shown: the live page is shown where there is one)
+    const stripSrc = r && !noVec ? `${vdir}strip.svg${stamp}` : null;
+    const viewerSrc = r && !noVec && (mode !== 'live' || !r.page) ? `${vdir}viewer.png${stamp}` : null;
+    const strip = useStrip(stripSrc), viewerSize = useImageSize(viewerSrc);
+    const stripSize = strip ? strip.size : strip;
 
     // the page's width in pt: the column and a margin either side; the stage's
     // height: the longer side's, and a tail
@@ -572,12 +871,20 @@ function App() {
     useEffect(() => marks.draw());
     const stage: [number, number] = [stagePt[0] * scale, stagePt[1] * scale];
 
-    // Scrolling together: the same x and y on both, the stages being alike.
+    // Scrolling together: the same x and y on both, the stages being alike. A
+    // side's scroll made here to follow the other is not passed back: by the
+    // time its event comes, the other may have moved on (the live page, say,
+    // scrolled itself).
+    const echo = useRef(new Map<Element, [number, number]>());
     const follow = (from: RefObject<HTMLDivElement>, to: RefObject<HTMLDivElement>) => () => {
         if (!lock || !from.current || !to.current) return;
-        const a = from.current, b = to.current;
-        if (b.scrollTop !== a.scrollTop) b.scrollTop = a.scrollTop;
-        if (b.scrollLeft !== a.scrollLeft) b.scrollLeft = a.scrollLeft;
+        const a = from.current, b = to.current, was = echo.current.get(a);
+        echo.current.delete(a);
+        if (was && was[0] === a.scrollTop && was[1] === a.scrollLeft) return;
+        if (b.scrollTop === a.scrollTop && b.scrollLeft === a.scrollLeft) return;
+        b.scrollTop = a.scrollTop;
+        b.scrollLeft = a.scrollLeft;
+        echo.current.set(b, [b.scrollTop, b.scrollLeft]);
     };
     const onLeft = follow(left, right), onRight = follow(right, left);
     useEffect(() => { if (lock) onLeft(); }, [lock]);
@@ -588,14 +895,22 @@ function App() {
         lastScale.current = scale;
         if (f !== 1) for (const p of [left.current, right.current]) if (p) { p.scrollTop *= f; p.scrollLeft *= f; }
     }, [scale]);
+    // a height (pt) in the middle of both sides; scrolling apart, the TeX
+    // side at its own (a step's TeX y)
+    const centre = (y: number, texY = y) => {
+        for (const [p, at] of [[left.current, lock ? y : texY], [right.current, y]] as const)
+            if (p) p.scrollTop = Math.max(0, at * scale - p.clientHeight / 2);
+    };
     // show a mismatch: in the middle of both sides
     const reveal = (i: number) => {
         setSel(i);
+        setTab('mismatches');
         const it = items[i];
         if (!it) return;
-        for (const p of [left.current, right.current]) if (p) p.scrollTop = Math.max(0, it.y * scale - p.clientHeight / 2);
+        centre(it.y, it.texY);
         document.querySelector(`.list .row[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
     };
+    const goSummary = (key: string, y: number, texY?: number) => { setSumSel(key); centre(y, texY); };
 
     // The inspector: one panel, in this page, docked or floating as the
     // inspector does anywhere; it inspects the live page, whichever test is
@@ -690,13 +1005,14 @@ function App() {
                 <button class="ib" title="Read the report again (after a test run)" aria-label="Reload" onClick=${load}><${IconReload}/></button>
             </div>
         </div>
-        ${r.problems?.length ? html`<ul class=${`problems ${r.status}`}>${r.problems.map(p => html`<li>${p}</li>`)}</ul>` : null}
+        <${Headline} r=${r} summary=${summary} onMore=${() => setTab('summary')}/>
         <div class="main">
             <div class=${`compare${colours === 'inverted' ? ' inverted' : ''}`} ref=${compare} data-dir=${dir}>
                 <section class="side">
                     <h2><span class="title">TeX · pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></span></h2>
                     ${empty ?? html`<${Pane} paneRef=${left} onScroll=${onLeft} stage=${stage} stagePt=${stagePt} side="left" marks=${marks}>
-                        <${Sheet} src=${stripSrc} size=${stripSize} items=${items} side="strip" sel=${sel} scale=${scale}/><//>`}
+                        <${StripSheet} strip=${strip} pane=${left} scale=${scale}/>
+                        <${Boxes} pane=${left} items=${items} index=${index.strip} side="strip" sel=${sel} scale=${scale} stagePt=${stagePt}/><//>`}
                 </section>
                 <section class="side">
                     <h2><span class="title">Browser · reflowed</span>
@@ -704,28 +1020,49 @@ function App() {
                             onChange=${setSide} options=${[['live', 'Live page'], ['snapshot', 'Snapshot']]}/></h2>
                     ${empty ?? html`<${Pane} paneRef=${right} onScroll=${onRight} stage=${stage} stagePt=${stagePt} side="right" marks=${marks}>
                         ${mode === 'live' && liveSrc
-                            ? html`<${Live} key=${`${r.id}|${r.at}`} src=${liveSrc} items=${items} sel=${sel} scale=${scale} stagePt=${stagePt}
-                                marginPt=${marginPt} hsizePt=${hsizePt} colours=${colours} frameRef=${frame} onPage=${onPage} onHeight=${setLiveH}/>`
-                            : html`<${Sheet} src=${viewerSrc} size=${viewerSize} items=${items} side="viewer" sel=${sel} scale=${scale}/>`}<//>`}
+                            ? html`<${Live} key=${`${r.id}|${r.at}`} src=${liveSrc} pane=${right} scale=${scale}
+                                marginPt=${marginPt} hsizePt=${hsizePt} colours=${colours} frameRef=${frame} onPage=${onPage} onPlace=${onPlace}/>`
+                            : html`<${Sheet} src=${viewerSrc} size=${viewerSize} scale=${scale}/>`}
+                        <${Boxes} pane=${right} items=${items} index=${index.viewer} side="viewer" sel=${sel} scale=${scale} stagePt=${stagePt}
+                            at=${mode === 'live' && liveSrc ? liveAt : undefined}/><//>`}
                 </section>
             </div>
             <section class="list">
-                <h2>
-                    <span class="fill">${items.length ? `${items.length} not matching` : vec && !vec.error ? 'Everything matches' : ''}</span>
+                <h2 class="tabs">
+                    <span role="tablist" aria-label="The list">
+                        ${[['mismatches', 'Mismatches'], ['summary', 'Summary']].map(([k, label]) => html`<button type="button" role="tab" id=${`tab-${k}`}
+                            aria-controls=${`panel-${k}`} aria-selected=${String(tab === k)} onClick=${() => setTab(k)}>${label}</button>`)}
+                    </span>
+                    <span class="fill"></span>
+                    ${tab === 'mismatches' ? html`
                     <button class="ib" title="Previous (p)" aria-label="Previous mismatch" disabled=${!items.length} onClick=${() => reveal(Math.max(0, sel - 1))}><${IconUp}/></button>
-                    <button class="ib" title="Next (n)" aria-label="Next mismatch" disabled=${!items.length} onClick=${() => reveal(Math.min(items.length - 1, sel + 1))}><${IconDown}/></button>
+                    <button class="ib" title="Next (n)" aria-label="Next mismatch" disabled=${!items.length} onClick=${() => reveal(Math.min(items.length - 1, sel + 1))}><${IconDown}/></button>` : null}
                 </h2>
-                <div class="filters" role="group" aria-label="Error thresholds">
-                    <span class="caption muted" title="What is further off is listed here and boxed on both sides; ↺ goes back to the case's ceiling">Error threshold (pt)</span>
-                    <${Threshold} label="glyph" what="Glyphs" value=${glyphThr} fallback=${r.tolerance} onChange=${setGlyphThr}/>
-                    <${Threshold} label="rule" what="Rules" value=${ruleThr} fallback=${r.rule_tolerance ?? r.tolerance} onChange=${setRuleThr}/>
+                <div class="panel" role="tabpanel" id="panel-mismatches" aria-labelledby="tab-mismatches" hidden=${tab !== 'mismatches'}>
+                    <div class="count">${items.length - jumpCount ? `${items.length - jumpCount} not matching` : vec && !vec.error ? 'Everything matches' : ''}${
+                        jumpCount ? `, ${jumpCount} vertical jump${jumpCount > 1 ? 's' : ''}` : ''}</div>
+                    <div class="measure">
+                        <${Seg} title="How the two are compared: each line set on TeX's baseline (placement), or glyph by glyph where it is (absolute)"
+                            value=${byPlacement ? 'placement' : 'absolute'} onChange=${setMeasure}
+                            options=${lineData ? [['placement', 'Placement'], ['absolute', 'Absolute']] : [['absolute', 'Absolute']]}/>
+                        <span class="muted">${byPlacement ? 'each line on TeX\'s baseline; jumps in amber'
+                            : lineData ? 'where each glyph is: one jump moves all below it' : 'no line pairing in this build: where each glyph is'}</span>
+                    </div>
+                    <div class="filters" role="group" aria-label="Error thresholds">
+                        <span class="caption muted" title="What is further off is listed here and boxed on both sides; ↺ goes back to the case's ceiling">Error threshold (pt)</span>
+                        <${Threshold} label="glyph" what="Glyphs" value=${glyphThr} fallback=${r.tolerance} onChange=${setGlyphThr}/>
+                        <${Threshold} label="rule" what="Rules" value=${ruleThr} fallback=${r.rule_tolerance ?? r.tolerance} onChange=${setRuleThr}/>
+                    </div>
+                    <div class="rows" role="listbox" aria-label="Mismatches">
+                        ${shown.map((it, i) => html`<div class=${`row ${it.allowed ? 'allowed' : ''}`} role="option" data-i=${i} aria-selected=${String(i === sel)}
+                            onClick=${() => reveal(i)} title=${`y ${it.y} pt`}>
+                            <span class="k">${it.k === 'g' ? '◆' : it.k === 'r' ? '▬' : it.k}</span>
+                            <span class="what">${it.what}</span><span class="muted">${it.note}</span></div>`)}
+                        ${items.length > shown.length ? html`<div class="more">and ${items.length - shown.length} more</div>` : null}
+                    </div>
                 </div>
-                <div class="rows" role="listbox" aria-label="Mismatches">
-                    ${shown.map((it, i) => html`<div class=${`row ${it.allowed ? 'allowed' : ''}`} role="option" data-i=${i} aria-selected=${String(i === sel)}
-                        onClick=${() => reveal(i)} title=${`y ${it.y} pt`}>
-                        <span class="k">${it.k === 'g' ? '◆' : it.k === 'r' ? '▬' : it.k}</span>
-                        <span class="what">${it.what}</span><span class="muted">${it.note}</span></div>`)}
-                    ${items.length > shown.length ? html`<div class="more">and ${items.length - shown.length} more</div>` : null}
+                <div class="panel" role="tabpanel" id="panel-summary" aria-labelledby="tab-summary" hidden=${tab !== 'summary'}>
+                    <${SummaryList} key=${`${r.id}|${r.at}`} summary=${summary} status=${r.status} sel=${sumSel} go=${goSummary}/>
                 </div>
             </section>
         </div>
@@ -733,6 +1070,7 @@ function App() {
             <span class="group start">
                 <span class="key" title="A glyph or rule further off than the error threshold, or on one side only"><span class="sw"></span>error</span>
                 <span class="key" title="A rule of TeX's the browser did not draw, within the case's rules_missing"><span class="sw dash"></span>allowed</span>
+                <span class="key" title="Where the browser's lines move against TeX's (placement): the change, once, where it happens"><span class="sw jump"></span>jump</span>
                 <span class="key"><span class="sw sel"></span>selected</span>
             </span>
             <span class="group middle where mono" ref=${statusRef}></span>
