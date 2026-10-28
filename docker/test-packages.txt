@@ -25,3 +25,4 @@ float           # tests/render/cases/floats.tex, tests/capture/capture.test.ts (
 algorithms      # the same: algorithm.sty's ruled float
 newfloat        # tests/capture/capture.test.ts (floats in the flow): \DeclareFloatingEnvironment
 times           # tests/render/cases/times-microtype.tex: T1 Times through its virtual fonts (psnfss's times)
+tocloft         # tests/render/cases/leaders.tex: a table of contents whose entries keep their dot leaders

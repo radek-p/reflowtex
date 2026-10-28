@@ -94,9 +94,9 @@ export function runsOf(data: BlockData, i: number, a: number, b: number): LayerR
                                ink.push({ x, x1: x + w, top: y - (g.height || 0) * SP_TO_PX, bottom: y + (g.depth || 0) * SP_TO_PX });
                            }
                        } };
-        const { ratio, er, x0, fillRatio, fillOrder } = L.lrp[j];
+        const { ratio, er, x0, fillRatio, fillOrder, edge } = L.lrp[j];
         const nodes = L.lines[j].nodes;
-        renderNodes(data.fontInfo, sink, nodes, x0, L.baselineYs![j], fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+        renderNodes(data.fontInfo, sink, nodes, x0, L.baselineYs![j], fillOrder ? fillRatio : ratio, er, fillOrder || 0, 0, 0, 1, edge);
         const y0 = L.baselineYs![j] - maxOf(L.profiles![j], 'h'), y1 = L.baselineYs![j] + maxOf(L.profiles![j], 'd');
         let text = null as TextRun | null;   // (set in addText)
         const flush = () => { if (text && text.text.trim()) runs.push(text); text = null; };
@@ -228,8 +228,8 @@ export function inkOf(data: BlockData, i: number): { x0: number; x1: number; y0:
     const sink = { glyph: noop, space: noop, rule: noop, picture: noop, beginTransform: noop, endTransform: noop,
                    node: (n: TexNode, x: number, y: number, w: number) => { if (n.type === 'glyph' || n.type === 'rule') { x0 = Math.min(x0, x); x1 = Math.max(x1, x + w); } } };
     for (let j = 0; j < L.lines.length; j++) {
-        const { ratio, er, x0: lx, fillRatio, fillOrder } = L.lrp[j];
-        renderNodes(data.fontInfo, sink, L.lines[j].nodes, lx, L.baselineYs![j], fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+        const { ratio, er, x0: lx, fillRatio, fillOrder, edge } = L.lrp[j];
+        renderNodes(data.fontInfo, sink, L.lines[j].nodes, lx, L.baselineYs![j], fillOrder ? fillRatio : ratio, er, fillOrder || 0, 0, 0, 1, edge);
     }
     if (!(x1 > x0)) return null;
     const last = L.lines.length - 1;

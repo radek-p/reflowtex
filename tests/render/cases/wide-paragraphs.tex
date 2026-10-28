@@ -1,0 +1,22 @@
+% Paragraphs TeX set wider than the column, reaching past its right edge by a fixed measure at every width: a
+% list with a negative \rightmargin (as changepage's adjustwidth makes), a negative \rightskip, and a negative
+% \leftskip on the left; a centred line in each, and the text at the column's width between them.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\begin{document}
+A justified paragraph at the column's width, long enough to fill a few lines at every width the text is set
+at, so that its spaces are stretched or shrunk as TeX chose them and its last line ends in the middle.
+\begin{list}{}{\leftmargin 0pt \rightmargin -40pt \listparindent\parindent}
+\item[] A justified paragraph in a list whose right margin is negative: its lines reach 40pt past the
+column's right edge, as TeX set them, and its spaces are stretched or shrunk at that measure.
+
+\centering Centred in the wider list
+\end{list}
+{\rightskip -30pt A justified paragraph with a negative right skip, reaching 30pt past the right edge of the
+column at every width, its lines broken at that measure and justified to it.\par}
+{\leftskip -25pt A justified paragraph with a negative left skip, starting 25pt left of the column and broken
+at a measure 25pt wider than the column's, so that it overhangs the left margin on every line.\par}
+{\leftskip 0pt plus 1fil \rightskip -40pt plus 1fil \parfillskip 0pt Centred, 20pt right of the column's centre\par}
+A last justified paragraph at the column's width, long enough to fill a few lines, after the wide ones.
+\end{document}

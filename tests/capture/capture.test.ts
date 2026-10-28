@@ -158,7 +158,7 @@ test('a rule and a box in vertical mode are kept', async () => {
 test('a paragraph\'s margin skips are recorded as glue', async () => {
   const d = await capture(['Justified.', '', '{\\centering Centred.\\par}', '',
                            '{\\leftskip=1em plus .3\\hsize \\rightskip=0pt plus .3\\hsize minus 2pt Finite.\\par}'].join('\n'));
-  type Skips = { left_skip?: Node & { stretch?: number; stretch_order?: number; shrink?: number }; right_skip?: Skips['left_skip']; align?: string; indent?: number };
+  type Skips = { left_skip?: Node & { stretch?: number; stretch_order?: number; shrink?: number }; right_skip?: Skips['left_skip']; align?: string; indent?: number; left_skip_width?: number };
   const [just, centred, finite] = d.paragraphs as (Skips & { nodes: Node[] })[];
   assert.equal(just.left_skip, undefined);
   assert.equal(just.right_skip, undefined);
@@ -168,6 +168,10 @@ test('a paragraph\'s margin skips are recorded as glue', async () => {
   assert.ok(Math.abs((finite.left_skip as { stretch_rate?: number }).stretch_rate! - 0.3) < 1e-4);
   assert.equal(finite.right_skip!.shrink, 2 * 65536);
   assert.ok(finite.indent! >= 10 * 65536);   // the 1em
+  // which is in the indent, and recorded: the line's box starts that far left
+  // of its text (the origin of its \leaders)
+  assert.equal(finite.left_skip_width, finite.indent);
+  assert.equal(just.left_skip_width, undefined);
   assert.equal(centred.align, undefined);     // no label besides the skips
 });
 

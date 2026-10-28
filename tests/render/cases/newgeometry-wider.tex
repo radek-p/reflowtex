@@ -1,0 +1,21 @@
+% A page set wider than the document's text width: a title page under \newgeometry with smaller margins, its
+% paragraphs wider than the column (a centred block, a justified paragraph), then the text at its own width again.
+\documentclass[12pt]{report}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[hmargin=3cm]{geometry}
+\begin{document}
+\newgeometry{hmargin={2cm,2cm}}
+\begin{center}
+{\LARGE\bfseries\sffamily Bachelor's thesis}\\[1ex]
+submitted by\\
+A. N. Author
+\end{center}
+A justified paragraph on the wide page, long enough to fill two or three lines at this measure so that
+its spaces are stretched or shrunk as TeX chose, and a last line that ends somewhere in the middle.
+\restoregeometry
+\clearpage
+A justified paragraph at the document's own measure, long enough to fill two or three lines so that its
+spaces are stretched or shrunk as TeX chose, and a last line that ends somewhere in the middle.
+\begin{center}Centred at the normal width\end{center}
+\end{document}
