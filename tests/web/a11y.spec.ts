@@ -622,6 +622,7 @@ test('screen reader mode: a prompt at the page’s start, and the reading option
   expect(await page.evaluate(() => (window as any).reflowtex.screenReaderMode())).toBe(true);
   await expect(prompt).toHaveText(/is on/);
   await page.locator('.rtx-reading-button').click();
+  await page.locator('.rtx-reading-panel .rtx-reading-more > summary').click();   // under More
   const off = page.locator('.rtx-reading-panel [data-reader="false"]');
   await expect(page.locator('.rtx-reading-panel [data-reader="true"]')).toHaveAttribute('aria-checked', 'true');
   await off.click();

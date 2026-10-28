@@ -13,9 +13,14 @@
   {{- range partial "docs-group-pages.html" . -}}{{- $order = $order | append . -}}{{- end -}}
 {{- end -}}
 {{- $here := . -}}
+{{- /* The page first, so that what it says of itself is known below: a
+       page that sets columnWidthPt (a paper of the corpus) starts its
+       column at that width, the width control's "auto". */ -}}
+{{- $content := .Content -}}
+{{- $ownPt := .Store.Get "columnWidthPt" -}}
 {{- $idx := -1 -}}
 {{- range $i, $p := $order -}}{{- if eq $p.RelPermalink $here.RelPermalink -}}{{- $idx = $i -}}{{- end -}}{{- end -}}
-<div class="docs-layout{{ if .Params.toc }} has-toc{{ end }}{{ if .Params.wide }} is-wide{{ end }}">
+<div class="docs-layout{{ if .Params.toc }} has-toc{{ end }}{{ if .Params.wide }} is-wide{{ end }}{{ with $ownPt }} has-own-width{{ end }}"{{ with $ownPt }} style="{{ printf "--docs-own-width: %.3frem" (mul (float .) 0.125) | safeCSS }}"{{ end }}>
   <details class="docs-nav-fold">
     <summary>Contents</summary>
     {{ partial "docs-nav.html" (dict "docs" $docs "here" $here) }}
@@ -25,7 +30,7 @@
   </aside>
   <main id="lt-content">
     <h1{{ if .Params.latexTitle }} class="sr-only"{{ end }}>{{ .Title }}</h1>
-    {{ .Content }}
+    {{ $content }}
     <nav class="docs-pager" aria-label="Previous and next page">
       {{- if gt $idx 0 }}{{ with index $order (sub $idx 1) }}
       <a class="prev" href="{{ .RelPermalink }}"><span>Previous</span>{{ .LinkTitle }}</a>
@@ -44,7 +49,8 @@
    rather than the text squeezed; below that the column itself gives way. */
 (function () {
   var lay = document.currentScript.previousElementSibling, html = document.documentElement;
-  var WANT = { auto: 46, narrow: 34, normal: 46, wide: 64 };
+  var own = parseFloat(getComputedStyle(lay).getPropertyValue('--docs-own-width'));
+  var WANT = { auto: own || 46, narrow: 34, normal: 46, wide: 64 };
   function fit() {
     var rem = parseFloat(getComputedStyle(html).fontSize) || 16;
     var zoom = parseFloat(html.style.getPropertyValue('--rtx-zoom')) || 1;

@@ -60,7 +60,7 @@
     border: 1px solid color-mix(in srgb, currentColor 16%, transparent); overflow-wrap: anywhere; }
   .cc-labels li.cc-class { border-color: transparent; color: var(--lt-primary);
     background: color-mix(in srgb, var(--lt-primary) 10%, transparent); }
-  .cc-reason, .cc-patched { font-size: .825rem; }
+  .cc-patched { font-size: .825rem; }
   .cc-patched summary { cursor: pointer; }
   .cc-patched p { margin: .3rem 0 0 !important; font-size: .8rem; overflow-wrap: anywhere; }
   .cc-patched { opacity: .75; }
@@ -69,8 +69,6 @@
   .cc-links a.cc-read { font-weight: 650; color: var(--lt-primary); }
   .cc-licence { padding-top: .55rem; border-top: 1px solid var(--cc-line); font-size: .75rem; line-height: 1.4; opacity: .7; }
   .cc-licence span { display: block; }
-  /* Not shown: an outline where the others have a field. */
-  .corpus-card.is-stopped { background: none; border: 1px dashed color-mix(in srgb, currentColor 32%, transparent); }
 
   /* A paper's page: its details above the paper, in the column's measure. */
   .corpus-paper-head { display: flex; flex-direction: column; gap: .45rem; max-width: 46rem; margin: 0 0 2.5rem;
@@ -114,17 +112,17 @@
   .corpus-table tbody th a:hover { text-decoration: underline; }
   .corpus-table .ct-domain th {
     padding-top: 1.4rem; font-size: .72rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; opacity: .65; }
-  .ct-sub, .ct-reason { display: block; font-size: .78rem; font-weight: 400; opacity: .65; }
-  .ct-reason { opacity: .85; margin-top: .15rem; }
+  .ct-sub { display: block; font-size: .78rem; font-weight: 400; opacity: .65; }
   .ct-meta { display: flex; flex-wrap: wrap; gap: 0 .75em; align-items: baseline; }
   .corpus-table tbody th .ct-sub a { text-decoration: underline; }
   .ct-status { white-space: nowrap; }
   .ct-status > span { display: inline-flex; align-items: center; gap: .3em; }
   .ct-goal svg { width: .8em; height: .8em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  .ct-below, .ct-stopped { font-weight: 600; }
+  .ct-below { font-weight: 600; }
   .ct-compare { display: block; font-size: .8rem; color: var(--lt-primary); }
   .corpus-table tr:target > * { background: color-mix(in srgb, var(--lt-primary) 8%, transparent); }
-  .corpus-table tr.is-stopped td.num { opacity: .5; }
+  .corpus-selection { margin-top: 1.5rem; }
+  .corpus-stopped { max-width: 46rem; margin: 0 0 1rem; padding-left: 1.2rem; font-size: .85rem; }
   @media (max-width: 40rem) { .corpus-table .c-abs, .corpus-table .c-glyphs { display: none; } }
 </style>
 {{- end -}}

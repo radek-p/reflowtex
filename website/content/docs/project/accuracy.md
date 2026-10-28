@@ -84,8 +84,7 @@ with the two-column PDF. Only each paper's own text width is measured: at
 other widths the browser breaks the lines again, and there is no PDF from
 \TeX{} to compare with.
 The figures count glyphs only; the pixel comparison above is made for
-\texttt{testmath.tex} alone. A paper that cannot be shown is counted, with
-the reason, and has no figures.
+\texttt{testmath.tex} alone.
 {{< /latex >}}
 
 {{< corpus-accuracy >}}

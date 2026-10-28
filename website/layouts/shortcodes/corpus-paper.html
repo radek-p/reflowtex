@@ -15,7 +15,7 @@
 {{- with $p -}}
 {{- $pub := partial "corpus/published.html" . -}}
 <header class="corpus-paper-head">
-  <p class="cp-label"><a href="{{ "docs/showcase/" | relURL }}#paper-{{ .id }}">Showcase</a></p>
+  <p class="cp-label"><a href="{{ "docs/showcase/" | relURL }}#corpus">All papers</a></p>
   {{- with partial "corpus/authors-all.html" .authors }}<p class="cp-authors">{{ . }}</p>{{ end }}
   {{- $where := slice }}{{ with or .venue (and .published .published.venue) }}{{ $where = $where | append . }}{{ end }}
   {{- with .year }}{{ if not (in (delimit $where " ") (string .)) }}{{ $where = $where | append (string .) }}{{ end }}{{ end }}
@@ -46,6 +46,9 @@
 {{- $a11y := eq (printf "%v" site.Params.reflowtexA11y) "true" }}
 {{- /* The paper's fonts, served with the comparison's: merged over the
        site's font map on this page (partials/reflowtex-viewer.html). */}}
+{{- /* The width TeX set the paper at: the page's column starts at it
+       (partials/docs-shell.html). */}}
+{{- with $b.width_pt }}{{ $.Page.Store.Set "columnWidthPt" . }}{{ end }}
 {{- with $b.font_map }}{{ $.Page.Store.Set "latexFontMap" . }}{{ end }}
 {{- /* attrs: the viewer's options the paper was measured with (e.g.
        data-tex-final-pass), each a data-* attribute on the block. */}}

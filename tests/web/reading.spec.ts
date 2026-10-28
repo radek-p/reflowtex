@@ -80,6 +80,7 @@ test('formulas for screen readers: offered with the layer, and kept in step', as
   const page = await openPage('reading-a11y');
   await page.locator('.rtx-reading-button').click();
   const panel = page.locator('.rtx-reading-panel');
+  await panel.locator('.rtx-reading-more > summary').click();   // the less used options are under More
   await panel.locator('[data-m="spoken"]').click();
   expect(await page.evaluate(() => (window as any).reflowtex.accessibleMath())).toBe('spoken');
   expect(await page.locator('.latex-a11y math').count()).toBe(0);
@@ -96,6 +97,7 @@ test('the reader text can be shown, from the corner panel only', async ({ openPa
   const page = await openPage('reading-a11y');
   expect(await page.locator('#inline-options .rtx-reading-debug').count(), 'not in the card').toBe(0);
   await page.locator('.rtx-reading-button').click();
+  await page.locator('.rtx-reading-panel .rtx-reading-more > summary').click();
   const sw = page.locator('.rtx-reading-panel .rtx-reading-debug');
   await expect(sw).toHaveAttribute('aria-checked', 'false');
   const piece = page.locator('.latex-a11y > *').first();
