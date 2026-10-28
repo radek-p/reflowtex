@@ -1,0 +1,8 @@
+# Removes \usepackage[all,cmtip,2cell]{xy}, which no file of the paper uses (no \xymatrix, \xy or \ar[...]):
+# with these options xy loads xypdf, which stops under LuaTeX.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/macros.tex
++++ b/macros.tex
+@@ -13 +13 @@
+-\usepackage[all,cmtip,2cell]{xy}
++% \usepackage[all,cmtip,2cell]{xy}  (removed for the test corpus: unused, and its xypdf needs pdfTeX)
