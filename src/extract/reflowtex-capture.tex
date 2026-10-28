@@ -256,7 +256,10 @@
 % graphicx hands every file it includes, with the name it found it under
 % (through \graphicspath, \input@path or with a default extension), to
 % \Gin@setfile. The call is wrapped: the wrapper records that name and the
-% PDF page asked for, and stamps the image it makes with the record's id. It
+% PDF page asked for, and stamps the image it makes with the record's id; the
+% file LuaTeX then reads for the image replaces the name (serializer.lua,
+% find_image_file), since a package inside the wrapper may include another
+% file – epstopdf the PDF it made from an EPS figure. It
 % is installed after the preamble (reflowtex-capture-late.tex), around the
 % \Gin@setfile the preamble left – whatever loaded graphics, with whatever
 % options, and whatever redefined \Gin@setfile when it was loaded (LaTeX's

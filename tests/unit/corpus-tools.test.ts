@@ -158,12 +158,17 @@ test('the report lists what stopped last, and opens on a result unless the URL n
   assert.equal(opening(listed([{ id: 'x', status: 'error' }]), ''), 0);
 });
 
-test('a published block with displays carries the display model, or they would stay at the width TeX compiled', () => {
+test('a published block with displays was sampled at other widths, or they would stay at the width TeX compiled', () => {
   const Document = messageType('Document');
   const doc = (o: Record<string, unknown>) => Document.encode(Document.fromObject(o)).finish() as Uint8Array;
   const display = { kind: 'display' }, para = { kind: 'paragraph', para: 1 };
-  assert.equal(reflowsDisplays(doc({ content: [para, display] })), false);
-  assert.equal(reflowsDisplays(doc({ content: [para], streams: [{ content: [display] }] })), false);
-  assert.equal(reflowsDisplays(doc({ content: [para, display], display_model: true })), true);
-  assert.equal(reflowsDisplays(doc({ content: [para] })), true);
+  // never sampled: rejected, unless it has no display or a model of its own
+  assert.equal(reflowsDisplays(doc({ content: [para, display] }), false), false);
+  assert.equal(reflowsDisplays(doc({ content: [para], streams: [{ content: [display] }] }), false), false);
+  assert.equal(reflowsDisplays(doc({ content: [para, display], display_model: true }), false), true);
+  assert.equal(reflowsDisplays(doc({ content: [para] }), false), true);
+  // sampled: published with or without a model (TeX failed at every wider width, or no law held)
+  assert.equal(reflowsDisplays(doc({ content: [para, display] }), true), true);
+  assert.equal(reflowsDisplays(doc({ content: [para], streams: [{ content: [display] }] }), true), true);
+  assert.equal(reflowsDisplays(doc({ content: [para, display], display_model: true }), true), true);
 });

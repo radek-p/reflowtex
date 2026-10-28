@@ -153,9 +153,11 @@ async function capture(): Promise<void> {
     if (existsSync(from)) { for (const job of ['input', stem]) copyFileSync(from, join(BUILD, `${job}.bbl`)); break; }
   await pageless(join(SRC, paper!.main), { out: BUILD, passes: 3, widthExtra: '0pt', log: logger('capture') });
 }
+/** Whether the site stage sampled the displays at wider widths (report.ts checks it). */
+let displaysSampled = false;
 async function site(): Promise<void> {
   rmSync(join(BUILD, 'site'), { recursive: true, force: true });
-  await siteFromRun(BUILD, join(BUILD, 'site'), { log: logger('site'), title: paper!.title });
+  displaysSampled = (await siteFromRun(BUILD, join(BUILD, 'site'), { log: logger('site'), title: paper!.title })).sampled;
 }
 interface FullVector extends Vector { strip_unmatched: unknown[]; viewer_unmatched: unknown[] }
 async function compare(): Promise<FullVector> {
@@ -183,7 +185,7 @@ let metrics: Record<string, unknown> = { id, failed_at: failed?.stage ?? null, e
 if (v) {
   const L = lineSummary(BUILD);
   const [g, r] = worst(v);
-  metrics = { id, hsize_pt: v.hsize_pt, tolerance: TOL,
+  metrics = { id, hsize_pt: v.hsize_pt, tolerance: TOL, displays_sampled: displaysSampled,
     glyphs: { tex: v.glyphs.strip, drawn: v.glyphs.viewer, matched: v.glyphs.matched, missing: v.strip_unmatched.length, extra: v.viewer_unmatched.length },
     worst_pt: { glyph: g, rule: r },
     rules: { tex: v.rules.filter(x => !x.unmatched).length + v.rules_missing.length, drawn: v.rules.length, missing: v.rules_missing.length,

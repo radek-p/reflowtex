@@ -57,6 +57,8 @@ export interface Metrics {
   worst_pt?: { glyph: number; rule: number | null };
   problems_at_testmath_ceilings?: string[];
   finished?: string;
+  /** the site stage sampled the displays at wider widths (paper.ts) */
+  displays_sampled?: boolean;
   scores?: {
     placement: { share: number; tex_glyphs: number; tex_glyphs_in_unmatched_lines: number };
     vertical: { jumps: number; max_abs_pt: number };
@@ -159,7 +161,7 @@ if (import.meta.main) {
     let e = paperEntry(p, m, manifest.goal, patchNote);
     const at = m?.finished ?? (m ? statSync(src.metrics).mtime.toISOString() : new Date(0).toISOString());
     if (e.status === 'displayed') {
-      try { copyPaper(p, e, src.build, join(out, p.id), assets, embeds); }
+      try { copyPaper(p, e, m, src.build, join(out, p.id), assets, embeds); }
       catch (err) { e = { ...paperEntry(p, { failed_at: 'report', error: (err as Error).message }, manifest.goal, patchNote) }; }
     }
     papers.push(e);
@@ -202,9 +204,12 @@ export function blockOf(page: string): { block: string; bytes: Uint8Array; fonts
   return { block: blocks[0], bytes: new Uint8Array(Buffer.from(b64, 'base64')), fonts: map ? JSON.parse(map) as Record<string, string> : {} };
 }
 
-/** Whether a block's displays follow the reader's width: a document with a display carries the display model
- *  (pipeline.ts, sampleDisplays), or its displays stay as captured, set for the width TeX compiled them at. */
-export function reflowsDisplays(bytes: Uint8Array): boolean {
+/** Whether a block's displays were given the chance to follow the reader's width: a block with a display was
+ *  sampled at wider widths (pipeline.ts, sampleDisplays), or carries the display model. A sampled block may
+ *  still have none – TeX failed at every wider width, or no law held – and its displays then stay at the width
+ *  TeX compiled them at, as the pipeline publishes them; one never sampled is a site stage that skipped it. */
+export function reflowsDisplays(bytes: Uint8Array, sampled: boolean): boolean {
+  if (sampled) return true;
   type Item = { kind?: string };
   const Document = messageType('Document');
   const doc = Document.toObject(Document.decode(bytes), { enums: String, defaults: false }) as
@@ -224,14 +229,15 @@ export function blockJson(block: string, bytes: Uint8Array, fonts: Record<string
 }
 
 /** The paper's files: the block to embed, outline, measured page, links on, and the comparison. */
-function copyPaper(p: Paper, e: CorpusPaper, build: string, dir: string, assets: string, blocks: string): void {
+function copyPaper(p: Paper, e: CorpusPaper, m: Metrics | null, build: string, dir: string, assets: string, blocks: string): void {
   const site = join(build, 'site');
   for (const f of ['pageless.pdf', 'vector/vector.json', 'vector/lines.json']) if (!existsSync(join(build, f))) throw new Error(`no ${f} in ${build}`);
   if (!existsSync(join(site, 'index.html'))) throw new Error(`no site/index.html in ${build}`);
   const measured = readFileSync(join(site, 'index.html'), 'utf8');
   const { block, bytes, fonts } = blockOf(measured);
   // the site shows the paper at other widths than its own
-  if (!reflowsDisplays(bytes)) throw new Error(`the block in ${site} has displays but no display model: they would not follow the width`);
+  if (!reflowsDisplays(bytes, Boolean(m?.displays_sampled)))
+    throw new Error(`the block in ${site} has displays and was never sampled at other widths: they would not follow the width`);
   // the page's scripts and fonts: shared when every one of them is the same as the shared copy (or there is none yet)
   const own = filesUnder(site).filter(f => f === 'latex-viewer.js' || f === 'protobuf.min.js' || f.startsWith('fonts/'));
   const shared = own.every(f => !existsSync(join(assets, f)) || sameFile(join(site, f), join(assets, f)));

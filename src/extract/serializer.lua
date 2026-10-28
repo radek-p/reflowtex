@@ -690,18 +690,40 @@ function Serializer.note_captured_picture(id, page)
     }
 end
 
--- The name graphicx found an included file under, which may be relative to a
--- folder of TEXINPUTS (figs/a.pdf), and the page asked for. kpse makes the
--- same lookup LuaTeX makes for the image; the result is made absolute, so it
--- names the same file from whatever directory the pipeline reads it.
-function Serializer.note_graphic(id, name, page)
-    local file = kpse.find_file(name) or name
-    if not file:match("^/") then file = lfs.currentdir() .. "/" .. (file:gsub("^%./", "")) end
-    picture_files[id] = {
-        file = file,
-        page = tonumber(page) or 1,
-        externalized = false,
-    }
+-- An included file: the file LuaTeX read for the image, and the page asked
+-- for. The name graphicx was handed (note_graphic) need not be that file: a
+-- package between it and the driver may include another in its place –
+-- epstopdf, for figs/a.eps, includes the PDF made from it,
+-- figs/a-eps-converted-to.pdf. So the file is taken where LuaTeX looks it up
+-- (find_image_file, below), for the included graphic being made then; the
+-- driver makes an image once per file and reuses it, so a name already met is
+-- the file it led to the first time. Paths are made absolute, so they name the
+-- same file from whatever directory the pipeline reads them.
+do
+    local image_file_of = {}     -- a name graphicx was handed → the file LuaTeX read for it
+    local function absolute(file)
+        if file:match("^/") then return file end
+        return lfs.currentdir() .. "/" .. (file:gsub("^%./", ""))
+    end
+    function Serializer.note_graphic(id, name, page)
+        picture_files[id] = {
+            name = name,
+            file = image_file_of[name] or absolute(kpse.find_file(name, "tex", true) or name),
+            page = tonumber(page) or 1,
+            externalized = false,
+        }
+    end
+    -- With this callback set, LuaTeX makes no lookup of its own: the one it makes
+    -- otherwise is made here (kpse, TeX's format, the file must exist).
+    luatexbase.add_to_callback("find_image_file", function(name)
+        local found = kpse.find_file(name, "tex", true)
+        local rec = picture_files[tex.attribute[PIC_ATTR]]
+        if found and rec and rec.externalized == false then
+            rec.file = absolute(found)
+            image_file_of[rec.name] = rec.file
+        end
+        return found
+    end, "find_image_file")
 end
 
 -- ── Transforms ────────────────────────────────────────────────────────────

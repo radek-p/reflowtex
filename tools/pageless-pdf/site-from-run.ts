@@ -44,8 +44,11 @@ const readBack = (jobname: string) => ['serializer.lua', ...['aux', 'toc', 'lof'
   ...CAPTURE_FILES.map(f => basename(f)), DOCUMENT_FILE, CALLER_PREAMBLE_FILE];
 
 export interface SiteFromRunOptions { extraScripts?: string[]; title?: string; singleWidth?: boolean; passes?: number; log?: (s: string) => void }
+/** The page written, and whether the displays were sampled at wider widths
+ *  (sampleDisplays ran; it may still have found no model to attach). */
+export interface SiteFromRunResult { page: string; sampled: boolean }
 
-export async function siteFromRun(build: string, site: string, o: SiteFromRunOptions = {}): Promise<string> {
+export async function siteFromRun(build: string, site: string, o: SiteFromRunOptions = {}): Promise<SiteFromRunResult> {
   const log = o.log ?? (s => console.log(s));
   // the pipeline's messages, each as its line
   const pipelineLog = new Log('pipeline', [r => log(r.message)]);
@@ -117,7 +120,7 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
     fontMap: pipe.fontMap(), sourceUrl: 'https://github.com/radek-p/reflowtex', fontsBase: 'fonts/',
     extraScripts: (o.extraScripts ?? []).map(e => basename(e)),
   }));
-  return join(site, 'index.html');
+  return { page: join(site, 'index.html'), sampled: !o.singleWidth };
 }
 
 if (import.meta.main) {
@@ -130,6 +133,6 @@ if (import.meta.main) {
   });
   if (positionals.length !== 2) { console.error('usage: site-from-run.ts <build dir> <site dir> [--extra-script F]… [--title T] [--single-width] [--passes N]'); process.exit(2); }
   try {
-    console.log(`site: ${await siteFromRun(positionals[0], positionals[1], { extraScripts: v['extra-script'], title: v.title, singleWidth: v['single-width'], passes: Number(v.passes) })}`);
+    console.log(`site: ${(await siteFromRun(positionals[0], positionals[1], { extraScripts: v['extra-script'], title: v.title, singleWidth: v['single-width'], passes: Number(v.passes) })).page}`);
   } catch (e) { console.error(`error: ${(e as Error).message}`); process.exit(1); }
 }

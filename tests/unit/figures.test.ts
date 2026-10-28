@@ -174,3 +174,24 @@ test('through the pipeline: the figure drawn, by any name graphicx finds it unde
     for (const p of data.pictures) assert.match(p.svg, /data-text/, 'its label drawn as text');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('a document that loads epstopdf, its EPS figure in a subfolder, its displays sampled at wider widths: each run draws the PDF epstopdf included', { skip: tools }, async () => {
+  const root = tmp('sampled');
+  try {
+    const src = join(root, 'src');
+    write(join(src, 'figures', 'plot.eps'), EPS);
+    const pipe = new Pipeline({ buildRoot: join(root, 'build'), fontsDir: join(root, 'fonts'), searchDirs: [src], mathml: false, log: new Log('pipeline') });
+    // epstopdf loaded in the preamble wraps graphics' \Gin@setfile before the capture
+    // code's wrapper goes around it, which is then handed the EPS's name, not the PDF's;
+    // a display, so the document is compiled again at wider widths; the figure
+    // twice, so the driver's second image is the one it made the first time
+    await pipe.compile('\\documentclass{article}\n\\usepackage{graphicx}\n\\usepackage{epstopdf}\n\\begin{document}\nText before the figure, long enough to make a line or two of a paragraph.\n' +
+      '\\[ a + b = c \\]\n\\includegraphics[width=60pt]{figures/plot} and again \\includegraphics[width=40pt]{figures/plot.eps}.\n\\end{document}\n',
+    { kind: 'document', key: 'sampled' });
+    const data = JSON.parse(readFileSync(join(root, 'build', 'sampled', 'output.json'), 'utf8')) as { display_model?: boolean; pictures: { svg: string }[] };
+    assert.equal(data.display_model, true, 'the displays were modelled from wider samples');
+    assert.ok(data.pictures.length >= 1);
+    for (const p of data.pictures) assert.match(p.svg, /data-text/, 'its label drawn as text');
+    assert.deepEqual(Object.keys(pipe.inputs.get('sampled')!), [join(src, 'figures', 'plot.eps')]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
