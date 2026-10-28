@@ -17,7 +17,7 @@
 //
 // and this writes:
 //
-//     <site>/data/latex_blocks/<key>.json   {nodelist_b64, a11y_html, content_hash, toolchain, inputs}
+//     <site>/data/latex_blocks/<key>.json   {nodelist_b64, a11y_html, content_hash, toolchain, inputs, tex_errors}
 //     <site>/data/latex_schema.json         {schema_b64}
 //     <site>/data/latex_files.json          {"name.tex": key} for file refs and as="…"
 //     <site>/data/latex_color_maps.json     {name: <colour map>, …}
@@ -41,6 +41,7 @@ import { a11yLayerFromBytes } from '../../src/pipeline/a11y.ts';
 import { listBackends, formatBackends } from '../../src/pipeline/backend/registry.ts';
 import { installViewer, schemaBase64, pyJsonDumps, jsonSorted } from '../../src/pipeline/site.ts';
 import { consoleLog } from '../../src/shared/log.ts';
+import { texErrorWarning } from '../../src/pipeline/warnings.ts';
 
 // Two ways to write a block:
 //   inline     {{< latex [attrs] >}} …LaTeX… {{< /latex >}}
@@ -238,9 +239,15 @@ if (!blocks.size && !batches.size) { log.info('no-blocks', 'No {{< latex >}} blo
 const toolchain = toolchainHash(undefined, pipe.backend.id);
 // With it, the block's accessible layer (src/pipeline/a11y.ts): the shortcode
 // puts it after the block when the site asks (params.reflowtexA11y, a11y="…").
-const writeBlock = (key: string, bytes: Uint8Array, hash: string, inputs: Record<string, string> = pipe.inputs.get(key) ?? {}) =>
+// And the errors TeX carried on past in it, one line each (tex_errors): the
+// block is built as TeX set it, and the shortcode fails the site's build on
+// them when it asks (params.reflowtexFailOnTexError).
+const texErrorsOf = (key: string): string[] =>
+  (pipe.diagnostics.get(key) ?? []).filter(d => d.severity === 'error').map(d => texErrorWarning(d).message);
+const writeBlock = (key: string, bytes: Uint8Array, hash: string, inputs: Record<string, string> = pipe.inputs.get(key) ?? {},
+                    texErrors: string[] = texErrorsOf(key)) =>
   writeFileSync(join(dataDir, `${key}.json`), JSON.stringify({ nodelist_b64: Buffer.from(bytes).toString('base64'),
-    a11y_html: a11yLayerFromBytes(bytes), content_hash: hash, toolchain, inputs }, null, 2));
+    a11y_html: a11yLayerFromBytes(bytes), content_hash: hash, toolchain, inputs, ...(texErrors.length ? { tex_errors: texErrors } : {}) }, null, 2));
 const storedHash = (key: string): string | undefined => {
   const f = join(dataDir, `${key}.json`);
   try {
@@ -258,7 +265,7 @@ const current = (key: string) => {
   if (existsSync(join(buildRoot, key, 'output.json'))) pipe.useCached(key);
   const f = join(dataDir, `${key}.json`), d = JSON.parse(readFileSync(f, 'utf8'));
   const bytes = Buffer.from(d.nodelist_b64, 'base64');
-  if (d.a11y_html !== a11yLayerFromBytes(bytes)) writeBlock(key, bytes, d.content_hash, d.inputs ?? {});
+  if (d.a11y_html !== a11yLayerFromBytes(bytes)) writeBlock(key, bytes, d.content_hash, d.inputs ?? {}, d.tex_errors ?? []);
 };
 
 const stale: { key: string; content: string; preamble: string; name: string; kind: Kind }[] = [];
@@ -309,7 +316,7 @@ for (const [bname, all] of [...batches].sort((a, b) => (a[0] < b[0] ? -1 : a[0] 
   try {
     const blobs = await pipe.compileBatch(parts.map(p => ({ key: p.key, content: p.content, name: p.name })),
       { preamble, key: bhash, name: `batch "${bname}"` });
-    for (const [key, bytes] of blobs) writeBlock(key, bytes, bhash);
+    for (const [key, bytes] of blobs) writeBlock(key, bytes, bhash, undefined, texErrorsOf(bhash));
     log.info('batch-compiled', `  batch "${bname}": done (${[...blobs.values()].map(b => `${b.length} bytes`).join(', ')})`, { batch: bname });
   } catch (e) {
     log.error('batch-failed', `ERROR: batch "${bname}":\n${(e as Error).message}`, { batch: bname, error: (e as Error).message });

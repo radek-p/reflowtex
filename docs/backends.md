@@ -72,7 +72,12 @@ A backend (`CaptureBackend`) has an `id`, a `name`, a `runtime`, a
   - `pictures`: a picture source, when the backend makes pictures' SVG
     itself (otherwise the pipeline converts each picture's PDF page in
     `dir`);
-  - `diagnostics`: warnings, with their file and line where known.
+  - `diagnostics`: warnings, and the errors TeX carried on past (severity
+    `error`, each once with its `count`, its `context` and the `pass`),
+    with their file and line where known. The pipeline logs those errors as
+    `tex-error` warnings; with `texErrors: 'error'` (`CaptureDocument`)
+    the backend fails the capture at the first instead. A capture fails
+    (`TexError`) when TeX gave no usable output.
 - The pipeline calls `capture` once for the document, then again for each
   width sample it needs. The job may keep state between captures (LuaTeX
   runs each later capture in a copy of the first one's directory, so it

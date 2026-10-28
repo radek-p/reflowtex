@@ -20,7 +20,7 @@ compile time).
 
 Text holding a `\documentclass` and passed as a snippet is still a snippet. It
 goes into the preamble's document, and TeX reports the second class line as
-an error.
+an error (a warning in the build's log: see TeX errors).
 
 ## How a document is compiled
 
@@ -74,6 +74,46 @@ and snippets alike.
   sets one metadata for many documents. It is the only command reflowtex
   redefines for the document, and only under force.
 
+## TeX errors
+
+lualatex runs in nonstopmode, as an author's build tool runs it. The build of
+a block stops (`TexError`) only where lualatex itself gives the author
+nothing usable:
+
+- TeX stopped: an emergency stop (a class or file not found, a `\read` from
+  the terminal, no `\end{document}`), a full memory ("TeX capacity
+  exceeded"), a hundred errors;
+- the run wrote no output (no `output.json`; for the pageless tool, no PDF),
+  or it was killed (a memory limit).
+
+An error TeX reports and carries on past – an undefined control sequence, a
+package's `\PackageError`, an `\errmessage` – leaves what plain lualatex
+leaves the author: a document with that error in it, set as TeX recovered
+from it. The block is built from it, and each distinct error is a warning
+record with the code `tex-error` (`src/shared/log.ts`): in the build's log,
+as a line `<block>: warning: TeX error: <message> (<file>:<line>: <what TeX
+read>)`, and in the block's data, so the page's log has it too – the
+inspector's Log tab lists it, and the page's alerted level (`warning` or
+below) sends it to the browser's console. Its details:
+
+| Detail | |
+|---|---|
+| `error` | TeX's message, as its `! …` line gives it (a LaTeX error's continuation lines joined) |
+| `file` | the file TeX was reading, as the log names it (`./reflowtex-document.tex` for a document given as text, or a snippet with its preamble), when the log says which |
+| `line` | the line it was reading (TeX's `l.N`) |
+| `context` | what TeX had read of that line: it ends where the error came |
+| `pass` | the TeX pass that reported it (the run's last; earlier passes' errors are not the document's) |
+| `count` | how many times the same message came at the same place |
+
+The errors are the document's at its own width. Display sampling compiles it
+again at wider widths; an error TeX reports there and not at the document's
+own width means TeX failed at that width.
+
+The option `texErrors` keeps the stricter rule: `texErrors: 'error'`
+(pipeline API), `--fail-on-tex-error` (vanilla and `pageless.ts`), the Hugo
+param `reflowtexFailOnTexError = true`. The first such error then fails the
+block, with TeX's error lines in the message. The default is `'warn'`.
+
 ## Passes
 
 A run is repeated while what TeX reads back (`.aux`, `.toc`, `.lof`, `.lot`)
@@ -93,6 +133,8 @@ pipe.compile(content: string, o: {
   jobname?: string,                       // \jobname (default 'input')
   passes?: number, key?: string, name?: string,
 }): Promise<Uint8Array>
+
+new Pipeline({ …, texErrors?: 'warn' | 'error' })   // an error TeX carries on past: a warning (default) or a failed block
 
 pipe.compileBatch(parts: { key, content, name? }[], o?: { preamble?, documentMetadata?, jobname?, passes?, key?, name? })
 pipe.compileMany(items: { content, key, kind, preamble?, … }[], jobs?)

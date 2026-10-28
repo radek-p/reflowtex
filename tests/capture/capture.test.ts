@@ -13,6 +13,7 @@ import { DEFAULT_PREAMBLE, Pipeline, contentKey, type CompileOptions } from '../
 import { a11yLayer, type LayerDocument } from '../../src/pipeline/a11y.ts';
 import { Log } from '../../src/shared/log.ts';
 import { messageType } from '../../src/pipeline/schema.ts';
+import { TexError } from '../../src/pipeline/errors.ts';
 
 type Node = { type: string; char?: number; font?: number; color?: string; link?: number; stream?: number; mathml?: unknown;
               width?: number; height?: number; depth?: number; kern?: number; subtype?: number;
@@ -360,8 +361,13 @@ test('marks: \\webspan, its short forms, nesting and class lists', async () => {
     { id: 'e', classes: 'x' }, { id: '', classes: 'p q' }, { id: 'a_1', classes: '' }]);
 });
 
-test('marks: \\webspan refuses a key it does not know', async () => {
-  await assert.rejects(capture('\\webspan[colour=red]{x}.', pkg));
+test('marks: \\webspan refuses a key it does not know: TeX\'s error, a warning of the block\'s', async () => {
+  const body = '\\webspan[colour=red]{x}.';
+  await capture(body, pkg);
+  const key = contentKey(body, pkg);
+  const errors = pipeLog.records().filter(r => r.code === 'tex-error' && r.details.block === `${key} (${key})`);
+  assert.equal(errors.length, 1, errors.map(r => r.message).join('\n'));
+  assert.match(errors[0].details.error, /^! Package reflowtex Error: \\webspan: unknown key `colour'/);
 });
 
 test('NewWebEnvironment passes its parameters as written', async () => {
@@ -917,7 +923,9 @@ test('a snippet in the caller\'s preamble, and in the default one without it', a
 });
 
 test('text with a class line passed as a snippet is a snippet: set in the preamble, and TeX says the rest', async () => {
-  await assert.rejects(compiled('\\documentclass{book}\nBody.', '', { kind: 'snippet' }), /documentclass|Can be used only in preamble/);
+  const r = await compiled('\\documentclass{book}\nBody.', '', { kind: 'snippet' });
+  assert.match(r.text, /Body\.$/);
+  assert.ok(r.warnings.some(w => /^LaTeX Error: Can be used only in preamble\./.test(w)), r.warnings.join('\n'));
 });
 
 test('the caller\'s metadata: applied to a document without its own', async () => {
@@ -938,4 +946,36 @@ test('the caller\'s metadata, forced: applied, and the document\'s own ignored w
 
 test('the caller\'s metadata applies to a snippet', async () => {
   assert.equal((await compiled(LANG, '', { kind: 'snippet', documentMetadata: { keys: 'lang=de' } })).text, 'Lang:de.');
+});
+
+// ── TeX errors ──────────────────────────────────────────────────────────────
+// The build stops only where lualatex gives the author nothing (TeX stopped,
+// no output). An error TeX carries on past leaves what plain lualatex leaves:
+// the block is built as TeX set it, and the error is a warning, in the
+// build's log and in the block's data; texErrors: 'error' fails it instead.
+
+test('an undefined control sequence in the body: the block is built, and the warning names it', async () => {
+  const body = 'Before \\undefinedmacro after.';
+  const d = await capture(body) as Output & { warnings?: { code: string; message: string }[] };
+  assert.equal(d.paragraphs.map(p => glyphText(p.nodes)).join(' '), 'Beforeafter.');
+  const key = contentKey(body, '');
+  const mine = pipeLog.records().filter(r => r.code === 'tex-error' && r.details.block === `${key} (${key})`);
+  // the snippet is set in DEFAULT_PREAMBLE (4 lines) after \\begin{document}: line 6
+  assert.deepEqual(mine.map(r => [r.level, r.details.error, r.details.file, r.details.line, r.details.context, r.details.count]),
+    [['warning', '! Undefined control sequence.', './reflowtex-document.tex', '6', 'Before \\undefinedmacro', '1']]);
+  assert.match(mine[0].message, /: warning: TeX error: Undefined control sequence\. \(\.\/reflowtex-document\.tex:6: Before \\undefinedmacro\)$/);
+  assert.deepEqual(d.warnings?.filter(w => w.code === 'tex-error').map(w => w.message), [mine[0].message.replace(/^.*: warning: /, '')],
+    'the block\'s data carries it to the page\'s log');
+});
+
+test('texErrors: \'error\': the same error fails the block, with TeX\'s error line', async () => {
+  const strict = new Pipeline({ buildRoot: join(root, 'build-strict'), fontsDir: join(root, 'fonts'), log: new Log('pipeline'), texErrors: 'error' });
+  await assert.rejects(strict.compile('Before \\undefinedmacro after.', { kind: 'snippet', key: 'strict' }), (e: Error) => e instanceof TexError &&
+    /^strict: lualatex reported 1 error\(s\) \(nonstopmode continued, so the node list would be silently wrong\):\n  ! Undefined control sequence\./.test(e.message));
+});
+
+test('a missing class: TeX stops, and so does the build (TexError)', async () => {
+  await assert.rejects(compiled('\\documentclass{nosuchclass}\n\\begin{document}\nText.\n\\end{document}\n', '', { kind: 'document' }),
+    (e: Error) => e instanceof TexError && /lualatex failed \(exit code 1, ! Emergency stop\.\)/.test(e.message) &&
+      /File `nosuchclass\.cls' not found/.test(e.message));
 });

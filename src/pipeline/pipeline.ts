@@ -30,6 +30,7 @@ import { kpsewhich } from './fonts/type1.ts';
 import { FontFiles, compositeTexts, resolveVirtualFonts } from './fonts/vf.ts';
 import { protoText } from './schema.ts';
 import { BackendUnavailable, BuildError, MissingCapability, TexError } from './errors.ts';
+import { texErrorKey, texErrorWarning } from './warnings.ts';
 import { documentNeeds, supports, unmetNeeds, capabilityInfo } from './backend/capabilities.ts';
 import { createBackend, selectedBackendId } from './backend/registry.ts';
 import type { CaptureBackend, CaptureResult, Diagnostic, PictureSource } from './backend/types.ts';
@@ -125,6 +126,12 @@ export interface PipelineOptions {
    *  stops the build where the result would be wrong or incomplete; 'warn'
    *  builds it, saying what is missing */
   missingCapabilities?: 'error' | 'warn';
+  /** an error TeX carries on past (nonstopmode, as plain lualatex does):
+   *  'warn' (default) builds the block as TeX set it and logs a warning
+   *  (tex-error) for each distinct error, which the block's data carries to
+   *  the page's log too; 'error' stops the block's build at the first
+   *  (TexError). TeX stopping (no output) always stops it. */
+  texErrors?: 'error' | 'warn';
   /** where the build's messages go (default: consoleLog, the console) */
   log?: Log;
 }
@@ -160,6 +167,7 @@ export class Pipeline {
   readonly backend: CaptureBackend;
   private readonly searchDirs: string[];
   private readonly missingCapabilities: 'error' | 'warn';
+  private readonly texErrors: 'error' | 'warn';
   /** the warnings of each block's last compilation, by key */
   readonly diagnostics = new Map<string, Diagnostic[]>();
   private readonly mathml: boolean;
@@ -180,6 +188,7 @@ export class Pipeline {
     const a = this.backend.availability();
     if (!a.ok) throw new BackendUnavailable(a.reason);
     this.missingCapabilities = o.missingCapabilities ?? 'error';
+    this.texErrors = o.texErrors ?? 'warn';
     this.mathml = o.mathml ?? true;
     this.log = o.log ?? consoleLog();
     const local = o.localFontsDir ? resolve(o.localFontsDir) : null;
@@ -294,26 +303,53 @@ export class Pipeline {
 
     const job = await this.backend.open({
       kind, content, preamble, documentMetadata: o.documentMetadata, jobname: o.jobname, dir, label, searchDirs: this.searchDirs, localFonts: this.localFonts, mathml: this.mathml,
+      texErrors: this.texErrors,
     });
     try {
       // The document at its own width, then (sampleDisplays) at wider ones if it
       // has displays to model – unless the backend modelled them itself.
       const first = await job.capture({ widthExtraSp: 0, passes: supports(caps, 'multiPass') ? passes : 1 });
+      // The errors TeX carried on past at the document's own width: the
+      // author's, as plain lualatex reports them.
+      const texErrors = first.diagnostics.filter(d => d.severity === 'error');
+      if (texErrors.length && this.texErrors === 'error') {
+        throw new TexError(`backend ${this.backend.id} reported ${texErrors.length} error(s) (nonstopmode continued, so the node list would be ` +
+          `silently wrong):\n${texErrors.slice(0, 10).map(e => `  ! ${e.message}`).join('\n')}`, label, `! ${texErrors[0].message}`);
+      }
+      for (const e of texErrors) {
+        const w = texErrorWarning(e);
+        this.log.warn('tex-error', `  ${label}: warning: ${w.message}`, { block: label, ...w.details });
+      }
+      // A wider width the author never compiles at: an error TeX reports
+      // there and not at the document's own width means TeX failed at that
+      // width (sampling then treats it as any compilation that failed).
+      const known = new Set(texErrors.map(texErrorKey));
+      const atWidth = async (extraSp: number): Promise<CaptureResult> => {
+        const r = await job.capture({ widthExtraSp: extraSp, passes: 1 });
+        const fresh = r.diagnostics.filter(d => d.severity === 'error' && !known.has(texErrorKey(d)));
+        if (fresh.length) {
+          throw new TexError(`TeX reported ${fresh.length} error(s) with the text ${DM.pyG(extraSp / 65536)} pt wider that it does not at the ` +
+            `document's own width:\n${fresh.slice(0, 10).map(e => `  ! ${e.message}`).join('\n')}\n  see ${r.dir}`, label, `! ${fresh[0].message}`);
+        }
+        return r;
+      };
       let final: CaptureResult = first;
       if (supports(caps, 'singlePassDisplays') && first.data.display_model) final = first;
       else if (supports(caps, 'widthResampling')) {
         final = await sampleDisplays(first, {
-          at: extraSp => job.capture({ widthExtraSp: extraSp, passes: 1 }),
-          probe: async extraSp => (await job.capture({ widthExtraSp: extraSp, passes: 1 })).data,
+          at: atWidth,
+          probe: async extraSp => (await atWidth(extraSp)).data,
           label, log: this.log,
         });
       } else if (DM.wantsModel(first.data)) {
         this.log.warn('display-widths-unsupported', `  ${label}: warning: backend ${this.backend.id} cannot compile at other widths; displays stay at the document's width`,
           { block: label, backend: this.backend.id });
       }
-      this.diagnostics.set(key, final.diagnostics);
+      this.diagnostics.set(key, final === first ? first.diagnostics : [...texErrors, ...final.diagnostics.filter(d => d.severity !== 'error')]);
 
       const data = final.data;
+      // the page's log gets them too, with the block's other warnings
+      if (texErrors.length) data.warnings = [...(data.warnings ?? []), ...texErrors.map(texErrorWarning)];
       this.inputs.set(key, fileHashes(includedPictureFiles(data).filter(f => existsSync(f))));
       await this.transform(data, final.dir, {
         block: label, docTag: key.replace(/[^0-9A-Za-z]/g, '').slice(0, 8), formulas: final.mathml, pictures: final.pictures,

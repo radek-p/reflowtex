@@ -12,8 +12,9 @@ export class BuildError extends Error {
   }
 }
 
-/** TeX failed, or reported an error it carried on past (nonstopmode): the
- *  node list would be a repaired document, not the one written. */
+/** TeX gave no usable output (no output file, an emergency stop, a run
+ *  killed), or – with the option texErrors: 'error' – reported an error it
+ *  carried on past (nonstopmode), whose node list is a repaired document. */
 export class TexError extends BuildError {
   /** TeX's first error message (its `! …` line), when the log has one. */
   texError?: string;

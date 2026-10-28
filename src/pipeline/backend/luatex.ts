@@ -147,9 +147,10 @@ export class LuaTeXBackend implements CaptureBackend {
       capture: async (run: CaptureRun): Promise<CaptureResult> => {
         const d = runs++ === 0 ? dir : sampleDir();
         writeFileSync(join(d, DRIVER_FILE), input(run.widthExtraSp));
-        const data = readSerializerOutput(await runLuaLatex(d, { texinputs, passes: run.passes, main: DRIVER_FILE, jobname, block: doc.label, shellEscape: this.shellEscape }));
-        const log = join(d, `${jobname}.log`);
-        return { data, dir: d, mathml: readMathmlFile(d, jobname), diagnostics: existsSync(log) ? logDiagnostics(readFileSync(log, 'utf8')) : [] };
+        const r = await runLuaLatex(d, { texinputs, passes: run.passes, main: DRIVER_FILE, jobname, block: doc.label, shellEscape: this.shellEscape, texErrors: doc.texErrors });
+        const data = readSerializerOutput(r.output);
+        const errors: Diagnostic[] = r.errors.map(e => ({ severity: 'error', ...e, pass: r.passes }));
+        return { data, dir: d, mathml: readMathmlFile(d, jobname), diagnostics: [...errors, ...(existsSync(r.log) ? logDiagnostics(readFileSync(r.log, 'utf8')) : [])] };
       },
     };
   }

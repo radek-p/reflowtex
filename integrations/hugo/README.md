@@ -149,6 +149,26 @@ reflowtexLogShow = ["error", "missing-char"]   # or a string: "error, missing-ch
 The partial writes what is set into a `#latex-log-config` JSON island; a site
 that sets neither gets no island, and the viewer's defaults.
 
+### TeX errors
+
+prebuild fails a block only where lualatex itself gives the author nothing:
+TeX stopped (an emergency stop – a missing class or file –, a full memory, a
+hundred errors) or wrote no output. An error TeX reports and carries on past –
+an undefined control sequence, a package's error – leaves what plain lualatex
+gives the author, a document with that error in it: the block is built as TeX
+set it, and each distinct error is a warning with the code `tex-error`, printed
+by prebuild and carried to the page's log (`reflowtexLogAlert = "warning"`
+sends it to the browser's console; the inspector's Log tab lists it). A site
+that wants such errors to fail its build says so:
+
+```toml
+[params]
+reflowtexFailOnTexError = true
+```
+
+prebuild records each block's errors with it (`tex_errors` in its data), and
+the shortcode then stops `hugo` with them, naming the page.
+
 ### Books in parts: `batch` and `weight`
 
 Blocks with the same `batch="name"` are compiled together as one LaTeX

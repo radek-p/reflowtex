@@ -67,7 +67,8 @@ const logTo = (file: string) => { writeFileSync(file, ''); return (s: string) =>
 async function pagelessRun(c: Case, extra: number, out = buildDir(c, extra), texPictures = c.tex_pictures): Promise<string> {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  await pageless(c.file, { out, passes: c.passes, widthExtra: `${extra}pt`, texPictures, log: logTo(join(out, 'pageless.log')),
+  // a case is a document TeX sets without an error: one is the case's fault
+  await pageless(c.file, { out, passes: c.passes, widthExtra: `${extra}pt`, texPictures, texErrors: 'error', log: logTo(join(out, 'pageless.log')),
     ...(c.preamble ? { preamble: readFileSync(c.preamble, 'utf8') } : {}), ...(c.metadata ? { documentMetadata: { keys: c.metadata } } : {}) });
   return out;
 }
@@ -138,7 +139,7 @@ export async function againstPlain(c: Case): Promise<PlainCheck> {
   // under the case file's own name, as its author compiles it (\jobname)
   const main = basename(c.file), jobname = main.replace(/\.tex$/, '');
   copyFileSync(c.plain_file ?? c.file, join(out, main));
-  await runLuaLatex(out, { texinputs: [dirname(c.file)], passes: c.passes, main, jobname, expect: `${jobname}.pdf`, block: c.name });
+  await runLuaLatex(out, { texinputs: [dirname(c.file)], passes: c.passes, main, jobname, expect: `${jobname}.pdf`, block: c.name, texErrors: 'error' });
   const s = traceStrip(join(strip, 'pageless.pdf')).glyphs, p = traceStrip(join(out, `${jobname}.pdf`)).glyphs;
   const r: PlainCheck = { glyphs: { strip: s.length, plain: p.length }, worst: { across: 0, down: 0 } };
   for (let i = 0; i < Math.min(s.length, p.length); i++) {

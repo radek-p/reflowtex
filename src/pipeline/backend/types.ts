@@ -45,6 +45,10 @@ export interface CaptureDocument {
   localFonts: string[];
   /** capture LaTeX's MathML where the document enables it */
   mathml: boolean;
+  /** an error TeX carries on past (nonstopmode): a diagnostic of severity
+   *  'error' (default 'warn'), or the capture fails with a TexError
+   *  ('error'). TeX stopping always fails it. */
+  texErrors?: 'error' | 'warn';
 }
 
 export interface CaptureRun {
@@ -65,6 +69,12 @@ export interface Diagnostic {
   file?: string;
   /** 1-based line in that file */
   line?: number;
+  /** an error: what TeX had read of that line when it came */
+  context?: string;
+  /** an error: how many times it came at the same place */
+  count?: number;
+  /** an error: the TeX pass it was reported in (the run's last) */
+  pass?: number;
 }
 
 /** Where a picture node's drawing comes from: the fields the capture put on
@@ -113,7 +123,8 @@ export interface CaptureResult {
   mathml?: Map<number, string>;
   /** SVG for picture nodes, when the backend makes it itself */
   pictures?: PictureSource;
-  /** warnings (and errors TeX recovered from, when a backend lets them through) */
+  /** warnings, and the errors TeX recovered from (severity 'error'), each
+   *  once, with its count */
   diagnostics: Diagnostic[];
 }
 

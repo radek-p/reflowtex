@@ -18,6 +18,14 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { TexError } from './errors.ts';
+import { errorLines, fatalStop, texErrors, type TexErrorInfo } from './tex-log.ts';
+export type { TexErrorInfo };
+
+/** What a TeX error that TeX carried on past (nonstopmode) does to a build:
+ *  'warn' (the default) goes on, as plain lualatex does, and the caller
+ *  reports it; 'error' stops the build (a TexError). TeX stopping – no
+ *  output – always stops it. */
+export type TexErrorPolicy = 'error' | 'warn';
 
 export interface LuaLatexOptions {
   /** directories searched before TeX's own tree (TEXINPUTS), after the
@@ -41,6 +49,21 @@ export interface LuaLatexOptions {
   /** shell escape on (the caller asserts the document is trusted); default:
    *  REFLOWTEX_SHELL_ESCAPE=1 */
   shellEscape?: boolean;
+  /** an error TeX carried on past: returned (default 'warn'), or a TexError
+   *  ('error') */
+  texErrors?: TexErrorPolicy;
+}
+
+/** A finished run. */
+export interface LuaLatexRun {
+  /** the serializer's output.json text ('' when the run expects another file) */
+  output: string;
+  /** each distinct error TeX carried on past in the last pass */
+  errors: TexErrorInfo[];
+  /** the passes run */
+  passes: number;
+  /** the run's log file */
+  log: string;
 }
 
 interface Run { code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }
@@ -91,15 +114,19 @@ export async function runLuaLatexOnce(dir: string, opts: Pick<LuaLatexOptions, '
   await lualatex(dir, runEnv(opts.texinputs), opts.shellEscape ?? process.env.REFLOWTEX_SHELL_ESCAPE === '1', main, opts.jobname ?? main.replace(/\.tex$/, ''));
 }
 
-/** Compile dir/<main>; returns the serializer's output.json text. A TeX
- *  error is fatal even though nonstopmode carried on and produced a node
- *  list: what it produced is a *repaired* document, which still renders and
- *  is simply wrong. The failed run's output.json is removed, so nothing
- *  later mistakes it for a block's; so is each pass's before it starts, so a
- *  pass that is killed (a memory limit) cannot leave the one before's.
- *  Another pass runs when what TeX reads back changed, or when the run
- *  asked for one, up to `passes`. */
-export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<string> {
+/** Compile dir/<main>; returns the serializer's output.json text and the
+ *  errors TeX carried on past. The build stops (a TexError) only where
+ *  lualatex itself gives the author nothing: the run left no output file, it
+ *  was killed, or TeX stopped (an emergency stop, a full memory, a hundred
+ *  errors). An error TeX recovered from in nonstopmode leaves what plain
+ *  lualatex gives the author – a document with the same error in it – and
+ *  is returned, for the caller to report, unless `texErrors` is 'error'.
+ *  A failed run's output.json is removed, so nothing later mistakes it for
+ *  a block's; so is each pass's before it starts, so a pass that is killed
+ *  (a memory limit) cannot leave the one before's. Another pass runs when
+ *  what TeX reads back changed, or when the run asked for one, up to
+ *  `passes`; the errors are the last pass's. */
+export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<LuaLatexRun> {
   const main = opts.main ?? 'input.tex';
   const jobname = opts.jobname ?? main.replace(/\.tex$/, '');
   const env = runEnv(opts.texinputs);
@@ -110,7 +137,9 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<s
   let result: Run | null = null;
   const log = join(dir, `${jobname}.log`);
   const expect = join(dir, opts.expect ?? 'output.json');
+  let passes = 0;
   for (let n = 0; n < Math.max(1, opts.passes); n++) {
+    passes = n + 1;
     // LaTeX's MathML (tagging with luamml, src/pipeline/mathml.ts) is written
     // afresh each run – and LaTeX reads the last run's back in, to embed in
     // the PDF, which fails on a character it cannot read (luamml's raw DEL
@@ -125,19 +154,21 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<s
     before = after;
   }
   const texLog = existsSync(log) ? readFileSync(log, 'utf8') : result!.stdout;
-  const errors = texLog.split('\n').filter(l => l.startsWith('! '));
-  if (!existsSync(expect)) {
+  const errors = errorLines(texLog);
+  const stopped = result!.signal ? null : fatalStop(texLog);
+  if (!existsSync(expect) || result!.signal || stopped) {
+    rmSync(outputJson, { force: true });
     let detail = texLog.slice(-3000);
     // stderr is where a lualatex wrapper says what it tried (the container's
     // lazy package install)
     if (result!.stderr.trim()) detail += `\n--- stderr ---\n${result!.stderr.slice(-2000)}`;
-    const status = result!.signal ? `killed by ${result!.signal}` : `exit code ${result!.code}`;
+    const status = result!.signal ? `killed by ${result!.signal}` : `exit code ${result!.code}${stopped ? `, ${stopped}` : ''}`;
     throw new TexError(`lualatex failed (${status}):\n${detail}`, opts.block, errors[0]);
   }
-  if (errors.length) {
+  if (errors.length && opts.texErrors === 'error') {
     rmSync(outputJson, { force: true });
     throw new TexError(`lualatex reported ${errors.length} error(s) (nonstopmode continued, so the node list would be ` +
       `silently wrong):\n${[...new Set(errors)].slice(0, 10).map(e => `  ${e}`).join('\n')}\n  see ${log}`, opts.block, errors[0]);
   }
-  return existsSync(outputJson) ? readFileSync(outputJson, 'utf8') : '';
+  return { output: existsSync(outputJson) ? readFileSync(outputJson, 'utf8') : '', errors: texErrors(texLog, dir), passes, log };
 }

@@ -13,11 +13,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { Pipeline, toolchainHash, type CompileOptions } from '../../src/pipeline/pipeline.ts';
-import { BackendUnavailable, MissingCapability, UnknownBackend } from '../../src/pipeline/errors.ts';
+import { BackendUnavailable, MissingCapability, TexError, UnknownBackend } from '../../src/pipeline/errors.ts';
 import {
   CAPABILITIES, CAPABILITY_NAMES, documentNeeds, fullCapabilities, supports, unmetNeeds,
   createBackend, listBackends, registerBackend, unregisterBackend, selectedBackendId, formatBackends, DEFAULT_BACKEND,
-  type Capabilities, type CaptureBackend, type CaptureDocument, type CaptureRun,
+  type Capabilities, type CaptureBackend, type CaptureDocument, type CaptureRun, type Diagnostic,
 } from '../../src/pipeline/backend/index.ts';
 import { Log } from '../../src/shared/log.ts';
 import { logDiagnostics } from '../../src/pipeline/backend/luatex.ts';
@@ -114,20 +114,22 @@ function output(o: { display?: boolean; modelled?: boolean; width?: number } = {
   } as SerializerOutput;
 }
 
-/** A backend made here: its captures counted, the runs it was asked for kept. */
-function memoryBackend(caps: Capabilities, make: (run: CaptureRun) => SerializerOutput): CaptureBackend & { runs: CaptureRun[]; docs: CaptureDocument[] } {
+/** A backend made here: its captures counted, the runs it was asked for kept;
+ *  `errors` are the TeX errors each capture reports it carried on past. */
+function memoryBackend(caps: Capabilities, make: (run: CaptureRun) => SerializerOutput,
+                       errors: (run: CaptureRun) => Diagnostic[] = () => []): CaptureBackend & { runs: CaptureRun[]; docs: CaptureDocument[] } {
   const runs: CaptureRun[] = [], docs: CaptureDocument[] = [];
   return {
     id: 'memory', name: 'in memory', runtime: { kind: 'none', concurrent: true }, capabilities: caps, runs, docs,
     availability: () => ({ ok: true }),
     open: async doc => {
       docs.push(doc);
-      return { capture: async r => { runs.push(r); return { data: make(r), dir: doc.dir, diagnostics: [{ severity: 'warning', message: 'from memory' }] }; } };
+      return { capture: async r => { runs.push(r); return { data: make(r), dir: doc.dir, diagnostics: [...errors(r), { severity: 'warning', message: 'from memory' }] }; } };
     },
   };
 }
 
-const pipeline = (backend: CaptureBackend, o: { missingCapabilities?: 'error' | 'warn' } = {}) => {
+const pipeline = (backend: CaptureBackend, o: { missingCapabilities?: 'error' | 'warn'; texErrors?: 'error' | 'warn' } = {}) => {
   const dir = tmp(), log = new Log('pipeline');
   return { pipe: new Pipeline({ buildRoot: dir, fontsDir: join(dir, 'fonts'), backend, log, ...o }), log };
 };
@@ -143,6 +145,56 @@ test('a backend given as an object compiles through the pipeline; its diagnostic
   assert.deepEqual(b.runs, [{ widthExtraSp: 0, passes: 1 }]);
   assert.equal(b.docs[0].content, 'Text.', 'the document as written: the backend prepares it');
   assert.deepEqual(pipe.diagnostics.get('k1'), [{ severity: 'warning', message: 'from memory' }]);
+});
+
+// ── TeX errors ───────────────────────────────────────────────────────────────
+// An error TeX carried on past is the author's, as plain lualatex leaves it:
+// the block is built, with a warning; texErrors: 'error' fails it instead.
+
+const UNDEFINED: Diagnostic = { severity: 'error', message: 'Undefined control sequence.', file: './reflowtex-document.tex', line: 7,
+  context: 'Text \\foo', count: 2, pass: 1 };
+
+test('an error TeX carried on past: the block is built, with a tex-error warning in the build\'s log and in its data', async () => {
+  const b = memoryBackend({}, () => output(), () => [UNDEFINED]);
+  const { pipe, log } = pipeline(b);
+  await pipe.compile('Text \\foo.', { kind: 'snippet', key: 'e1' });
+  assert.equal(b.docs[0].texErrors, 'warn', 'the backend is told to go on');
+  const mine = log.records().filter(r => r.code === 'tex-error');
+  assert.deepEqual(mine.map(r => [r.level, r.message, r.details]), [['warning',
+    '  e1: warning: TeX error: Undefined control sequence. (./reflowtex-document.tex:7: Text \\foo), 2 times',
+    { block: 'e1', error: '! Undefined control sequence.', file: './reflowtex-document.tex', line: '7', context: 'Text \\foo', pass: '1', count: '2' }]], lines(log));
+  const data = JSON.parse(readFileSync(join(pipe.buildRoot, 'e1', 'output.json'), 'utf8'));
+  assert.deepEqual(data.warnings.map((w: { code: string; message: string }) => [w.code, w.message]),
+    [['tex-error', 'TeX error: Undefined control sequence. (./reflowtex-document.tex:7: Text \\foo), 2 times']], 'the page\'s log gets it with the block');
+  assert.equal(pipe.diagnostics.get('e1')![0], UNDEFINED);
+});
+
+test('texErrors: \'error\': an error TeX carried on past fails the block (TexError), naming TeX\'s line', async () => {
+  const b = memoryBackend({}, () => output(), () => [UNDEFINED]);
+  const { pipe, log } = pipeline(b, { texErrors: 'error' });
+  await assert.rejects(pipe.compile('Text \\foo.', { kind: 'snippet', key: 'e2' }), (e: Error) => e instanceof TexError &&
+    e.texError === '! Undefined control sequence.' &&
+    /^e2: backend memory reported 1 error\(s\) \(nonstopmode continued, so the node list would be silently wrong\):\n  ! Undefined control sequence\.$/.test(e.message));
+  assert.equal(b.docs[0].texErrors, 'error', 'the backend is told to stop');
+  assert.ok(!log.records().some(r => r.code === 'tex-error'), lines(log));
+});
+
+test('display samples: the document\'s own errors again at a wider width are no failure, and are logged once', async () => {
+  const b = memoryBackend({ widthResampling: true }, r => output({ display: true, width: 300 * 65536 + r.widthExtraSp }), () => [UNDEFINED]);
+  const { pipe, log } = pipeline(b);
+  await pipe.compile('\\[x\\] \\foo', { kind: 'snippet', key: 'e3' });
+  assert.deepEqual(b.runs.map(r => r.widthExtraSp / 65536), [0, 128, 256]);
+  assert.equal(log.records().filter(r => r.code === 'tex-error').length, 1, lines(log));
+  assert.ok(log.records().some(r => r.code === 'display-model-stable'), lines(log));
+});
+
+test('display samples: an error TeX reports at a wider width and not at the document\'s own fails that width (TexError)', async () => {
+  const wide: Diagnostic = { severity: 'error', message: 'Too wide.', file: './reflowtex-document.tex', line: 3, count: 1, pass: 1 };
+  const b = memoryBackend({ widthResampling: true }, r => output({ display: true, width: 300 * 65536 + r.widthExtraSp }),
+    r => (r.widthExtraSp >= 256 * 65536 ? [wide] : []));
+  const { pipe } = pipeline(b);
+  await assert.rejects(pipe.compile('\\[x\\]', { kind: 'snippet', key: 'e4' }), (e: Error) => e instanceof TexError && e.texError === '! Too wide.' &&
+    /TeX reported 1 error\(s\) with the text 256 pt wider that it does not at the document's own width:\n  ! Too wide\./.test(e.message));
 });
 
 test('the kind the caller gives reaches the backend with the preamble and metadata, ', async () => {

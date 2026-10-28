@@ -50,3 +50,37 @@ test('Hugo: blocks are snippets, kind="document" a document', { skip }, () => {
     assert.equal(readdirSync(join(site, 'data/latex_blocks')).filter(f => f.endsWith('.json')).length, 2);
   } finally { rmSync(site, { recursive: true, force: true }); }
 });
+
+// An error TeX carries on past: the block is built, with a warning line;
+// --fail-on-tex-error (vanilla) fails it. prebuild records it with the block
+// (tex_errors), for the shortcode (params.reflowtexFailOnTexError).
+const WITH_ERROR = '\\documentclass{article}\n\\begin{document}\nBefore \\undefinedmacro after.\n\\end{document}\n';
+
+test('vanilla: a TeX error is a warning line; with --fail-on-tex-error the block fails', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rtx-vanilla-tex-errors-'));
+  try {
+    mkdirSync(join(dir, 'docs'));
+    writeFileSync(join(dir, 'docs', 'paper.tex'), WITH_ERROR);
+    const out = cli(['integrations/vanilla/build.ts', join(dir, 'docs'), '-o', join(dir, 'site')]);
+    assert.match(out, /: warning: TeX error: Undefined control sequence\. \(\.\/reflowtex-document\.tex:3: Before \\undefinedmacro\)/, out);
+    assert.match(readFileSync(join(dir, 'site', 'index.html'), 'utf8'), /data-nodelist-b64=/);
+    const r = spawnSync(process.execPath, ['integrations/vanilla/build.ts', join(dir, 'docs'), '-o', join(dir, 'site-strict'), '--fail-on-tex-error'],
+      { cwd: REPO, encoding: 'utf8' });
+    assert.equal(r.status, 1, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, /ERROR: paper\.tex: .*lualatex reported 1 error\(s\) \(nonstopmode continued, so the node list would be silently wrong\):\n {2}! Undefined control sequence\./, r.stderr);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Hugo: prebuild records a block\'s TeX errors with it', { skip }, () => {
+  const site = mkdtempSync(join(tmpdir(), 'rtx-hugo-tex-errors-'));
+  try {
+    mkdirSync(join(site, 'content'), { recursive: true });
+    writeFileSync(join(site, 'content/a.md'), '---\ntitle: A\n---\n{{< latex >}}Before \\undefinedmacro after.{{< /latex >}}\n\n{{< latex >}}Fine.{{< /latex >}}\n');
+    const out = cli(['integrations/hugo/prebuild.ts', site]);
+    assert.match(out, /warning: TeX error: Undefined control sequence\./, out);
+    const blocks = readdirSync(join(site, 'data/latex_blocks')).filter(f => f.endsWith('.json'))
+      .map(f => JSON.parse(readFileSync(join(site, 'data/latex_blocks', f), 'utf8')) as { tex_errors?: string[] });
+    assert.deepEqual(blocks.map(b => b.tex_errors ?? []).sort((a, b) => a.length - b.length),
+      [[], ['TeX error: Undefined control sequence. (./reflowtex-document.tex:6: Before \\undefinedmacro)']]);
+  } finally { rmSync(site, { recursive: true, force: true }); }
+});
