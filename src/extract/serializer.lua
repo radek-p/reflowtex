@@ -247,6 +247,10 @@ local function note_glyph(n, g, slot)
     end
 end
 
+-- font id → char → the packet of each character set in a virtual font
+-- LuaTeX made itself (note_packet, below)
+local font_packets = {}
+
 -- A version's entry of the font table: `info` (the font's) with the codes of
 -- the characters set in it.
 local function annotate(info, v, chars, slot)
@@ -274,6 +278,20 @@ local function annotate(info, v, chars, slot)
     if #codes > 0 then info.codes = codes end
 end
 
+-- A font's recorded packets, as the font table has them: by character. None
+-- if one of its characters' could not be (drawn then from the font's face).
+local function packet_list(id)
+    local t = font_packets[id]
+    if not t then return nil end
+    local out = {}
+    for c, commands in pairs(t) do
+        if type(commands) ~= "table" or commands.pending then return nil end
+        out[#out + 1] = { char = c, commands = commands }
+    end
+    table.sort(out, function(a, b) return a.char < b.char end)
+    return out
+end
+
 local function annotate_fonts()
     if not font.getcopy then return end
     local ids, next_id = {}, font.max and font.max() or 0
@@ -294,10 +312,11 @@ local function annotate_fonts()
             local first = vs[1]
             for c in pairs(first_chars[id] or {}) do first.chars[c] = true end
             annotate(info, first, first.chars, first.slot or slot_fonts[id])
+            info.packets = packet_list(id)
             for k = 2, #vs do
                 local v = vs[k]
                 next_id = next_id + 1
-                local entry = { name = info.name, size_sp = info.size_sp, filename = info.filename }
+                local entry = { name = info.name, size_sp = info.size_sp, filename = info.filename, packets = info.packets }
                 annotate(entry, v, v.chars, v.slot)
                 used_fonts[next_id] = entry
                 for _, g in ipairs(v.glyphs) do g.font = next_id end
@@ -922,6 +941,95 @@ local function note_missing(n)
     end
 end
 
+-- ── Virtual fonts LuaTeX made ─────────────────────────────────────────────
+-- A virtual font's characters are packets that draw characters of other
+-- fonts, moved, and rules; the pipeline draws each glyph as its packet does
+-- (src/pipeline/fonts/vf.ts), reading the packets of a classic virtual font
+-- from its .vf file. A virtual font LuaTeX makes itself has none:
+-- \letterspacefont (microtype's tracking, \textls, \lsstyle) copies a font
+-- and makes each character a packet that moves right by half the letterspace,
+-- sets the character of the font it copied and moves right by the other
+-- half; a virtual font may be defined from Lua too. For those the packet of
+-- each character set is recorded as LuaTeX holds it (font.getcopy), in a few
+-- commands: right and down, push and pop, a rule (height and width), and a
+-- character of a font by its id, with that character's box (sp) and glyph
+-- index (a font command is folded into the characters after it). The moves
+-- and rules are in the units LuaTeX keeps them in and its backend draws them
+-- by, as a .vf's: 2^20 is the virtual font's size (for \letterspacefont's
+-- moves, made in sp, that draws each character size / 2^20 of half the
+-- letterspace right of its box's origin, as TeX's PDF has it). The fonts it
+-- names join the font table, and a character of one that is such a font
+-- again has its packet recorded too. A packet with any other command (a
+-- special, Lua code, an image, a scale) is not recorded: the glyph is then
+-- drawn from the font's own face, as before.
+local made_virtual = {}   -- font id → its engine copy, if LuaTeX made it as a virtual font; else false
+local function made_virtual_font(id)
+    local v = made_virtual[id]
+    if v == nil then
+        v = false
+        local f = font.getfont(id)
+        if not (f and f.type ~= "virtual") and font.getcopy then
+            local ok, copy = pcall(font.getcopy, id)
+            if ok and type(copy) == "table" and copy.type == "virtual"
+                    and not kpse.find_file(copy.name or "", "vf") then
+                v = copy
+            end
+        end
+        made_virtual[id] = v
+    end
+    return v
+end
+
+local note_packet
+-- The packet of character `c` of virtual font `f` (its engine copy), in the
+-- commands above; nil if it has any other.
+local function packet_commands(f, c)
+    local ch = f.characters and f.characters[c]
+    if not (ch and ch.commands) then return nil end
+    local local_fonts = f.fonts or {}
+    local current = local_fonts[1] and local_fonts[1].id
+    local out = {}
+    for _, cmd in ipairs(ch.commands) do
+        local op = cmd[1]
+        if op == "right" or op == "down" then
+            out[#out + 1] = { op, round_int(cmd[2]) }
+        elseif op == "push" or op == "pop" then
+            out[#out + 1] = { op }
+        elseif op == "rule" then
+            out[#out + 1] = { "rule", round_int(cmd[2]), round_int(cmd[3]) }
+        elseif op == "font" then
+            current = cmd[2]
+        elseif op == "char" or op == "slot" then
+            local fid, d = current, cmd[2]
+            if op == "slot" then fid, d = cmd[2], cmd[3] end
+            local info = fid and d and char_info(fid, d)
+            if not info then return nil end
+            note_font(fid)
+            if made_virtual_font(fid) then note_packet(fid, d) end
+            out[#out + 1] = { "char", fid, d, info.width or 0, info.height or 0, info.depth or 0, info.index }
+        elseif op ~= "nop" and op ~= "comment" then
+            return nil
+        end
+    end
+    return out
+end
+
+-- Record the packet of character `c` of font `id` if LuaTeX made the font as
+-- a virtual one (once per character; false: it could not be).
+local PENDING = { pending = true }            -- (a packet naming its own character stops there)
+function note_packet(id, c)
+    local f = made_virtual_font(id)
+    if not f then return end
+    local t = font_packets[id]
+    if not t then
+        t = {}
+        font_packets[id] = t
+    end
+    if t[c] ~= nil then return end
+    t[c] = PENDING
+    t[c] = packet_commands(f, c) or false
+end
+
 -- ── Node serializer ───────────────────────────────────────────────────────
 
 -- Font expansion in a line TeX has set (\adjustspacing, microtype): LuaTeX
@@ -1031,6 +1139,7 @@ local function serialize_nodelist(head)
             }
             if not g.link and not g.footnote then g.link = open_link_id() end
             note_glyph(n, g, g.slot)
+            note_packet(n.font, n.char)
             cur[#cur + 1] = g
 
         elseif t == "glue" then

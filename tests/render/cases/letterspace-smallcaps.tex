@@ -1,0 +1,22 @@
+% Letterspaced fonts: microtype's tracking=true letterspaces small capitals
+% through LuaTeX's \letterspacefont, a font LuaTeX makes in memory whose
+% characters are packets moving right by half the letterspace, setting the
+% character of the font it copied and moving right by the other half (as
+% LuaTeX's backend scales a packet's moves, size / 2^20 of the half: 0.25 pt
+% here). \textls letterspaces by hand the same way. In a justified paragraph,
+% at a paragraph's start and at its end.
+\documentclass[12pt]{report}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[tracking=true]{microtype}
+\begin{document}
+Some running text before the reference, long enough to be justified across the measure of the page,
+and then a reference: Journal of Economic Dynamics and Control 49 C, S.\,186--210.
+\textsc{doi}: 10.1016/j.jedc.2014.08.007. More words follow it in the same justified paragraph so the line
+is set with stretch, and \textsc{Small Capitals In The Middle} of the line, and \textls[200]{spaced} words.
+
+\textsc{doi} at the start of a line, and a line that ends with small capitals \textsc{doi}
+
+\textls[200]{Spaced} at the start of a paragraph, set with stretch across the measure of the page and
+again in its last line, which ends with a word \textls[200]{spaced}
+\end{document}

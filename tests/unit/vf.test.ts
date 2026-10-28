@@ -124,6 +124,46 @@ test('push and pop: an accent placed over the letter that follows', { skip: NO_C
   assert.deepEqual(kids.map(k => (k.type === 'kern' ? k.kern : k.char)), [tenth, 0x13, -(tenth + w(cmr, 0x13)), 101]);
 });
 
+// A virtual font LuaTeX made (\\letterspacefont), its packets recorded by the
+// capture: moves in units of its size (2^20 = the size), characters of fonts
+// of the table by id, with their boxes.
+const LS = 786432, HALF = 21736;                          // 12 pt; microtype's tracking=50 of a 13.27 pt quad, halved
+function letterspaced() {
+  const fonts = new Map<string, FontInfo>([
+    ['17', { name: 'ec-lmcsc10', size_sp: LS, face: { kind: 'tfm' } }],
+    ['19', { name: 'ec-lmcsc10', size_sp: LS, face: { kind: 'tfm' }, expand_stretch: 20, expand_shrink: 20, expand_step: 1,
+             codes: [{ char: 100, lp: 25, rp: 25, ef: 1000 }],
+             packets: [{ char: 100, commands: [['right', HALF], ['char', 17, 100, 491088, 414410, 0], ['right', HALF]] },
+                       { char: 105, commands: [['push'], ['rule', EM / 8, EM / 4], ['pop'], ['char', 17, 105, 200000, 400000, 0, 73]] }] }],
+  ]);
+  const nodes: N[] = [{ type: 'glyph', char: 100, font: 19, width: 534560, height: 414410, depth: 0, link: 2 },
+                      { type: 'glyph', char: 105, font: 19, width: 200000, height: 400000, depth: 0 }];
+  const n = resolveVirtualFonts(fonts, visit => nodes.forEach(visit), files);
+  return { n, nodes, fonts };
+}
+
+test('a letterspaced character (recorded packet): a box of its size, the character moved right as LuaTeX\'s backend draws it', () => {
+  const { n, nodes, fonts } = letterspaced();
+  assert.equal(n, 2);
+  const shift = texScale(HALF, LS);
+  assert.equal(shift, 16302, 'size / 2^20 of the half letterspace');
+  assert.deepEqual(nodes[0], { type: 'hlist', subtype: 2, width: 534560, height: 414410, depth: 0, shift: 0, glue_set: 0, glue_sign: 0, glue_order: 0, children: [
+    { type: 'kern', kern: shift, subtype: 1 },
+    { type: 'glyph', char: 100, font: 20, width: 491088, height: 414410, depth: 0, link: 2 },
+  ], font: 19, char: 100 });
+  assert.deepEqual(fonts.get('20'), { name: 'ec-lmcsc10', size_sp: LS, face: { kind: 'tfm' }, expand_stretch: 20, expand_shrink: 20, expand_step: 1 },
+    'the copied font, with the virtual one\'s expansion and none of its codes');
+  assert.deepEqual(fonts.get('19')!.face, { kind: 'virtual' });
+});
+
+test('a recorded packet: a rule, push and pop, a glyph index kept', () => {
+  const { nodes } = letterspaced();
+  const kids = nodes[1].children as N[];
+  assert.deepEqual(kids.map(k => [k.type, k.width ?? k.kern]), [['rule', texScale(EM / 4, LS)], ['kern', -texScale(EM / 4, LS)], ['glyph', 200000]]);
+  assert.equal(kids[0].height, texScale(EM / 8, LS));
+  assert.equal(kids[2].gindex, 73);
+});
+
 test('a face that is not virtual is left alone', () => {
   const fonts = new Map<string, FontInfo>([['1', { name: 'cmr10', size_sp: SIZE, face: { kind: 'tfm' } }]]);
   const nodes: N[] = [{ type: 'glyph', char: 65, font: 1 }];

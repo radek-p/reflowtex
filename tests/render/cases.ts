@@ -196,6 +196,11 @@ export const cases: Record<string, CaseSettings> = {
   // pt right of TeX's, justified lines up to 0.47 pt off. One page, so
   // against_plain too. Worst attained 2026-10-27.
   'times-microtype': { against_plain: true, tolerance: 0.022 },
+  // Small capitals letterspaced by microtype's tracking and words by \textls:
+  // fonts LuaTeX makes as virtual ones, whose packets the capture records.
+  // Their glyphs were drawn at the box's origin, 0.25 pt left of TeX's (34
+  // glyphs). Worst attained 2026-10-28.
+  'letterspace-smallcaps': { tolerance: 0.032 },
   // Long justified lines in T1 Latin Modern, whose widths are no whole
   // thousandths of an em, against the same text in OpenType. The strip's
   // glyphs used to be read by MuPDF's whole-number widths, which put TeX's own

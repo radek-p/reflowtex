@@ -28,6 +28,8 @@ const OMIT_IF_ZERO = new Set(['stretch_order', 'shrink_order', 'subtype', 'shift
 const PIPELINE_ONLY: Record<string, ReadonlySet<string>> = {
   Node: new Set(['gindex', 'file', 'page', 'generated', 'src']),
   Paragraph: new Set(['index', 'band_indent', 'band_width']),
+  // the packets of a virtual font LuaTeX made, which its glyphs were drawn by (fonts/vf.ts)
+  FontInfo: new Set(['packets']),
 };
 const NONE: ReadonlySet<string> = new Set();
 

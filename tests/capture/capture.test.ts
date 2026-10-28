@@ -261,6 +261,29 @@ test('codes changed between paragraphs: each paragraph\'s glyphs are in a versio
   assert.equal(a.expand_stretch, 20);
 });
 
+test('a font LuaTeX letterspaces (\\textls) records the packets of the characters set in it', async () => {
+  // (a classic font: an OpenType one microtype letterspaces by font kerns)
+  const d = await capture('Plain and \\textls[200]{spaced} words.', '\\usepackage[T1]{fontenc}\\usepackage{microtype}');
+  type Packets = { char: number; commands: (string | number)[][] }[];
+  const fonts = d.fonts as Record<string, { name: string; size_sp: number; packets?: Packets }>;
+  const spaced = Object.entries(fonts).filter(([, f]) => f.packets);
+  assert.equal(spaced.length, 1, 'one letterspaced font');
+  const [id, f] = spaced[0];
+  assert.deepEqual(f.packets!.map(p => p.char), [...'acdeps'].map(c => c.charCodeAt(0)), 'the characters set in it');
+  for (const p of f.packets!) {
+    const [right1, char, right2] = p.commands;
+    assert.deepEqual([right1[0], char[0], right2[0]], ['right', 'char', 'right']);
+    assert.equal(right1[1], right2[1], 'half the letterspace on each side');
+    assert.equal(char[2], p.char);
+    assert.ok(fonts[String(char[1])] && String(char[1]) !== id, 'the character of the font it copied, in the table');
+  }
+  // each glyph of it is drawn as its packet does (output.json as the pipeline leaves it): a box of the
+  // character's size, the character of the font it copied moved right in it
+  const boxes = [...walk(d.paragraphs[0].nodes)].filter(n => String(n.font) === id);
+  assert.deepEqual(boxes.map(b => [b.type, b.children?.map(c => c.type)]), Array(6).fill(['hlist', ['kern', 'glyph']]));
+  assert.ok(boxes.every(b => b.children![0].kern! > 0));
+});
+
 test('codes that never change give one entry per font', async () => {
   const d = await capture('First paragraph.\\par Second paragraph.\\par Third.', '\\usepackage{microtype}');
   const names = Object.values(d.fonts as Record<string, { name: string; size_sp: number }>).map(f => `${f.name}@${f.size_sp}`);
