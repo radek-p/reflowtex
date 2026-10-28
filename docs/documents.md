@@ -71,12 +71,16 @@ and snippets alike.
   ignored, and the log gets a warning naming its keys:
   `Package reflowtex Warning: The document's \DocumentMetadata is ignored, the
   caller's is forced. Ignored keys: lang=en.` This is meant for a publisher who
-  sets one metadata for many documents. It is the only command reflowtex
-  redefines for the document, and only under force.
+  sets one metadata for many documents. Apart from the interaction modes
+  (TeX errors, below), it is the only command reflowtex redefines for the
+  document, and only under force.
 
 ## TeX errors
 
-lualatex runs in nonstopmode, as an author's build tool runs it. The build of
+lualatex runs in nonstopmode, as an author's build tool runs it, with stdin
+closed: TeX never waits for an answer. A document that switches to
+`\errorstopmode` or `\scrollmode` (or calls `\tracingall`, which does) stays
+in nonstopmode, so its errors are treated as below. The build of
 a block stops (`TexError`) only where lualatex itself gives the author
 nothing usable:
 

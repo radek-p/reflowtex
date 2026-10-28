@@ -6,9 +6,9 @@
 // web tests look at. TeX only, no browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { DEFAULT_PREAMBLE, Pipeline, contentKey, type CompileOptions } from '../../src/pipeline/pipeline.ts';
 import { a11yLayer, type LayerDocument } from '../../src/pipeline/a11y.ts';
 import { Log } from '../../src/shared/log.ts';
@@ -980,6 +980,36 @@ test('an undefined control sequence in the body: the block is built, and the war
   assert.match(mine[0].message, /: warning: TeX error: Undefined control sequence\. \(\.\/reflowtex-document\.tex:6: Before \\undefinedmacro\)$/);
   assert.deepEqual(d.warnings?.filter(w => w.code === 'tex-error').map(w => w.message), [mine[0].message.replace(/^.*: warning: /, '')],
     'the block\'s data carries it to the page\'s log');
+});
+
+/** `f` run with lualatex killed (with what it started) after `seconds`: a
+ *  stand-in for it, first on PATH, runs the real one with the stand-in's own
+ *  stdin, so a run that waits for an answer fails the test instead of
+ *  hanging it. (JavaScript: the stand-in is an executable Node runs as it
+ *  is, without a .ts name to strip types by.) */
+async function withLuaLatexLimit<T>(seconds: number, f: () => Promise<T>): Promise<T> {
+  const path = process.env.PATH ?? '';
+  const real = path.split(delimiter).map(d => join(d, 'lualatex')).find(p => existsSync(p));
+  assert.ok(real, 'lualatex on PATH');
+  const bin = mkdtempSync(join(tmpdir(), 'reflowtex-lualatex-limit-'));
+  writeFileSync(join(bin, 'lualatex'), `#!/usr/bin/env node
+const { spawn } = require('node:child_process');
+const p = spawn(${JSON.stringify(real)}, process.argv.slice(2), { stdio: 'inherit', detached: true });
+const timer = setTimeout(() => { try { process.kill(-p.pid, 'SIGKILL'); } catch {} }, ${seconds * 1000});
+p.on('exit', (code, signal) => { clearTimeout(timer); process.exit(signal ? 1 : code ?? 1); });
+`);
+  chmodSync(join(bin, 'lualatex'), 0o755);
+  process.env.PATH = `${bin}${delimiter}${path}`;
+  try { return await f(); } finally { process.env.PATH = path; rmSync(bin, { recursive: true, force: true }); }
+}
+
+test('a document that switches to \\errorstopmode: an error is one TeX carries on past, nothing waits for an answer', { timeout: 120_000 }, async () => {
+  const body = '\\errorstopmode Before \\undefinedmacro after.';
+  const d = await withLuaLatexLimit(60, () => capture(body));
+  assert.equal(d.paragraphs.map(p => glyphText(p.nodes)).join(' '), 'Beforeafter.');
+  const key = contentKey(body, '');
+  assert.deepEqual(pipeLog.records().filter(r => r.code === 'tex-error' && r.details.block === `${key} (${key})`)
+    .map(r => [r.level, r.details.error]), [['warning', '! Undefined control sequence.']]);
 });
 
 test('texErrors: \'error\': the same error fails the block, with TeX\'s error line', async () => {

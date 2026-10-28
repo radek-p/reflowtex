@@ -20,6 +20,14 @@
 // restricted). What LaTeX would have run a program for itself – epstopdf
 // converting an EPS figure – the pipeline does before TeX runs instead
 // (figures.ts), when shell escape is off.
+//
+// TeX never reads a terminal: it runs with stdin closed (at end of file), and
+// so does every program it starts. A document that switches to
+// \errorstopmode (or \scrollmode, or \tracingall, which does) would
+// otherwise wait for an answer at its next error, for ever; at end of file
+// TeX stops instead, and the capture keeps the run in nonstopmode
+// (src/extract/reflowtex-capture.tex), so the error is one TeX carries on
+// past, as with -interaction=nonstopmode.
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
@@ -88,7 +96,7 @@ const SHELL_ESCAPE_FLAG = (s: ShellEscape) => (s === 'restricted' ? '-shell-rest
 function lualatex(cwd: string, env: NodeJS.ProcessEnv, mode: ShellEscape, main: string, jobname: string): Promise<Run> {
   const shellEscape = SHELL_ESCAPE_FLAG(mode);
   return new Promise((resolve, reject) => {
-    const p = spawn('lualatex', [shellEscape, '-interaction=nonstopmode', `-jobname=${jobname}`, main], { cwd, env });
+    const p = spawn('lualatex', [shellEscape, '-interaction=nonstopmode', `-jobname=${jobname}`, main], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '';
     p.stdout.on('data', d => { stdout += d; });
     p.stderr.on('data', d => { stderr += d; });

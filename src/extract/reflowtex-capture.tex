@@ -41,6 +41,18 @@
   end
 }
 
+% ── No terminal: the run stays in nonstopmode ───────────────────────────────
+% The pipeline runs TeX with -interaction=nonstopmode and stdin closed
+% (src/pipeline/lualatex.ts): nobody answers TeX. A document that switches to
+% a mode that asks – \errorstopmode, \scrollmode, as a class does after a
+% quiet \batchmode check and \tracingall does – would have TeX read the
+% terminal at its next error, find the end of the file and stop. The switch
+% keeps nonstopmode instead, so the error is one TeX carries on past, as it
+% is under nonstopmode; \batchmode is left as it is (it only writes less to
+% the terminal).
+\let\errorstopmode\nonstopmode
+\let\scrollmode\nonstopmode
+
 % ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
 % luaotfload resolves a font *by name* against a database built from several
 % locations, searched in `location_precedence` order – whose default is
