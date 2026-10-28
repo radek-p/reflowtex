@@ -394,12 +394,13 @@ function pinPage(win: Window & PageHooks, colPx: number, marginPx: number): void
     win.dispatchEvent(new Event('resize'));
 }
 
-// The page's colours. 'tex' is TeX's own: black on white, as the PDF is (the
-// page's light theme is #333 on #fafaf9); four are the page's themes; 'inverted'
-// is TeX's, inverted by a filter on both sides (report.css). 'auto': TeX, or
-// inverted while the report is dark.
-const PAGE_COLOURS: [string, string, string][] = [['tex', 'TeX', 'Black on white, as TeX sets it'], ['light', 'Light', "The page's light theme"],
-    ['dark', 'Dark', "The page's dark theme"], ['sepia', 'Sepia', "The page's sepia theme"], ['contrast', 'Contrast', "The page's high-contrast theme"],
+// The page's colours. 'tex' is the theme `default`, TeX's own colours with no
+// colour map, exactly as the PDF has them (links too), as the measurement
+// sees them; four are the viewer's other themes, each its colour map;
+// 'inverted' is TeX's, inverted by a filter on both sides (report.css).
+// 'auto': TeX, or inverted while the report is dark.
+const PAGE_COLOURS: [string, string, string][] = [['tex', 'TeX', 'As the PDF: no colour map'], ['light', 'Light', "The viewer's light theme"],
+    ['dark', 'Dark', "The viewer's dark theme"], ['sepia', 'Sepia', "The viewer's sepia theme"], ['contrast', 'Contrast', "The viewer's high-contrast theme"],
     ['inverted', 'TeX inverted', "TeX's colours, inverted on both sides"]];
 const resolvePageColours = (mode: string): string => (mode !== 'auto' ? mode : document.documentElement.dataset.theme === 'dark' ? 'inverted' : 'tex');
 /** Give the live page these colours: a theme of its own, or TeX's. */
@@ -407,10 +408,10 @@ function pageColours(win: (Window & PageHooks) | null | undefined, mode: string)
     const doc = win?.document;
     if (!doc?.head) return;
     const tex = mode === 'tex' || mode === 'inverted';
-    if (win!.__setTheme) win!.__setTheme(tex ? 'light' : mode);
+    if (win!.__setTheme) win!.__setTheme(tex ? 'default' : mode);
     let style = doc.getElementById('rr-colours');
     if (!style) { style = doc.createElement('style'); style.id = 'rr-colours'; doc.head.appendChild(style); }
-    style.textContent = tex ? 'html { color: #000 !important; --latex-page-bg: #fff !important }' : '';
+    style.textContent = tex ? 'html { --latex-page-bg: #fff !important }' : '';
 }
 
 /** The page itself, as the test measured it: live, for the inspector. As tall

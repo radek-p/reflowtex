@@ -172,7 +172,7 @@ test('a figure is themed as the page is: black and white to the theme\'s colours
   // black: the stroke, by its variable, falling back to the text colour; the
   // fills and the text, which MuPDF leaves without a fill, inherit the
   // picture's (sink.ts sets it to the same variable)
-  assert.match(pic, /stroke="var\(--latex-color-000000, currentColor\)" d="M10 10H190"/);
+  assert.match(pic, /stroke="var\(--latex-color-000000, #000000\)" d="M10 10H190"/);
   assert.match(pic, /d="M150 20H180V50H150Z"\/>/);
   assert.equal(uses(pic).length, 2);
   for (const u of uses(pic)) assert.doesNotMatch(u.attrs, /fill=/);
@@ -182,7 +182,7 @@ test('a figure is themed as the page is: black and white to the theme\'s colours
   assert.doesNotMatch(pic, /(?:fill|stroke)="#/, 'no colour left as it was');
   // and the other ways SVG writes a colour
   const other = rewritePictureSvg('<svg viewBox="0 0 10 10"><path fill="rgb(255, 0, 0)" stroke="white"/><path fill="black" stroke="rgb(0,0,255)"/><path fill="none" stroke="url(#a)"/></svg>', 'p-').svg;
-  assert.equal(other, '<path fill="var(--latex-color-ff0000, #ff0000)" stroke="var(--latex-color-ffffff, #ffffff)"/><path fill="var(--latex-color-000000, currentColor)" stroke="var(--latex-color-0000ff, #0000ff)"/><path fill="none" stroke="url(#a)"/>');
+  assert.equal(other, '<path fill="var(--latex-color-ff0000, #ff0000)" stroke="var(--latex-color-ffffff, #ffffff)"/><path fill="var(--latex-color-000000, #000000)" stroke="var(--latex-color-0000ff, #0000ff)"/><path fill="none" stroke="url(#a)"/>');
 });
 
 test('a full-size page rectangle is drawn as the PDF paints it, in its themed colour', async () => {

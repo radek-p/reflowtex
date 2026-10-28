@@ -175,8 +175,9 @@ end
 -- xcolor's \color emits pdf_colorstack whatsits (push/pop/set with a PDF
 -- colour operator string). We simulate the stack during the document-order
 -- walk and annotate glyph/rule nodes with the resolved colour as a CSS hex
--- string. nil means "default text colour" (black), which the renderer maps
--- to currentColor so dark mode keeps working; #000000 is normalised to nil.
+-- string. nil means "default text colour" (black), which the renderer draws
+-- as the theme's black (#000000 in the default theme); #000000 is
+-- normalised to nil.
 
 local function parse_pdf_color(data)
     if not data or data == "" then return nil end

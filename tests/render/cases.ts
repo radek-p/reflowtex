@@ -124,6 +124,13 @@ export const cases: Record<string, CaseSettings> = {
   // after a display the browser counted interline glue twice (up to 4.8 pt
   // here). against_plain checks the compile itself. Worst attained 2026-10-25.
   'label-anchors': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.002 },
+  // hyperref's link colours and coloured rules, compared exactly (every
+  // case's colours are); one page, so against_plain too.
+  'hyperref-colours': { against_plain: true, tolerance: 0.009, rule_tolerance: 0.003 },
+  // CMYK colours: a PDF reader draws them colour managed, the viewer as the
+  // serializer converts them, plainly; a failure on record until it draws
+  // them as a reader does.
+  'cmyk-colours': { against_plain: true, tolerance: 0.009, known: 'CMYK colours are converted plainly, not as a PDF reader draws them' },
   // ae's T1 text through virtual fonts, accented letters built from two
   // glyphs. Worst attained 2026-10-27 (0.082 until then, when the strip's
   // Type 1 glyphs were read by MuPDF's whole-number widths: see type1-text).

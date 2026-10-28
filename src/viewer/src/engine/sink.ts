@@ -207,16 +207,16 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
                 el.textContent = drawn;
                 const read = nodeText(n);
                 if (read !== drawn) el.dataset.text = read;
-                // Inline style so it wins over the page's `fill: currentColor`
-                // rule; uncoloured glyphs keep currentColor (dark-mode aware).
-                // Coloured ones go through the theme substitution maps. A
-                // carrier is never seen: important, as over a link's colour.
+                // Inline style, through the theme's colour map (colour.ts);
+                // an uncoloured glyph takes the map's black from the viewer's
+                // stylesheet, and a link's glyph the theme's link colour
+                // first (registerLinkGlyph). A carrier is never seen.
                 if (carrier) el.style.setProperty('fill', 'transparent', 'important');
                 else if (n.color) el.style.fill = colorFill(n.color);
                 // a broken word's hyphen: copied without it ('keep': with it), the word joined
                 if (BREAK_NODES.has(n)) el.dataset.break = BREAK_NODES.get(n) === 'keep' ? 'keep' : '';
                 if (n.stream)     registerStreamSource(el, n.stream, cache);
-                if (n.link)       registerLinkGlyph(el, n.link, cache);
+                if (n.link)       registerLinkGlyph(el, n.link, cache, carrier ? null : colorFill(n.color ?? '#000000'));
                 if (n.mark)       applyMark(el, n.mark, cache);
                 // A \webtext's glyphs – TeX's default or a text the page gave
                 // – carry its name, so a page can find (and style) where it is.
@@ -301,8 +301,7 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
                 // CSS: a blanket `rect { fill: currentColor }` would also hit
                 // the shapes inside a tikzpicture and flatten their colours,
                 // since CSS outranks the presentation attributes a picture's SVG has.
-                el.style.fill = n.color ? colorFill(n.color)
-                                        : 'var(--latex-color-000000, currentColor)';
+                el.style.fill = colorFill(n.color ?? '#000000');
                 byNode.set(n, el); stats.created++;
             } else {
                 el.setAttribute('x', String(x)); el.setAttribute('y', String(y));
@@ -344,7 +343,7 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
                 el.style.pointerEvents = 'auto';
                 const box = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
                 box.style.cssText = `width:${w}px;height:${h + d}px;font-size:${n.fontPx}px;` +
-                    `line-height:normal;color:${n.color ? colorFill(n.color) : 'currentColor'};` +
+                    `line-height:normal;color:${colorFill(n.color ?? '#000000')};` +
                     // content aligned by baseline, as ctx.measure measured it: the
                     // highest-reaching element's top at the widget's top, so the
                     // shared baseline lands on the line's
@@ -372,9 +371,9 @@ export function reconcileSink(byNode: Map<TexNode, SVGElement>, used: Set<Elemen
                 el = svgEl('g', { class: 'latex-picture' });
                 if (pic) insertPictureSvg(el as SVGGElement, pic.svg);
                 // MuPDF omits fill on black paths (SVG's initial fill is
-                // black), so the theme's default text colour is supplied here
-                // by inheritance rather than rewritten into every path.
-                el.setAttribute('fill', 'var(--latex-color-000000, currentColor)');
+                // black), so the theme's black is supplied here by
+                // inheritance rather than rewritten into every path.
+                el.setAttribute('fill', colorFill('#000000'));
                 byNode.set(n, el); stats.created++;
             } else {
                 stats.repositioned++;

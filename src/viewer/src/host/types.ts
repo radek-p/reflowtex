@@ -19,6 +19,8 @@ import type { Line } from '../engine/layout/types.ts';
 import type { Params } from '../runtime/params.ts';
 import type { Inspect } from './inspect.ts';
 import type { AlertLevel, LogLevel, LogRecord } from '../../../shared/log.ts';
+import type { ColorMap } from '../runtime/builtin-colour-maps.ts';
+import type { ThemeState } from '../runtime/theme.ts';
 
 export type { AlertLevel, LogLevel, LogRecord };
 
@@ -91,12 +93,11 @@ export interface TextOptions {
 }
 
 /** A colour map: per theme, the colours TeX produced (#rrggbb) → what that
- *  theme shows (any CSS colour); and tints, colours TeX baked by mixing a
- *  base into white → [base, percent], mixed again against the page. */
-export interface ColorMap {
-    colors?: Record<string, Record<string, string>>;
-    tints?: Record<string, [string, number]>;
-}
+ *  theme shows (any CSS colour), and how links look; and tints, colours TeX
+ *  baked by mixing a base into white → [base, percent], mixed again against
+ *  the page. */
+export type { ColorMap, LinkLook } from '../runtime/builtin-colour-maps.ts';
+export type { ThemeState } from '../runtime/theme.ts';
 
 export interface MarkHandle {
     readonly id: string;
@@ -706,6 +707,22 @@ export interface ReflowTeX {
      *  remembered. */
     accessibleDebug?(): boolean;
     setAccessibleDebug?(on: boolean): void;
+    /** The reader's colour theme (the README's Theming): the choice (a
+     *  theme, or 'system'), the theme shown, and the system mode's two
+     *  themes. reflowtex:theme on document when it changes. */
+    theme?(): ThemeState;
+    /** The themes on offer: default, then the colour maps'. */
+    themes?(): string[];
+    /** Choose a theme, or 'system'; applied to the page, and remembered
+     *  where the page keeps the reader's settings (rememberTheme). */
+    setTheme?(choice: string): void;
+    /** The themes the system mode shows while the system is light, and
+     *  while it is dark; remembered as setTheme's choice is. */
+    setSystemThemes?(slots: { light?: string; dark?: string }): void;
+    /** Keep the reader's theme settings on this page (localStorage), as
+     *  data-latex-theme-choice on <html> asks: without either, nothing is
+     *  read or written, and setTheme only applies. */
+    rememberTheme?(): void;
     /** For tools: the viewer's own state (the README's Inspecting). Not
      *  part of this contract: its shape may change between versions (its
      *  `version` says which). */
@@ -727,6 +744,8 @@ declare global {
         'reflowtex:log': CustomEvent<{ record: LogRecord }>;
         /** Sent on document after live marks change (host.addMark). */
         'reflowtex:marks': CustomEvent<{ marks: LiveMark[] }>;
+        /** Sent on document when the reader's theme changes (ReflowTeX.theme). */
+        'reflowtex:theme': CustomEvent<ThemeState>;
     }
     interface HTMLElement {
         /** A block's outline, once it is laid out (OutlineItem). */

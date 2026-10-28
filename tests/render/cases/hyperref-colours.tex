@@ -1,0 +1,19 @@
+% hyperref's colorlinks: references, URLs and citations drawn in the colours the document gives them (linkcolor, urlcolor, citecolor), the rest in TeX's black, and coloured rules – each glyph and rule compared with the PDF's colour exactly. RGB and gray colours only: CMYK is cmyk-colours.
+\documentclass{article}
+\usepackage{xcolor}
+\definecolor{urlpurple}{rgb}{0.6,0,0.6}
+\usepackage[colorlinks, linkcolor=red, urlcolor=urlpurple, citecolor={green!50!black}]{hyperref}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+\section{Links in colour}\label{s:links}
+Black text around a reference to Section~\ref{s:links}, a page address,
+\url{https://example.org/reflow}, a link with words of its own,
+\href{https://example.org/}{an address behind its text}, and a citation,
+\cite{knuth}, each drawn in its own colour, as hyperref sets it.
+Some \textcolor{blue}{blue words}, a \textcolor{black!60}{grey} one, a black
+rule \rule{1cm}{0.6pt} and a \textcolor{red}{red \rule{1cm}{0.6pt} rule}.
+\begin{thebibliography}{9}
+\bibitem{knuth} D. E. Knuth, \emph{The \TeX book}, Addison-Wesley, 1984.
+\end{thebibliography}
+\end{document}

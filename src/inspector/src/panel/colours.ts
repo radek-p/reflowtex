@@ -74,7 +74,7 @@ function ColourMap({ m, theme }: { m: Map; theme: string | null }) {
     const addColour = () => {
         const v = add.current!.value.trim().toLowerCase();
         if (!HEX.test(v)) { say('a TeX colour is #rrggbb'); return; }
-        run('setMapColour', m.name, theme || 'light', v, v).then(ok => { if (ok) add.current!.value = ''; });
+        run('setMapColour', m.name, theme && theme !== 'default' ? theme : 'light', v, v).then(ok => { if (ok) add.current!.value = ''; });
     };
     const addTint = () => {
         const [hex, base, pct] = [...tint.current!.querySelectorAll('input')].map(i => i.value.trim());
@@ -86,7 +86,9 @@ function ColourMap({ m, theme }: { m: Map; theme: string | null }) {
             ${m.themes.map(t => html`<th key=${t} class=${t === theme ? 'now' : ''}><button type="button" class="theme" aria-pressed=${t === theme}
                 title=${t === theme ? `The page is in the ${t} theme` : `Switch the page to the ${t} theme`} onClick=${() => run('setPageTheme', t)}>${t}</button></th>`)}<th>Current</th></tr></thead>
             <tbody>${m.colors.map(c => html`<tr key=${c.src}><td><${Swatch} c=${c.src}/></td>
-                ${m.themes.map(t => html`<td key=${t} class=${t === theme ? 'now' : ''}><${Cell} map=${m.name} theme=${t} src=${c.src} value=${c.by[t]} swatches=${swatches}/></td>`)}
+                ${m.themes.map(t => html`<td key=${t} class=${t === theme ? 'now' : ''}>${t === 'default'
+                    // (the default theme takes no map: TeX's colour, as it is)
+                    ? html`<${Swatch} c=${c.src}/>` : html`<${Cell} map=${m.name} theme=${t} src=${c.src} value=${c.by[t]} swatches=${swatches}/>`}</td>`)}
                 <td><${Swatch} c=${c.now}/></td></tr>`)}
             <tr class="add"><td colspan=${m.themes.length + 2}>
                 <input ref=${add} type="text" placeholder="#rrggbb" spellcheck="false" title="A colour TeX produced, to map"

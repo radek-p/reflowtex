@@ -194,15 +194,24 @@ page's own `data-latex-selection` is the default until the reader picks.
 
 Or use the components: `<ReadingButton width selection inspect themes />` and
 `<ReadingOptions … />`. The state is `reading`, a set of signals with
-setters: `reading.theme`, `.zoom` and `.width`, and `reading.setTheme(t)`,
-`.zoomBy(±1 | 0)` and `.setWidth(w)`. The page follows it through `<html>`:
-- the theme is a class (none for light) plus `data-theme`;
+setters: `reading.theme` (the theme shown), `.choice` (a theme, or
+`system`), `.system` (the system mode's two themes), `.zoom` and `.width`,
+and `reading.setTheme(t)` (a theme or `'system'`), `.setSystemThemes({ light,
+dark })`, `.zoomBy(±1 | 0)` and `.setWidth(w)`. The themes are the viewer's
+(its README's Theming): `default`, TeX's colours as they are, then light,
+dark, sepia and contrast, and System offers a theme for each of the system's
+modes. The page follows it through `<html>`:
+- the theme is a class (none for default) plus `data-theme`, set by the
+  viewer alone: `reading.setTheme` and `.setSystemThemes` call
+  `reflowtex.setTheme` and `reflowtex.setSystemThemes`, and the theme
+  signals follow `reflowtex:theme`;
 - the text size is `--rtx-zoom` (1 for 100%);
 - the width is `data-width`.
 
 Every change also sends a window resize, so the viewer lays the text out
-again. Choices are remembered in `localStorage` (`reflowtex-theme`,
-`reflowtex-zoom`, `reflowtex-width`). To avoid a flash before the module
+again. Choices are remembered in `localStorage` (`reflowtex-zoom`,
+`reflowtex-width`; the theme as the viewer keeps it, on a page that asks:
+its README's Theming). To avoid a flash before the module
 loads, a page sets the saved state itself first, as the website's
 `head.html` does. The inspector's entry shows when the page has the
 inspector (`inspect={false}` hides it). The look uses `--rtx-glass`,

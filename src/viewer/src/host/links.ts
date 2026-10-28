@@ -6,6 +6,7 @@ import { safeUrl } from '../engine/safe.ts';
 import type { Link } from '../engine/model.ts';
 import type { LayoutCache } from '../engine/layout/types.ts';
 import { screenCTM } from '../runtime/screen-ctm.ts';
+import { linkFill } from '../runtime/colour.ts';
 
 // ── Cross-references ─────────────────────────────────────────────────────────
 // A \ref stamps every glyph of its printed text with the same document-local id
@@ -78,7 +79,8 @@ export function setLinkState(key: string | null, cls: string, on: boolean): void
     drawLinkUnderline(key, els);
 }
 
-// The underline of a hovered reference. CSS text-decoration would underline
+// The underline of a hovered reference, where the theme draws one (its
+// colour map's links.underline: "hover"). CSS text-decoration would underline
 // each glyph on its own – every glyph is a separately placed tspan, and the
 // spaces between words are not glyphs at all – so the viewer draws it: one
 // line per text line, from the reference's first glyph to its last. Glyphs
@@ -91,7 +93,7 @@ export function drawLinkUnderline(key: string, els: Iterable<SVGGraphicsElement>
     // transparent – its fill is no colour for the line.
     const hover = [...els].filter(el => el.classList.contains('latex-link-hover')
                                         && !el.classList.contains('latex-link-hit'));
-    if (!hover.length) return;
+    if (!hover.length || getComputedStyle(hover[0]).getPropertyValue('--latex-link-underline').trim() !== 'hover') return;
     const lines: { svg: SVGSVGElement; base: number; left: number; right: number; em: number; colour: string }[] = [];
     for (const el of hover) {
         const svg = el.ownerSVGElement, ctm = screenCTM(el), sctm = screenCTM(svg);
@@ -236,7 +238,7 @@ export function installLinks(): void {
 // Tag one glyph of a reference. Only a reference we can actually resolve is
 // marked – an unresolvable one is left as plain text (see the note above).
 // Attached once, at element creation, so the reconciler's reuse keeps it.
-export function registerLinkGlyph(el: SVGElement, id: number, cache: LayoutCache): void {
+export function registerLinkGlyph(el: SVGElement, id: number, cache: LayoutCache, fill: string | null): void {
     const link = cache.links?.[id - 1];
     // An action (\webaction) is a control rather than a destination: it
     // has no href, is always live, and is announced as a button.
@@ -244,6 +246,8 @@ export function registerLinkGlyph(el: SVGElement, id: number, cache: LayoutCache
     const href = action ? null : linkHref(link);
     if (!href && !action) return;
     el.classList.add('latex-link');
+    // the theme's link colour for the state it is in, over TeX's (colour.ts)
+    if (fill) el.style.fill = linkFill(fill);
     el.dataset.link = `${cache.blockKey}:${id}`;
     if (action) { el.classList.add('latex-action'); el.dataset.linkAction = action; }
     else el.dataset.linkHref = href!;

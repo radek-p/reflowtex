@@ -7,15 +7,18 @@ latexTitle: true
 {{< latex preamble="docs" >}}
 \pagetitle[Typesetting]{Colours and themes}
 \bigskip
-Black text takes the page's text colour, so a dark theme works without any
-configuration. Colours chosen by the author are kept, and a \emph{colour
-map} can replace them per theme, so that \verb|\textcolor{blue}| stays
-readable on a dark background. The options above the example set its text
-size and theme, for the example only; the same options in the corner set
-them for the whole page.
+In the default theme every colour is TeX's own, as in the PDF: black text is
+black, and links have the colours the document gave them. The other themes,
+light, dark, sepia and contrast, each replace some colours by a
+\emph{colour map}, so that \verb|\textcolor{blue}| stays readable on a dark
+background, and give links a colour of their own. The options above the
+example set its text size and theme, for the example only; the same options
+in the corner set them for the whole page. There, \emph{System} follows the
+system: one theme while it is light and another while it is dark, by default
+the default theme and dark.
 {{< /latex >}}
 
-{{< latex preamble="docs" show-source="true" themes="light,dark,sepia,contrast" >}}
+{{< latex preamble="docs" show-source="true" themes="default,light,dark,sepia,contrast" >}}
 A \textcolor{blue}{blue remark}, a \textcolor{red}{red warning}, and
 colour inside mathematics:
 \[
@@ -43,17 +46,18 @@ picture of a wave tunnelling through a barrier.
 {{< /latex >}}
 
 {{< latex preamble="docs" >}}
-A colour map is a small JSON file. For each theme it lists the colours to
-replace. It also lists \emph{tints}: colours mixed with white, like
-\verb|blue!20!white|, which are mixed again with the current background.
-This site's map, \texttt{latex-color-maps/site.json}, is the default for
-every block. Here is what it does to the blue and red of the example:
+A colour map is a small piece of JSON. For each theme it lists the colours
+to replace and how links look. It also lists \emph{tints}: colours mixed
+with white, like \verb|blue!20!white|, which are mixed again with the
+current background. The viewer has one built in, \texttt{reflowtex}, which
+this site uses. Here is what it does to the blue and red of the example:
 {{< /latex >}}
 
-{{< color-map map="site" colors="#0000ff,#ff0000" >}}
+{{< color-map map="reflowtex" colors="#0000ff,#ff0000" >}}
 
 {{< latex preamble="docs" >}}
-In the file:
+A site can give its own, in \texttt{latex-color-maps/}; a theme it gives
+replaces the built-in one. In the file:
 {{< /latex >}}
 
 ```json
@@ -63,14 +67,17 @@ In the file:
     "sepia":    { "#0000ff": "#155e97", "#ff0000": "#c02d0c" },
     "contrast": { "#0000ff": "#0000b3", "#ff0000": "#b30000" }
   },
+  "links": {
+    "dark":     { "color": "#9d9bff", "hover": "#c3c2ff", "underline": "hover" }
+  },
   "tints": { "#ccccff": ["#0000ff", 20], "#ffcccc": ["#ff0000", 20] }
 }
 ```
 
 {{< latex preamble="docs" >}}
-A theme is a class on the page's \verb|<html>| element (\texttt{dark},
-\texttt{sepia} or \texttt{contrast}), so switching themes only changes
-styles; nothing is drawn again. The Theming section of \texttt{src/viewer/README.md}
+A theme is a class on the page's \verb|<html>| element (\texttt{light},
+\texttt{dark}, \texttt{sepia} or \texttt{contrast}; none for the default
+theme), so switching themes only changes styles; nothing is drawn again. The Theming section of \texttt{src/viewer/README.md}
 has the details.
 {{< /latex >}}
 

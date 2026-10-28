@@ -96,8 +96,7 @@ export function rewritePictureSvg(svg: string, prefix: string): Picture {
   inner = inner.replace(SVG_COLOR_RE, (all, a: string, q: string, colour: string, at: number) => {
     if (within(masked, at)) return all;
     const digits = hexDigits(colour);
-    const fallback = digits === '000000' ? 'currentColor' : `#${digits}`;
-    return `${a}=${q}var(--latex-color-${digits}, ${fallback})${q}`;
+    return `${a}=${q}var(--latex-color-${digits}, #${digits})${q}`;
   });
   // a mask's content inherits the mask's fill, not the picture's themed one
   inner = inner.replace(/<mask\b[^>]*>/g, tag => (attr(tag, 'fill') === undefined ? `<mask fill="#000000"${tag.slice(5)}` : tag));

@@ -61,7 +61,7 @@ viewport.
 | `data-latex-selection` | How selected text looks, on `<html>` or a block (the nearest wins): `native` (default), the browser's own highlight, glyph by glyph; `bands`, the viewer's, drawn as a mark's band is: one even rect per line (`rect.latex-selection`, coloured `var(--latex-selection-color, Highlight)`), spaces included, over marks and under the text; a selection that starts or ends in a word space (or at a glyph's far edge) reaches that edge, so a space can be selected, alone or with the words around it. The selection itself stays the browser's (copy, keyboard, `getSelection()`); only its look changes. [host/selection.ts](src/host/selection.ts) |
 | `data-latex-layout` | `sliced` (default) or `sync`, on a block or any element above it (`<html>` for the page; the nearest wins): whether a re-break lays out at once only what is on the screen and the rest in slices of idle time, or everything at once (see What a resize costs); `host.mount(el, { layout })` and `host.setLayout` set it from a script |
 | `data-latex-scope` | The scope its live texts are looked up in first (see Live text: scopes); `host.mount(el, { scope })` wins over it |
-| `data-color-map` | name of an entry in the page's `#latex-color-maps` island to recolour this block with (see Theming below); omitted = TeX/tikz colours render as-is |
+| `data-color-map` | name of an entry in the page's `#latex-color-maps` island whose themes this block takes (see Theming below); omitted = the viewer's built-in map. In the theme `default` no map applies: TeX's colours as they are |
 | `data-display-min-space` | Minimum space (pt) kept between two pieces of a display – an align's columns, or an equation and its number – as the measure decreases, before the display freezes and scrolls (default `10`; `0` permits zero). A display's *outer* space (centring, margin) is not covered by this and always closes to zero first |
 | `data-display-overflow-tolerance` | Tiny horizontal overhang ignored before adding a display scrollbar (default `2` CSS px) |
 | `data-line-penalty`, `data-adj-demerits`, `data-double-hyphen-demerits`, `data-final-hyphen-demerits`, `data-pretolerance`, `data-tolerance`, `data-emergency-stretch` (pt), `data-protrusion`, `data-expansion` | Knuth–Plass knobs; the defaults are LaTeX's, and the built-in breaker then breaks as LuaTeX does, protruding and expanding by the document's own microtype settings. A paragraph TeX broke with other values (`\sloppy`, as in every bibliography) keeps its own |
@@ -263,9 +263,10 @@ address or a handler, and addresses of other schemes (a `data:` image stays)
 before it is inserted. The pipeline cleans a picture the same way where it
 makes it (`src/pipeline/pictures.ts`), so the page's own data is clean too.
 
-Style the three states with `--latex-link`, `--latex-link-hover` and
-`--latex-link-active`; give `.latex-anchor` a `scroll-margin-top` if your page
-has a sticky header.
+How a link looks – its colour at rest, pointed at and pressed, and an
+underline – is its theme's, in the colour map (Theming); in the theme
+`default` a link is drawn as TeX drew it. Give `.latex-anchor` a
+`scroll-margin-top` if your page has a sticky header.
 
 ## What a resize costs
 
@@ -570,11 +571,18 @@ everything a page draws:
   handle's `elements()`/`rects()`. Every change sends `reflowtex:marks` on
   `document`. The marks live in [host/marks.ts](src/host/marks.ts); the
   painter asks `liveOn(node)` for every glyph it draws.
-- **Colour maps**: `host.colorMaps()` gives the maps in force (the page's
-  island, or what was set last), `host.setColorMaps(maps)` replaces them;
+- **Colour maps**: `host.colorMaps()` gives the maps in force (the
+  built-in `reflowtex`, with the page's of that name over it, and the
+  page's others: its island, or what was set last), `host.setColorMaps(maps)`
+  replaces the page's;
   the page's colours follow at once, with no layout (see Theming). Maps set
   before the viewer reads its island (at its first block) are kept over the
   island's, map by map.
+- **The reader's theme**: `reflowtex.theme()`, `reflowtex.themes()`,
+  `reflowtex.setTheme(choice)` (a theme, or `'system'`) and
+  `reflowtex.setSystemThemes({ light, dark })` and
+  `reflowtex.rememberTheme()`, with `reflowtex:theme` on `document`; see
+  Theming.
 
 ## Streams
 
@@ -603,8 +611,8 @@ its stylesheet.
 ## Actions
 
 `\webaction{verb:arg}{text}` makes text inside a paragraph a *control*. Its
-glyphs are grouped like a `\ref` and coloured with the same `.latex-link`
-rules, plus `.latex-action`. They take `role="button"` and one tab stop. A
+glyphs are grouped like a `\ref` and drawn as a link is (the theme's link
+look), with `.latex-link` and `.latex-action`. They take `role="button"` and one tab stop. A
 click, Enter or Space goes to the instance whose text holds the control –
 the nearest `[data-instance]` around it, a stream's element or a surface's –
 and then outward through its parents, the tree the TeX made rather than the
@@ -762,57 +770,177 @@ by `.latex-margin-note[data-kind=…]`, and may set the margin itself, on the
 block, in px: `--latex-margin-width` (0 for marks only) and
 `--latex-margin-gap`.
 
-## Theming (optional)
+## Theming
 
-reflowtex ships no colour palette of its own – a block with no `data-color-map`
-renders TeX's own colours as-is, and glyphs TeX left black carry no inline fill
-and inherit `currentColor`, so basic dark mode already works with zero
-configuration as long as your page sets a light text colour per theme.
+### Five themes
 
-Recolouring beyond that is entirely page-supplied data, read from an optional
-JSON island:
+| Theme | What it draws |
+|---|---|
+| `default` | TeX's colours exactly, as the PDF has them: black is `#000000`, every colour the document chose is its own, and a link is drawn as TeX drew it (hyperref's `colorlinks` colours, or black), with no underline. No colour map applies, ever. |
+| `light` | the built-in map's light theme: softer black (`#333333`), links in a colour of their own, underlined while pointed at |
+| `dark` | the built-in map's dark theme: light text, colours made readable on a dark page |
+| `sepia` | the built-in map's sepia theme |
+| `contrast` | the built-in map's high-contrast theme |
+
+A theme is a class on `<html>` – none for `default`, else the theme's name
+– and `data-theme` says which. Switching it restyles what is drawn through
+CSS custom properties: nothing is laid out or drawn again. hyperref's
+`pdfborder` boxes are not drawn in any theme: they are link annotations,
+which a PDF viewer may draw on screen, and not part of the page TeX
+typeset (they are not printed).
+
+### The reader's choice, and the system mode
+
+The reader picks a theme, or **system**: one theme while the system (the
+operating system or the browser) is in light mode and another while it is
+dark – the two *slots*, `light` and `dark`. For a reader who has chosen
+nothing the viewer starts in the system mode with `default` in the light
+slot and `dark` in the dark one: TeX's own colours unless the system is
+dark. In the system mode the theme follows the system as it changes.
+
+`reflowtex.setTheme` (below) is the one way the page's theme is set: the
+companion's reading options, the inspector and the vanilla page's panel all
+call it, and nothing else sets the class or the stored choice.
+
+The viewer sets the page's theme only once asked, so a page that themes
+itself is left alone (and stays in `default` until it sets a class). A page
+that wants the *reader's* settings asks, and gives the first values for a
+reader who has chosen nothing, with attributes on `<html>`:
+
+```html
+<html data-latex-theme-choice="system" data-latex-theme-light="default" data-latex-theme-dark="dark">
+```
+
+or by calling `reflowtex.rememberTheme()`. Only then are the choice and the
+slots remembered in `localStorage` (`reflowtex-theme`: a theme or `system`;
+`reflowtex-theme-light`, `reflowtex-theme-dark`), as the reader's other
+settings are. Without it the viewer neither reads nor writes those keys: a
+host that keeps its own settings (an editor, a CMS plugin) calls
+`reflowtex.setTheme`, which then only applies the theme.
+
+The viewer applies the theme when its script runs. A page that styles its
+own background per theme sets the class itself before the first paint, from
+the same keys, so nothing flashes:
+
+```html
+<script>
+  (function () {
+    var root = document.documentElement, get = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
+    var c = get('reflowtex-theme') || root.getAttribute('data-latex-theme-choice') || 'system';
+    var t = c !== 'system' ? c : matchMedia('(prefers-color-scheme: dark)').matches
+      ? get('reflowtex-theme-dark') || root.getAttribute('data-latex-theme-dark') || 'dark'
+      : get('reflowtex-theme-light') || root.getAttribute('data-latex-theme-light') || 'default';
+    if (t !== 'default') root.classList.add(t);
+    root.setAttribute('data-theme', t);
+  })();
+</script>
+```
+
+A host (a reading-options panel, an editor with a theme setting of its own)
+drives it through `window.reflowtex`:
+
+| Call | Does |
+|---|---|
+| `reflowtex.theme()` | `{ choice, theme, light, dark }`: the reader's choice (a theme or `'system'`), the theme shown now, and the two slots |
+| `reflowtex.themes()` | the themes on offer: `default`, then the colour maps' (`light`, `dark`, `sepia`, `contrast`, and any theme a page's map adds) |
+| `reflowtex.setTheme(choice)` | a theme's name or `'system'`; applied at once (it also makes the viewer set the page's theme from then on), and remembered on a page that keeps the reader's settings |
+| `reflowtex.setSystemThemes({ light, dark })` | either slot or both; applied at once when the choice is `system`; remembered as above |
+| `reflowtex.rememberTheme()` | keep the reader's settings on this page from now on, as `data-latex-theme-choice` asks at load: the remembered choice and slots are read and applied |
+
+Each change sends `reflowtex:theme` on `document`, with the state of
+`reflowtex.theme()` as its `detail`. The companion package's reading options
+are such a host.
+
+### A theme for part of a page
+
+`data-latex-theme="T"` on any element – a pane, an example's preview – gives
+the blocks inside it theme `T`, whatever the page's theme is
+(`data-latex-theme="default"` gives them TeX's own colours). A theme's
+colours are declared on the element that carries it (`<html>` with the
+theme's class, or the element with the attribute) and reach the blocks by
+inheritance, so a block takes the theme of its **nearest** themed ancestor:
+two panes in two themes stand side by side, and one inside another wins
+inside it. A footnote's popover takes its block's theme, map and
+`--latex-page-bg`. Set `--latex-page-bg` on the element too, for tints and
+the paper. The reader's choice and the system mode (above) are the page's;
+a host themes a pane by setting the attribute.
+
+### The link look for the page's own CSS
+
+Each themed element (`<html>` with a theme's class, or one with
+`data-latex-theme`) also carries its theme's link look, from the built-in
+map (or the page's map named `reflowtex`), for a host's own link-like marks:
+
+| Property | Value | Unset |
+|---|---|---|
+| `--latex-link-current` | the link colour at rest | in `default`, and where the theme gives none |
+| `--latex-link-current-hover` | while pointed at | `--latex-link-current`'s value |
+| `--latex-link-current-active` | while pressed | the hover colour |
+
+```css
+.my-mark { color: var(--latex-link-current, inherit); }
+.my-mark:hover { color: var(--latex-link-current-hover, inherit); }
+```
+
+In `default` they are unset, as links there have each their own colour from
+TeX, so give a fallback.
+
+### Colour maps
+
+Every theme but `default` draws the colours of a colour map. The viewer
+ships one, `reflowtex`
+([runtime/builtin-colour-maps.ts](src/runtime/builtin-colour-maps.ts)), with
+the four themes above; every block takes it, so a page needs no map of its
+own. A page may give its own maps in an optional JSON island:
 
 ```html
 <script id="latex-color-maps" type="application/json">
   { "my-map": {
-      "colors": { "dark": { "#eb5757": "#ff8585" }, … },
+      "colors": { "dark": { "#eb5757": "#ff8585", "#000000": "#e7e5e4" } },
+      "links":  { "dark": { "color": "#9d9bff", "hover": "#c3c2ff", "active": "#c2410c", "underline": "hover" } },
       "tints":  { "#ffcccc": ["#ff0000", 20] }
   } }
 </script>
 ```
 
-A block opts in with `data-color-map="my-map"`, naming one entry. Nothing
-stops a page from embedding several named maps and giving different blocks
-different ones – e.g. two documents sharing a page, each with its own palette.
+- **`colors`** – per theme, the hex TeX or TikZ produced and what to draw
+  instead: any CSS colour (the built-in draws `#ffffff`, TeX's paper, as
+  `var(--latex-page-bg, Canvas)`, the page's background). A colour a theme
+  leaves out is drawn as TeX wrote it. `#000000` is TeX's black, the
+  colour of all default-coloured text and rules.
+- **`links`** – per theme, how a link (`\ref`, `\url`, `\href`, a citation,
+  a `\webaction`) is drawn:
 
-- **`colors`** – flat substitution per theme, keyed by the hex TeX/tikz
-  produced. `'#000000'` is special: it is the *default* text colour (glyphs
-  TeX left black carry no inline fill), so mapping it recolours all
-  default-coloured text in that theme.
-- **`tints`** – colours TeX baked by mixing a base colour into the page (e.g.
-  `red!20!white` resolves to flat RGB at compile time, with no trace of how it
-  was built). Re-derived at runtime as `baked-hex: [base-hex, percent]`, so
-  the tint follows the *current* background rather than staying stuck to
-  whatever page colour was live when TeX compiled it.
+  | Key | Meaning | Unset |
+  |---|---|---|
+  | `color` | its glyphs' colour | TeX's colour for each glyph |
+  | `hover` | its colour while pointed at (the whole link, across lines) | `color` |
+  | `active` | its colour while pressed | `hover` |
+  | `underline` | `"hover"`: a line under it while pointed at, one per line it is on, in its colour; `"none"` | `"none"` |
 
-A theme can also be scoped to part of a page: `data-latex-theme="dark"` on any
-element gives the blocks inside it that theme's colours, whatever the page's
-theme is. That is how an example can preview each theme in place. Every colour
-the map remaps is declared in the scoped rules, so a scoped `light` also undoes
-the page's dark substitutions. Set `--latex-page-bg` on that element too, so
-tints mix with its background.
+- **`tints`** – colours TeX baked by mixing a base colour into the page
+  (e.g. `red!20!white` resolves to flat RGB at compile time, with no trace
+  of how it was built). Re-derived at runtime as
+  `baked-hex: [base-hex, percent]`, in every theme but `default`, so the
+  tint follows the theme's base colour and the *current* background rather
+  than staying stuck to the white page TeX mixed it on.
 
-A theme is matched by a class name on `<html>` (`dark`, `sepia`, `contrast`;
-unclassed is the implicit `light`) – switching the class restyles
-already-rendered SVG via CSS custom properties, no re-render. Adding a theme
-to a map is just a new key plus a class your page switcher sets; reflowtex
-doesn't hardcode which themes exist.
+A block takes a map by name with `data-color-map="my-map"`; nothing stops a
+page from giving different blocks different maps (two documents on one
+page, each with its own palette). Maps fall back to the built-in theme by
+theme: a theme a map gives replaces the built-in's (its colours and its
+links separately), and a theme it leaves out is the built-in's. A page's
+map named `reflowtex` replaces the built-in's themes it gives for every
+block; a map may also add a theme of its own, matched by its class like any
+other. A site that wants softer text or its own link colour in a theme sets
+it there.
 
-`tints` reads the ambient `--latex-page-bg` custom property (falling back to
-the CSS `Canvas` system colour), which is deliberately *not* part of the
-colour-map data – TeX has no notion of the page's colour, so that's the page's
-own theme CSS to set, typically right where it already sets its background
-per theme: `:root.dark { --latex-page-bg: #0c0a09; }`.
+`tints`, and the built-in's paper, read the ambient `--latex-page-bg`
+custom property (falling back to the CSS `Canvas` system colour), which is
+deliberately *not* part of the colour-map data – TeX has no notion of the
+page's colour, so that is the page's own theme CSS to set, typically right
+where it already sets its background per theme:
+`:root.dark { --latex-page-bg: #0c0a09; }`.
 
 The Hugo integration generates the island from `<site>/latex-color-maps/<name>.json`
 files, referenced with `color-map="<name>"` on the shortcode – see

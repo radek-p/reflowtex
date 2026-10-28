@@ -105,7 +105,7 @@ test('ids prefixed and colours themed, in either quote style', () => {
   assert.match(out, /<path id='p1-g1-5' d='M0 0'\/><clipPath id="p1-clip_1">/);
   assert.match(out, /<g clip-path="url\(#p1-clip_1\)"><use xlink:href='#p1-g1-5' fill='var\(--latex-color-ff0000, #ff0000\)'\/>/);
   assert.match(out, /<use data-text="x" xlink:href="#p1-g1-5" fill="var\(--latex-color-00ff00, #00ff00\)"\/>/);
-  assert.match(out, /stroke="var\(--latex-color-000000, currentColor\)" data-id='g1-5'/, 'black follows the text colour; data-id is no id');
+  assert.match(out, /stroke="var\(--latex-color-000000, #000000\)" data-id='g1-5'/, 'black is black, as any colour; data-id is no id');
   assert.match(out, /<use href='#elsewhere'\/>/, 'a reference to no id here is left alone');
 });
 

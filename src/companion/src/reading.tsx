@@ -16,20 +16,26 @@
 // (the companion draws every [data-rtx] element when it loads: mount.ts).
 //
 // How the page follows the state, so its CSS can: the theme is a class on
-// <html> (none for light) and data-theme; the text size is --rtx-zoom on
-// <html> (1 = 100%); the width is data-width on <html>. Every change also
-// sends a window resize, so the viewer lays the text out again. For no flash
-// before the module has loaded, a page sets the saved state itself first,
-// from the same localStorage keys (the website's head.html does).
+// <html> (none for default) and data-theme, set by the viewer alone, which
+// keeps the reader's choice – a theme, or the system mode with its two
+// themes (reflowtex.setTheme, its README's Theming): reading.setTheme and
+// setSystemThemes call it; the text size is --rtx-zoom on
+// <html> (1 = 100%); the width is data-width on <html>. Every change but the
+// theme also sends a window resize, so the viewer lays the text out again.
+// For no flash before the module has loaded, a page sets the saved state
+// itself first, from the same localStorage keys (the website's head.html
+// does).
 import { signal, useSignal, type Signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 
-const KEYS = { theme: 'reflowtex-theme', zoom: 'reflowtex-zoom', width: 'reflowtex-width', selection: 'reflowtex-selection',
+const KEYS = { zoom: 'reflowtex-zoom', width: 'reflowtex-width', selection: 'reflowtex-selection',
     math: 'reflowtex-a11y-math' };
 const ZOOM = { min: 0.5, max: 3, step: 1.1 };
 
 export interface Theme { name: string; label?: string }
-export const THEMES: Theme[] = [{ name: 'light' }, { name: 'dark' }, { name: 'sepia' }, { name: 'contrast' }];
+export const THEMES: Theme[] = [{ name: 'default' }, { name: 'light' }, { name: 'dark' }, { name: 'sepia' }, { name: 'contrast' }];
+/** The choice that follows the system: one theme while it is light, another while it is dark. */
+export const SYSTEM = 'system';
 export const WIDTHS = ['auto', 'narrow', 'normal', 'wide'];
 /** How selected text looks: the browser's own highlight, or the viewer's
  *  even bands (data-latex-selection on <html>; the viewer's host/selection.ts). */
@@ -43,10 +49,11 @@ const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } cat
 const html = () => document.documentElement;
 const resize = () => window.dispatchEvent(new Event('resize'));
 
-function initialTheme(): string {
-    return html().getAttribute('data-theme') || load(KEYS.theme)
-        || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-}
+// The theme is the viewer's (reflowtex.theme, setTheme: it applies the
+// theme and keeps the reader's choice); these signals follow it
+// (reflowtex:theme), and the setters below call it.
+const viewerTheme = () => window.reflowtex?.theme?.();
+const initialTheme = (): string => viewerTheme()?.theme || html().getAttribute('data-theme') || 'default';
 function initialZoom(): number {
     const z = parseFloat(html().style.getPropertyValue('--rtx-zoom')) || parseFloat(load(KEYS.zoom) || '');
     return z > 0 ? Math.min(ZOOM.max, Math.max(ZOOM.min, z)) : 1;
@@ -55,7 +62,13 @@ function initialZoom(): number {
 /** What a set of reading options controls: the page's (reading) or one
  *  element's (scopedReading). */
 export interface ReadingState {
+    /** The theme shown. */
     theme: Signal<string>;
+    /** What the reader chose: a theme, or 'system' (the page's options only). */
+    choice?: Signal<string>;
+    /** The system mode's themes, while the system is light and dark. */
+    system?: Signal<{ light: string; dark: string }>;
+    setSystemThemes?(slots: { light?: string; dark?: string }): void;
     zoom: Signal<number>;
     width: Signal<string>;
     themes: Theme[];
@@ -72,6 +85,8 @@ export const reading: ReadingState & { setZoom(z: number): void; selection: Sign
     math: Signal<string>; setMath(m: string): void; debug: Signal<boolean>; setDebug(on: boolean): void;
     reader: Signal<boolean>; setReader(on: boolean): void } = {
     theme: signal(initialTheme()),
+    choice: signal(viewerTheme()?.choice || SYSTEM),
+    system: signal({ light: viewerTheme()?.light || 'default', dark: viewerTheme()?.dark || 'dark' }),
     zoom: signal(initialZoom()),
     width: signal(html().getAttribute('data-width') || load(KEYS.width) || 'auto'),
     // The reader's choice, else the page's default (its data-latex-selection).
@@ -82,14 +97,10 @@ export const reading: ReadingState & { setZoom(z: number): void; selection: Sign
     /** The themes a page offers (the class names its CSS styles). */
     themes: THEMES,
 
-    setTheme(t: string) {
-        const root = html();
-        for (const th of reading.themes) if (th.name !== 'light') root.classList.remove(th.name);
-        if (t !== 'light') root.classList.add(t);
-        root.setAttribute('data-theme', t);
-        save(KEYS.theme, t);
-        reading.theme.value = t;
-    },
+    /** A theme, or 'system': reflowtex.setTheme (it says so: the listener below). */
+    setTheme(t: string) { window.reflowtex?.setTheme?.(t); },
+    /** reflowtex.setSystemThemes. */
+    setSystemThemes(slots: { light?: string; dark?: string }) { window.reflowtex?.setSystemThemes?.(slots); },
     /** Larger (1), smaller (-1) or back to 100% (0). */
     zoomBy(dir: -1 | 0 | 1) {
         const z = reading.zoom.value;
@@ -134,6 +145,11 @@ if (typeof document !== 'undefined')
     document.addEventListener('reflowtex:accessible-debug', e => { reading.debug.value = (e as CustomEvent).detail.on; });
 if (typeof document !== 'undefined')
     document.addEventListener('reflowtex:screen-reader-mode', e => { reading.reader.value = (e as CustomEvent).detail.on; });
+if (typeof document !== 'undefined')
+    document.addEventListener('reflowtex:theme', e => {
+        const d = (e as CustomEvent).detail;
+        reading.theme.value = d.theme; reading.choice!.value = d.choice; reading.system!.value = { light: d.light, dark: d.dark };
+    });
 // A choice the reader made before stands on every page.
 if (load(KEYS.selection)) html().setAttribute('data-latex-selection', reading.selection!.value);
 
@@ -208,12 +224,27 @@ export function ReadingOptions({ state = reading, width = false, selection = fal
                 <button type="button" data-z="in" aria-label="Larger text" title="Larger" onClick={() => state.zoomBy(1)}>A</button>
             </div>
             <div class="rtx-reading-row rtx-reading-themes" role="radiogroup" aria-label="Colour theme">
+                {state.choice && <button type="button" role="radio" data-t={SYSTEM} aria-checked={state.choice.value === SYSTEM}
+                        title="One theme while the system is light, another while it is dark" onClick={() => state.setTheme(SYSTEM)}>
+                    <span class="rtx-swatch" aria-hidden="true">Aa</span><span>System</span>
+                </button>}
                 {themes.map(t => (
-                    <button type="button" role="radio" data-t={t.name} aria-checked={state.theme.value === t.name}
+                    <button type="button" role="radio" data-t={t.name}
+                            aria-checked={(state.choice ? state.choice.value : state.theme.value) === t.name}
                             onClick={() => state.setTheme(t.name)}>
                         <span class="rtx-swatch" aria-hidden="true">Aa</span><span>{t.label || title(t.name)}</span>
                     </button>))}
             </div>
+            {state.choice?.value === SYSTEM && state.system && state.setSystemThemes && <div class="rtx-reading-row rtx-reading-system">
+                {(['light', 'dark'] as const).map(k => (
+                    <label class="rtx-reading-slot">
+                        <span>{k === 'light' ? 'When the system is light' : 'When the system is dark'}</span>
+                        <select data-slot={k} value={state.system!.value[k]}
+                                onChange={e => state.setSystemThemes!({ [k]: (e.currentTarget as HTMLSelectElement).value })}>
+                            {themes.map(t => <option value={t.name}>{t.label || title(t.name)}</option>)}
+                        </select>
+                    </label>))}
+            </div>}
             {width && <div class="rtx-reading-row">
                 <p class="rtx-reading-caption" id="rtx-width-label">Text width</p>
                 <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-width-label">

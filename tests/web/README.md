@@ -40,7 +40,8 @@ and CI's conventions.
 
 Builds go to `build/` (ignored). Run them with `make test-web`, or
 `npx playwright test -c tests/web -g footnote` for some (`--project webkit`
-for one engine). Tests tagged `@timing` (long tasks, in `slices.spec.ts`)
+for one engine; `REFLOWTEX_WEB_PAGES=notes,reading,hugo` builds only the
+pages those use, `hugo` for the Hugo site). Tests tagged `@timing` (long tasks, in `slices.spec.ts`)
 measure how long the viewer's tasks take, which means something only on a
 machine doing nothing else: they run in projects of their own
 (`timing-chromium`, `timing-webkit`, …), after every other test and one

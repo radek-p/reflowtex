@@ -1,20 +1,22 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
 {{- /*
   A colour map drawn as a table:
-    {{< color-map map="site" >}}                            every colour it names
-    {{< color-map map="site" colors="#0000ff,#ff0000" >}}   only these, and their tints
+    {{< color-map map="reflowtex" >}}                            every colour it names
+    {{< color-map map="reflowtex" colors="#0000ff,#ff0000" >}}   only these, and their tints
   Rows: every colour TeX wrote that the map (latex-color-maps/<name>.json,
-  read from data/latex_color_maps.json) names, then its tints. Columns: the
+  read from data/latex_color_maps.json, else the viewer's built-in map of
+  that name, from data/latex_builtin_color_maps.json) names, then its
+  tints. Columns: the
   colour as written, then each theme – a sample set in the colour that theme
   uses, on that theme's own page background. A tint is the mapped colour
   mixed with the theme's background, as the viewer mixes it.
 */ -}}
-{{- $m := index (hugo.Data.latex_color_maps | default dict) (.Get "map") -}}
+{{- $m := index (hugo.Data.latex_color_maps | default dict) (.Get "map") | default (index (hugo.Data.latex_builtin_color_maps | default dict) (.Get "map")) -}}
 {{- $only := slice -}}
 {{- with .Get "colors" }}{{ range split . "," }}{{ $only = $only | append (strings.TrimSpace . | lower) }}{{ end }}{{ end -}}
-{{- $themes := slice "light" "dark" "sepia" "contrast" -}}
-{{- $bg := dict "light" "#fafaf9" "dark" "#0c0a09" "sepia" "#f4ecd8" "contrast" "#ffffff" -}}
-{{- $label := dict "light" "Light" "dark" "Dark" "sepia" "Sepia" "contrast" "High contrast" -}}
+{{- $themes := slice "default" "light" "dark" "sepia" "contrast" -}}
+{{- $bg := dict "default" "#ffffff" "light" "#fafaf9" "dark" "#0c0a09" "sepia" "#f4ecd8" "contrast" "#ffffff" -}}
+{{- $label := dict "default" "Default" "light" "Light" "dark" "Dark" "sepia" "Sepia" "contrast" "High contrast" -}}
 {{- $names := dict "#000000" "black" "#0000ff" "blue" "#ff0000" "red" "#4f4f54" "grey" "#fcc712" "yellow" "#808080" "grey" -}}
 {{- $srcs := slice -}}
 {{- range $t, $cm := $m.colors }}{{ range $k, $_ := $cm }}{{ if and (not (in $srcs $k)) (or (not $only) (in $only $k)) }}{{ $srcs = $srcs | append $k }}{{ end }}{{ end }}{{ end -}}

@@ -5,6 +5,7 @@ data/latex_schema.json
 data/latex_files.json
 data/latex_font_map.json
 data/latex_color_maps.json
+data/latex_builtin_color_maps.json
 data/latex_link_map.json
 static/fonts/
 static/latex-viewer.js

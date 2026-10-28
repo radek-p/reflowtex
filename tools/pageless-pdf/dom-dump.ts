@@ -5,7 +5,9 @@
 // (pt from the column's left margin edge and from the top of the block; 2 CSS
 // px per pt): what vector-compare.ts matches against MuPDF's trace of the
 // strip. The page is pinned as the strip is laid out (column = \hsize, a margin
-// either side, light theme, every segment painted), so both describe one frame.
+// either side, every segment painted), so both describe one frame; in the
+// theme `default`, with no colour map, so each glyph's and rule's colour is
+// the one TeX gave it (`fill`, #rrggbb; null where nothing is painted).
 //
 //     node tools/pageless-pdf/dom-dump.ts <url> <out.json> [--hsize PT] [--margin PT] [--wait-log TEXT]
 import { parseArgs } from 'node:util';
@@ -13,27 +15,29 @@ import { writeFileSync } from 'node:fs';
 import { chromium, type Page } from 'playwright';
 import { filledRule, strokedRule, svgOutline, type Affine, type Pt } from './shapes.ts';
 
-export interface DomGlyph { x: number; y: number; w: number; text: string; font: string; size: number }
-/** A rule the viewer drew: its four corners (`pts`, at any angle), and the box around them. */
-export interface DomRect { x: number; y: number; w: number; h: number; pts: Pt[] }
+export interface DomGlyph { x: number; y: number; w: number; text: string; font: string; size: number; fill: string | null }
+/** A rule the viewer drew: its four corners (`pts`, at any angle), the box
+ *  around them, and its colour. */
+export interface DomRect { x: number; y: number; w: number; h: number; pts: Pt[]; color: string | null }
 export interface Dom { height: number; glyphs: DomGlyph[]; rects: DomRect[] }
 /** A drawn <rect> or <path>, as the page gives it: its path data, how it is
- *  painted, and `m`, from its own coordinates to the strip's frame. */
-interface DomShape { d: string; fill: boolean; stroke: { width: number; capped: boolean } | null; m: Affine }
+ *  painted (and in what colour), and `m`, from its own coordinates to the
+ *  strip's frame. */
+interface DomShape { d: string; fill: string | null; stroke: { width: number; capped: boolean; color: string | null } | null; m: Affine }
 
 /** The rules among the shapes: each filled or stroked shape that shapes.ts
  *  takes for one, as the strip's are taken. */
 function rulesOf(shapes: DomShape[]): DomRect[] {
   const rects: DomRect[] = [];
-  const add = (pts: Pt[] | null) => {
+  const add = (pts: Pt[] | null, color: string | null) => {
     if (!pts) return;
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-    rects.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), pts });
+    rects.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), pts, color });
   };
   for (const s of shapes) {
     const o = svgOutline(s.d);
-    if (s.fill) add(filledRule(o, s.m));
-    if (s.stroke) add(strokedRule(o, s.stroke.width, s.stroke.capped, s.m));
+    if (s.fill !== null) add(filledRule(o, s.m), s.fill || null);
+    if (s.stroke) add(strokedRule(o, s.stroke.width, s.stroke.capped, s.m), s.stroke.color);
   }
   return rects;
 }
@@ -116,6 +120,14 @@ function readSegments(page: Page, marginPx: number, from: number, to: number): P
     // a matrix() on a group) comes out rotated.
     const frame = new DOMMatrix().scale(0.5).translate(window.scrollX - blockLeft + marginPx, window.scrollY - blockTop);
     const toFrame = (e: SVGGraphicsElement) => frame.multiply(e.getScreenCTM()!);
+    // A computed colour as #rrggbb; null for one not opaque (a carrier of a
+    // font with no face, say) or not a colour.
+    const hex = (c: string): string | null => {
+      const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/.exec(c);
+      if (!m) return null;
+      if (m[4] !== undefined && (m[4].endsWith('%') ? parseFloat(m[4]) / 100 : parseFloat(m[4])) < 1) return null;
+      return '#' + [m[1], m[2], m[3]].map(v => Math.round(parseFloat(v)).toString(16).padStart(2, '0')).join('');
+    };
     const at = (m: DOMMatrix, x: number, y: number): [number, number] => {
       const p = new DOMPoint(x, y).matrixTransform(m);
       return [p.x, p.y];
@@ -132,7 +144,7 @@ function readSegments(page: Page, marginPx: number, from: number, to: number): P
         const fs = parseFloat(t.getAttribute('font-size') || te.getAttribute('font-size') || '0');
         const bb = t.getBBox ? t.getBBox() : null;
         const [gx, gy] = at(toFrame(te), x, y);
-        glyphs.push({ x: gx, y: gy, w: bb ? bb.width / 2 : 0, text: t.textContent ?? '', font: ff, size: fs / 2 });
+        glyphs.push({ x: gx, y: gy, w: bb ? bb.width / 2 : 0, text: t.textContent ?? '', font: ff, size: fs / 2, fill: hex(getComputedStyle(t).fill) });
       }
       // Only what is drawn: not the definitions a picture's markup keeps in
       // <defs> (glyph outlines, a soft mask's drawing), nor a clip path or
@@ -149,7 +161,7 @@ function readSegments(page: Page, marginPx: number, from: number, to: number): P
         if (unseen(u) || u.getAttribute('fill') === 'none') continue;
         const x = parseFloat(u.getAttribute('x') ?? '0'), y = parseFloat(u.getAttribute('y') ?? '0');
         const [gx, gy] = at(toFrame(u), x, y);
-        glyphs.push({ x: gx, y: gy, w: 0, text: u.dataset.text?.trim() ? u.dataset.text : '◊', font: 'picture', size: 0 });
+        glyphs.push({ x: gx, y: gy, w: 0, text: u.dataset.text?.trim() ? u.dataset.text : '◊', font: 'picture', size: 0, fill: hex(getComputedStyle(u).fill) });
       }
       // What may be a rule (shapes.ts decides): TeX's rules, drawn as
       // <rect> – not a link's transparent hit area, nor the empty mark a
@@ -167,7 +179,9 @@ function readSegments(page: Page, marginPx: number, from: number, to: number): P
           d = `M${x} ${y}H${x + w}V${y + h}H${x}Z`;
         }
         const cs = getComputedStyle(e), m = toFrame(e);
-        shapes.push({ d, fill: cs.fill !== 'none', stroke: cs.stroke === 'none' ? null : { width: parseFloat(cs.strokeWidth), capped: cs.strokeLinecap !== 'butt' },
+        // (fill '' where it is painted in something not a flat colour)
+        shapes.push({ d, fill: cs.fill === 'none' ? null : hex(cs.fill) ?? '',
+                      stroke: cs.stroke === 'none' ? null : { width: parseFloat(cs.strokeWidth), capped: cs.strokeLinecap !== 'butt', color: hex(cs.stroke) },
                       m: [m.a, m.b, m.c, m.d, m.e, m.f] });
       }
     }
@@ -186,8 +200,10 @@ async function readPage(page: Page, url: string, o: DumpOptions & { hsize: numbe
   while (o.waitLog && Date.now() - t < 30000 && !logs.some(l => l.includes(o.waitLog!))) await page.waitForTimeout(100);
   await page.waitForTimeout(500);
   await page.evaluate(([colPx, marginPx, hsize]) => {
-    const w = window as unknown as { __setTheme?(t: string): void; __zoom?(z: number): void };
-    if (w.__setTheme) w.__setTheme('light');
+    // the theme `default`: no colour map, TeX's colours as they are
+    const w = window as unknown as { reflowtex?: { setTheme?(t: string): void }; __setTheme?(t: string): void; __zoom?(z: number): void };
+    if (w.reflowtex?.setTheme) w.reflowtex.setTheme('default');
+    else if (w.__setTheme) w.__setTheme('default');
     if (w.__zoom) w.__zoom(0);
     for (const b of document.querySelectorAll<HTMLElement>('#lt-content > .latex-block')) b.dataset.latexWidth = String(hsize);
     const css = document.createElement('style');

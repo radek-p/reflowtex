@@ -7,7 +7,7 @@ import { worst, type Vector } from '../../tests/render/render.ts';
 
 const vector = (matched: Vector['matched'], rules: Vector['rules']): Vector => ({
   hsize_pt: 345, window_pt: 0.7, glyphs: { strip: matched.length, viewer: matched.length, matched: matched.length },
-  matched, rules, rules_missing: [],
+  matched, rules, rules_missing: [], colours: { compared: 0, mismatched: 0, first: [] },
 });
 
 test('worst: the largest offset across or down, and the farthest rule', () => {

@@ -6,15 +6,24 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ctext%20x='3'%20y='13'%20font-size='15'%20font-family='Georgia,serif'%20fill='%23888'%3E%E2%88%AB%3C/text%3E%3C/svg%3E">
 
 {{/* ── The reader's choices, before first paint ─────────────────────────────
-     Colour theme, text size and column width, as the companion's `reading`
-     keeps them (src/companion/src/reading.tsx): set here from localStorage,
-     else a sensible default, so nothing flashes before the module loads; the
-     companion's reading options (partials/switches.html) change them later. */}}
+     Colour theme, text size and column width, as the viewer and the
+     companion's `reading` keep them (src/viewer/src/runtime/theme.ts,
+     src/companion/src/reading.tsx): set here from localStorage, else this
+     site's defaults, so nothing flashes before the scripts load; the
+     companion's reading options (partials/switches.html) change them later.
+     The theme: the reader's choice, or by default the system mode – TeX's
+     own colours (`default`) while the system is light, `dark` while it is
+     dark; the data-latex-theme-* attributes give the viewer those defaults. */}}
 <script>
   (function () {
     var root = document.documentElement, get = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
-    var t = get('reflowtex-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    if (t !== 'light') root.classList.add(t);
+    root.setAttribute('data-latex-theme-choice', 'system');
+    root.setAttribute('data-latex-theme-light', 'default');
+    root.setAttribute('data-latex-theme-dark', 'dark');
+    var c = get('reflowtex-theme') || 'system';
+    var t = c !== 'system' ? c : window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? get('reflowtex-theme-dark') || 'dark' : get('reflowtex-theme-light') || 'default';
+    if (t !== 'default') root.classList.add(t);
     root.setAttribute('data-theme', t);
     root.setAttribute('data-width', get('reflowtex-width') || 'auto');
     var z = parseFloat(get('reflowtex-zoom'));
@@ -23,11 +32,14 @@
 </script>
 
 <style>
-  :root { color-scheme: light dark; }
+  :root { color-scheme: light; }
+  html.dark { color-scheme: dark; }
   /* Palette lives on <html> so it also fills the strip a fixed-width column
      reveals when it overflows horizontally. The viewer keys its colour maps off
-     the same html.dark / .sepia / .contrast classes, so text stays in step. */
-  html { background: #fafaf9; color: #333; transition: background .15s ease, color .15s ease; }
+     the same html.light / .dark / .sepia / .contrast classes, so text stays in
+     step; with none, the default theme, TeX's paper: black on white. */
+  html { background: #fff; color: #000; transition: background .15s ease, color .15s ease; }
+  html.light    { background: #fafaf9; color: #333; }
   html.dark     { background: #0c0a09; color: #e7e5e4; }
   html.sepia    { background: #f4ecd8; color: #453a26; }
   html.contrast { background: #fff;    color: #000; }
@@ -47,7 +59,6 @@
   html.dark, html.sepia, html.contrast,
   [data-latex-theme="dark"], [data-latex-theme="sepia"], [data-latex-theme="contrast"] { --latex-theorem-background: initial; }
   html, [data-latex-theme] {
-    --latex-link: var(--lt-primary); --latex-link-hover: var(--lt-primary-strong);
     --latex-theorem-accent: var(--lt-primary); --lt-outline-accent: var(--lt-primary);
     --latex-handle-color: var(--lt-primary); }
   body {
@@ -347,6 +358,7 @@
      chosen theme's page colours; the viewer recolours the block inside
      (data-latex-theme). Same palette as the page themes above. */
   .latex-example-preview[data-latex-theme] { transition: background .15s ease, color .15s ease; }
+  .latex-example-preview[data-latex-theme="default"]  { background: #ffffff; color: #000000; --latex-page-bg: #ffffff; }
   .latex-example-preview[data-latex-theme="light"]    { background: #fafaf9; color: #333333; --latex-page-bg: #fafaf9; }
   .latex-example-preview[data-latex-theme="dark"]     { background: #0c0a09; color: #e7e5e4; --latex-page-bg: #0c0a09; }
   .latex-example-preview[data-latex-theme="sepia"]    { background: #f4ecd8; color: #453a26; --latex-page-bg: #f4ecd8; }
@@ -763,7 +775,8 @@
      footnote popover is filled with it, and tints are mixed against it.
      Without it the viewer falls back to Canvas, which follows the system's
      light/dark setting rather than this page's theme. */
-  html          { --latex-page-bg: #fafaf9; --lt-glass: rgba(250, 250, 249, .74); --lt-seg-on: #ffffff; }
+  html          { --latex-page-bg: #ffffff; --lt-glass: rgba(255, 255, 255, .80); --lt-seg-on: #ffffff; }
+  html.light    { --latex-page-bg: #fafaf9; --lt-glass: rgba(250, 250, 249, .74); --lt-seg-on: #ffffff; }
   html.dark     { --latex-page-bg: #0c0a09; --lt-glass: rgba(34, 31, 29, .74);    --lt-seg-on: #4a4541; }
   html.sepia    { --latex-page-bg: #f4ecd8; --lt-glass: rgba(244, 236, 216, .80); --lt-seg-on: #fbf6ea; }
   html.contrast { --latex-page-bg: #ffffff; --lt-glass: rgba(255, 255, 255, .92); --lt-seg-on: #ffffff; }
