@@ -1,0 +1,41 @@
+% Paragraphs with inline formulas where lines break: \mathsurround set, so a
+% formula that starts a line loses its surround with the math node TeX
+% discards there, and a break after a formula drops its closing surround;
+% formulas opening with \, (glue in the formula, discarded with the math node
+% at a line's start); short formulas in a row, each a breakpoint after it;
+% and words opening with an \accent, whose kern TeX keeps at a line's start.
+% Each paragraph is set at several measures. Captured with capture.lua into
+% math/ (README.md).
+\documentclass{article}
+\newcommand\at[2]{{\hsize=#1\relax #2\par}}
+\newcommand\cU{\,\mathcal{U}}
+\newcommand\textA{We write $\cU = \cU_1 \cup \cU_2$ for the variables, where $\cU_1$ consists of the
+top-level variables and $\cU_2$ of the others; set $N = |\cU_1|$ and $M = |\cU_2|$ for the
+sizes, and note $N+M = |\cU|$ holds by definition of $\cU$ and of $\cU_1$, $\cU_2$ in general.}
+\newcommand\textB{$X$ and $Y$ are separated by $S$ if and only if $S$ satisfies the criterion in the graph $G$,
+and $\{D\}$ for $A$ and $B$ is primary but not sufficient in $G$ whenever $D$ is a collider.}
+\newcommand\textC{Another paragraph: $a$ $b$ $c$ $d$ $e$ $f$ $g$ $h$ $i$ $j$ $k$ $l$ $m$ $n$ $o$ $p$ $q$ $r$ $s$
+$t$ $u$ $v$ $w$ $x$ $y$ $z$ $A$ $B$ $C$ $D$ $E$ $F$ $G$ $H$ $I$ $J$ $K$ $L$ $M$ $N$ $O$ $P$ $Q$.}
+\newcommand\textD{The \accent"B4 Ecole and the \accent"60 Etat, the \accent"B4 Ecole again and the
+\accent"60 Etat again, then \accent"B4 Ecole, \accent"60 Etat, \accent"B4 Ecole and \accent"60 Etat once more.}
+\begin{document}
+\mathsurround=0.1pt
+\at{345pt}{\textA}
+\at{250pt}{\textA}
+\at{180pt}{\textA}
+\at{345pt}{\textB}
+\at{200pt}{\textB}
+\at{250pt}{\textC}
+\at{120pt}{\textC}
+\mathsurround=2pt
+\at{345pt}{\textA}
+\at{220pt}{\textA}
+\at{300pt}{\textB}
+\at{160pt}{\textC}
+\mathsurround=0pt
+\at{345pt}{\textA}
+\at{200pt}{\textA}
+\at{220pt}{\textD}
+\at{150pt}{\textD}
+\at{230pt}{\textD}
+\end{document}

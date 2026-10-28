@@ -104,3 +104,27 @@ test('a start dropped when its line is overfull, in a pass before the final one'
     assert.deepEqual(r.breaks?.map(b => b.bcIdx), [2, 4], JSON.stringify(o));
   }
 });
+
+// A formula that starts a line: TeX discards its math node with the
+// \mathsurround, and the glue it opens with (a \,), as it discards the space
+// before it (§879). The line keeps a copy of the math node without the
+// surround, the mark of where the formula begins, which stands for the
+// paragraph's own node.
+test('a break before a formula discards its surround and its opening glue', async () => {
+  const { extractLineNodes } = await import(`${VIEWER}engine/breaker.ts`) as
+    { extractLineNodes(a: Candidate, b: Candidate, nodes: Node[]): Node[] };
+  const { paragraphNode } = await import(`${VIEWER}engine/core.ts`) as { paragraphNode(n: Node): Node };
+  const math = (subtype: number): Node => ({ type: 'math', subtype, surround: 6554 });   // 0.1pt
+  const thin = glue(2, 0, 0);
+  const nodes = [box(100), glue(3, PT, 0), math(0), thin, box(20), math(1), glue(3, PT, 0), box(100), parfillskip];
+  const bcs = breaker.buildBreakCandidates(nodes, {}, {}) as (Candidate & { leadW: number; trailW: number })[];
+  assert.deepEqual(bcs.map(b => [b.kind, b.nodeIdx]), [['start', -1], ['space', 1], ['space', 6], ['end', 8]]);
+  // the space, the surround and the \, go with the break before the formula
+  assert.equal(bcs[1].leadW, 3 * PT + 6554 + 2 * PT);
+  // a break after it drops the closing surround from the line's end
+  assert.equal(bcs[2].trailW, 6554);
+  const line = extractLineNodes(bcs[1], bcs[2], nodes);
+  assert.deepEqual(line.map(n => n.type), ['math', 'hlist']);
+  assert.equal(line[0].surround, 0);
+  assert.equal(paragraphNode(line[0]), nodes[2]);
+});

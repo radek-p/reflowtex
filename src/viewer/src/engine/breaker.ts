@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    BREAK_NODES, breakKind, LEFT_PROTRUSION, RIGHT_PROTRUSION, charW, expandableSp, gW, isChar, isCharBox, nodeWidthSp,
-    sumWidthSp,
+    BREAK_NODES, breakKind, LEFT_PROTRUSION, RIGHT_PROTRUSION, charW, discardedMath, expandableSp, gW, isChar, isCharBox,
+    nodeWidthSp, sumWidthSp,
 } from './core.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
 import type { Expansion, FontTable, Paragraph, TexNode, ViewerFont } from './model.ts';
@@ -208,6 +208,20 @@ export function paragraphExpansion(fontInfo: FontTable, nodes: TexNode[]): Expan
 
 // ── Knuth-Plass: break candidates ────────────────────────────────────────────
 
+// What a break discards at the start of the next line (TeX's break_width,
+// §837, and post_line_break's pruning, §879): glue, penalties, \kern and \/
+// kerns, and math nodes with their \mathsurround – so a formula at a line's
+// start loses its surround and any glue it opens with (a \,). A character,
+// a box, a font's or an accent's kern is kept, and ends it.
+const EXPLICIT_KERN = 1, ITALIC_KERN = 3;
+export function discardable(n: TexNode): boolean {
+    switch (n.type) {
+        case 'glue': case 'penalty': case 'math': return true;
+        case 'kern': return n.subtype === EXPLICIT_KERN || n.subtype === ITALIC_KERN;
+        default:     return false;
+    }
+}
+
 // Nodes after which glue is a legal breakpoint (TeX's precedes_break, which
 // a \vadjust is in, plus the viewer's own drawn-box kinds).
 export const PRECEDES_BREAK = new Set<string>(['glyph', 'hlist', 'vlist', 'rule', 'disc', 'wdisc', 'picture', 'widget', 'transform', 'adjust']);
@@ -243,19 +257,19 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
         cumW, cumS, cumZ, cumGlyphW, cumFS, cumFZ, cumFill,
         rightProtrusion: 0, leftProtrusion: 0, ...extra,
     });
-    // What a break at node i discards after itself: glue, kerns and penalties
-    // up to the next thing that is kept – an infinite fill among them too, so
-    // the next line does not count it as its own.
+    // What a break at node i discards after itself (discardable), up to the
+    // next thing that is kept or the \parfillskip – an infinite fill among
+    // them too, so the next line does not count it as its own.
     const lead = (from: number) => {
         let W = 0, S = 0, Z = 0, F = 0, k = from;
         for (; k < nodes.length; k++) {
             const m = nodes[k];
-            if (m.type === 'kern') W += m.kern;
-            else if (m.type === 'glue' && m.subtype !== 15) {
-                W += m.width; S += !m.stretch_order ? m.stretch : 0; Z += !m.shrink_order ? m.shrink : 0;
+            if (!discardable(m) || (m.type === 'glue' && m.subtype === 15)) break;
+            W += nodeWidthSp(m);
+            if (m.type === 'glue') {
+                S += !m.stretch_order ? m.stretch : 0; Z += !m.shrink_order ? m.shrink : 0;
                 if (m.stretch_order) F++;
             }
-            else if (m.type !== 'penalty') break;
         }
         const toEnd = nodes[k]?.type === 'glue' && nodes[k].subtype === 15;
         return { leadW: W, leadS: S, leadZ: Z, leadFill: F, leftProtrusion: prot(findFirstGlyph(nodes, k), true), ...(toEnd ? { toEnd } : {}) };
@@ -312,10 +326,11 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
             const pre=part(n.pre), post=part(n.post), replace=part(n.replace);
             const preGs=(n.pre||[]).filter(isChar), postGs=(n.post||[]).filter(isChar);
             // LuaTeX subtypes 0–2 (\discretionary, \-, an explicit hyphen) were in
-            // the source; 3 and up are its own hyphenation.
+            // the source; 3 and up are its own hyphenation. A break with no
+            // post-break text discards what follows, as a break at glue does.
             bcs.push(cand('disc', i, n.penalty??50, { pre, post, replace, explicit: (n.subtype||0) <= 2,
                 rightProtrusion: prot(preGs.length>0?preGs[preGs.length-1]:findLastGlyph(nodes,i), false),
-                leftProtrusion: prot(postGs.length>0?postGs[0]:findFirstGlyph(nodes,i+1), true) }));
+                ...((n.post||[]).length ? { leftProtrusion: prot(postGs.length>0?postGs[0]:findFirstGlyph(nodes,i+1), true) } : lead(i+1)) }));
             cumW+=replace.w; cumGlyphW+=replace.g; cumFS+=replace.fs; cumFZ+=replace.fz;
         } else if (n.type==='wdisc') {
             // A widget that may be split (see Widgets): one candidate per split,
@@ -602,14 +617,21 @@ export function extractLineNodes(startBC: BreakCandidate, endBC: BreakCandidate,
     const result: TexNode[]=[]; let from: number;
     if(startBC.kind==='start'){from=0;}
     else{if(startBC.kind==='disc') for(const pn of (startBC.postNodes||nodes[startBC.nodeIdx].post!)) result.push(pn); from=startBC.nodeIdx+1;}
-    // Glue, kerns and penalties are discarded at a line break, but only at a
-    // *break*: at the very start of a paragraph they are real content.
-    // \subparagraph* and friends make this visible – \@xsect drops the usual
-    // \parindent box and re-inserts the indent as \hskip\parindent glue, which
-    // stripping here would delete from the render while the break candidates
-    // still counted its width, leaving the first line short by exactly the indent.
-    if(startBC.kind!=='start'&&result.length===0){while(from<endBC.nodeIdx&&(nodes[from].type==='glue'||nodes[from].type==='kern'||nodes[from].type==='penalty'))from++;}
     const to=endBC.nodeIdx-(endBC.trailN||0);
+    // What a break discards (discardable) goes, but only at a *break*: at the
+    // very start of a paragraph it is real content. \subparagraph* and
+    // friends make this visible – \@xsect drops the usual \parindent box and
+    // re-inserts the indent as \hskip\parindent glue, which stripping here
+    // would delete from the render while the break candidates still counted
+    // its width, leaving the first line short by exactly the indent. A math
+    // node goes with its surround, but the line keeps the mark of where its
+    // formula begins (discardedMath).
+    if(startBC.kind!=='start'&&result.length===0){
+        for(;from<to&&discardable(nodes[from]);from++){
+            const n=nodes[from];
+            if(n.type==='math') result.push(n.surround?discardedMath(n):n);
+        }
+    }
     for(let i=from;i<to;i++) if(nodes[i].type!=='local_par') result.push(nodes[i]);
     if(endBC.kind==='disc') { const kind = breakKind(nodes[endBC.nodeIdx]);
         for(const pn of (endBC.preNodes||nodes[endBC.nodeIdx].pre!)) { BREAK_NODES.set(pn, kind); result.push(pn); } }

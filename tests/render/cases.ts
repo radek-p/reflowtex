@@ -90,6 +90,9 @@ export const cases: Record<string, CaseSettings> = {
   // fonts lacked). All 235 glyphs found. Worst attained 2026-10-25.
   'latin-modern-math': { tolerance: 0.009, rule_tolerance: 0.004 },
   'lists-headings': { tolerance: 0.009 },
+  // Formulas at line starts with \mathsurround 0.1pt and an opening \,: TeX
+  // discards both at a break. Worst attained 2026-10-28 (0.689 before).
+  mathsurround: { tolerance: 0.010 },
   microtype: { tolerance: 0.014 },
   paragraph: { tolerance: 0.010 },
   // The paragraph at widths that are no whole number of pixels (2 px per pt):
