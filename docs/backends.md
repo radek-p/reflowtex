@@ -13,8 +13,9 @@ LaTeX ──▶ backend ──▶ output.json shape ──▶ shared pipeline �
 
 This build has two:
 
-- **`luatex`**, the default: the document is set in `src/extract/template.tex`
-  and compiled by `lualatex` from TeX Live; `src/extract/serializer.lua`
+- **`luatex`**, the default: the document is compiled as it is by `lualatex`
+  from TeX Live, through a driver that reads `src/extract/reflowtex-capture.tex`
+  first (`docs/documents.md`); `src/extract/serializer.lua`
   writes the node lists.
 - **`tectonic`**, a placeholder. It is registered so that it can be listed and
   selected, and it claims no capability. Selecting it fails at once with
@@ -56,8 +57,9 @@ available (and why not), how it runs, and every capability as `true` or
 A backend (`CaptureBackend`) has an `id`, a `name`, a `runtime`, a
 `capabilities` descriptor, `availability()` and `open(document)`.
 
-- **`open(document)`** gets the document as the caller wrote it: `content`
-  (a snippet or a complete document) and `preamble`, a working directory,
+- **`open(document)`** gets the document as the caller wrote it: its `kind` (`document` or
+  `snippet`, as the caller says: `docs/documents.md`), `content` and
+  `preamble`, the caller's `documentMetadata` and `jobname` if any, a working directory,
   the directories to search for files the document reads, a site's own font
   files, and whether to capture MathML. It returns a job.
 - **`job.capture({ widthExtraSp, passes })`** compiles the document with the

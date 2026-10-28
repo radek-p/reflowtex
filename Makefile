@@ -63,10 +63,10 @@ check: node-deps
 	[ $$ok -eq 1 ] && echo "All prerequisites present." || { echo "Some prerequisites are missing."; exit 1; }
 
 demo: node-deps
-	node integrations/vanilla/build.ts examples/demo -o $(DEMO_OUT) --title "Reflow TeX demo"
+	node integrations/vanilla/build.ts examples/demo --snippet -o $(DEMO_OUT) --title "Reflow TeX demo"
 
 display-model-smoke: node-deps
-	node integrations/vanilla/build.ts examples/display-model-narrow \
+	node integrations/vanilla/build.ts examples/display-model-narrow --snippet \
 		-o build/display-model-smoke --title "Display model smoke test"
 
 serve: demo

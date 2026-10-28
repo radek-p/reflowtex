@@ -3,8 +3,8 @@
 #
 # Installed as /usr/local/bin/lualatex, shadowing the real binary at
 # /usr/bin/lualatex (see the Dockerfile: /usr/local/bin precedes /usr/bin on
-# PATH). The image bakes in the packages src/extract/template.tex and this
-# repo's own examples need, but a snippet's own preamble is free to
+# PATH). The image bakes in the packages the pipeline's default preamble
+# (src/pipeline/driver.ts) and this repo's own examples need, but a snippet's own preamble is free to
 # \usepackage anything (see docs/architecture.md) – if that pulls in something
 # not already installed, this retries via tlmgr instead of failing outright.
 # Needs network access the first time any given package is needed.

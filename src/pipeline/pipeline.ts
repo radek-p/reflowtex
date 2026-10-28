@@ -4,13 +4,13 @@
 // drive it and it knows nothing of them.
 //
 //     const pipe = new Pipeline({ buildRoot: 'build', fontsDir: 'site/fonts' });
-//     const bytes = await pipe.compile('$e^{i\\pi}+1=0$');
+//     const bytes = await pipe.compile('$e^{i\\pi}+1=0$', { kind: 'snippet' });
 //     await pipe.finishFonts();          // after every block
 //     pipe.fontMap();                    // original font file → served file
 //
 // A capture backend (backend/: LuaTeX by default) turns LaTeX into node
 // lists; everything after is shared. One snippet → one build/<key>/
-// directory holding the backend's run (LuaTeX's: input.tex and its log),
+// directory holding the backend's run (LuaTeX's: its driver and its log),
 // output.json and nodelist.pb, so the artefacts are there to inspect when
 // something looks wrong (and an integration can skip an unchanged snippet).
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -33,14 +33,19 @@ import { BackendUnavailable, BuildError, MissingCapability, TexError } from './e
 import { documentNeeds, supports, unmetNeeds, capabilityInfo } from './backend/capabilities.ts';
 import { createBackend, selectedBackendId } from './backend/registry.ts';
 import type { CaptureBackend, CaptureResult, Diagnostic, PictureSource } from './backend/types.ts';
-import { DEFAULT_TEMPLATE, WIDTH_EXTRA_MARK } from './backend/luatex.ts';
-import { splitDocument } from './document.ts';
+import type { DocumentKind, DocumentMetadataOption } from './driver.ts';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));             // src/
-// The LuaTeX template's names and the document's parts, where they were
-// before backends: tools and integrations import them from here.
-export { DEFAULT_TEMPLATE, DEFAULT_SERIALIZER, MATHML_LUA, PREAMBLE_MARK, CONTENT_MARK, WIDTH_EXTRA_MARK, METADATA_MARK, TEMPLATE_CLASS_RE } from './backend/luatex.ts';
-export { takeMetadata, splitDocument } from './document.ts';
+// The LuaTeX backend's files and the driver's names: tools and integrations
+// import them from here.
+export { DEFAULT_SERIALIZER, MATHML_LUA } from './backend/luatex.ts';
+export { DEFAULT_PREAMBLE, type DocumentKind, type DocumentMetadataOption } from './driver.ts';
+
+/** At most this many passes when the caller gives no number: a run stops as
+ *  soon as what TeX reads back settles (lualatex.ts), so a snippet without
+ *  references takes one. revtex sets its table of contents' number column
+ *  from the pass before, so three. */
+export const MAX_PASSES = 3;
 
 /** Display samples are taken at an additive step, not 2× or 3×: the fits stay
  *  well-conditioned without nearing TeX's \maxdimen. */
@@ -58,7 +63,7 @@ export function contentKey(content: string, preamble = ''): string {
 }
 
 /** A 16-hex hash of what turns a snippet into its bundle besides the snippet
- *  itself: the template, the serializer, the LaTeX packages, the schema and
+ *  itself: the capture code, the serializer, the LaTeX packages, the schema and
  *  this pipeline's own code. A build made with other versions of these is
  *  stale however unchanged its snippet is – an integration that skips
  *  unchanged snippets records this beside the content key and compares both.
@@ -104,7 +109,7 @@ export interface PipelineOptions {
   /** where served fonts are written */
   fontsDir: string;
   /** a site's own font files, found before TeX Live's (and copied next to
-   *  input.tex, so fontspec finds them by bare file name) */
+   *  the driver, so fontspec finds them by bare file name) */
   localFontsDir?: string | null;
   /** where TeX also looks for what a document reads (figures, \input files)
    *  before its own tree: a document is compiled away from its directory */
@@ -112,9 +117,7 @@ export interface PipelineOptions {
   /** the capture backend: an id (backend/registry.ts: 'luatex', …) or a
    *  backend object; default: REFLOWTEX_BACKEND, else 'luatex' */
   backend?: string | CaptureBackend;
-  /** the LaTeX template (the LuaTeX backend's, when it is chosen by id) */
-  template?: string;
-  /** the capture code the template loads (the LuaTeX backend's) */
+  /** the capture code the driver loads (the LuaTeX backend's) */
   serializer?: string;
   /** record MathML for every formula (default on; needs TeX Live's luamml) */
   mathml?: boolean;
@@ -127,9 +130,23 @@ export interface PipelineOptions {
 }
 
 export interface CompileOptions {
+  /** what the text is: a complete document, compiled as it is, or a snippet,
+   *  set in `preamble` (docs/documents.md). Required: the text is never
+   *  read to decide. */
+  kind: DocumentKind;
+  /** a snippet's setup – class, packages, macros (none: driver.ts
+   *  DEFAULT_PREAMBLE) – or, for a document, more preamble read at the end
+   *  of the document's own */
+  preamble?: string;
   key?: string;
-  /** at most this many TeX passes (cross-references need two or three) */
+  /** at most this many TeX passes (default MAX_PASSES; fewer once what TeX
+   *  reads back settles) */
   passes?: number;
+  /** the caller's \DocumentMetadata keys: the document's own wins, unless
+   *  `force` (driver.ts) */
+  documentMetadata?: DocumentMetadataOption;
+  /** TeX's job name (\jobname); default 'input' */
+  jobname?: string;
   /** how the caller knows the snippet (a file, a page and line): messages only */
   name?: string;
 }
@@ -142,7 +159,6 @@ export class Pipeline {
   /** the capture backend: what it is and can do (backend.capabilities) */
   readonly backend: CaptureBackend;
   private readonly searchDirs: string[];
-  private readonly template: string;
   private readonly missingCapabilities: 'error' | 'warn';
   /** the warnings of each block's last compilation, by key */
   readonly diagnostics = new Map<string, Diagnostic[]>();
@@ -159,9 +175,8 @@ export class Pipeline {
   constructor(o: PipelineOptions) {
     this.buildRoot = resolve(o.buildRoot);
     this.searchDirs = (o.searchDirs ?? []).map(d => resolve(d));
-    this.template = o.template ?? DEFAULT_TEMPLATE;
     this.backend = typeof o.backend === 'object' ? o.backend
-      : createBackend(selectedBackendId({ flag: o.backend }), { template: o.template, serializer: o.serializer });
+      : createBackend(selectedBackendId({ flag: o.backend }), { serializer: o.serializer });
     const a = this.backend.availability();
     if (!a.ok) throw new BackendUnavailable(a.reason);
     this.missingCapabilities = o.missingCapabilities ?? 'error';
@@ -175,9 +190,9 @@ export class Pipeline {
   /** The .proto text a page embeds once (the viewer parses it). */
   schemaText(): string { return protoText(); }
 
-  /** Compile one snippet: the bytes a page embeds. */
-  async compile(content: string, preamble = '', o: CompileOptions = {}): Promise<Uint8Array> {
-    const { data, dir, key } = await this.compileData(content, preamble, o);
+  /** Compile one document or snippet (o.kind): the bytes a page embeds. */
+  async compile(content: string, o: CompileOptions): Promise<Uint8Array> {
+    const { data, dir, key } = await this.compileData(content, o);
     const bytes = encodeBlock(data);
     writeFileSync(join(dir, 'nodelist.pb'), bytes);
     this.blocks.set(key, data);
@@ -187,18 +202,15 @@ export class Pipeline {
   /** Compile several snippets as ONE document – a book's chapters published
    *  on separate pages, say – and return one blob per part: numbering,
    *  counters, macros defined along the way and cross-references come out as
-   *  in the whole. The parts are joined with \reflowtexbatchpart (template.tex),
+   *  in the whole. The parts are snippets, joined with \reflowtexbatchpart
+   *  (src/extract/reflowtex-capture.tex) and set in `o.preamble`,
    *  which makes what follows a stream without opening a group; the finished
    *  document is cut into one document per part (transforms.ts, batchParts),
    *  each also written to build/<part key>/ like a block of its own. */
-  async compileBatch(parts: { key: string; content: string; name?: string }[], preamble = '', o: CompileOptions = {}): Promise<Map<string, Uint8Array>> {
+  async compileBatch(parts: { key: string; content: string; name?: string }[], o: Omit<CompileOptions, 'kind'> = {}): Promise<Map<string, Uint8Array>> {
     const joined = parts.map((p, i) => `\\reflowtexbatchpart{${i + 1}}\n${p.content}`).join('\n');
-    for (const p of parts) {
-      if (splitDocument(p.content))
-        throw new BuildError(`part ${p.key} is a complete document; a batch is made of parts, and a named preamble holds the setup`, o.name ?? o.key);
-    }
-    const key = o.key ?? contentKey(joined, preamble);
-    const { data, label } = await this.compileData(joined, preamble, { ...o, key, batch: true });
+    const key = o.key ?? contentKey(joined, o.preamble ?? '');
+    const { data, label } = await this.compileData(joined, { ...o, kind: 'snippet', key, batch: true });
     this.blocks.set(key, data);
     const split = batchParts(data);
     if (split.length !== parts.length) throw new BuildError(`expected ${parts.length} part(s), found ${split.length}`, label);
@@ -218,11 +230,11 @@ export class Pipeline {
 
   /** Compile many snippets, `jobs` at a time. Returns what compiled and what
    *  failed (by key) – the caller decides whether a failure stops the build. */
-  async compileMany(snippets: { key: string; content: string; preamble?: string; name?: string; passes?: number }[],
+  async compileMany(snippets: ({ content: string } & CompileOptions & { key: string })[],
                     jobs = 1): Promise<{ results: Map<string, Uint8Array>; failures: Map<string, Error> }> {
     const results = new Map<string, Uint8Array>(), failures = new Map<string, Error>();
     const one = async (s: (typeof snippets)[number]) => {
-      try { results.set(s.key, await this.compile(s.content, s.preamble ?? '', { key: s.key, name: s.name, passes: s.passes })); }
+      try { const { content, ...o } = s; results.set(s.key, await this.compile(content, o)); }
       catch (e) { failures.set(s.key, e as Error); }
     };
     const queue = [...snippets];
@@ -260,16 +272,20 @@ export class Pipeline {
 
   // ── One document ──────────────────────────────────────────────────────────
 
-  private async compileData(content: string, preamble: string, o: CompileOptions & { batch?: boolean }): Promise<{ data: SerializerOutput; dir: string; key: string; label: string }> {
+  private async compileData(content: string, o: CompileOptions & { batch?: boolean }): Promise<{ data: SerializerOutput; dir: string; key: string; label: string }> {
+    const preamble = o.preamble ?? '';
     const key = o.key ?? contentKey(content, preamble);
     const label = o.name ? `${o.name} (${key})` : key;
+    const { kind } = o;
+    if (kind !== 'document' && kind !== 'snippet')
+      throw new BuildError(`the option kind is required: 'document' (a complete LaTeX file) or 'snippet' (set in the preamble); got ${JSON.stringify(kind)}`, label);
     const dir = join(this.buildRoot, key);
     mkdirSync(dir, { recursive: true });
     const caps = this.backend.capabilities;
-    const passes = o.passes ?? 1;
+    const passes = o.passes ?? MAX_PASSES;
 
     // What the document needs of the backend, asked of its descriptor.
-    for (const n of unmetNeeds(documentNeeds(content, preamble, { passes, batch: o.batch }), caps)) {
+    for (const n of unmetNeeds(documentNeeds(content, preamble, { passes: o.passes, batch: o.batch }), caps)) {
       const msg = `backend ${this.backend.id} lacks ${n.capability}, which this document needs: ${n.reason}`;
       if (capabilityInfo(n.capability).whenMissing === 'error' && this.missingCapabilities === 'error')
         throw new MissingCapability(`${msg} (missingCapabilities: 'warn' builds it anyway)`, label);
@@ -277,7 +293,7 @@ export class Pipeline {
     }
 
     const job = await this.backend.open({
-      content, preamble, dir, label, searchDirs: this.searchDirs, localFonts: this.localFonts, mathml: this.mathml,
+      kind, content, preamble, documentMetadata: o.documentMetadata, jobname: o.jobname, dir, label, searchDirs: this.searchDirs, localFonts: this.localFonts, mathml: this.mathml,
     });
     try {
       // The document at its own width, then (sampleDisplays) at wider ones if it
@@ -289,7 +305,7 @@ export class Pipeline {
         final = await sampleDisplays(first, {
           at: extraSp => job.capture({ widthExtraSp: extraSp, passes: 1 }),
           probe: async extraSp => (await job.capture({ widthExtraSp: extraSp, passes: 1 })).data,
-          label, log: this.log, template: this.template,
+          label, log: this.log,
         });
       } else if (DM.wantsModel(first.data)) {
         this.log.warn('display-widths-unsupported', `  ${label}: warning: backend ${this.backend.id} cannot compile at other widths; displays stay at the document's width`,
@@ -390,8 +406,6 @@ export interface SamplingOptions<S extends Sample = Sample> {
   probe(extraSp: number): Promise<SerializerOutput>;
   label: string;
   log: Log;
-  /** named in the message when a template reports no width */
-  template?: string;
 }
 
 /** TeX failed at the document's width + extraSp, and at every width tried
@@ -487,8 +501,8 @@ async function modelDisplays<S extends Sample>(first: S, o: SamplingOptions<S>,
     const [, s] = entry;
     if (s !== first && !DM.wantsModel(s.data)) return s;
     const w = widthOf(s);
-    if (w <= 0) throw new BuildError(`display-bearing template ${o.template ?? ''} did not report a positive source width ` +
-      `(is ${WIDTH_EXTRA_MARK} and the Serializer.note_source_width hook missing?)`, label);
+    if (w <= 0) throw new BuildError('a display-bearing document did not report a positive source width ' +
+      '(is the capture code\'s Serializer.note_source_width hook missing?)', label);
     // in order: wider than the window, or (below a ceiling) inside it
     const at0 = window.findIndex(([, y]) => widthOf(y) >= w);
     if (at0 >= 0 && (ceiling === null || at0 === 0 || widthOf(window[at0][1]) === w))

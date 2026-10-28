@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
+import { DEFAULT_PREAMBLE, Pipeline, contentKey, type CompileOptions } from '../../src/pipeline/pipeline.ts';
 import { a11yLayer, type LayerDocument } from '../../src/pipeline/a11y.ts';
 import { Log } from '../../src/shared/log.ts';
 import { messageType } from '../../src/pipeline/schema.ts';
@@ -34,13 +34,21 @@ const root = mkdtempSync(join(tmpdir(), 'reflowtex-capture-'));
 const pipeLog = new Log('pipeline');
 const pipe = new Pipeline({ buildRoot: join(root, 'build'), fontsDir: join(root, 'fonts'), log: pipeLog });
 
+/** The setup a test's snippet is set in: the default one with the test's
+ *  own lines after it – after its \DocumentMetadata line, which LaTeX wants
+ *  before the class, when it starts with one. */
+function setup(lines: string): string {
+  const meta = /^\\DocumentMetadata\{[^{}]*\}\n?/.exec(lines)?.[0] ?? '';
+  return [meta.trim(), DEFAULT_PREAMBLE, lines.slice(meta.length)].filter(Boolean).join('\n');
+}
+
 /** A snippet's output.json, as the pipeline leaves it; compiled once per run.
  *  LuaTeX reports an error inside a callback as a warning and goes on without
  *  what the callback would have captured: that fails here. */
 async function capture(body: string, preamble = '', passes = 1): Promise<Output> {
   const key = contentKey(body, preamble);
   const dir = join(pipe.buildRoot, key);
-  if (!existsSync(join(dir, 'output.json'))) await pipe.compile(body, preamble, { key, passes, name: key });
+  if (!existsSync(join(dir, 'output.json'))) await pipe.compile(body, { kind: 'snippet', preamble: setup(preamble), key, passes, name: key });
   const log = readFileSync(join(dir, 'input.log'), 'utf8');
   const errors = log.split('\n').filter(l => (l.includes('error:') && l.includes('filter')) || l.includes('serializer.lua:'));
   assert.deepEqual(errors, [], 'Lua errors in the serializer');
@@ -271,7 +279,7 @@ test('hyperref links are captured', async () => {
   const runs = linkedRuns(await capture(LINKED, HYPER, 2));
   assert.deepEqual(runs.filter(([t]) => ['1', 'thesecond', 'atarget'].includes(t)), [
     ['1', { label: 'cite.knuth' }],          // \cite
-    ['1', { label: 'sec:intro' }],           // \ref (template.tex)
+    ['1', { label: 'sec:intro' }],           // \ref (the capture code)
     ['thesecond', { label: 'sec:two' }],     // \hyperref[label]{…}
     ['atarget', { label: 'tgt' }],           // \hyperlink
   ]);
@@ -530,7 +538,7 @@ test('a character the font lacks is drawn by nothing, and the block lists it', a
 // formula's MathML: LaTeX writes it (<jobname>-luamml-mathml.html),
 // src/extract/mathml.lua notes which formula is which, src/pipeline/mathml.ts
 // puts each on its begin-math node or display item, unchanged. The preamble's
-// \DocumentMetadata is moved before the class by the pipeline. A document
+// \DocumentMetadata comes before the class (setup, above). A document
 // without it gets none. Needs luamml 0.9 (TeX Live 2026).
 
 import { execFileSync } from 'node:child_process';
@@ -553,7 +561,7 @@ const noMathml = new Pipeline({ buildRoot: join(root, 'build-nomathml'), fontsDi
 async function captureWithoutMathml(body: string, preamble = '', passes = 1): Promise<Output> {
   const key = contentKey(body, preamble);
   const dir = join(noMathml.buildRoot, key);
-  if (!existsSync(join(dir, 'output.json'))) await noMathml.compile(body, preamble, { key, passes, name: key });
+  if (!existsSync(join(dir, 'output.json'))) await noMathml.compile(body, { kind: 'snippet', preamble: setup(preamble), key, passes, name: key });
   return JSON.parse(readFileSync(join(dir, 'output.json'), 'utf8'));
 }
 
@@ -760,7 +768,7 @@ const NOTES = [
 const THEOREM = '\\newtheorem{proposition}{Proposition}';
 /** Each theorem's first paragraph, as its glyphs read (spaces are glue). */
 const theoremHeads = (d: Output) => d.paragraphs.map(p => glyphText(p.nodes)).filter(t => t.startsWith('Proposition'));
-// (what lualatex prints for the same document without the template)
+// (what lualatex prints for the same document without the capture code)
 const AMS_HEADS = ['Proposition1([1,p.3]).Cited.', 'Proposition2(Aplainnote).Plain.', 'Proposition3.Empty.',
                    'Proposition4.None.', 'Proposition5(a]b).Bracket.'];
 
@@ -877,4 +885,57 @@ test('a paragraph shaped by \\hangindent or \\parshape records the band of each 
   const pb = readFileSync(join(pipe.buildRoot, contentKey(body, ''), 'nodelist.pb'));
   const doc = messageType('Document').toObject(messageType('Document').decode(pb)) as { paragraphs: Para[] };
   assert.deepEqual(doc.paragraphs.map(bands).filter(Boolean), paras.map(bands).filter(Boolean));
+});
+
+// ── What the caller gives: a document or a snippet, and its metadata ────────
+// The caller says which (kind); the text is never read to decide. A snippet
+// is set in the caller's preamble, or in DEFAULT_PREAMBLE without one. The
+// caller's \DocumentMetadata applies to a document that sets none; the
+// document's own wins, unless the caller forces its own (then the document's
+// is ignored, with a warning in the log). Which metadata won is read from
+// the document's properties (\GetDocumentProperties{document/lang}).
+const kinds = new Pipeline({ buildRoot: join(root, 'build-kinds'), fontsDir: join(root, 'fonts'), log: new Log('pipeline') });
+/** The text of what the pipeline made of `content`, and its warnings. */
+async function compiled(content: string, preamble: string, o: Omit<CompileOptions, 'key' | 'preamble'>): Promise<{ text: string; warnings: string[] }> {
+  const key = contentKey(`${o.kind}\n${JSON.stringify(o.documentMetadata ?? null)}\n${content}`, preamble);
+  await kinds.compile(content, { ...o, preamble, key });
+  const d: Output = JSON.parse(readFileSync(join(kinds.buildRoot, key, 'output.json'), 'utf8'));
+  return { text: d.paragraphs.map(p => glyphText(p.nodes)).join(' '), warnings: (kinds.diagnostics.get(key) ?? []).map(w => w.message) };
+}
+const LANG = 'Lang:~\\GetDocumentProperties{document/lang}.';
+const doc = (meta: string) => `${meta}\\documentclass{article}\n\\begin{document}\n${LANG}\n\\end{document}\n`;
+
+test('a document, compiled as it is, with the caller\'s preamble read at the end of its own', async () => {
+  const r = await compiled('\\documentclass{book}\n\\begin{document}\n\\chaptername, \\mine.\n\\end{document}\n', '\\newcommand\\mine{mine}', { kind: 'document' });
+  assert.equal(r.text, 'Chapter,mine.');
+});
+
+test('a snippet in the caller\'s preamble, and in the default one without it', async () => {
+  assert.equal((await compiled('\\chaptername.', '\\documentclass{book}', { kind: 'snippet' })).text, 'Chapter.');
+  // DEFAULT_PREAMBLE: article with mathtools (\coloneqq)
+  assert.match((await compiled('$a\\coloneqq b$ \\refname.', '', { kind: 'snippet' })).text, /References\.$/);
+});
+
+test('text with a class line passed as a snippet is a snippet: set in the preamble, and TeX says the rest', async () => {
+  await assert.rejects(compiled('\\documentclass{book}\nBody.', '', { kind: 'snippet' }), /documentclass|Can be used only in preamble/);
+});
+
+test('the caller\'s metadata: applied to a document without its own', async () => {
+  assert.equal((await compiled(doc(''), '', { kind: 'document', documentMetadata: { keys: 'lang=de' } })).text, 'Lang:de.');
+});
+
+test('the caller\'s metadata: the document\'s own kept', async () => {
+  const r = await compiled(doc('\\DocumentMetadata{lang=en}\n'), '', { kind: 'document', documentMetadata: { keys: 'lang=de' } });
+  assert.equal(r.text, 'Lang:en.');
+  assert.ok(!r.warnings.some(w => /reflowtex/.test(w) || /is ignored/.test(w)), r.warnings.join('\n'));
+});
+
+test('the caller\'s metadata, forced: applied, and the document\'s own ignored with a warning naming its keys', async () => {
+  const r = await compiled(doc('\\DocumentMetadata{lang=en}\n'), '', { kind: 'document', documentMetadata: { keys: 'lang=de', force: true } });
+  assert.equal(r.text, 'Lang:de.');
+  assert.ok(r.warnings.some(w => /DocumentMetadata is ignored, the caller's is forced\. Ignored keys: lang=en\.?$/.test(w)), r.warnings.join('\n'));
+});
+
+test('the caller\'s metadata applies to a snippet', async () => {
+  assert.equal((await compiled(LANG, '', { kind: 'snippet', documentMetadata: { keys: 'lang=de' } })).text, 'Lang:de.');
 });

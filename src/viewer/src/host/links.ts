@@ -9,7 +9,7 @@ import { screenCTM } from '../runtime/screen-ctm.ts';
 
 // ── Cross-references ─────────────────────────────────────────────────────────
 // A \ref stamps every glyph of its printed text with the same document-local id
-// (see template.tex), so a reference is a *set* of glyphs, not one. That is what
+// (see src/extract/reflowtex-capture-late.tex), so a reference is a *set* of glyphs, not one. That is what
 // makes it possible to light the whole reference up on hover even when the
 // browser has broken it across two lines – the pieces never had to stay
 // adjacent, they only have to share an id.

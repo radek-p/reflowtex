@@ -12,7 +12,7 @@
 // viewer (files it loads in turn are copied by hand).
 //
 // The display model is the pipeline's (pipeline.ts, sampleDisplays), anchored
-// on the strip's own run: that run is the first sample, and the same input.tex
+// on the strip's own run: that run is the first sample, and the same driver
 // is compiled again with \reflowtexWidthExtra raised, in samples/<k>/ under the
 // build dir (the .aux copied, so references resolve). When the model is
 // anchored at the strip's run, displays render at the strip's width exactly as
@@ -29,10 +29,14 @@ import { encodeDocument } from '../../src/pipeline/encode.ts';
 import { blockHtml, installViewer } from '../../src/pipeline/site.ts';
 import { renderPage } from '../../integrations/vanilla/page.ts';
 import { Log } from '../../src/shared/log.ts';
+import { CALLER_PREAMBLE_FILE, CAPTURE_FILES, DEFAULT_JOBNAME, DOCUMENT_FILE, DRIVER_FILE } from '../../src/pipeline/driver.ts';
+import { JOBNAME_FILE } from './pageless.ts';
 
 const LATEX_DIR = fileURLToPath(new URL('../../src/latex', import.meta.url));
-// the files TeX reads back – references, contents, lists, bibliography
-const READ_BACK = ['serializer.lua', 'input.aux', 'input.toc', 'input.lof', 'input.lot', 'input.bbl'];
+// the files TeX reads back – references, contents, lists, bibliography –
+// and what the driver reads (driver.ts)
+const readBack = (jobname: string) => ['serializer.lua', ...['aux', 'toc', 'lof', 'lot', 'bbl'].map(e => `${jobname}.${e}`),
+  ...CAPTURE_FILES.map(f => basename(f)), DOCUMENT_FILE, CALLER_PREAMBLE_FILE];
 
 export interface SiteFromRunOptions { extraScripts?: string[]; title?: string; singleWidth?: boolean; passes?: number; log?: (s: string) => void }
 
@@ -42,10 +46,11 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
   const pipelineLog = new Log('pipeline', [r => log(r.message)]);
   build = resolve(build); site = resolve(site);
   let data = readSerializerOutput(readFileSync(join(build, 'output.json'), 'utf8'));
+  const jobname = existsSync(join(build, JOBNAME_FILE)) ? readFileSync(join(build, JOBNAME_FILE), 'utf8').trim() : DEFAULT_JOBNAME;
   if (!o.singleWidth) {
-    const src = readFileSync(join(build, 'input.tex'), 'utf8');
+    const src = readFileSync(join(build, DRIVER_FILE), 'utf8');
     const m = /\\reflowtexWidthExtra=(\d+)sp/.exec(src);
-    if (!m) throw new Error('input.tex has no \\reflowtexWidthExtra assignment: not a build of this template');
+    if (!m) throw new Error(`${DRIVER_FILE} has no \\reflowtexWidthExtra assignment: not a build of pageless.ts`);
     const baseExtra = Number(m[1]);
     const texinputs = [LATEX_DIR];
     if (existsSync(join(build, 'source-dir.txt'))) texinputs.unshift(readFileSync(join(build, 'source-dir.txt'), 'utf8').trim());
@@ -55,11 +60,11 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
       const d = join(build, 'samples', name);
       mkdirSync(join(d, 'pics'), { recursive: true });
       const tex = src.replace(m[0], () => `\\reflowtexWidthExtra=${baseExtra + extraSp}sp`);
-      const fresh = existsSync(join(d, 'input.tex')) && readFileSync(join(d, 'input.tex'), 'utf8') === tex && existsSync(join(d, 'output.json'));
+      const fresh = existsSync(join(d, DRIVER_FILE)) && readFileSync(join(d, DRIVER_FILE), 'utf8') === tex && existsSync(join(d, 'output.json'));
       if (!fresh) {
-        writeFileSync(join(d, 'input.tex'), tex);
-        for (const f of READ_BACK) if (existsSync(join(build, f))) copyFileSync(join(build, f), join(d, f));
-        await runLuaLatex(d, { texinputs, passes: o.passes ?? 1, settle: false, block: `sample ${name}` });
+        writeFileSync(join(d, DRIVER_FILE), tex);
+        for (const f of readBack(jobname)) if (existsSync(join(build, f))) copyFileSync(join(build, f), join(d, f));
+        await runLuaLatex(d, { texinputs, passes: o.passes ?? 1, settle: false, main: DRIVER_FILE, jobname, block: `sample ${name}` });
       }
       return { data: readSerializerOutput(readFileSync(join(d, 'output.json'), 'utf8')), dir: d };
     };
@@ -78,7 +83,7 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
   const pipe = new Pipeline({ buildRoot: join(build, 'site-build'), fontsDir: join(site, 'fonts'), log: pipelineLog });
   const work = join(build, 'site-build', 'run');
   mkdirSync(join(work, 'pics'), { recursive: true });
-  for (const f of ['input.pdf', 'pageless.json']) if (existsSync(join(build, f))) copyFileSync(join(build, f), join(work, f));
+  for (const f of [`${jobname}.pdf`, 'pageless.json']) if (existsSync(join(build, f))) copyFileSync(join(build, f), join(work, f));
   if (existsSync(join(build, 'pics'))) for (const p of readdirSync(join(build, 'pics'))) copyFileSync(join(build, 'pics', p), join(work, 'pics', p));
   data = structuredClone(data) as SerializerOutput;
   await pipe.transform(data, work, { block: 'run' });

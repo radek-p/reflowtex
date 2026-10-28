@@ -219,7 +219,7 @@ export async function convertPictures(data: SerializerOutput, buildDir: string, 
       const page = Math.trunc(Number(n.page ?? 1) || 1);
       const externalized = Boolean(n.externalized), generated = Boolean(n.generated);
       delete n.file; delete n.page; delete n.externalized; delete n.generated;
-      if (!src) throw new PictureError('a picture node has no source file – the template image hook did not record it', block);
+      if (!src) throw new PictureError('a picture node has no source file – the graphics hook of the capture code did not record it', block);
       let key = JSON.stringify([src, page, externalized, generated]);
       if (!externalized && !generated) {
         // An included file: a PNG or JPEG becomes its own <image>, whatever

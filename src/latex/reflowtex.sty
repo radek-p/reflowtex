@@ -4,7 +4,7 @@
 % Load it from a document that is written for the web but must still compile
 % to a PDF: \usepackage{reflowtex}. Everything here has two definitions, one
 % for the extraction run (the pipeline compiles the snippet with \ifreflowtex
-% true – see src/extract/template.tex) and one for an ordinary LaTeX run,
+% true – see src/extract/reflowtex-capture.tex) and one for an ordinary LaTeX run,
 % where the same constructs fall back to their nearest print analogue.
 %
 % Layers, from primitive to convenience:
@@ -56,7 +56,7 @@
 \ProcessKeyOptions[reflowtex]
 
 % ── The switch ──────────────────────────────────────────────────────────────
-% The pipeline's template defines \ifreflowtex (true) before the preamble is
+% The pipeline's capture code defines \ifreflowtex (true) before the preamble is
 % read. In any other run it is undefined here, so define it false. Tested by
 % name: a bare `\ifdefined\ifreflowtex` would leave the \iftrue that
 % \ifreflowtex *is* dangling inside a skipped branch.
@@ -96,7 +96,7 @@
 %
 % In print the environment is transparent (a paragraph boundary on each side,
 % which the web build has too).
-% The pipeline's template numbers batch parts with the same counter.
+% The pipeline's capture code numbers batch parts with the same counter.
 \ifdefined\reflowtexStreamCount
   \let\reflowtex@streams\reflowtexStreamCount
 \else
@@ -163,7 +163,7 @@
 % stood, an empty box (attribute 915), that flows with the text: a page asks
 % where it came to rest, to put the aside beside it – in the margin, say.
 %
-% The pipeline's template does the work (\reflowtexAside, which \marginpar
+% The pipeline's capture code does the work (\reflowtexAside, which \marginpar
 % uses too); in print an aside is left out.
 \ifreflowtex
   \NewDocumentCommand\webaside{O{} m +m}{%
@@ -360,7 +360,7 @@
 % bubbling `reflowtex:action` DOM event from where the text sits. The nearest
 % enclosing stream whose kind understands the action handles it – an
 % accordion understands "pane:…" (below). It is a link underneath: every glyph
-% of `text` carries the same link id (template.tex, attribute 909), so it stays
+% of `text` carries the same link id (reflowtex-capture-late.tex, attribute 909), so it stays
 % one control however the line breaks.
 %
 % In print a control has nothing to do, so neither argument is typeset.

@@ -12,7 +12,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { Pipeline, toolchainHash } from '../../src/pipeline/pipeline.ts';
+import { Pipeline, toolchainHash, type CompileOptions } from '../../src/pipeline/pipeline.ts';
 import { BackendUnavailable, MissingCapability, UnknownBackend } from '../../src/pipeline/errors.ts';
 import {
   CAPABILITIES, CAPABILITY_NAMES, documentNeeds, fullCapabilities, supports, unmetNeeds,
@@ -20,7 +20,7 @@ import {
   type Capabilities, type CaptureBackend, type CaptureDocument, type CaptureRun,
 } from '../../src/pipeline/backend/index.ts';
 import { Log } from '../../src/shared/log.ts';
-import { logDiagnostics, fillTemplate } from '../../src/pipeline/backend/luatex.ts';
+import { logDiagnostics } from '../../src/pipeline/backend/luatex.ts';
 import type { SerializerOutput } from '../../src/pipeline/nodes.ts';
 
 const REPO = new URL('../../', import.meta.url).pathname;
@@ -137,7 +137,7 @@ const lines = (log: Log) => log.records().map(r => `${r.level} ${r.code}:${r.mes
 test('a backend given as an object compiles through the pipeline; its diagnostics are kept by key', async () => {
   const b = memoryBackend({}, () => output());
   const { pipe } = pipeline(b);
-  const bytes = await pipe.compile('Text.', '', { key: 'k1' });
+  const bytes = await pipe.compile('Text.', { kind: 'snippet', key: 'k1' });
   assert.ok(bytes.length > 0);
   assert.equal(pipe.backend, b);
   assert.deepEqual(b.runs, [{ widthExtraSp: 0, passes: 1 }]);
@@ -145,23 +145,37 @@ test('a backend given as an object compiles through the pipeline; its diagnostic
   assert.deepEqual(pipe.diagnostics.get('k1'), [{ severity: 'warning', message: 'from memory' }]);
 });
 
+test('the kind the caller gives reaches the backend with the preamble and metadata, ', async () => {
+  const b = memoryBackend({}, () => output());
+  const { pipe } = pipeline(b);
+  await pipe.compile('\\documentclass{book}\nX', { kind: 'snippet', preamble: '\\documentclass{article}', key: 'k', documentMetadata: { keys: 'lang=de' }, jobname: 'paper' });
+  assert.deepEqual([b.docs[0].kind, b.docs[0].preamble, b.docs[0].documentMetadata, b.docs[0].jobname], ['snippet', '\\documentclass{article}', { keys: 'lang=de' }, 'paper']);
+});
+
+test('no kind given: an error naming the option, before anything is compiled', async () => {
+  const b = memoryBackend({}, () => output());
+  const { pipe } = pipeline(b);
+  await assert.rejects(pipe.compile('Text.', { key: 's' } as unknown as CompileOptions), /the option kind is required: 'document' .* or 'snippet'/);
+  assert.equal(b.docs.length, 0);
+});
+
 test('displays: sampled only when the backend can compile wider; else kept at the width, with a warning', async () => {
   const plain = memoryBackend({}, () => output({ display: true }));
   const a = pipeline(plain);
-  await a.pipe.compile('\\[x\\]', '', { key: 'd1' });
+  await a.pipe.compile('\\[x\\]', { kind: 'snippet', key: 'd1' });
   assert.equal(plain.runs.length, 1, 'no width samples asked of a backend without widthResampling');
   assert.ok(a.log.records().some(r => r.level === 'warning' && r.code === 'display-widths-unsupported' && r.details.block === 'd1' &&
     /^  d1: warning: backend memory cannot compile at other widths; displays stay/.test(r.message)), lines(a.log));
 
   const modelled = memoryBackend({ singlePassDisplays: true, widthResampling: true }, () => output({ display: true, modelled: true }));
   const b = pipeline(modelled);
-  await b.pipe.compile('\\[x\\]', '', { key: 'd2' });
+  await b.pipe.compile('\\[x\\]', { kind: 'snippet', key: 'd2' });
   assert.equal(modelled.runs.length, 1, 'the backend modelled the displays: no samples');
   assert.ok(!b.log.records().some(r => r.level === 'warning'), lines(b.log));
 
   const resampling = memoryBackend({ widthResampling: true }, r => output({ display: true, width: 300 * 65536 + r.widthExtraSp }));
   const c = pipeline(resampling);
-  await c.pipe.compile('\\[x\\]', '', { key: 'd3' });
+  await c.pipe.compile('\\[x\\]', { kind: 'snippet', key: 'd3' });
   assert.deepEqual(resampling.runs.map(r => r.widthExtraSp / 65536), [0, 128, 256], 'the document, then two wider samples');
   // the build's lines are records of the log, each with its code, the line as printed its message
   const stable = c.log.records().filter(r => r.code === 'display-model-stable');
@@ -171,8 +185,8 @@ test('displays: sampled only when the backend can compile wider; else kept at th
 
 test('passes: asked of a backend only when it can run again', async () => {
   const one = memoryBackend({}, () => output()), many = memoryBackend({ multiPass: true }, () => output());
-  await pipeline(one, { missingCapabilities: 'warn' }).pipe.compile('x', '', { passes: 3 });
-  await pipeline(many).pipe.compile('x', '', { passes: 3 });
+  await pipeline(one, { missingCapabilities: 'warn' }).pipe.compile('x', { kind: 'snippet', passes: 3 });
+  await pipeline(many).pipe.compile('x', { kind: 'snippet', passes: 3 });
   assert.equal(one.runs[0].passes, 1);
   assert.equal(many.runs[0].passes, 3);
 });
@@ -180,14 +194,14 @@ test('passes: asked of a backend only when it can run again', async () => {
 test('a missing capability: an error where the result would be wrong, a warning where only less refined', async () => {
   const b = memoryBackend({}, () => output());
   const { pipe, log } = pipeline(b);
-  await assert.rejects(pipe.compile('\\begin{tikzpicture}\\end{tikzpicture}', '', { key: 'p' }),
+  await assert.rejects(pipe.compile('\\begin{tikzpicture}\\end{tikzpicture}', { kind: 'snippet', key: 'p' }),
     (e: Error) => e instanceof MissingCapability && /backend memory lacks pictures/.test(e.message));
   assert.equal(b.runs.length, 0, 'nothing compiled');
-  await pipe.compile('x', '\\usepackage{microtype}', { key: 'm' });
+  await pipe.compile('x', { kind: 'snippet', preamble: '\\usepackage{microtype}', key: 'm' });
   assert.ok(log.records().some(r => r.level === 'warning' && r.code === 'missing-capability' && r.details.capability === 'protrusion' &&
     /warning: backend memory lacks protrusion/.test(r.message)), lines(log));
   const lenient = pipeline(b, { missingCapabilities: 'warn' });
-  await lenient.pipe.compile('\\begin{tikzpicture}\\end{tikzpicture}', '', { key: 'p2' });
+  await lenient.pipe.compile('\\begin{tikzpicture}\\end{tikzpicture}', { kind: 'snippet', key: 'p2' });
   assert.ok(lenient.log.records().some(r => r.code === 'missing-capability' && /warning: backend memory lacks pictures/.test(r.message)), lines(lenient.log));
 });
 
@@ -202,7 +216,7 @@ test('the first of several documents runs alone only for a backend that asks for
     },
   };
   const { pipe } = pipeline(counted);
-  await pipe.compileMany(['a', 'b', 'c'].map(k => ({ key: k, content: k })), 3);
+  await pipe.compileMany(['a', 'b', 'c'].map(k => ({ key: k, content: k, kind: 'snippet' as const })), 3);
   assert.equal(most, 3, 'all three at once');
 });
 
@@ -241,29 +255,6 @@ test('LuaTeX log warnings, with their continuation lines and input lines', () =>
     { severity: 'warning', message: 'Token not allowed in a PDF string (Unicode): removing `math shift\' on input line 7.', line: 7 },
     { severity: 'warning', message: 'Something odd.' },
   ]);
-});
-
-test('the LuaTeX template filled: a complete document\'s class, preamble and metadata where they go', () => {
-  const t = '%%DOCUMENT-METADATA%%\n\\documentclass{article}\n%%PREAMBLE%%\n\\begin{document}%%WIDTH-EXTRA-SP%%\n%%CONTENT%%\n\\end{document}';
-  const doc = '\\DocumentMetadata{tagging=on}\n\\documentclass{book}\n\\usepackage{x}\n\\begin{document}\nBody.\n\\end{document}\n';
-  assert.equal(fillTemplate(t, doc, '\\usepackage{y}')(5),
-    '\\DocumentMetadata{tagging=on}\n\\documentclass{book}\n\n\\usepackage{x}\n\n\\usepackage{y}\n\\begin{document}5\nBody.\n\n\\end{document}');
-});
-
-test('the LuaTeX template filled: a class line in a file the document inputs, as TeX reads it', () => {
-  // As in real papers: the main file inputs a preamble of its own (which may
-  // input another), and the class line is there.
-  const t = '\\documentclass{article}\n%%PREAMBLE%%\n\\begin{document}\n%%CONTENT%%\n\\end{document}';
-  const dir = tmp();
-  mkdirSync(join(dir, 'setup'));
-  writeFileSync(join(dir, 'setup', 'preamble.tex'), '% the setup\n\\input{setup/class}\n\\usepackage{x}\n');
-  writeFileSync(join(dir, 'setup', 'class.tex'), '\\documentclass[11pt]{book}\n');
-  writeFileSync(join(dir, 'macros.tex'), '\\newcommand\\m{m}\n');
-  const doc = '\\input{setup/preamble} % comment\n\\input macros\n\\begin{document}\nBody.\n\\end{document}\n';
-  assert.equal(fillTemplate(t, doc, '', [dir])(0),
-    '\\documentclass[11pt]{book}\n\n\\usepackage{x}\n\\input macros\n\n\\begin{document}\nBody.\n\n\\end{document}');
-  // a file not among the document's own, or a line that is not alone, is left to TeX
-  assert.equal(fillTemplate(t, doc, '', [])(0), `\\documentclass{article}\n\n\\begin{document}\n${doc}\n\\end{document}`);
 });
 
 // ── The integrations' CLIs ───────────────────────────────────────────────────

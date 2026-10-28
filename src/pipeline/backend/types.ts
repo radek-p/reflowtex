@@ -15,12 +15,24 @@
 // (capabilities.ts). docs/backends.md describes how a backend plugs in.
 import type { SerializerOutput } from '../nodes.ts';
 import type { Capabilities } from './capabilities.ts';
+import type { DocumentKind, DocumentMetadataOption } from '../driver.ts';
 
 export interface CaptureDocument {
-  /** the snippet, or a complete document (\documentclass … \end{document}) */
+  /** what `content` is, as the caller says: a complete document, or a
+   *  snippet to be set in `preamble`. The text is never read to decide. */
+  kind: DocumentKind;
+  /** the document or the snippet */
   content: string;
-  /** the caller's preamble; may hold \DocumentMetadata and \documentclass */
+  /** a snippet's setup – class, packages, macros – or, for a document, more
+   *  preamble read at the end of the document's own; may be empty (a
+   *  snippet is then set in driver.ts's DEFAULT_PREAMBLE) */
   preamble: string;
+  /** the caller's \DocumentMetadata keys (driver.ts: the document's own
+   *  wins unless forced) */
+  documentMetadata?: DocumentMetadataOption;
+  /** TeX's job name (\jobname, and the name of every file the run writes);
+   *  default 'input' */
+  jobname?: string;
   /** the document's working directory (build/<key>/), created: the backend
    *  keeps its run's files there, for a later look */
   dir: string;
@@ -144,9 +156,7 @@ export interface CaptureBackend {
 
 /** What a backend may be configured with; each backend says which it reads. */
 export interface BackendOptions {
-  /** the LaTeX template the document is set in */
-  template?: string;
-  /** the capture code the template loads */
+  /** the capture code the driver loads */
   serializer?: string;
   /** shell escape on: the caller asserts every document is trusted
    *  (capability shellEscape) */

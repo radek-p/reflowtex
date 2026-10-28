@@ -17,20 +17,24 @@ MuPDF's WebAssembly build, sharp, Playwright).
 
 ```sh
 node tools/pageless-pdf/pageless.ts paper.tex -o out/ [--passes 3] \
-    [--template T] [--margin 36pt] [--width-extra 0pt] [--tex-pictures]
-# → out/pageless.pdf, pageless.json, output.json (+ the run's input.tex/.log/.pdf)
+    [--margin 36pt] [--width-extra 0pt] [--tex-pictures] \
+    [--snippet] [--preamble P.tex] [--document-metadata KEYS [--force-metadata]]
+# → out/pageless.pdf, pageless.json, output.json (+ the run's driver, paper.log, paper.pdf)
 ```
 
 The serializer's `capture_flow` already keeps the galley: before the page
 builder sees a contribution it deep-copies the node with its real
 dimensions (`Serializer.flow_head()`). That copy is the pageless document.
-`pageless.ts` compiles the document as the pipeline does – inside the
-extraction template (the pipeline's by default; `examples/testmath` has its
-own), shell escape off unless `REFLOWTEX_SHELL_ESCAPE=1` – with two lines
-added: `pageless_pdf.lua` loaded after the serializer, and a hook at the
+`pageless.ts` compiles the document as the pipeline does – through the
+driver, which reads the capture code and then the file as it is, under its
+own job name (`src/pipeline/driver.ts`, `docs/documents.md`), shell escape
+off unless `REFLOWTEX_SHELL_ESCAPE=1` – with two lines added: `pageless_pdf.lua` loaded after the serializer, and a hook at the
 end of the document that ships the copy. It compiles once, at the
 document's own width; `--width-extra` widens `\textwidth` through the
-template's width hook.
+capture's width hook. A file is a complete document; `--snippet` sets it in
+`--preamble`'s setup instead (for a document, `--preamble` is read at the end
+of its own preamble), and `--document-metadata` gives `\DocumentMetadata` keys
+(`examples/testmath`: `--preamble preamble.tex --document-metadata tagging=on`).
 
 The copy is already the document with no page breaks in it: at a forced
 break (`\newpage`, `\clearpage`, a float's request to LaTeX's output routine)

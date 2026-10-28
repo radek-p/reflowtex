@@ -2,7 +2,8 @@
 
 Every glyph the browser draws, checked against where TeX put it.
 
-For each case, the document is compiled by the pipeline's own template into
+For each case, the document is compiled as the pipeline compiles it (as it
+is, through the driver that reads the capture code first) into
 a **pageless PDF** – one page as tall as the document, every glyph and rule
 where TeX placed it (`tools/pageless-pdf`). The same run gives the viewer
 page. Chromium opens that page with its column pinned to the PDF's width,
@@ -164,8 +165,8 @@ so a curve, a triangle or a stroked outline is a rule on neither.
 
 ## Against plain LaTeX
 
-The strip and the page both come from the pipeline's compile, inside its
-template. If the template changed what TeX sets, both would be wrong
+The strip and the page both come from the pipeline's compile, with its
+capture code. If the capture changed what TeX sets, both would be wrong
 together and the comparison would still pass. A case with
 `against_plain` (`label-anchors`, `blank-lines`, `prevdepth`, `missing-chars`, …) is also compiled as its author would
 compile it, with plain lualatex, into `build/<case>/plain/`, and the test

@@ -10,12 +10,12 @@ latexTitle: true
 The reference integration turns a directory of \texttt{.tex} snippets into a
 self-contained site: one HTML page, the viewer, and the fonts the snippets
 use. Each snippet becomes one block, in file-name order; a file named
-\texttt{preamble.tex} is not a block but is prepended to every snippet's
-preamble.
+\texttt{preamble.tex} is not a block but the setup every snippet is set
+in: its class, packages and macros.
 {{< /latex >}}
 
 ```sh
-node integrations/vanilla/build.ts examples/demo -o site
+node integrations/vanilla/build.ts examples/demo --snippet -o site
 node scripts/serve.ts site             # or open site/index.html from disk
 ```
 

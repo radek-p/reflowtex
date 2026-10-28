@@ -1,0 +1,14 @@
+% A document that names its files by \jobname, and prints the name of the
+% file TeX is reading, as real papers do (\input{\jobname-data}, a .bbl or
+% externalised figures named after the job). Compiled by the pipeline, the
+% job is named after the document's file and LaTeX's \CurrentFile is empty
+% in the main file, as in the author's own run.
+\documentclass{article}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+This is the job \texttt{\jobname}, reading the file [\CurrentFile], long
+enough to fill a line of the text width and then a few more words.
+
+\input{\jobname-data}
+\end{document}

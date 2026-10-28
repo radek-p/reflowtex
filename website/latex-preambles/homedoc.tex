@@ -3,6 +3,11 @@
 % every formula's MathML (with classic fonts LaTeX loads luamml only when
 % asked). ReflowTeX reads it for screen readers.
 \DocumentMetadata{tagging=on}
+% the setup a snippet is set in: class and packages (the pipeline adds none)
+\documentclass{article}
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{tikz}
 \tagpdfsetup{math/mathml/luamml/load=true}
 % Preamble for the home page set as one LaTeX document (content/home-draft.md).
 % Every block of that page is in one batch, so sections, theorems, figures,

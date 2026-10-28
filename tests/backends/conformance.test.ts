@@ -73,7 +73,7 @@ for (const id of ids) {
       test('not available: selecting it fails clearly, and so does opening a document', async () => {
         assert.throws(() => new Pipeline({ buildRoot: join(ROOT, id), fontsDir: join(ROOT, id, 'fonts'), backend: id, log: new Log('pipeline') }),
           (e: Error) => e instanceof BackendUnavailable && e.message.includes('not available'));
-        await assert.rejects(backend.open({ content: fixture('base'), preamble: '', dir: join(ROOT, id, 'x'), label: 'base',
+        await assert.rejects(backend.open({ kind: 'document', content: fixture('base'), preamble: '', dir: join(ROOT, id, 'x'), label: 'base',
           searchDirs: [], localFonts: [], mathml: false }), BackendUnavailable);
       });
       for (const c of CAPABILITY_NAMES) test(c, { skip: available.reason }, () => {});
@@ -95,7 +95,7 @@ function conformance(id: string, backend: CaptureBackend): void {
     const k = `${name}/${passes}`;
     if (!built.has(k)) built.set(k, (async () => {
       const content = fixture(name), key = contentKey(content, `passes ${passes}`);
-      const bytes = await pipe.compile(content, '', { key, passes, name });
+      const bytes = await pipe.compile(content, { kind: 'document', key, passes, name });
       return { bytes, key, data: readSerializerOutput(readFileSync(join(pipe.buildRoot, key, 'output.json'), 'utf8')) };
     })());
     return built.get(k)!;
@@ -119,7 +119,7 @@ function conformance(id: string, backend: CaptureBackend): void {
 
   test('base: a capture at the document width gives the node lists and diagnostics', async () => {
     const dir = join(ROOT, id, 'direct-base');
-    const job = await backend.open({ content: fixture('base'), preamble: '', dir, label: 'direct base', searchDirs: [], localFonts: [], mathml: false });
+    const job = await backend.open({ kind: 'document', content: fixture('base'), preamble: '', dir, label: 'direct base', searchDirs: [], localFonts: [], mathml: false });
     try {
       const r = await job.capture({ widthExtraSp: 0, passes: 1 });
       assert.ok(r.data.paragraphs.length >= 2);
@@ -145,7 +145,7 @@ function conformance(id: string, backend: CaptureBackend): void {
 
   test('widthResampling: a wider capture reports the width it used', { skip: skip('widthResampling') }, async () => {
     const dir = join(ROOT, id, 'direct-displays');
-    const job = await backend.open({ content: fixture('displays'), preamble: '', dir, label: 'direct displays', searchDirs: [], localFonts: [], mathml: false });
+    const job = await backend.open({ kind: 'document', content: fixture('displays'), preamble: '', dir, label: 'direct displays', searchDirs: [], localFonts: [], mathml: false });
     try {
       const a = await job.capture({ widthExtraSp: 0, passes: 1 });
       const extra = 128 * 65536;
@@ -162,7 +162,7 @@ function conformance(id: string, backend: CaptureBackend): void {
 
   test('singlePassDisplays: one capture carries the display model', { skip: skip('singlePassDisplays') }, async () => {
     const dir = join(ROOT, id, 'direct-displays-1');
-    const job = await backend.open({ content: fixture('displays'), preamble: '', dir, label: 'one pass displays', searchDirs: [], localFonts: [], mathml: false });
+    const job = await backend.open({ kind: 'document', content: fixture('displays'), preamble: '', dir, label: 'one pass displays', searchDirs: [], localFonts: [], mathml: false });
     try {
       const r = await job.capture({ widthExtraSp: 0, passes: 1 });
       assert.equal(r.data.display_model, true);
@@ -217,7 +217,7 @@ function conformance(id: string, backend: CaptureBackend): void {
 
   test('batchParts: two parts of one document, numbering carried', { skip: skip('batchParts') }, async () => {
     const parts = [{ key: `${id}-part-a`, content: '\\section{One}\nFirst part.' }, { key: `${id}-part-b`, content: '\\section{Two}\nSecond part.' }];
-    const out = await pipe.compileBatch(parts, '', { name: 'batch' });
+    const out = await pipe.compileBatch(parts, { name: 'batch' });
     assert.deepEqual([...out.keys()], parts.map(p => p.key));
     const second = readSerializerOutput(readFileSync(join(pipe.buildRoot, parts[1].key, 'output.json'), 'utf8'));
     assert.ok(paragraphText(second).some(t => /^2 ?Two/.test(t)), paragraphText(second).join(' | '));
@@ -274,7 +274,7 @@ function conformance(id: string, backend: CaptureBackend): void {
     for (const on of [false, true]) {
       const dir = join(ROOT, id, `shell-escape-${on}`);
       const b = createBackend(id, { shellEscape: on });
-      const job = await b.open({ content: fixture('shell-escape'), preamble: '', dir, label: 'shell escape', searchDirs: [], localFonts: [], mathml: false });
+      const job = await b.open({ kind: 'document', content: fixture('shell-escape'), preamble: '', dir, label: 'shell escape', searchDirs: [], localFonts: [], mathml: false });
       try {
         const r = await job.capture({ widthExtraSp: 0, passes: 1 });
         assert.equal(existsSync(join(r.dir, 'shell-escape-ran.txt')), on, `shell escape ${on ? 'on' : 'off'}`);

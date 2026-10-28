@@ -7,7 +7,7 @@ quickest way to get LaTeX onto a page.
 ## Use
 
 ```sh
-node build.ts <snippets-dir> -o site/
+node build.ts <dir> -o site/ [--snippet]
 node ../../scripts/serve.ts site     # then open http://localhost:8000
 ```
 
@@ -20,8 +20,14 @@ A directory of LaTeX snippets:
 
 - Each `*.tex` file becomes **one block** on the page, in filename order, headed
   by its filename stem.
-- A file named **`preamble.tex`** is not a block – its contents are prepended to
-  every snippet's preamble (shared macros, packages, TikZ libraries, fonts).
+- A file named **`preamble.tex`** is not a block – it is the setup every
+  snippet is set in: its `\documentclass` (and `\DocumentMetadata` before it, if
+  any), packages, macros, TikZ libraries, fonts. Without one, snippets are set in
+  the pipeline's default (article, mathtools, amssymb, TikZ).
+- Each `*.tex` file is a complete document, compiled as it is (`preamble.tex`, if
+  any, is then read at the end of each one's own preamble); with `--snippet`
+  (and `--batch`), each is a snippet set in `preamble.tex`.
+  See [`docs/documents.md`](../../docs/documents.md).
 - Repo-local OTF fonts (faces not installed into TeX) go in a **`fonts/`**
   subdirectory of the snippets dir, or pass `--local-fonts`.
 

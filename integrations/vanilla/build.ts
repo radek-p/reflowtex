@@ -3,15 +3,18 @@
 // reflowtex – the vanilla HTML+JS integration.
 //
 // The reference integration: it depends only on reflowtex/src. Point it at a
-// directory of LaTeX snippets and it writes a self-contained static site – one
+// directory of LaTeX files and it writes a self-contained static site – one
 // HTML page, the viewer's scripts and the fonts – that renders the snippets in
 // any browser:
 //
-//     node integrations/vanilla/build.ts <snippets-dir> -o site/
+//     node integrations/vanilla/build.ts <dir> -o site/ [--snippet]
 //
-// Each *.tex file becomes one block on the page, in file name order. A file
-// named preamble.tex is not a block: it is prepended to every snippet's
-// preamble. Repo-local OTF fonts (faces not installed into TeX) go in a fonts/
+// Each *.tex file becomes one block on the page, in file name order: a
+// complete document, compiled as it is (a file named preamble.tex, if any,
+// is read at the end of each one's own preamble), or with --snippet (and
+// --batch) a snippet, set in the setup preamble.tex holds (class, packages,
+// macros; without one, the pipeline's DEFAULT_PREAMBLE). preamble.tex is
+// not a block. Repo-local OTF fonts (faces not installed into TeX) go in a fonts/
 // subdirectory of the snippets dir, or pass --local-fonts. The page works
 // straight off disk, or served from anywhere: fonts resolve relative to
 // latex-viewer.js's own URL.
@@ -19,7 +22,7 @@ import { parseArgs } from 'node:util';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { Pipeline, contentKey } from '../../src/pipeline/pipeline.ts';
-import { DEFAULT_SOURCE_URL, blockHtml, installViewer, passesFor } from '../../src/pipeline/site.ts';
+import { DEFAULT_SOURCE_URL, blockHtml, installViewer } from '../../src/pipeline/site.ts';
 import { renderPage } from './page.ts';
 import { listBackends, formatBackends } from '../../src/pipeline/backend/registry.ts';
 import { LOG_LEVELS, consoleLog, isAlertLevel, parseSelection } from '../../src/shared/log.ts';
@@ -32,6 +35,7 @@ const { values: o, positionals } = parseArgs({
     'source-url': { type: 'string', default: DEFAULT_SOURCE_URL },
     'fonts-base': { type: 'string', default: 'fonts/' },
     batch: { type: 'boolean', default: false },
+    snippet: { type: 'boolean', default: false },
     jobs: { type: 'string', short: 'j', default: '1' },
     'local-fonts': { type: 'string' },
     a11y: { type: 'boolean', default: false },
@@ -49,11 +53,15 @@ if (o['list-backends']) {
 }
 if (o.help || positionals.length !== 1) {
   console.log(`usage: node integrations/vanilla/build.ts <snippets-dir> [-o site/] [--title T] [--source-url URL]
-       [--fonts-base fonts/] [--batch] [-j N] [--local-fonts DIR] [--a11y]
+       [--fonts-base fonts/] [--snippet] [--batch] [-j N] [--local-fonts DIR] [--a11y]
        [--log-alert LEVEL] [--log-show LIST] [--backend ID]
        node integrations/vanilla/build.ts --list-backends [--json]
 
-  --batch       compile all snippets as ONE document (a book's chapters, in
+  --snippet     each .tex file is a snippet, set in preamble.tex (its
+                \documentclass, packages, macros); by default each is a
+                complete document (\documentclass … \end{document}),
+                compiled as it is
+  --batch       compile all files as snippets of ONE document (a book's chapters, in
                 file name order), so numbering, macros and cross-references
                 carry across them; each is still its own block
   --fonts-base  URL prefix @font-face fetches fonts from (default fonts/,
@@ -101,22 +109,27 @@ let pipe: Pipeline;
 try {
   pipe = new Pipeline({ buildRoot, fontsDir: join(out, 'fonts'), localFontsDir: localFonts, searchDirs: [srcDir], backend: o.backend, log });
 } catch (e) { log.error('build-error', `error: ${(e as Error).message}`); process.exit(1); }
-log.info('compile-start', `reflowtex: compiling ${snippets.length} snippet(s) from ${srcDir}`, { snippets: String(snippets.length), dir: srcDir });
+// a batch is made of snippets
+const kind = o.snippet || o.batch ? 'snippet' as const : 'document' as const;
+log.info('compile-start', `reflowtex: compiling ${snippets.length} ${kind}(s) from ${srcDir}`, { snippets: String(snippets.length), dir: srcDir });
+// TeX's job is named after the file (\jobname: paper for paper.tex), when
+// TeX can take the name as it is
+const jobnameOf = (name: string) => { const s = name.replace(/\.tex$/, ''); return /^[A-Za-z0-9_.+-]+$/.test(s) ? s : 'input'; };
 const jobs = snippets.map(name => {
   const content = readFileSync(join(srcDir, name), 'utf8');
-  return { key: contentKey(content, preamble), content, preamble, name, passes: passesFor(content) };
+  return { key: contentKey(content, preamble), content, preamble, name, kind, jobname: jobnameOf(name) };
 });
-// A snippet's own bibliography (paper.bbl beside paper.tex) is read as
-// \jobname.bbl, and every snippet compiles as input.tex in its build dir.
+// A file's own bibliography (paper.bbl beside paper.tex) is read as
+// \jobname.bbl, in the block's build dir.
 for (const j of jobs) {
   const bbl = join(srcDir, j.name.replace(/\.tex$/, '.bbl'));
-  if (existsSync(bbl)) { mkdirSync(join(buildRoot, j.key), { recursive: true }); copyFileSync(bbl, join(buildRoot, j.key, 'input.bbl')); }
+  if (existsSync(bbl)) { mkdirSync(join(buildRoot, j.key), { recursive: true }); copyFileSync(bbl, join(buildRoot, j.key, `${j.jobname}.bbl`)); }
 }
 
 let blobs: Map<string, Uint8Array>;
 if (o.batch) {
-  blobs = await pipe.compileBatch(jobs.map(j => ({ key: j.key, content: j.content, name: j.name })), preamble,
-    { passes: Math.max(...jobs.map(j => j.passes)), name: `batch ${basename(srcDir)}` });
+  blobs = await pipe.compileBatch(jobs.map(j => ({ key: j.key, content: j.content, name: j.name })),
+    { preamble, name: `batch ${basename(srcDir)}` });
 } else {
   const { results, failures } = await pipe.compileMany(jobs, Number(o.jobs));
   for (const [key, e] of failures) {

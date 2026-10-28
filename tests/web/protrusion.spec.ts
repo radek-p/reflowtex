@@ -181,7 +181,7 @@ test('a theorem\'s lines end at the margin', async ({ openPage }) => {
 test('a centred line is centred on what does not protrude', async ({ openPage }) => {
   // TeX packs a centred line with its margin kerns: the space left and right
   // of the line, less its protruding characters, is the same. (A figure's
-  // caption is a centred paragraph: src/extract/template.tex.)
+  // caption is a centred paragraph: src/extract/reflowtex-capture.tex.)
   const page = await openPage('protrusion');
   const all: (Line & { w: number })[] = [];
   for (const w of WIDTHS) for (const l of await at(page, 4, w)) if (l.align === 'center' && l.text.length > 20) all.push({ ...l, w });

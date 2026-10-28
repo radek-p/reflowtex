@@ -22,7 +22,11 @@ export interface CaseSettings {
   passes?: number;
   /** the document, from the repository root (default cases/<name>.tex) */
   file?: string;
-  template?: string;
+  /** more preamble, read at the end of the document's own (a file, from the
+   *  repository root) */
+  preamble?: string;
+  /** the caller's \DocumentMetadata keys (the document's own wins) */
+  metadata?: string;
   /** TikZ pictures in the PDF drawn by TeX, not stacked back from the
    *  capture's private pages (pageless.ts --tex-pictures): the browser's
    *  pictures – their labels' glyphs – are then checked against TeX itself,
@@ -62,7 +66,8 @@ export const defaults: Required<Pick<CaseSettings, 'widths' | 'tolerance' | 'pas
 export const cases: Record<string, CaseSettings> = {
   testmath: {
     file: 'examples/testmath/testmath.tex',
-    template: 'examples/testmath/template.tex',
+    preamble: 'examples/testmath/preamble.tex',
+    metadata: 'tagging=on',
     passes: 3,
     widths: [0],
     slow: true,
@@ -277,6 +282,17 @@ export const cases: Record<string, CaseSettings> = {
   // ../ for a figure, as in real papers: TeX took such a name relative to the
   // build directory, and the build stopped. Not against plain: that compile
   // runs in a build directory too. Worst attained 2026-10-27.
+  // A document whose class line is behind a conditional (\ifnum … \documentclass
+  // … \else \documentclass … \fi, as in real papers), with graphicx and xcolor
+  // given options of its own: the first class line was taken and the rest of
+  // the conditional left behind, and the capture's own TikZ, loaded first,
+  // made the options clash. The document is now read as it is.
+  'class-in-conditional': { against_plain: true, tolerance: 0.010 },
+  // A document compiled under its own job name, as its author compiles it:
+  // \jobname names the files it reads (\input{\jobname-data}), and
+  // \CurrentFile is empty in the main file. The driver used to name every
+  // job input, and LaTeX's \input set \CurrentFile to the main file.
+  jobname: { file: 'tests/render/cases/jobname/paper.tex', against_plain: true, tolerance: 0.010 },
   'relative-paths': { file: 'tests/render/cases/relative-paths/main.tex', tolerance: 0.010 },
   // Pictures graphicx clips (clip with a trim or a viewport), beside one whole
   // and one through a viewport unclipped. graphicx puts a clipped image in a

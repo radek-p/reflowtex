@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // MathML for every formula a reader meets – LaTeX's, as LaTeX writes it.
 //
-// With tagging on and luamml loaded (the template's \DocumentMetadata and
+// With tagging on and luamml loaded (the document's \DocumentMetadata and
 // \tagpdfsetup{math/mathml/luamml/load=true}), LaTeX converts each formula
 // with luamml – amsmath alignments, cases and matrices as tables, with their
 // intents (:system-of-equations, :pause-medium, :equation-label) – and writes
@@ -26,8 +26,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { contentItems, forEachNode, walkNodes, type ContentItem, type SerializerOutput, type TexNode } from './nodes.ts';
 
-/** LaTeX's MathML file in a build directory (the job is `input`). */
-export const mathmlFile = (dir: string) => join(dir, 'input-luamml-mathml.html');
+/** LaTeX's MathML file in a build directory, of job `jobname`. */
+export const mathmlFile = (dir: string, jobname = 'input') => join(dir, `${jobname}-luamml-mathml.html`);
 
 /** The file's formulas: \mml N → its <math>, as written. */
 export function parseMathmlFile(html: string): Map<number, string> {
@@ -43,8 +43,8 @@ export function parseMathmlFile(html: string): Map<number, string> {
 }
 
 /** The formulas LaTeX wrote in build directory `dir`, if it wrote any. */
-export function readMathmlFile(dir: string): Map<number, string> {
-  const f = mathmlFile(dir);
+export function readMathmlFile(dir: string, jobname = 'input'): Map<number, string> {
+  const f = mathmlFile(dir, jobname);
   return existsSync(f) ? parseMathmlFile(readFileSync(f, 'utf8')) : new Map();
 }
 

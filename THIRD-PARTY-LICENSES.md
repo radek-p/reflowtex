@@ -146,7 +146,7 @@ internal name records too. So a modified font never masquerades as the upstream
 original, as the GUST/OFL licenses ask. A modified font is also subset to the
 characters the site uses; its name records, and so that marker, are kept. You still need to carry each font's own
 license/notice with a deployed site; which fonts appear depends on your documents.
-The defaults in `src/extract/template.tex` are:
+The fonts of LaTeX's defaults (a document or preamble that chooses none) are:
 
 | Font | Typical license |
 |---|---|

@@ -20,9 +20,9 @@
 // the pipeline makes it: pictures captured.
 //
 // Builds go to tests/render/build/<case>/ (ignored by git).
-import { appendFileSync, copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pageless } from '../../tools/pageless-pdf/pageless.ts';
 import { siteFromRun } from '../../tools/pageless-pdf/site-from-run.ts';
@@ -49,7 +49,7 @@ export function allCases(): Map<string, Case> {
     return [name, { ...defaults, ...s, name, target: defaults.tolerance,
       file: s.file ? join(REPO, s.file) : join(HERE, 'cases', `${name}.tex`),
       plain_file: s.plain_file ? join(REPO, s.plain_file) : undefined,
-      template: s.template ? join(REPO, s.template) : undefined } as Case];
+      preamble: s.preamble ? join(REPO, s.preamble) : undefined } as Case];
   }));
 }
 
@@ -67,7 +67,8 @@ const logTo = (file: string) => { writeFileSync(file, ''); return (s: string) =>
 async function pagelessRun(c: Case, extra: number, out = buildDir(c, extra), texPictures = c.tex_pictures): Promise<string> {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  await pageless(c.file, { out, passes: c.passes, widthExtra: `${extra}pt`, template: c.template, texPictures, log: logTo(join(out, 'pageless.log')) });
+  await pageless(c.file, { out, passes: c.passes, widthExtra: `${extra}pt`, texPictures, log: logTo(join(out, 'pageless.log')),
+    ...(c.preamble ? { preamble: readFileSync(c.preamble, 'utf8') } : {}), ...(c.metadata ? { documentMetadata: { keys: c.metadata } } : {}) });
   return out;
 }
 
@@ -121,7 +122,7 @@ export interface PlainCheck {
 }
 
 /** The strip at the case's own width against plain lualatex's PDF of the same
- *  document (build/<case>/plain/input.pdf), glyph by glyph in the order TeX
+ *  document (build/<case>/plain/<case file>.pdf), glyph by glyph in the order TeX
  *  shipped them, each relative to the first: where the page has a glyph, the
  *  strip must have it at the same distance from the first one (plain lualatex
  *  compiles the case's `plain_file` instead, when it has one). On one page TeX
@@ -134,9 +135,11 @@ export async function againstPlain(c: Case): Promise<PlainCheck> {
   const out = join(BUILD, c.name, 'plain');
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  copyFileSync(c.plain_file ?? c.file, join(out, 'input.tex'));
-  await runLuaLatex(out, { texinputs: [dirname(c.file)], passes: c.passes, expect: 'input.pdf', block: c.name });
-  const s = traceStrip(join(strip, 'pageless.pdf')).glyphs, p = traceStrip(join(out, 'input.pdf')).glyphs;
+  // under the case file's own name, as its author compiles it (\jobname)
+  const main = basename(c.file), jobname = main.replace(/\.tex$/, '');
+  copyFileSync(c.plain_file ?? c.file, join(out, main));
+  await runLuaLatex(out, { texinputs: [dirname(c.file)], passes: c.passes, main, jobname, expect: `${jobname}.pdf`, block: c.name });
+  const s = traceStrip(join(strip, 'pageless.pdf')).glyphs, p = traceStrip(join(out, `${jobname}.pdf`)).glyphs;
   const r: PlainCheck = { glyphs: { strip: s.length, plain: p.length }, worst: { across: 0, down: 0 } };
   for (let i = 0; i < Math.min(s.length, p.length); i++) {
     const dx = (s[i][0] - s[0][0]) - (p[i][0] - p[0][0]), dy = (s[i][1] - s[0][1]) - (p[i][1] - p[0][1]);
