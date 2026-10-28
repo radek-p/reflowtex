@@ -1,0 +1,18 @@
+% A document in a class with its own \enddocument (oldend.cls, LaTeX's from
+% before 2020): no end-of-document hook runs, and the strip must still be
+% shipped once, at the end, with all of the document in it. Bold maths by
+% bm, whose \bm scans its argument up to \@@end, the primitive \end: the
+% strip must not be shipped from there.
+\documentclass{oldend}
+\usepackage{bm}
+\pagestyle{empty}
+\begin{document}
+\section{A section}\label{sec}
+A paragraph long enough to break across lines differently at every width
+the test tries, with a reference to Section~\ref{sec} in it, bold
+$\bm{g} = (\bm{\eta}, s)$ in it, and some more words so that it has a
+third line as well at the narrowest width.
+
+The last paragraph, which ends the document just before its own
+\verb|\enddocument| runs.
+\end{document}

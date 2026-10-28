@@ -1,0 +1,19 @@
+% The document's top: a \vbox whose list opens with space above a rule
+% (a title box). The box draws, so the document starts at the box's top, and
+% the space inside it, above the rule, is the box's, in TeX's strip and in
+% the browser alike.
+\documentclass{article}
+\begin{document}
+\vbox{\hsize\textwidth\linewidth\hsize
+  \vskip 0.1in
+  \hrule height 2pt
+  \vskip 0.25in
+  \centering
+  {\LARGE A title in a box\par}
+  \vskip 0.29in
+  \hrule height 2pt
+  \vskip 0.09in}
+Some ordinary text after the title box, long enough to make a full line of
+running text at every width the test tries, and then a little more so that
+the paragraph has a second line as well.
+\end{document}

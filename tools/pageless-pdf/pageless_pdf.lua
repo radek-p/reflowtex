@@ -9,7 +9,7 @@
 -- pages of up to `limit` (default 16000pt, just under \maxdimen), cutting
 -- only inside top-level glue or kerns so that nothing TeX placed is moved:
 -- a cut glue simply ends one page and begins the next, and stacking the
--- pages edge to edge (stack.py) gives the single strip back, with every
+-- pages edge to edge (stack.ts) gives the single strip back, with every
 -- distance between two boxes exactly what TeX computed. Cuts are placed so
 -- that each page's height is a multiple of `align` (default 0.5pt), so a
 -- raster at a multiple of 144.54 dpi has page boundaries on pixel rows.
@@ -21,8 +21,11 @@
 --
 -- Captured TikZ pictures are empty placeholder boxes in the galley (the
 -- template ships each picture as a private page and leaves a metric-identical
--- empty box). Their positions in the strip are recorded so stack.py can draw
--- the private pages back into place.
+-- empty box). The strip has the pictures themselves: a copy of each captured
+-- box is kept, and the copied galley's placeholders are filled with it, so
+-- TeX's backend draws each picture where it is, through whatever is around
+-- it – a \resizebox's or \rotatebox's matrix, a colour, a clip – as it drew
+-- it on the document's page.
 --
 -- The strip's pages have an origin of their own: the margin across, nothing
 -- down. What moved the document's pages on the paper – \hoffset and \voffset
@@ -31,24 +34,36 @@
 -- strip is shipped.
 --
 -- Load this file right after serializer.lua (it wraps
--- Serializer.note_captured_picture to learn the private page numbers), and
--- call Pageless.ship() from the `enddocument/afterlastpage` hook:
+-- Serializer.note_captured_picture to keep each picture's box), and
+-- call Pageless.ship_at_end() there:
 --
---   \AddToHook{enddocument/afterlastpage}{%
---     \directlua{Pageless.ship{margin = tex.sp("36pt")}}}
+--   \directlua{dofile("pageless_pdf.lua") Pageless.ship_at_end{margin = tex.sp("36pt")}}
+--
+-- The strip is shipped when TeX has ended the run and LuaTeX is about to
+-- finish the PDF (the finish_pdffile callback, first of its functions): after
+-- the last \clearpage has put every float into the galley, whatever the
+-- \enddocument – a class's own, as LaTeX's was before 2020, runs no
+-- end-of-document hook – and before the serializer's walk, which runs there
+-- too. (Not from a redefined \@@end: packages take the primitive for a
+-- sentinel that never expands – bm's \bm scans up to it; and stop_run comes
+-- after the PDF is written.)
 --
 -- Output: the pages, appended to the job's PDF, and pageless.json describing
--- them (page numbers, heights, picture placements), all in sp.
+-- them (page numbers, heights), all in sp.
 
 Pageless = Pageless or {}
 
-local TIKZ_PIC_ATTR = 908
+-- the serializer's attribute numbers and box subtypes
+local ids = Serializer.ids
+local TIKZ_PIC_ATTR = ids.TIKZ_PIC_ATTR
 
--- private page of each captured picture, by document-local id
-local picture_pages = {}
+-- each captured picture's box, by document-local id: the template's capture
+-- box still holds it when the private page has been shipped
+local picture_boxes = {}
 local orig_note = Serializer.note_captured_picture
 function Serializer.note_captured_picture(id, page)
-    picture_pages[tonumber(id)] = tonumber(page)
+    local box = tex.getbox("reflowtexTikzBox")
+    if box then picture_boxes[tonumber(id)] = node.copy(box) end
     return orig_note(id, page)
 end
 
@@ -76,76 +91,31 @@ local function set_extent(p, v)
     if ntype(p) == "glue" then p.width = v else p.kern = v end
 end
 
--- ── picture placement inside a box tree ─────────────────────────────────────
--- x/y are strip coordinates in sp: x from the page's left edge (margin
--- included), y from the strip's top, growing downwards.
-
-local function set_glue(g, box)
-    local w = g.width or 0
-    local sign, set = box.glue_sign or 0, box.glue_set or 0
-    if sign == 1 and (g.stretch_order or 0) == (box.glue_order or 0) then
-        w = w + set * (g.stretch or 0)
-    elseif sign == 2 and (g.shrink_order or 0) == (box.glue_order or 0) then
-        w = w - set * (g.shrink or 0)
-    end
-    return w
-end
-
-local find_in_vlist
-
-local function note_placeholder(out, c, x, y_top)
-    local id = node.get_attribute(c, TIKZ_PIC_ATTR)
-    out[#out + 1] = {
-        id = id, page = picture_pages[id],
-        x = math.floor(x + 0.5), y = math.floor(y_top + 0.5),
-        width = c.width, height = c.height, depth = c.depth,
-    }
-end
-
--- baseline: y of the hlist's baseline; x0: x of its left edge
-local function find_in_hlist(out, box, x0, baseline)
-    if not box.head then return end
-    for c in node.traverse(box.head) do
-        local t = ntype(c)
+-- ── pictures ──────────────────────────────────────────────────────────────
+-- A placeholder in a copied chunk gets the picture's own list and glue
+-- setting (its size is the picture's already), wherever it is in the tree.
+local function fill_pictures(head)
+    local filled = 0
+    for p in node.traverse(head) do
+        local t = ntype(p)
         if t == "hlist" or t == "vlist" then
-            local x = x0 + node.dimensions(box.glue_set or 0, box.glue_sign or 0,
-                                           box.glue_order or 0, box.head, c)
-            local shift = c.shift or 0
-            if node.get_attribute(c, TIKZ_PIC_ATTR) then
-                note_placeholder(out, c, x, baseline + shift - (c.height or 0))
-            elseif t == "hlist" then
-                find_in_hlist(out, c, x, baseline + shift)
-            else
-                find_in_vlist(out, c, x, baseline + shift - (c.height or 0))
+            local id = node.get_attribute(p, TIKZ_PIC_ATTR)
+            local pic = id and picture_boxes[id]
+            if pic then
+                node.flush_list(p.head)
+                p.head = pic.head and node.copy_list(pic.head) or nil
+                p.glue_set, p.glue_sign, p.glue_order = pic.glue_set, pic.glue_sign, pic.glue_order
+                filled = filled + 1
+            elseif p.head then
+                filled = filled + fill_pictures(p.head)
+            end
+        elseif t == "disc" then
+            for _, f in ipairs({ "pre", "post", "replace" }) do
+                if p[f] then filled = filled + fill_pictures(p[f]) end
             end
         end
     end
-end
-
--- y_top: y of the vlist's top edge; x0: x of its left edge
-find_in_vlist = function(out, box, x0, y_top)
-    if not box.head then return end
-    local y = y_top
-    for c in node.traverse(box.head) do
-        local t = ntype(c)
-        if t == "hlist" or t == "vlist" then
-            local x = x0 + (c.shift or 0)
-            if node.get_attribute(c, TIKZ_PIC_ATTR) then
-                note_placeholder(out, c, x, y)
-            elseif t == "hlist" then
-                find_in_hlist(out, c, x, y + (c.height or 0))
-            else
-                find_in_vlist(out, c, x, y)
-            end
-            y = y + (c.height or 0) + (c.depth or 0)
-        elseif t == "rule" then
-            y = y + (c.height or 0) + (c.depth or 0)
-        elseif t == "glue" then
-            y = y + set_glue(c, box)
-        elseif t == "kern" then
-            y = y + (c.kern or 0)
-        end
-    end
+    return filled
 end
 
 -- ── side effects a second shipout must not repeat ───────────────────────────
@@ -205,30 +175,37 @@ end
 -- with no page breaks.
 --
 -- \maketitle's `\null\vskip 2em` and \end{document}'s \clearpage leave glue
--- and an empty box before the first line and after the last; paged, the top
--- one becomes the page's \topskip and the bottom is blank page. The viewer
--- starts at its first line's ascent and ends at its last depth, so the strip
--- is trimmed to its first and last non-empty box.
-local function empty_box(p)
-    local t = ntype(p)
-    return (t == "hlist" or t == "vlist") and p.head == nil
-        and p.width == 0 and p.height == 0 and p.depth == 0
-end
-
+-- and boxes that draw nothing before the first line and after the last (a
+-- class's title block can open with ink-less boxes and net negative space);
+-- paged, the top becomes the page's \topskip and the bottom is blank page.
+-- The document's top is the first node that draws – a line, a rule, a box
+-- with ink in it – as for the serializer's walk, which drops the space
+-- before it (Serializer.draws: one rule for both); the strip is trimmed to
+-- the first and the last node that draws. When that node is a box whose
+-- first item that draws lies above its own top (negative space opening the
+-- box), the strip starts at that item: the walk leaves the negative space
+-- out too (Serializer.space_above_ink).
 local function trim_galley(nodes)
     local first, last = nil, nil
     for k, p in ipairs(nodes) do
-        local t = ntype(p)
-        if (t == "hlist" or t == "vlist") and not empty_box(p) then
+        if Serializer.draws(p) then
             first = first or k
             last = k
         end
     end
     if not first then return nodes end
     local out = {}
+    local above = Serializer.space_above_ink(nodes[first])
+    if above < 0 then
+        local k = node.new("kern")
+        k.kern = -above
+        out[1] = k
+        texio.write_nl(string.format("pageless: the first box's ink begins %.3fpt above its top; the strip starts there",
+                                     -above / 65536))
+    end
     for k = first, last do out[#out + 1] = nodes[k] end
-    if #out < #nodes then
-        texio.write_nl(string.format("pageless: trimmed %d node(s) before the first box and %d after the last",
+    if first > 1 or last < #nodes then
+        texio.write_nl(string.format("pageless: trimmed %d node(s) before the first that draws and %d after the last",
                                      first - 1, #nodes - last))
     end
     return out
@@ -243,32 +220,10 @@ end
 -- boxes, so both have the text once. As in the walk: a line marks its
 -- paragraph shown, a \vbox is walked into, and the boxes looked at are those
 -- shown as they are (an \hbox that is no line, display or alignment, a
--- picture).
-local PARA_ATTR = 900
-local HL_LINE, HL_ALIGNMENT, HL_EQUATION = 1, 4, 6
-
-local function find_para(n)
-    local v = node.get_attribute(n, PARA_ATTR)
-    if v then return v end
-    local t = ntype(n)
-    if (t == "hlist" or t == "vlist") and n.head then
-        for c in node.traverse(n.head) do
-            local r = find_para(c)
-            if r then return r end
-        end
-    end
-    return nil
-end
-
-local function holds_shown_lines(n, shown)
-    for x in node.traverse(n.head) do
-        local p = node.get_attribute(x, PARA_ATTR)
-        if p and shown[p] then return true end
-        local t = ntype(x)
-        if (t == "hlist" or t == "vlist") and x.head and holds_shown_lines(x, shown) then return true end
-    end
-    return false
-end
+-- picture). The paragraph of a line and the test of a box are the walk's own
+-- (Serializer.find_para, Serializer.holds_lines); the strip ships before the
+-- walk runs, so it marks what is shown itself.
+local HL_LINE, HL_ALIGNMENT, HL_EQUATION = ids.HL_LINE, ids.HL_ALIGNMENT, ids.HL_EQUATION
 
 local function shown_as_is(p)
     local t = ntype(p)
@@ -281,14 +236,14 @@ local function drop_text_twice(nodes)
     local function mark(p)
         local t = ntype(p)
         if t == "hlist" and p.subtype == HL_LINE then
-            local para = find_para(p)
+            local para = Serializer.find_para(p)
             if para then shown[para] = true end
         elseif t == "vlist" and p.head and not node.get_attribute(p, TIKZ_PIC_ATTR) then
             for c in node.traverse(p.head) do mark(c) end
         end
     end
     for _, p in ipairs(nodes) do
-        if shown_as_is(p) and p.head and holds_shown_lines(p, shown) then
+        if shown_as_is(p) and p.head and Serializer.holds_lines(p, shown) then
             -- left out
         else
             mark(p)
@@ -338,7 +293,7 @@ function Pageless.ship(opts)
     tex.hoffset, tex.voffset = 0, 0
     pdf.setorigin(margin, 0)
 
-    local chunks, pictures = {}, {}
+    local chunks, pictures = {}, 0
     local y0 = 0
     local i, n = 1, #nodes
     local carry = nil                       -- the far side of the last cut glue
@@ -381,26 +336,11 @@ function Pageless.ship(opts)
         else
             carry = nil
         end
+        pictures = pictures + fill_pictures(list_head)
         list_head = strip_side_effects(list_head)
-        local list = {}
-        for p in node.traverse(list_head) do list[#list + 1] = p end
+        local count = 0
+        for _ in node.traverse(list_head) do count = count + 1 end
         local box = node.vpack(list_head)
-        -- picture placeholders, with the strip position of each
-        local y = y0
-        for _, c in ipairs(list) do
-            local t = ntype(c)
-            if t == "hlist" or t == "vlist" then
-                local x = margin + (c.shift or 0)
-                if node.get_attribute(c, TIKZ_PIC_ATTR) then
-                    note_placeholder(pictures, c, x, y)
-                elseif t == "hlist" then
-                    find_in_hlist(pictures, c, x, y + (c.height or 0))
-                else
-                    find_in_vlist(pictures, c, x, y)
-                end
-            end
-            y = y + extent(c)
-        end
 
         tex.pagewidth  = width + 2 * margin
         tex.pageheight = box.height + box.depth
@@ -409,32 +349,28 @@ function Pageless.ship(opts)
         chunks[#chunks + 1] = {
             page = status.total_pages,
             y0 = y0, height = box.height, depth = box.depth,
-            nodes = #list,
+            nodes = count,
         }
         y0 = y0 + box.height + box.depth
         i = last + 1
     end
 
-    -- describe it all for stack.py
-    local function q(s) return '"' .. tostring(s):gsub('"', '\\"') .. '"' end
-    local parts = { '{"unit":"sp","sp_per_pt":65536,' ..
-                    '"page_width":' .. (width + 2 * margin) .. ',"hsize":' .. width ..
-                    ',"margin":' .. margin .. ',"total_height":' .. y0 ..
-                    ',"chunks":[' }
-    for k, c in ipairs(chunks) do
-        parts[#parts + 1] = string.format('%s{"page":%d,"y0":%d,"height":%d,"depth":%d,"nodes":%d}',
-            k > 1 and "," or "", c.page, c.y0, c.height, c.depth, c.nodes)
-    end
-    parts[#parts + 1] = '],"pictures":['
-    for k, p in ipairs(pictures) do
-        parts[#parts + 1] = string.format('%s{"id":%d,"page":%s,"x":%d,"y":%d,"width":%d,"height":%d,"depth":%d}',
-            k > 1 and "," or "", p.id, p.page and tostring(p.page) or "null",
-            p.x, p.y, p.width, p.height, p.depth)
-    end
-    parts[#parts + 1] = ']}'
+    -- describe it all for stack.ts
     local f = assert(io.open(jsonname, "w"))
-    f:write(table.concat(parts))
+    f:write(Serializer.json_encode({
+        unit = "sp", sp_per_pt = 65536, page_width = width + 2 * margin, hsize = width,
+        margin = margin, total_height = y0, chunks = chunks,
+    }))
     f:close()
     texio.write_nl(string.format("pageless: shipped %d page(s), %.1fpt tall in all, %d picture(s); wrote %s",
-        #chunks, y0 / 65536, #pictures, jsonname))
+        #chunks, y0 / 65536, pictures, jsonname))
+end
+
+function Pageless.ship_at_end(opts)
+    local cb, before = "finish_pdffile", {}
+    for _, d in ipairs(luatexbase.callback_descriptions(cb)) do
+        before[#before + 1] = { luatexbase.remove_from_callback(cb, d) }
+    end
+    luatexbase.add_to_callback(cb, function() Pageless.ship(opts) end, "pageless")
+    for _, f in ipairs(before) do luatexbase.add_to_callback(cb, f[1], f[2]) end
 end

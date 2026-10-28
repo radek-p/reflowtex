@@ -28,8 +28,10 @@ dimensions (`Serializer.flow_head()`). That copy is the pageless document.
 `pageless.ts` compiles the document as the pipeline does – through the
 driver, which reads the capture code and then the file as it is, under its
 own job name (`src/pipeline/driver.ts`, `docs/documents.md`), shell escape
-off unless `REFLOWTEX_SHELL_ESCAPE=1` – with two lines added: `pageless_pdf.lua` loaded after the serializer, and a hook at the
-end of the document that ships the copy. It compiles once, at the
+off unless `REFLOWTEX_SHELL_ESCAPE=1` – with a few lines added: `pageless_pdf.lua` loaded after the serializer and
+set to ship the copy when TeX has ended the run (LuaTeX's `finish_pdffile`,
+after `\end`: whatever the `\enddocument`, a class's own included, which may run
+no end-of-document hook). It compiles once, at the
 document's own width; `--width-extra` widens `\textwidth` through the
 capture's width hook. A file is a complete document; `--snippet` sets it in
 `--preamble`'s setup instead (for a document, `--preamble` is read at the end
@@ -42,7 +44,9 @@ the serializer leaves out what paging made – the breaks, LaTeX's empty marker
 boxes, `\vfil`, `\topskip` glue – and sets the next line's interline glue from
 the line before the break, as in the middle of a page; the author's `\vspace`
 and `\vspace*` after a break are kept (`src/extract/README.md`).
-`pageless_pdf.lua` trims the galley to its first and last non-empty box.
+`pageless_pdf.lua` trims the galley to its first and last node that draws (a
+line, a rule, a box with ink: `Serializer.draws`, the rule the walk uses for
+the document's top too).
 It ships the rest at the end of the run as
 consecutive pages of at most 16000pt (just under `\maxdimen`), cut only
 *inside* a top-level glue or kern: the glue's width is split between the end
@@ -53,11 +57,13 @@ Shipping a copy would repeat a shipout's side effects (`\write`s – every
 `\label` again into the .aux – late Lua, destinations, annotations), so
 those are stripped, with inserts and marks; drawing whatsits (colour,
 literals, matrices) stay. Captured TikZ pictures are empty placeholders in
-the galley; their positions are recorded in `pageless.json`.
+the galley; `pageless_pdf.lua` keeps a copy of each captured box and fills
+the shipped copy's placeholders with it, so TeX's backend draws each picture
+in its place, through the matrix, colour or clip around it (`\resizebox`,
+`\rotatebox`), as on the document's page.
 
 `stack.ts` (pdf-lib) folds the pages into one: each becomes a Form XObject
-placed at the sum of the preceding pages' heights, and the TikZ pictures'
-private pages are drawn back at their places. The page exceeds Acrobat's
+placed at the sum of the preceding pages' heights. The page exceeds Acrobat's
 14400-unit limit by design; browsers, Poppler and MuPDF show it, and
 `raster.ts` (MuPDF) rasterises any band of it without drawing the rest.
 

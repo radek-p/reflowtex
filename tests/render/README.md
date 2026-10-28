@@ -186,8 +186,9 @@ other widths. It is picked up by name. Settings that differ from
 
 Glyphs in TikZ pictures – node text, labels – are compared like any other:
 the viewer draws them as outlines (`<use>`, reported as ◊). By default
-the PDF has the pictures the capture shipped, stacked back at their places,
-so a picture the capture got wrong would be wrong on both sides. A case
+the PDF has the boxes the capture made, put back in their places (through
+any `\resizebox` or `\rotatebox` around them: `scaled-pictures`), so a
+picture the capture got wrong would be wrong on both sides. A case
 with `tex_pictures` (`tikz-labels`, `tikz-nested`, `tikz-fills`,
 `nicematrix`, `page-offsets`) has its PDFs compiled with TikZ's own `\tikzpicture`
 (`pageless.ts --tex-pictures`): TeX draws the pictures in the text, and the

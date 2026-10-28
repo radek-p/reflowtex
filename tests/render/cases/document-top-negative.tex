@@ -1,0 +1,15 @@
+% The document's top: boxes that draw nothing but have a height (a class's
+% front matter leaves such boxes), then a net negative space, then the first
+% line. The document starts at that line: what comes before it, negative or
+% not, is left out, in TeX's strip and in the browser alike.
+\documentclass{article}
+\begin{document}
+\vbox to 0.03pt{}\vbox to 0.03pt{}\vbox{}
+\vskip -36.135pt
+\vskip 10.84pt
+\noindent{\small Draft version of a document, a line at the very top}
+\par
+Some ordinary text after it, long enough to make a full line of running
+text at every width the test tries, and then a little more so that the
+paragraph has a second line as well.
+\end{document}

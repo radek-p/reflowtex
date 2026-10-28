@@ -1637,6 +1637,34 @@ local function has_visible_nodes(nodes)
     return false
 end
 
+-- The same of a node as TeX has it: whether it draws anything – a glyph, a
+-- rule with ink, a picture (an image, a captured TikZ box), or a box, leader
+-- or discretionary holding one. The document's top is the first item that
+-- draws: the walk drops the space before it, and the pageless strip, the
+-- browser's reference, is trimmed to it (Serializer.draws), whether that
+-- space is positive or negative and whatever draws nothing among it.
+local function draws(n)
+    local t = node.type(n.id)
+    if t == "glyph" then return true end
+    if t == "rule" then return inked_rule(n) end
+    if t == "hlist" or t == "vlist" then
+        if node.get_attribute(n, TIKZ_PIC_ATTR) then return true end
+        if n.head then
+            for c in node.traverse(n.head) do
+                if draws(c) then return true end
+            end
+        end
+        return false
+    end
+    if t == "glue" then return n.leader ~= nil and draws(n.leader) end
+    if t == "disc" and n.replace then
+        for c in node.traverse(n.replace) do
+            if draws(c) then return true end
+        end
+    end
+    return false
+end
+
 -- The band of the most recent paragraph, for a display TeX's own is not
 -- known for (see display_width). And its
 -- leading, which a fixed box (emit_fixed) is set with.
@@ -1701,6 +1729,30 @@ local function set_glue_width(g, box)
         w = w - math.floor((g.shrink or 0) * gs + 0.5)
     end
     return w
+end
+
+-- How far below a box's top the first item in it that draws begins
+-- (negative: above it), as the walk goes into boxes: a \vbox that is no
+-- picture is walked into, anything else that draws is an item; glue counts
+-- as the box set it (\splittopskip not at all, as in the walk), whatever
+-- draws nothing by its size. At the document's top that space is the gap
+-- the walk keeps when it is not negative (place_gap), and the strip starts
+-- at that item when it is.
+local function space_above_ink(n)
+    if node.type(n.id) ~= "vlist" or node.get_attribute(n, TIKZ_PIC_ATTR) or not n.head then return 0 end
+    local y = 0
+    for c in node.traverse(n.head) do
+        if draws(c) then return y + space_above_ink(c) end
+        local t = node.type(c.id)
+        if t == "glue" and c.subtype ~= GLUE_SPLITTOPSKIP then
+            y = y + set_glue_width(c, n)
+        elseif t == "kern" then
+            y = y + (c.kern or 0)
+        elseif t == "hlist" or t == "vlist" or t == "rule" then
+            y = y + (c.height or 0) + (c.depth or 0)
+        end
+    end
+    return y
 end
 
 -- ── Streams ───────────────────────────────────────────────────────────────
@@ -1807,7 +1859,9 @@ end
 -- `amount` is the space the viewer is to keep, `parts` (note_part) what it is
 -- made of. As everywhere, a gap before anything at all is dropped, as TeX
 -- drops glue at the top of a page – unless the top of a box lies in it
--- (`box_top`): what the box holds above its first line is the box's. A gap of
+-- (`box_top`): what the box holds above its first line is the box's, when
+-- it is not negative (negative space before the first item that draws is
+-- left out, as the strip leaves it out: space_above_ink). A gap of
 -- zero made of glue – article's \parskip, 0pt plus 1pt – is still an item, so
 -- its glue is not lost to a tool that shows it.
 local function place_gap(ctx, next_sid, amount, parts, box_top)
@@ -1824,7 +1878,7 @@ local function place_gap(ctx, next_sid, amount, parts, box_top)
         end
     end
     local glue = parts or {}
-    if (pos > 0 or box_top) and (amount ~= 0 or #glue > 0) then
+    if (pos > 0 or (box_top and amount >= 0)) and (amount ~= 0 or #glue > 0) then
         table.insert(list, pos + 1, { kind = "vspace", amount = amount,
                                       glue = (#glue > 0) and glue or nil })
     end
@@ -1862,7 +1916,7 @@ local fixed_items = 0
 -- it as TeX set it.
 local HL_EQUATION_WRAP = 6
 local function emit_fixed(n, box, pending, ctx)
-    place_gap(ctx, stream_attr(n), pending.sp, pending.parts)
+    place_gap(ctx, stream_attr(n), pending.sp, pending.parts, pending.box_top)
     reset_pending(pending)
     local g, h = pending.interline, box.height or 0
     local leading = { bskip = cur_leading.bskip, lskip = cur_leading.lskip, lskiplimit = cur_leading.lskiplimit }
@@ -1914,15 +1968,17 @@ end
 -- again, packaged: multicols passes its column lines through the main list
 -- (the walk emits them as paragraphs) and then its output routine puts the
 -- balanced columns back as one \hbox. Kept, the text would show twice.
-local function holds_emitted_lines(n)
+-- (holds_lines: whether the box holds a line of a paragraph in `seen`.)
+local function holds_lines(n, seen)
     for x in node.traverse(n.head) do
         local p = node.get_attribute(x, PARA_ATTR)
-        if p and seen_para[p] then return true end
+        if p and seen[p] then return true end
         local t = node.type(x.id)
-        if (t == "hlist" or t == "vlist") and x.head and holds_emitted_lines(x) then return true end
+        if (t == "hlist" or t == "vlist") and x.head and holds_lines(x, seen) then return true end
     end
     return false
 end
+local function holds_emitted_lines(n) return holds_lines(n, seen_para) end
 
 -- The box as a fixed display draws it; nil for one that draws nothing, and
 -- nil, "emitted" for one holding text the stream already has.
@@ -2151,10 +2207,12 @@ local function walk_flow(head, pending, ctx, box)
             -- depth. So the glue above stays in the gap, with what the box holds
             -- above its first line – at the top of the page too, where TeX
             -- drops only what comes before the box; the glue inside counts as
-            -- the box set it, and below it \prevdepth is the box's depth.
+            -- the box set it, and below it \prevdepth is the box's depth. A
+            -- box that draws nothing has no top of its own: at the top of the
+            -- document it is part of what comes before anything (see draws).
             if ctx.last_kind == nil then reset_pending(pending) end
             pending.interline = nil
-            pending.box_top = true
+            if draws(n) then pending.box_top = true end
             box_depth, depth_follows = IGNORE_DEPTH, false
             walk_flow(n.head, pending, ctx, n)
             pending.interline = nil
@@ -2369,6 +2427,23 @@ Serializer = Serializer or {}   -- note_picture already added a table above; do 
 function Serializer.flow_head()
     return flow_head
 end
+
+-- The walk's rules, for such a tool to apply as the walk does (the pageless
+-- strip: tools/pageless-pdf/pageless_pdf.lua), not a copy of them: whether a
+-- node draws anything and where in a box that begins (the document's top),
+-- the paragraph a box's lines
+-- belong to, whether a box holds lines of paragraphs already shown (text the
+-- galley has twice), the attributes and box subtypes they read, and the JSON
+-- writer.
+Serializer.draws = draws
+Serializer.space_above_ink = space_above_ink
+Serializer.find_para = find_para
+Serializer.holds_lines = holds_lines
+Serializer.json_encode = json_encode
+Serializer.ids = {
+    PARA_ATTR = PARA_ATTR, TIKZ_PIC_ATTR = TIKZ_PIC_ATTR,
+    HL_LINE = HL_LINE, HL_ALIGNMENT = HL_ALIGNMENT, HL_EQUATION = HL_EQUATION,
+}
 
 -- The id-keyed tables (links, anchors, slots) are lists on the wire: an id is
 -- its entry's 1-based position. The ids come from counters in the capture code and

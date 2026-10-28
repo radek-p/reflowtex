@@ -1,0 +1,15 @@
+% The document's top: a title block that opens with a rule (a title bar),
+% then space, then the title. The rule draws, so the document starts at it,
+% with the space below it, in TeX's strip and in the browser alike.
+\documentclass{article}
+\begin{document}
+\hrule height 4pt
+\vskip 0.25in
+{\LARGE\centering A title under a rule\par}
+\vskip 0.29in
+\hrule height 1pt
+\vskip 0.09in
+Some ordinary text after the title, long enough to make a full line of
+running text at every width the test tries, and then a little more so that
+the paragraph has a second line as well.
+\end{document}
