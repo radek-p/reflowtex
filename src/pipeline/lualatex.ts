@@ -25,6 +25,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { TexError } from './errors.ts';
 import { errorLines, fatalStop, texErrors, type TexErrorInfo } from './tex-log.ts';
+import { TexLog } from './backend/tex-log.ts';
 import { prepareFigures } from './figures.ts';
 import { consoleLog, type Log } from '../shared/log.ts';
 export type { TexErrorInfo };
@@ -78,6 +79,8 @@ export interface LuaLatexRun {
   passes: number;
   /** the run's log file */
   log: string;
+  /** the last pass's log, read (its output, when TeX wrote no log) */
+  texLog: TexLog;
 }
 
 interface Run { code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }
@@ -115,6 +118,7 @@ function readBack(dir: string, jobname: string): string {
 /** The run asked for another one itself ("Rerun to get cross-references
  *  right", a package's "Please rerun LaTeX"). */
 const RERUN_RE = /\bRerun\b|\bplease rerun\b/i;
+const rerunAsked = (log: TexLog): boolean => log.lines.some((_, i) => RERUN_RE.test(log.join(i).text));
 
 /** The environment of a run: TEXINPUTS with the run's own directory first,
  *  then `texinputs`, then TeX's own tree. The run's directory comes first so
@@ -157,6 +161,7 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<L
   for (const ext of READ_BACK_EXTS) if (!existsSync(join(dir, `${jobname}.${ext}`))) writeFileSync(join(dir, `${jobname}.${ext}`), '');
   let before = readBack(dir, jobname);
   let result: Run | null = null;
+  let texLog = new TexLog('');
   const log = join(dir, `${jobname}.log`);
   const expect = join(dir, opts.expect ?? 'output.json');
   let limit = Math.max(1, opts.passes), passes = 0;
@@ -169,21 +174,20 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<L
     rmSync(join(dir, `${jobname}-luamml-mathml.html`), { force: true });
     rmSync(outputJson, { force: true });
     result = await lualatex(dir, env, mode, main, jobname);
-    const text = existsSync(log) ? readFileSync(log, 'utf8') : '';
-    opts.onPass?.(n + 1, text);
+    texLog = new TexLog(existsSync(log) ? readFileSync(log) : result.stdout);
+    opts.onPass?.(n + 1, texLog.text);
     const after = readBack(dir, jobname);
     // epstopdf asked for a figure's PDF under a name of its settings': it is
     // there now, for another pass
-    if (figures?.placeRequested(text)) { limit = Math.max(limit, n + 2); before = after; continue; }
-    if (opts.settle !== false && after === before && !RERUN_RE.test(text)) break;
+    if (figures?.placeRequested(texLog)) { limit = Math.max(limit, n + 2); before = after; continue; }
+    if (opts.settle !== false && after === before && !rerunAsked(texLog)) break;
     before = after;
   }
-  const texLog = existsSync(log) ? readFileSync(log, 'utf8') : result!.stdout;
   const errors = errorLines(texLog);
   const stopped = result!.signal ? null : fatalStop(texLog);
   if (!existsSync(expect) || result!.signal || stopped) {
     rmSync(outputJson, { force: true });
-    let detail = texLog.slice(-3000);
+    let detail = texLog.text.slice(-3000);
     // stderr is where a lualatex wrapper says what it tried (the container's
     // lazy package install)
     if (result!.stderr.trim()) detail += `\n--- stderr ---\n${result!.stderr.slice(-2000)}`;
@@ -195,5 +199,5 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<L
     throw new TexError(`lualatex reported ${errors.length} error(s) (nonstopmode continued, so the node list would be ` +
       `silently wrong):\n${[...new Set(errors)].slice(0, 10).map(e => `  ${e}`).join('\n')}\n  see ${log}`, opts.block, errors[0]);
   }
-  return { output: existsSync(outputJson) ? readFileSync(outputJson, 'utf8') : '', errors: texErrors(texLog, dir), passes, log };
+  return { output: existsSync(outputJson) ? readFileSync(outputJson, 'utf8') : '', errors: texErrors(texLog, dir), passes, log, texLog };
 }

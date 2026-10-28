@@ -105,7 +105,10 @@ lists, with the stream and the text around each. A backend with no such
 hook can read them off TeX's log, which every engine writes:
 `missingCharsFromLog(log)` (`src/pipeline/backend/tex-log.ts`) reads TeX's,
 pdfTeX's, XeTeX's and LuaTeX's "Missing character" lines, warnings or
-errors, joined where TeX broke them at `max_print_line`.
+errors. The same module reads LaTeX's warnings (`logDiagnostics`). Each
+takes a log read once as a `TexLog` (or its text or bytes), which joins
+the lines TeX broke at `max_print_line` by LuaTeX's rule, in bytes of
+UTF-8; it uses no Node API.
 
 Glyph source positions, where a backend has them, are on glyph nodes as
 `src: { file, line, column?, length? }` (`GlyphSource`); the document's own

@@ -53,3 +53,11 @@ test('what a pass reads back keeps changing, or the run asks again: the most all
   assert.equal((await passes(`echo 'LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.' >> paper.log`)).passes, 3);
   assert.equal((await passes(`printf '\\\\newlabel{s}{{%s}{1}}\\n' "$n" > paper.aux`, 2)).passes, 2);
 });
+
+test('a request to run again that TeX broke across two log lines is read whole', async () => {
+  // "Rerun" split at the log's width (79 bytes), as TeX breaks a long line
+  const line = `Package demo Warning: ${'x'.repeat(53)} Rerun to get it right.`;
+  const broken = `${line.slice(0, 79)}\\n${line.slice(79)}`;
+  assert.ok(!broken.split('\\n').some(l => /Rerun/.test(l)));
+  assert.equal((await passes(`printf '${broken}\\n' >> paper.log`)).passes, 3);
+});

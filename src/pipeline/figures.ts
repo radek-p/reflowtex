@@ -40,6 +40,7 @@ import {
 import { availableParallelism } from 'node:os';
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import type { Log } from '../shared/log.ts';
+import { TexLog, type TexLogSource } from './backend/tex-log.ts';
 
 /** What the pipeline converts: PostScript, encapsulated or not. */
 export const CONVERTIBLE = /\.(eps|ps)$/i;
@@ -98,18 +99,24 @@ export function convertedName(name: string): string {
 }
 
 /** The conversions epstopdf asked for in a run, as its log names them: each
- *  figure (Source file) and the PDF it is to be included as (Output file), by
- *  the names TeX had for them. TeX breaks a log line at 79 characters
- *  (max_print_line), so a line that long is joined with the next first. */
-export function requestedFigures(log: string): { source: string; output: string }[] {
-  const lines = log.split('\n');
-  let text = '';
-  for (const l of lines) text += l.length === 79 ? l : `${l}\n`;
+ *  figure (Source file) and the PDF it is to be included as (Output file, in
+ *  the `(epstopdf)` lines after it), by the names TeX had for them, each
+ *  line joined where TeX broke it. */
+export function requestedFigures(source: TexLogSource): { source: string; output: string }[] {
+  const log = TexLog.of(source);
+  const { lines } = log;
   const out: { source: string; output: string }[] = [];
-  const re = /^Package epstopdf Info: Source file: <([^>\n]*)>\n((?:\(epstopdf\)[^\n]*\n)*)/gm;
-  for (const m of text.matchAll(re)) {
-    const o = /^\(epstopdf\)\s+Output file: <([^>\n]*)>/m.exec(m[2]);
-    if (o) out.push({ source: m[1], output: o[1] });
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].startsWith('Package epstopdf Info: Source file: <')) continue;
+    const first = log.join(i);
+    const m = /^Package epstopdf Info: Source file: <([^>]*)>/.exec(first.text);
+    let output: string | undefined;
+    for (i = first.end; i + 1 < lines.length && lines[i + 1].startsWith('(epstopdf)');) {
+      const next = log.join(i + 1);
+      output ??= /^\(epstopdf\)\s+Output file: <([^>]*)>/.exec(next.text)?.[1];
+      i = next.end;
+    }
+    if (m && output !== undefined) out.push({ source: m[1], output });
   }
   return out;
 }
@@ -187,7 +194,7 @@ export interface RunFigures {
   dir: string;
   /** Put the PDF at each name epstopdf asked for in `log` and did not find:
    *  how many were put (TeX is to run again when any were). */
-  placeRequested(log: string): number;
+  placeRequested(log: TexLogSource): number;
 }
 
 /** Convert the figures `dirs` hold (findConvertibleFigures) and put them in
@@ -244,7 +251,7 @@ export async function prepareFigures(runDir: string, dirs: readonly string[], o:
   const inside = (root: string, p: string) => { const r = relative(root, p); return r !== '' && !r.startsWith('..') && !isAbsolute(r); };
   return {
     dir,
-    placeRequested(log: string): number {
+    placeRequested(log: TexLogSource): number {
       let n = 0;
       for (const { source, output } of requestedFigures(log)) {
         // the figure, by the name TeX found it under: in dir (a name relative

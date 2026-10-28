@@ -12,6 +12,7 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readSerializerOutput } from '../nodes.ts';
 import { readMathmlFile } from '../mathml.ts';
+import { logDiagnostics } from './tex-log.ts';
 import { runLuaLatex, runLuaLatexOnce } from '../lualatex.ts';
 import {
   CALLER_PREAMBLE_FILE, CAPTURE_FILES, DEFAULT_JOBNAME, DOCUMENT_FILE, DRIVER_FILE, METADATA_PROBE_FILE,
@@ -58,32 +59,6 @@ export async function applicableMetadata(dir: string, document: string, m: Docum
   const answer = existsSync(join(dir, METADATA_PROBE_FILE)) ? readFileSync(join(dir, METADATA_PROBE_FILE), 'utf8').trim() : '';
   // no answer: the document never reached a class; TeX will say why in the run itself
   return answer === '0' ? m : undefined;
-}
-
-/** The warnings in a LaTeX log: `LaTeX Warning: …`, `Package x Warning: …`,
- *  `Class x Warning: …`, with their continuation lines and the input line
- *  they name. */
-export function logDiagnostics(log: string): Diagnostic[] {
-  const out: Diagnostic[] = [];
-  const lines = log.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^(LaTeX|Package (\S+)|Class (\S+)) Warning: (.*)$/.exec(lines[i]);
-    if (!m) continue;
-    let message = m[4].trim();
-    // continuation lines: a package's or class's begin "(name)", LaTeX's
-    // own are indented
-    const prefix = m[2] ?? m[3];
-    const cont = prefix ? new RegExp(`^\\(${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\s*(.*)$`) : /^\s+(\S.*)$/;
-    for (let j = i + 1; j < lines.length; j++) {
-      const c = cont.exec(lines[j]);
-      if (!c) break;
-      message += ` ${c[1].trim()}`;
-      i = j;
-    }
-    const line = /on input line (\d+)\.?/.exec(message);
-    out.push({ severity: 'warning', message: message.replace(/\s+/g, ' ').trim(), ...(line ? { line: Number(line[1]) } : {}) });
-  }
-  return out;
 }
 
 /** The document's file in `dir`: a document as it is, a snippet set in the
@@ -153,7 +128,7 @@ export class LuaTeXBackend implements CaptureBackend {
           texErrors: doc.texErrors, figureCache, log: doc.log });
         const data = readSerializerOutput(r.output);
         const errors: Diagnostic[] = r.errors.map(e => ({ severity: 'error', ...e, pass: r.passes }));
-        return { data, dir: d, mathml: readMathmlFile(d, jobname), diagnostics: [...errors, ...(existsSync(r.log) ? logDiagnostics(readFileSync(r.log, 'utf8')) : [])] };
+        return { data, dir: d, mathml: readMathmlFile(d, jobname), diagnostics: [...errors, ...logDiagnostics(r.texLog)] };
       },
     };
   }
