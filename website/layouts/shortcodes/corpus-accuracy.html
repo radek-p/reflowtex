@@ -51,9 +51,9 @@
       <tr id="row-{{ .id }}"{{ if not $shown }} class="is-stopped"{{ end }}>
         <th scope="row">
           {{- if and $shown .page }}<a href="{{ .page | relURL }}">{{ .title }}</a>{{ else }}{{ .title }}{{ end }}
-          <span class="ct-sub">{{ with .class }}<code>{{ . }}</code>{{ end }}{{ with .field }} · {{ . }}{{ end }}</span>
+          <span class="ct-sub ct-meta">{{ with .class }}<code>{{ . }}</code>{{ end }}{{ with .field }}<span>{{ . }}</span>{{ end }}</span>
           {{- $pub := partial "corpus/published.html" . }}
-          <span class="ct-sub">{{ if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ .licence }}</a>{{ else }}{{ .licence }}{{ end }}{{ with $pub.url }} · <a href="{{ . }}" rel="noopener">Published at {{ $pub.host }}</a>{{ end }}</span>
+          <span class="ct-sub">{{ if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ .licence }}</a>{{ else }}{{ .licence }}{{ end }}{{ with $pub.url }}, published at <a href="{{ . }}" rel="noopener">{{ $pub.host }}</a>{{ end }}</span>
           {{- if not $shown }}<span class="ct-reason">Not shown: {{ .reason | default "it did not build" }}</span>{{ end }}
         </th>
         {{- if $shown }}

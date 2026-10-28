@@ -51,7 +51,7 @@
         </p>
         <p class="cc-licence">
           {{- if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ .licence }}</a>{{ else }}{{ .licence }}{{ end }}
-          {{- with $pub.url }} · <a href="{{ . }}" rel="noopener">Published at {{ $pub.host }}</a>{{ end }}
+          {{- with $pub.url }}, published at <a href="{{ . }}" rel="noopener">{{ $pub.host }}</a>{{ end }}
           {{- with .attribution }}<span>{{ . }}</span>{{ end -}}
         </p>
       </article>
