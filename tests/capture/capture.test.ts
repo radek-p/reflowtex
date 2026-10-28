@@ -441,6 +441,20 @@ test('a virtual font\'s accented letters read as one character each (ae: é, ï,
   assert.match(a11yLayer(d as unknown as LayerDocument), /Café, naïve, façade\./);
 });
 
+// A classic maths font's symbols (cmsy's prime, ∀, ∈, ≤, ∞) were private-use
+// codes, read as nothing: "f′" read as "f", and a tag's prime was lost.
+test('a classic maths font\'s symbols read as their characters: f′, ∀x∈A, x≤∞, a tag (1′)', async () => {
+  const d = await capture([
+    'Let $f\'$ be given, and $\\forall x \\in A$, $x \\leq \\infty$.',
+    '\\begin{equation}a\\label{eq:b}\\end{equation}',
+    '\\begin{equation}b\\tag{\\ref{eq:b}$\'$}\\end{equation}',
+  ].join('\n'), '\\usepackage{amsmath}', 2);
+  assert.match(glyphText(d.paragraphs[0].nodes), /^Letf′begiven,and∀x∈A,x≤∞\./);
+  const displays = d.content.filter(i => i.kind === 'display').map(i => glyphText([i.box!]));
+  assert.deepEqual(displays, ['a(1)', 'b(1′)']);
+  assert.match(a11yLayer(d as unknown as LayerDocument), /Let f′ be given, and ∀x ∈ A, x ≤ ∞\./);
+});
+
 // An equation number with no room beside its formula: TeX sets it on a line of
 // its own, below the formula (§1205) or, on the left, above it (§1203), in
 // place of the display skip there. No skip is recorded on that side; one

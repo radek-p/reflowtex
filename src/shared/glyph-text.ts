@@ -12,7 +12,7 @@
  *  GLYPH_INDEX_PUA + glyph index for a glyph of an OpenType font reached
  *  another way than by its cmap (a GSUB variant, a combining mark;
  *  fonts/addressing.ts), in plane 16; SLOT_PUA + slot for a classic font's
- *  slot with no searchable character (fonts/type1.ts), in the BMP's private
+ *  slot with no character of its own (fonts/type1.ts), in the BMP's private
  *  use area. LuaTeX gives unencoded variants plane-15 codes of its own. */
 export const GLYPH_INDEX_PUA = 0x100000;
 export const SLOT_PUA = 0xE000;
@@ -20,8 +20,9 @@ export const SLOT_PUA = 0xE000;
 /** A code point in a private use area: the BMP's, or planes 15 and 16. */
 export const isPrivateUse = (cp: number): boolean => (cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000;
 
-/** The code a classic font's slot gets when it is no character a reader
- *  would search for: the rule every producer of a classic face shares. */
+/** The code a classic font's slot gets when it is no character of its own
+ *  (no reading of its glyph name stands as text alone): the rule every
+ *  producer of a classic face shares. */
 export const slotCode = (slot: number): number => SLOT_PUA + slot;
 
 /** The code of a slot of a classic font that names none of its glyphs (no

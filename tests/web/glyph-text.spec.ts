@@ -22,15 +22,21 @@ const copyAll = (block: Locator) => block.evaluate(el => {
 
 // A ligature was copied as its one character (U+FB03 for "ffi"), a classic
 // font's as a private-use code, and so was a sign with no character of its
-// own; a mark could not be found by a ligature's letters.
-test("copying gives each glyph's text: a ligature's letters, nothing for a private-use code", async ({ openPage }) => {
+// own; a mark could not be found by a ligature's letters. A classic maths
+// font's signs (′ ∀ ∈ ≤ ∞) were private-use codes too, and copied as nothing.
+test("copying gives each glyph's text: a ligature's letters, a maths sign's character, nothing for a private-use code", async ({ openPage }) => {
   const page = await openPage('glyph-text');
   const block = page.locator('.latex-block[data-nodelist-b64]').first();
   expect(await block.locator('tspan[data-text]').count(), 'drawn by codes that are not their text').toBeGreaterThan(0);
   const copied = (await copyAll(block)).replace(/\s+/g, ' ');
   expect(copied).toContain('The official finding of the office was effective');
   expect(copied).toContain('A classic font’s official finding was as effective.');
-  expect(copied).toContain('search for, , which says nothing');
+  expect(copied).toMatch(/characters: f′, ∀x ?∈ ?A, x ?≤ ?∞\./);
+  expect(copied).toContain('the sized , which says nothing');
+  // the prime is drawn by its character, which is its text
+  const prime = block.locator('tspan', { hasText: '′' });
+  await expect(prime).toHaveCount(1);
+  expect(await prime.getAttribute('data-text')).toBeNull();
   expect(copied).not.toMatch(/[-ﬀ-ﬆ]|[\u{F0000}-\u{10FFFF}]/u);
   // the glyphs' text as the page's API gives it, and a mark found by it
   const r = await block.evaluate(el => {

@@ -21,7 +21,7 @@ import { classicSlotCode, slotCode } from '../../shared/glyph-text.ts';
 import { readPk } from './pk.ts';
 import { pixelContours } from './pixels.ts';
 import { readTfm } from './tfm.ts';
-import { buildCmap, format12, parseCmap, readSfnt, writeSfnt } from './sfnt.ts';
+import { withFormat12 } from './sfnt.ts';
 import { finishConverted, kpsewhich, reproducible } from './type1.ts';
 
 /** The resolution METAFONT renders at: ljfour's 600 dpi, magnified 4×. */
@@ -111,14 +111,10 @@ export function pixelFont(name: string, pkBytes: Uint8Array, tfmBytes: Uint8Arra
     familyName: label, styleName: 'Regular', fullName: label, postScriptName: `${name}-ReflowTeXMetafont`,
     unitsPerEm: upm, ascender: upm, descender: 0, glyphs,
   });
-  // opentype.js writes a format-4 cmap only, which holds no code point past
-  // the BMP (the double-struck letters, 𝟙): every one goes into a format-12
-  const sfnt = readSfnt(new Uint8Array(font.toArrayBuffer()));
-  const subs = parseCmap(sfnt.tables.get('cmap')!), f12 = format12(subs);
-  codes.forEach((code, i) => f12.shared.map.set(addressing.get(code)!, i + 1));
-  f12.shared.dirty = true;
-  sfnt.tables.set('cmap', buildCmap(subs));
-  return { bytes: reproducible(writeSfnt(sfnt)), addressing };
+  // the double-struck letters (𝟙) are past the BMP: every code goes into a
+  // format-12 cmap
+  const otf = withFormat12(new Uint8Array(font.toArrayBuffer()), codes.map((code, i): [number, number] => [addressing.get(code)!, i + 1]));
+  return { bytes: reproducible(otf), addressing };
 }
 
 /** A METAFONT font as a served OTF (NAME.reflowtex-HASH.otf in `outDir`),
