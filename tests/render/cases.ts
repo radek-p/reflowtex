@@ -274,6 +274,9 @@ export const cases: Record<string, CaseSettings> = {
   // glyph of these cases was off by the difference. Worst attained 2026-10-28.
   'document-top-empty-box': { tolerance: 0.013 },
   'document-top-negative': { tolerance: 0.009 },
+  // The same inside a box that draws: negative space opening the box put its
+  // first line above the box's top in the strip, at its ascent in the browser.
+  'document-top-negative-box': { tolerance: 0.009 },
   'document-top-rule': { tolerance: 0.009, rule_tolerance: 0.003 },
   'document-top-vbox': { tolerance: 0.009, rule_tolerance: 0.002 },
   // A page whose origin is moved – geometry's hoffset and voffset, a class's

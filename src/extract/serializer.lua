@@ -1711,6 +1711,30 @@ local function set_glue_width(g, box)
     return w
 end
 
+-- How far below a box's top the first item in it that draws begins
+-- (negative: above it), as the walk goes into boxes: a \vbox that is no
+-- picture is walked into, anything else that draws is an item; glue counts
+-- as the box set it (\splittopskip not at all, as in the walk), whatever
+-- draws nothing by its size. At the document's top that space is the gap
+-- the walk keeps when it is not negative (place_gap), and the strip starts
+-- at that item when it is.
+local function space_above_ink(n)
+    if node.type(n.id) ~= "vlist" or node.get_attribute(n, TIKZ_PIC_ATTR) or not n.head then return 0 end
+    local y = 0
+    for c in node.traverse(n.head) do
+        if draws(c) then return y + space_above_ink(c) end
+        local t = node.type(c.id)
+        if t == "glue" and c.subtype ~= GLUE_SPLITTOPSKIP then
+            y = y + set_glue_width(c, n)
+        elseif t == "kern" then
+            y = y + (c.kern or 0)
+        elseif t == "hlist" or t == "vlist" or t == "rule" then
+            y = y + (c.height or 0) + (c.depth or 0)
+        end
+    end
+    return y
+end
+
 -- ── Streams ───────────────────────────────────────────────────────────────
 -- Every item lands in exactly one content list: the main flow, a footnote's
 -- body, or the content of a \begin{webstream} block (reflowtex.sty). The
@@ -1815,7 +1839,9 @@ end
 -- `amount` is the space the viewer is to keep, `parts` (note_part) what it is
 -- made of. As everywhere, a gap before anything at all is dropped, as TeX
 -- drops glue at the top of a page – unless the top of a box lies in it
--- (`box_top`): what the box holds above its first line is the box's. A gap of
+-- (`box_top`): what the box holds above its first line is the box's, when
+-- it is not negative (negative space before the first item that draws is
+-- left out, as the strip leaves it out: space_above_ink). A gap of
 -- zero made of glue – article's \parskip, 0pt plus 1pt – is still an item, so
 -- its glue is not lost to a tool that shows it.
 local function place_gap(ctx, next_sid, amount, parts, box_top)
@@ -1832,7 +1858,7 @@ local function place_gap(ctx, next_sid, amount, parts, box_top)
         end
     end
     local glue = parts or {}
-    if (pos > 0 or box_top) and (amount ~= 0 or #glue > 0) then
+    if (pos > 0 or (box_top and amount >= 0)) and (amount ~= 0 or #glue > 0) then
         table.insert(list, pos + 1, { kind = "vspace", amount = amount,
                                       glue = (#glue > 0) and glue or nil })
     end
@@ -2384,11 +2410,13 @@ end
 
 -- The walk's rules, for such a tool to apply as the walk does (the pageless
 -- strip: tools/pageless-pdf/pageless_pdf.lua), not a copy of them: whether a
--- node draws anything (the document's top), the paragraph a box's lines
+-- node draws anything and where in a box that begins (the document's top),
+-- the paragraph a box's lines
 -- belong to, whether a box holds lines of paragraphs already shown (text the
 -- galley has twice), the attributes and box subtypes they read, and the JSON
 -- writer.
 Serializer.draws = draws
+Serializer.space_above_ink = space_above_ink
 Serializer.find_para = find_para
 Serializer.holds_lines = holds_lines
 Serializer.json_encode = json_encode

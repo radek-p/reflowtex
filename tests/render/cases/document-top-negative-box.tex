@@ -1,0 +1,17 @@
+% The document's top: a box that draws, whose list opens with negative space
+% above its first line (a class's running head set in the title block), so
+% the line's ink is above the box's own top. The document starts at that
+% line, in TeX's strip and in the browser alike: the negative space before
+% the first item that draws is left out, inside the box too.
+\documentclass{article}
+\begin{document}
+\vbox{\hsize\textwidth
+  \vskip -20pt
+  \noindent{\small A running head, set above the box's top\par}
+  \vskip 30pt
+  \noindent{\Large A title in the same box\par}}
+\vskip 12pt
+Some ordinary text after the box, long enough to make a full line of
+running text at every width the test tries, and then a little more so that
+the paragraph has a second line as well.
+\end{document}

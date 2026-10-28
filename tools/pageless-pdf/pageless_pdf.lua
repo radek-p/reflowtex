@@ -181,7 +181,10 @@ end
 -- The document's top is the first node that draws – a line, a rule, a box
 -- with ink in it – as for the serializer's walk, which drops the space
 -- before it (Serializer.draws: one rule for both); the strip is trimmed to
--- the first and the last node that draws.
+-- the first and the last node that draws. When that node is a box whose
+-- first item that draws lies above its own top (negative space opening the
+-- box), the strip starts at that item: the walk leaves the negative space
+-- out too (Serializer.space_above_ink).
 local function trim_galley(nodes)
     local first, last = nil, nil
     for k, p in ipairs(nodes) do
@@ -192,8 +195,16 @@ local function trim_galley(nodes)
     end
     if not first then return nodes end
     local out = {}
+    local above = Serializer.space_above_ink(nodes[first])
+    if above < 0 then
+        local k = node.new("kern")
+        k.kern = -above
+        out[1] = k
+        texio.write_nl(string.format("pageless: the first box's ink begins %.3fpt above its top; the strip starts there",
+                                     -above / 65536))
+    end
     for k = first, last do out[#out + 1] = nodes[k] end
-    if #out < #nodes then
+    if first > 1 or last < #nodes then
         texio.write_nl(string.format("pageless: trimmed %d node(s) before the first that draws and %d after the last",
                                      first - 1, #nodes - last))
     end
