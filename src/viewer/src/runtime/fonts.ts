@@ -56,6 +56,7 @@ interface Face {
 const faces = new Map<string, Face>();          // family → its face in effect
 const given = new Map<string, FontSource>();     // file → what the page gave, before its first block
 const latest = new Map<string, FontFace>();       // family → the newest face asked for (a later provide wins)
+const asked = new Map<string, number>();          // family → how many times a file was given for it
 const swaps = new Set<Promise<void>>();
 
 /** A font file's family: its original name, without .otf, safe as a CSS name. */
@@ -95,9 +96,34 @@ export function provideFont(file: string, source: FontSource): Promise<boolean> 
     const family = familyOf(file);
     const old = faces.get(family);
     if (!old) { given.set(file, source); return Promise.resolve(true); }
-    const next = makeFace(file, family, source);
-    // the same URL again: the face it made (one that failed is fetched again)
-    if (old.url !== null && old.url === next.url && old.face.status !== 'error') return old.settled.then(() => old.face.status === 'loaded');
+    const turn = (asked.get(family) ?? 0) + 1;
+    asked.set(family, turn);
+    const url = typeof source === 'string' ? new URL(source, document.baseURI).href : null;
+    if (url !== null && url === old.url) {
+        // the same URL again: the face it made – unless that one failed. Then
+        // the file is fetched again past the browser's cache, which may keep
+        // the failed answer (Firefox does, for a font), and the face is made
+        // from its bytes.
+        if (old.face.status !== 'error') return old.settled.then(() => old.face.status === 'loaded');
+        const fetched = fetch(url, { cache: 'reload' })
+            .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status} ${r.statusText}`))))
+            .then(bytes => (asked.get(family) === turn ? replaceFace(old, { ...makeFace(file, family, bytes), url }) : false),   // (a newer one was given meanwhile)
+                  (e: unknown) => replaceFailed(file, e));
+        const done = fetched.then(() => {}).finally(() => swaps.delete(done));
+        swaps.add(done);
+        return fetched;
+    }
+    return replaceFace(old, makeFace(file, family, source));
+}
+
+const replaceFailed = (file: string, e: unknown): false => {
+    report('warning', 'font-replace-failed', `font ${file}: the new file could not be loaded (${(e as Error)?.message ?? e}); the previous one stays`, { font: file, error: e });
+    return false;
+};
+
+/** `old`'s face replaced by `next`'s once that has loaded (provideFont). */
+function replaceFace(old: Face, next: Face): Promise<boolean> {
+    const { file, family } = next;
     latest.set(family, next.face);
     const swap = next.face.load().then(() => {
         if (latest.get(family) !== next.face) return false;          // a newer one was given meanwhile
@@ -110,8 +136,7 @@ export function provideFont(file: string, source: FontSource): Promise<boolean> 
         return true;
     }, (e: unknown) => {
         if (latest.get(family) === next.face) latest.delete(family);
-        report('warning', 'font-replace-failed', `font ${file}: the new file could not be loaded (${(e as Error)?.message ?? e}); the previous one stays`, { font: file, error: e });
-        return false;
+        return replaceFailed(file, e);
     });
     const done = swap.then(() => {}).finally(() => swaps.delete(done));
     swaps.add(done);
