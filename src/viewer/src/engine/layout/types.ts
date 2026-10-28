@@ -65,9 +65,11 @@ export interface Line {
      *  viewer's expansion is not applied on top. */
     exact?: boolean;
 }
-/** How a line is set: its glue ratio, expansion, left edge (px) and the
- *  ratio of its infinite fill, if it has one with room to spare. */
-export interface LinePlacement { ratio: number; er: number; x0: number; fillRatio?: number; fillOrder?: number }
+/** How a line is set: its glue ratio, expansion, where its text starts (px,
+ *  x0), the ratio of its infinite fill, if it has one with room to spare, and
+ *  the left edge of its box (px, edge; x0 when not given): TeX's line box
+ *  holds the \leftskip, and its \leaders are aligned from the box's edge. */
+export interface LinePlacement { ratio: number; er: number; x0: number; fillRatio?: number; fillOrder?: number; edge?: number }
 /** TeX's interline parameters, in px; on a paragraph's first line, the depth
  *  TeX set the glue above it from where that is not the line above's
  *  (prevDepth; -Infinity: no glue, TeX's \prevdepth of -1000pt). */

@@ -1311,6 +1311,9 @@ local function capture_paragraph(head, groupcode)
         protrude_chars = tex.protrudechars or 0,
         left_skip  = margin_skip("leftskip"),
         right_skip = margin_skip("rightskip"),
+        -- the fixed part of \leftskip, inside each line's box: the box
+        -- starts that far left of `indent` (its \leaders align from there)
+        left_skip_width = ls ~= 0 and ls or nil,
         nodes  = serialize_nodelist(head),
     }
     for _, b in ipairs(BREAK_PARAMS) do

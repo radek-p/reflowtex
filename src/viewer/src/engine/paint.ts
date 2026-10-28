@@ -61,7 +61,7 @@ export function paintSegment(fontInfo: FontTable, cache: LayoutCache, i: number)
     }
 
     for (let j = 0; j < L.lines.length; j++) {
-        const { ratio, er, x0, fillRatio, fillOrder } = L.lrp![j];
+        const { ratio, er, x0, fillRatio, fillOrder, edge } = L.lrp![j];
         sink.beginLine(s.pairs[j].text, s.pairs[j].g);
         // On a fill line finite glue is already at natural width (ratio 0), so the
         // single ratio slot carries the fill ratio and fillOrder selects the fill.
@@ -71,7 +71,7 @@ export function paintSegment(fontInfo: FontTable, cache: LayoutCache, i: number)
         const lineH = ink.reduce((m, it) => Math.max(m, it.h), 0) / SP_TO_PX;
         const lineD = ink.reduce((m, it) => Math.max(m, it.d), 0) / SP_TO_PX;
         renderNodes(fontInfo, sink, L.lines[j].nodes, x0, L.baselineYs![j],
-                    fillOrder ? fillRatio : ratio, er, fillOrder || 0, lineH, lineD);
+                    fillOrder ? fillRatio : ratio, er, fillOrder || 0, lineH, lineD, 1, edge);
         paintAdjusts(fontInfo, sink, L, j, cache.layoutCtx?.columnPx ?? L.W);
         linkRuns.push(...sink.takeLinkRuns());
         markRuns.push(...sink.takeMarkRuns());

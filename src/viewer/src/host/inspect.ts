@@ -129,10 +129,10 @@ export function replaySegment(fontInfo: BlockData['fontInfo'], cache: LayoutCach
                 beginTransform: noop, endTransform: noop,
                 node: sink.node, vnode: sink.vnode };
     for (let j = 0; j < L.lines.length; j++) {
-        const { ratio, er, x0, fillRatio, fillOrder } = L.lrp[j];
+        const { ratio, er, x0, fillRatio, fillOrder, edge } = L.lrp[j];
         if (sink.line) sink.line(j, L.lines[j], x0, L.baselineYs![j]);
         renderNodes(fontInfo, s, L.lines[j].nodes, x0, L.baselineYs![j],
-                    fillOrder ? fillRatio : ratio, er, fillOrder || 0);
+                    fillOrder ? fillRatio : ratio, er, fillOrder || 0, 0, 0, 1, edge);
         paintAdjusts(fontInfo, s, L, j, cache.layoutCtx?.columnPx ?? L.W);
     }
     return true;

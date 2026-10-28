@@ -323,6 +323,11 @@ message Paragraph {
   // as the block's alignment (data-align) asks.
   optional Node left_skip  = 18;
   optional Node right_skip = 19;
+  // \leftskip's fixed part (sp), which `indent` and each LineBand's indent
+  // include. TeX's line is a box from the band's start, the \leftskip inside
+  // it, so a line's box starts this far left of its indent: the origin its
+  // \leaders are aligned from (the dots of a table of contents). Absent = 0.
+  optional int32 left_skip_width = 20;
 }
 
 // A line's band in a shaped paragraph (sp, at Document.source_width): where

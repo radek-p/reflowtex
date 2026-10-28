@@ -421,7 +421,8 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
             else if (ratio < 0) x0 += ratio * (L?.shrink || 0) * SP_TO_PX;
             maxRightPx = Math.max(maxRightPx, x0 + indentPx + natPx);
             lines.push(ln);
-            lrp.push({ ratio, er, x0: x0 + indentPx, fillRatio, fillOrder });
+            lrp.push({ ratio, er, x0: x0 + indentPx, fillRatio, fillOrder,
+                       edge: (band.indentSp - (para.left_skip_width || 0)) * SP_TO_PX });
             meta.push(thisMeta);
             thisMeta = lineMeta;
             const adj = lineAdjust(ln.nodes);
