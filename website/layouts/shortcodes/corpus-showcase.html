@@ -8,7 +8,7 @@
 {{- $c := partial "corpus/data.html" . -}}
 {{- partial "corpus/style.html" .Page -}}
 {{- $list := where ($c.papers | default slice) "status" "displayed" -}}
-{{- with hugo.Data.showcase_extra }}{{ $list = $list | append .papers }}{{ end -}}
+{{- with hugo.Data.showcase_extra }}{{ $list = $list | append .papers }}{{ with .elsewhere }}{{ $list = where $list "id" "not in" . }}{{ end }}{{ end -}}
 {{- with $list -}}
 {{- $groups := partial "corpus/domains.html" . -}}
 <div class="corpus" id="corpus">
