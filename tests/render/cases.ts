@@ -215,6 +215,12 @@ export const cases: Record<string, CaseSettings> = {
   // baselineskip and drew a box or rule in it after the paragraph (over 900
   // glyphs more than 0.7 pt from TeX's). Worst attained 2026-10-27.
   'newline-skip': { against_plain: true, tolerance: 0.010, rule_tolerance: 0.002 },
+  // Negative space between rows of boxes, as in real papers' figures ("\\
+  // \vspace{-len}" between two rows, in a center, in a figure, and as a
+  // \vadjust in running text): TeX pulls the second row up over the first,
+  // and the browser kept them apart, by the space less \lineskip (8.96 pt
+  // here), as a spacer has no negative height. Worst attained 2026-10-28.
+  'negative-vspace': { tolerance: 0.010, rule_tolerance: 0.004 },
   // Characters typed raw that the font has no glyph for, as in real papers: ł,
   // Ł, ź and ﬀ in a T1 font, box drawing in Latin Modern OpenType. TeX
   // reports them missing and draws nothing (OpenType: the font's empty
