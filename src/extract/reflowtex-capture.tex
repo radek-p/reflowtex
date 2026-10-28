@@ -255,10 +255,12 @@
 % rule, and likewise do not expose their filename through the node API.
 % graphicx hands every file it includes, with the name it found it under
 % (through \graphicspath, \input@path or with a default extension), to
-% \Gin@setfile. The call is wrapped here: it records that name and the PDF
-% page asked for, and stamps the image it makes with the record's id.
-% Installed when graphics is loaded (graphicx loads it), by whatever loads it
-% and with whatever options: the document's own, a class's, TikZ's.
+% \Gin@setfile. The call is wrapped: the wrapper records that name and the
+% PDF page asked for, and stamps the image it makes with the record's id. It
+% is installed after the preamble (reflowtex-capture-late.tex), around the
+% \Gin@setfile the preamble left – whatever loaded graphics, with whatever
+% options, and whatever redefined \Gin@setfile when it was loaded (LaTeX's
+% tagging code does).
 \makeatletter
 \def\reflowtex@Ginsetfile#1#2#3{%
   \global\advance\reflowtexPicCount by 1
@@ -267,9 +269,6 @@
   \begingroup\attribute902=\reflowtexPicCount\relax
     \reflowtexOrigGinSetfile{#1}{#2}{#3}%
   \endgroup}
-\AddToHook{package/graphics/after}{%
-  \let\reflowtexOrigGinSetfile\Gin@setfile
-  \let\Gin@setfile\reflowtex@Ginsetfile}
 \makeatother
 
 % ── Companion package switch ─────────────────────────────────────────────────

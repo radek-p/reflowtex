@@ -1180,6 +1180,27 @@ test('\\include{nowhere/one}, a directory the document\'s lacks: TeX cannot writ
     (e: Error) => e instanceof TexError && /I can't write on file `nowhere\/one\.aux'/.test(e.message));
 });
 
+// ── Included graphics ───────────────────────────────────────────────────────
+// Every \includegraphics is recorded with the file it read (the graphics
+// wrapper in reflowtex-capture.tex), whatever the setup: with tagging on,
+// LaTeX defines its own \Gin@setfile when graphics is loaded, and the
+// wrapper goes around that one.
+
+// a 1×1 PNG
+const DOT_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+
+for (const [what, meta] of [['', ''], [', tagging on', '\\DocumentMetadata{tagging=on}\n']] as const) {
+  test(`a scaled \\includegraphics from a subdirectory${what}: the picture is built from the file it read`, async () => {
+    const src = mkdtempSync(join(tmpdir(), 'reflowtex-graphics-'));
+    mkdirSync(join(src, 'figures'));
+    writeFileSync(join(src, 'figures', 'dot.png'), DOT_PNG);
+    const gr = new Pipeline({ buildRoot: join(root, 'build-graphics'), fontsDir: join(root, 'fonts'), searchDirs: [src], log: new Log('pipeline') });
+    const key = `graphics${meta ? '-tagged' : ''}`;
+    await gr.compile('\\noindent\\includegraphics[width=0.5\\linewidth]{figures/dot.png}\n', { kind: 'snippet', key, preamble: setup(meta) });
+    assert.deepEqual(Object.keys(gr.inputs.get(key) ?? {}), [join(src, 'figures', 'dot.png')]);
+  });
+}
+
 // ── TeX errors ──────────────────────────────────────────────────────────────
 // The build stops only where lualatex gives the author nothing (TeX stopped,
 // no output). An error TeX carries on past leaves what plain lualatex leaves:
