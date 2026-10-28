@@ -977,6 +977,9 @@ function App() {
         }, 500);
         return () => clearInterval(t);
     }, []);
+    // Another entry (or batch): what the inspector showed of the last page goes at once – it inspects the new
+    // page when that has loaded (onPage), and nothing where the entry has no page.
+    useEffect(() => { if (inspectorUsed.current) inspector()?.inspect(window); }, [batch?.id, r?.id, r?.at]);
     const setSide = (m: string) => { setMode(m); if (m !== 'live' && inspecting) { inspector()?.close(); setInspecting(false); } };
 
     useEffect(() => {

@@ -1,0 +1,21 @@
+# TeX Live 2025 packages of the corpus's image, beside scheme-basic. The
+# collections cover what the papers load (and what those packages load in
+# turn: tlmgr resolves the dependencies of collections, not of single
+# packages); tools/corpus/texlive.ts lists, from a run's logs, the packages
+# the papers actually read, for a smaller list.
+collection-luatex
+collection-latexrecommended
+collection-latexextra
+collection-mathscience
+collection-pictures
+collection-bibtexextra
+collection-fontsrecommended
+collection-publishers
+# reflowtex's own (the CI image's)
+mathtools fontspec unicode-math lm-math pgf tikz-cd xcolor microtype luamml dvisvgm lualatex-math filehook
+# biblatex's backend
+biber
+# loaded by single papers, not in the collections above
+ascmac bclogo luatexbase luatextra luacode epsf
+# languages the papers set
+hyphen-greek hyphen-russian hyphen-german babel-german polyglossia

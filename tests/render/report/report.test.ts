@@ -527,3 +527,25 @@ test('batches: each its own list and totals, named by the URL, its gzipped files
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+test('switching batches: the inspector lets go of the last page, and shows nothing for an entry without one', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 1 });
+  await ctx.addInitScript(() => { localStorage.setItem('render-report.inspector', 'open'); });
+  const page = await ctx.newPage();
+  const panel = () => page.evaluate(() => {
+    const root = document.querySelector('[data-rtx-ui]')?.shadowRoot;
+    return { status: root?.querySelector('.status')?.textContent ?? '', tree: root?.querySelector('.tree')?.textContent ?? '' };
+  });
+  // a real page (the pipeline's), its block in the inspector
+  await page.goto(`${url}/?batch=tests#far`);
+  await page.waitForFunction(() => /\d+ blocks?/.test(document.querySelector('[data-rtx-ui]')?.shadowRoot?.querySelector('.status')?.textContent ?? ''), null, { timeout: 60000 });
+  assert.ok((await panel()).tree.length > 0);
+  // the corpus batch: an entry with no page of the viewer's, then one that stopped (no page at all)
+  await page.click('button:text("Paper corpus")');
+  await page.waitForFunction(() => document.querySelector('[data-rtx-ui]')?.shadowRoot?.querySelector('.status')?.textContent === 'no inspectable viewer', null, { timeout: 30000 });
+  assert.match((await panel()).tree, /No inspectable/);
+  await page.selectOption('select[aria-label="Test"]', 'stopped-1');
+  await page.waitForFunction(() => document.querySelector('.headline.error'));
+  assert.match((await panel()).tree, /No inspectable/);
+  await ctx.close();
+});
