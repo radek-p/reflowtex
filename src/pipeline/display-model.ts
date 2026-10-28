@@ -370,7 +370,19 @@ export function hasWidthBoxes(data: SerializerOutput): boolean {
     (n.type === 'hlist' || n.type === 'vlist' || n.type === 'picture') && (((n.width as number) || 0) >= WIDE_BOX_SHARE * sw)));
 }
 
-export const wantsModel = (data: SerializerOutput): boolean => hasDisplays(data) || hasWidthBoxes(data);
+/** A paragraph's margin skip that stretches or shrinks finitely, which may
+ *  be a share of the measure (a class centring with 0pt plus .3\hsize). */
+const finiteSkip = (g: unknown): boolean => {
+  const n = g as TexNode | undefined;
+  return !!n && ((!(n.stretch_order as number) && !!n.stretch) || !!n.shrink);
+};
+/** Whether a paragraph's margin skips stretch or shrink finitely – reason
+ *  enough to compile the document at other widths, for their rates. */
+export function hasWidthSkips(data: SerializerOutput): boolean {
+  return data.paragraphs.some(p => finiteSkip(p.left_skip) || finiteSkip(p.right_skip));
+}
+
+export const wantsModel = (data: SerializerOutput): boolean => hasDisplays(data) || hasWidthBoxes(data) || hasWidthSkips(data);
 
 const countRates = (root: TexNode): number => {
   let k = 0;
@@ -388,6 +400,14 @@ export function attachParagraphRates(first: SerializerOutput, previous: Serializ
   const dx = xc - xb;
   let modelled = 0;
   for (let i = 0; i < pa.length; i++) {
+    // Its margin skips: their stretch and shrink may be a share of the
+    // measure, and follow it then, whatever its nodes do.
+    for (const key of ['left_skip', 'right_skip'] as const) {
+      const [sa, sb, sc] = [pa[i], pb[i], pc[i]].map(p => p[key] as TexNode | undefined);
+      if (!sa || !sb || !sc || topologyError(sa, sb, `para.${key}`) || topologyError(sb, sc, `para.${key}`)) continue;
+      if (affineError(sa, sb, sc, x0, xb, xc, `para.${key}`, PARAGRAPH_TOL_SP, PARAGRAPH_TOL_RATIO)) continue;
+      attachRates(sa, sb, sc, dx);
+    }
     const [ta, tb, tc] = [pa[i], pb[i], pc[i]].map(p => ({ type: 'hlist', children: p.nodes ?? [] }) as TexNode);
     if (topologyError(ta, tb, 'para') || topologyError(tb, tc, 'para')) continue;
     if (affineError(ta, tb, tc, x0, xb, xc, 'para', PARAGRAPH_TOL_SP, PARAGRAPH_TOL_RATIO)) continue;

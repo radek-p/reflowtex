@@ -8,6 +8,7 @@ import {
     DEFAULT_PRETOLERANCE, DEFAULT_TOLERANCE, DEFAULT_TOLERANCE_2, DEFAULT_EMERGENCY_STRETCH,
     DEFAULT_USE_EXPANSION, DEFAULT_USE_PROTRUSION,
 } from '../engine/core.ts';
+import type { GlueNode } from '../engine/model.ts';
 
 /** A block's layout parameters: the line breaker's (TeX's names, as
  *  data attributes on the block) and the viewer's own. */
@@ -35,9 +36,10 @@ export interface Params {
     texFinalPass: boolean | 'strict';
     /** 'justify' | 'left' | 'right' | 'center' */
     align: string;
-    /** Set by the layout for a paragraph that is not justified: any line
-     *  that fits costs nothing. */
-    ragged?: boolean;
+    /** A paragraph's \leftskip and \rightskip less their fixed parts
+     *  (breaker.ts, paragraphParams): TeX adds them to every line. */
+    leftSkip?: GlueNode;
+    rightSkip?: GlueNode;
 }
 
 // ── Per-block params ──────────────────────────────────────────────────────────

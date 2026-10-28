@@ -12,9 +12,8 @@
 // glue and penalties between the lines. So a difference in the result is a
 // difference in the viewer's breaks or glue setting, or in this file.
 //
-// Only what the viewer models is replayed: no stretch in \leftskip or
-// \rightskip, no protrusion or expansion, no directions. A fixture with
-// anything else is refused with an error. A \parshape or \hangindent is given
+// Only what the viewer models is replayed: no protrusion or expansion, no
+// directions. A fixture with anything else is refused with an error. A \parshape or \hangindent is given
 // to the breaker as the serializer records it: one measure per line, from the
 // paragraph's first, up to TeX's last special line (shapeOf).
 
@@ -270,8 +269,6 @@ export function replay(fixtureText: string): string {
   const P = fx.P, G = fx.G;
   if (P.looseness || P.adjustspacing || P.protrudechars || P.lastlinefit || P.bodydirection)
     throw new Error('\\looseness, \\adjustspacing, \\protrudechars, \\lastlinefit and directions are not replayed');
-  for (const s of ['leftskip', 'rightskip'])
-    if (G[s][1] || G[s][3]) throw new Error(`a \\${s} with stretch or shrink is not replayed`);
   const shape = shapeOf(fx);
   const band = (k: number) => shape[Math.min(k, shape.length - 1)];
   const measures = shape.map(([, w]) => w - G.leftskip[0] - G.rightskip[0]);
@@ -281,6 +278,11 @@ export function replay(fixtureText: string): string {
   const fontInfo: Dict = {};
   for (const [id, f] of fx.fonts) fontInfo[String(id)] = { quad: f.quad, expand: null, codes: new Map() };
   const para: Dict = { nodes, width: measures[0] };
+  // the margin skips' stretch and shrink, as the serializer records them
+  for (const [s, field] of [['leftskip', 'left_skip'], ['rightskip', 'right_skip']]) {
+    const [, stretch, stretchOrder, shrink, shrinkOrder] = G[s];
+    if (stretch || shrink) para[field] = { type: 'glue', width: 0, stretch, stretch_order: stretchOrder, shrink, shrink_order: shrinkOrder };
+  }
   for (const [tex, field] of Object.entries(RECORDED)) para[field] = P[tex];
   const p = breaker.paragraphParams(params.paramsFromData({ texFinalPass: 'strict' }, 'justify'), para);
   const bcs = breaker.buildBreakCandidates(nodes, fontInfo, para);

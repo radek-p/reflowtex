@@ -101,7 +101,7 @@ const fullLines = (page: WebPage, i: number) => page.evaluate((i: number) => {
         fill: ns.some((n: any) => n.type === 'glue' && n.stretch_order > 0 && n.stretch > 0),
         afterMath: e > 0 && ns[e - 1].type === 'math',
         afterBox: box,
-        align: para.align || 'justify', lastOfPara,
+        align: !para.left_skip && !para.right_skip ? 'justify' : para.left_skip && para.right_skip ? 'center' : para.right_skip ? 'left' : 'right', lastOfPara,
         kerns: `${((ln.leftProtrusion || 0) / 65536).toFixed(2)}/${((ln.rightProtrusion || 0) / 65536).toFixed(2)}`,
       });
     });

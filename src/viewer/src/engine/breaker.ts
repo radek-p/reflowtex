@@ -5,7 +5,7 @@ import {
     nodeWidthSp, sumWidthSp,
 } from './core.ts';
 import { unreachable } from '../../../shared/unreachable.ts';
-import type { Expansion, FontTable, Paragraph, TexNode, ViewerFont } from './model.ts';
+import type { Expansion, FontTable, GlueNode, Paragraph, TexNode, ViewerFont } from './model.ts';
 import type { Line } from './layout/types.ts';
 import type { Params } from '../runtime/params.ts';
 
@@ -23,10 +23,6 @@ export interface BreakCandidate {
     cumW: number; cumS: number; cumZ: number; cumGlyphW: number; cumFS: number; cumFZ: number; cumFill: number;
     rightProtrusion: number;
     leftProtrusion: number;
-    /** A break here discards everything up to the paragraph's end: the
-     *  line after it is empty and loses \parfillskip's stretch with the rest
-     *  (TeX's break_width, §837). */
-    toEnd?: boolean;
     /** The end: the last line's right protrusion, counted when it is packed. */
     packRightProtrusion?: number;
     /** A discretionary that was in the source (\\discretionary, \\-, a hyphen). */
@@ -258,21 +254,22 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
         rightProtrusion: 0, leftProtrusion: 0, ...extra,
     });
     // What a break at node i discards after itself (discardable), up to the
-    // next thing that is kept or the \parfillskip – an infinite fill among
-    // them too, so the next line does not count it as its own.
+    // next thing that is kept – an infinite fill among them too, so the next
+    // line does not count it as its own. A break that discards everything up
+    // to the paragraph's end discards its \parfillskip too: the line after it
+    // is empty, and has no fill (§837).
     const lead = (from: number) => {
         let W = 0, S = 0, Z = 0, F = 0, k = from;
         for (; k < nodes.length; k++) {
             const m = nodes[k];
-            if (!discardable(m) || (m.type === 'glue' && m.subtype === 15)) break;
+            if (!discardable(m)) break;
             W += nodeWidthSp(m);
             if (m.type === 'glue') {
                 S += !m.stretch_order ? m.stretch : 0; Z += !m.shrink_order ? m.shrink : 0;
                 if (m.stretch_order) F++;
             }
         }
-        const toEnd = nodes[k]?.type === 'glue' && nodes[k].subtype === 15;
-        return { leadW: W, leadS: S, leadZ: Z, leadFill: F, leftProtrusion: prot(findFirstGlyph(nodes, k), true), ...(toEnd ? { toEnd } : {}) };
+        return { leadW: W, leadS: S, leadZ: Z, leadFill: F, leftProtrusion: prot(findFirstGlyph(nodes, k), true) };
     };
     const bcs: BreakCandidates = [cand('start', -1, 0, { leftProtrusion: prot(findFirstGlyph(nodes, 0), true) })];
     bcs.expansion = adjust > 0 ? paragraphExpansion(fontInfo, nodes) : null;
@@ -290,9 +287,15 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
         // no end candidate at all: kpPass then returned nothing and the greedy
         // fallback emitted no final line, so the whole paragraph vanished whenever
         // it happened to fit on one line. Key on the subtype instead. The last
-        // line's right protrusion counts only when the line is packed: the
-        // breaker (ext_try_break) has no character to look from at the end.
+        // line holds it as any glue: its width, stretch and shrink count (a
+        // table of contents' entry sets it to -\rightskip, so that its last
+        // line reaches into the margin skip), and its stretch fills the line –
+        // or, rigid, leaves the slack to the margin skips. The last line's
+        // right protrusion counts only when the line is packed: the breaker
+        // (ext_try_break) has no character to look from at the end.
         if (n.type==='glue' && n.subtype===15) {
+            cumW+=n.width; cumS+=!n.stretch_order?n.stretch:0; cumZ+=!n.shrink_order?n.shrink:0;
+            if (n.stretch_order) cumFill+=1;
             // (the breaker leaves it out, but the line is packed with it)
             bcs.push(cand('end', i, -10000, { packRightProtrusion: prot(findLastGlyph(nodes, i), false) }));
             break;
@@ -354,10 +357,21 @@ export function buildBreakCandidates(nodes: TexNode[], fontInfo: FontTable, para
     return bcs;
 }
 
+// A paragraph's margin skips, \leftskip and \rightskip, are in every line
+// (TeX's background, §827): their fixed parts are out of the measure
+// already, their finite stretch and their shrink (which TeX makes finite,
+// §826) count in every line's, and an infinite stretch in either makes
+// every line filled.
+const finiteStretch = (g: GlueNode | undefined) => g && !(g.stretch_order || 0) ? g.stretch || 0 : 0;
+export const marginStretch = (p: Params): number => finiteStretch(p.leftSkip) + finiteStretch(p.rightSkip);
+export const marginShrink = (p: Params): number => (p.leftSkip?.shrink || 0) + (p.rightSkip?.shrink || 0);
+const fills = (g: GlueNode | undefined) => !!g && (g.stretch_order || 0) > 0 && !!g.stretch;
+export const marginFilled = (p: Params): boolean => fills(p.leftSkip) || fills(p.rightSkip);
+
 // A line from candidate a to candidate b, as TeX measures it: natural width
 // (w, less the protrusion at both ends), finite glue stretch and shrink
-// (s, z), font stretch and shrink (fs, fz) and the expandable width the
-// renderer's expansion factor acts on (g).
+// (s, z, the margin skips' with them), font stretch and shrink (fs, fz) and
+// the expandable width the renderer's expansion factor acts on (g).
 export function lineMetrics(a: BreakCandidate, b: BreakCandidate, p: Params): LineMetrics {
     const protrude = p.useProtrusion ? a.leftProtrusion + b.rightProtrusion : 0;
     // Where the line starts (after the break at a, less what that break
@@ -367,8 +381,8 @@ export function lineMetrics(a: BreakCandidate, b: BreakCandidate, p: Params): Li
     const on = p.useExpansion !== false;
     return {
         w:  upto('cumW', 'w') - b.trailW - from('cumW', 'w') - a.leadW - protrude,
-        s:  b.cumS - a.cumS - a.leadS,
-        z:  b.cumZ - a.cumZ - a.leadZ,
+        s:  b.cumS - a.cumS - a.leadS + marginStretch(p),
+        z:  b.cumZ - a.cumZ - a.leadZ + marginShrink(p),
         g:  on ? upto('cumGlyphW', 'g') - from('cumGlyphW', 'g') : 0,
         fs: on ? upto('cumFS', 'fs') - from('cumFS', 'fs') : 0,
         fz: on ? upto('cumFZ', 'fz') - from('cumFZ', 'fz') : 0,
@@ -423,13 +437,13 @@ export function expansionShortfall(shortfall: number, m: LineMetrics, ex: Expans
 
 // A line carrying an infinite-order fill (\hfil from \\, \hfill, the
 // \parfillskip of the last line) absorbs positive slack instead of justifying:
-// badness 0. So does every line of a paragraph that is not justified
-// (p.ragged): \raggedright, \centering and \raggedleft set \rightskip or
+// badness 0. So does every line of a paragraph whose margin skips stretch
+// infinitely: \raggedright, \centering and \raggedleft set \rightskip or
 // \leftskip to 0pt plus 1fil, so any line that fits costs nothing and TeX
 // takes the fewest lines, hyphenating only when it must. An empty last line
 // after a break that discarded the \parfillskip has no fill (§837).
 export function lineFilled(a: BreakCandidate, b: BreakCandidate, p: Params): boolean {
-    return (b.kind === 'end' && !a.toEnd) || !!p.ragged || b.cumFill > a.cumFill + a.leadFill;
+    return marginFilled(p) || b.cumFill > a.cumFill + a.leadFill;
 }
 
 // ── KP DP (one pass) ─────────────────────────────────────────────────────────
@@ -617,7 +631,8 @@ export function extractLineNodes(startBC: BreakCandidate, endBC: BreakCandidate,
     const result: TexNode[]=[]; let from: number;
     if(startBC.kind==='start'){from=0;}
     else{if(startBC.kind==='disc') for(const pn of (startBC.postNodes||nodes[startBC.nodeIdx].post!)) result.push(pn); from=startBC.nodeIdx+1;}
-    const to=endBC.nodeIdx-(endBC.trailN||0);
+    // (the last line holds the \parfillskip, as TeX's does)
+    const to=endBC.kind==='end'?endBC.nodeIdx+1:endBC.nodeIdx-(endBC.trailN||0);
     // What a break discards (discardable) goes, but only at a *break*: at the
     // very start of a paragraph it is real content. \subparagraph* and
     // friends make this visible – \@xsect drops the usual \parindent box and
@@ -697,8 +712,38 @@ export function kpBreak(bcs: BreakCandidates, nodes: TexNode[], measure: Measure
     return setLines(bcs, kpBreakpoints(bcs, nodes, measure, p), nodes, measure, p);
 }
 
+// LaTeX's \@flushglue, 0pt plus 1fil: \raggedright's \rightskip,
+// \raggedleft's \leftskip, \centering's both.
+const FLUSH_GLUE: GlueNode = { type: 'glue', width: 0, stretch: 65536, stretch_order: 2, shrink: 0 };
+
+/** A paragraph's margin skips, less their fixed parts: TeX's, where the
+ *  serializer recorded them (it records those that stretch or shrink); for
+ *  a paragraph without any, those LaTeX's command for the block's alignment
+ *  (data-align) sets. */
+export function marginSkips(para: Partial<Paragraph>, align: string): { left?: GlueNode; right?: GlueNode } {
+    if (para.left_skip || para.right_skip) return { left: para.left_skip, right: para.right_skip };
+    return { left: align === 'center' || align === 'right' ? FLUSH_GLUE : undefined,
+             right: align === 'center' || align === 'left' ? FLUSH_GLUE : undefined };
+}
+
+/** Whether a paragraph TeX justified is set as the block's alignment asks
+ *  with its \parfillskip made rigid, as \centering and \raggedleft make it,
+ *  so that its last line is centred or flush right too. */
+export function blockRigidParFill(para: Partial<Paragraph>, align: string): boolean {
+    return !para.left_skip && !para.right_skip && (align === 'center' || align === 'right');
+}
+
+/** The alignment a paragraph's margin skips make, named as data-align names
+ *  it: centred, flush left or right where they stretch infinitely, else
+ *  justified (a breaker of the page's own is told it). */
+export function alignOf(p: Params): string {
+    const l = fills(p.leftSkip), r = fills(p.rightSkip);
+    return l && r ? 'center' : r ? 'left' : l ? 'right' : 'justify';
+}
+
 // A paragraph's own breaking parameters: TeX's where the serializer recorded
-// them (it records those that differ from the defaults), the block's otherwise.
+// them (it records those that differ from the defaults), the block's
+// otherwise; and its margin skips (marginSkips).
 const PARAGRAPH_PARAMS = [
     ['pretolerance', 'pretolerance'], ['tolerance', 'tolerance'], ['emergency_stretch', 'emergencyStretch'],
     ['line_penalty', 'linePenalty'], ['adj_demerits', 'adjDemerits'],
@@ -710,5 +755,7 @@ export function paragraphParams(p: Params, para: Partial<Paragraph>): Params {
         const v = para[field];
         if (v !== undefined && v !== null) (own ??= { ...p })[key] = v;
     }
+    const { left, right } = marginSkips(para, p.align);
+    if (left || right || p.leftSkip || p.rightSkip) { own ??= { ...p }; own.leftSkip = left; own.rightSkip = right; }
     return own ?? p;
 }

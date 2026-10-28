@@ -1,0 +1,37 @@
+% Paragraphs set between margin skips that stretch: TeX adds \leftskip and
+% \rightskip to every line, so their stretch counts in each line's badness
+% and shares its slack with the spaces. An author block centred with finite
+% stretch (0pt plus .3\hsize on both sides, a rigid \parfillskip, as some
+% classes set their front matter): its lines are shorter than \centering's
+% and its spaces stretch too. Then LaTeX's \centering, \raggedright and
+% \raggedleft, a ragged right of finite stretch (0pt plus 2em), a \leftskip
+% of 2em plus 1fil, and a table of contents.
+\documentclass{article}
+\newcommand\names{First Author, Second Author, Third Author and Fourth Author,
+Department of Physics, Some University, Some City 12345, Some Country, and the
+Institute for Theoretical Physics, Another University, Another City, Another Country}
+\newcommand\fox{The quick brown fox jumps over the lazy dog, and the five boxing
+wizards jump quickly over the fence while the sphinx of black quartz judges my vow
+and the lazy dog sleeps on in the warm afternoon sun by the old barn door.}
+\begin{document}
+\tableofcontents
+\section{Short}
+\subsection{The convex hull of the simulability set and its connection to compatibility structures}
+\subsection{Implications for the semi-device-independent certification of numbers of measures}
+
+{\leftskip=0pt plus .3\hsize \rightskip=0pt plus .3\hsize \parfillskip=0pt
+ \parindent=0pt \finalhyphendemerits=0 \names\par}
+
+{\centering \names\par}
+
+{\raggedright \fox\par}
+
+{\raggedleft \fox\par}
+
+{\rightskip=0pt plus 2em \fox\par}
+
+{\leftskip=2em plus 1fil \parfillskip=0pt \fox\par}
+
+{\leftskip=0pt plus .3\hsize \rightskip=0pt plus .3\hsize \parfillskip=0pt
+ \parindent=0pt First Author\hskip 1em plus .17fil Second Author\hskip 1em plus .17fil Third Author\par}
+\end{document}
