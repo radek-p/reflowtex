@@ -49,7 +49,9 @@
 
 Pageless = Pageless or {}
 
-local TIKZ_PIC_ATTR = 908
+-- the serializer's attribute numbers and box subtypes
+local ids = Serializer.ids
+local TIKZ_PIC_ATTR = ids.TIKZ_PIC_ATTR
 
 -- each captured picture's box, by document-local id: the template's capture
 -- box still holds it when the private page has been shipped
@@ -203,32 +205,10 @@ end
 -- boxes, so both have the text once. As in the walk: a line marks its
 -- paragraph shown, a \vbox is walked into, and the boxes looked at are those
 -- shown as they are (an \hbox that is no line, display or alignment, a
--- picture).
-local PARA_ATTR = 900
-local HL_LINE, HL_ALIGNMENT, HL_EQUATION = 1, 4, 6
-
-local function find_para(n)
-    local v = node.get_attribute(n, PARA_ATTR)
-    if v then return v end
-    local t = ntype(n)
-    if (t == "hlist" or t == "vlist") and n.head then
-        for c in node.traverse(n.head) do
-            local r = find_para(c)
-            if r then return r end
-        end
-    end
-    return nil
-end
-
-local function holds_shown_lines(n, shown)
-    for x in node.traverse(n.head) do
-        local p = node.get_attribute(x, PARA_ATTR)
-        if p and shown[p] then return true end
-        local t = ntype(x)
-        if (t == "hlist" or t == "vlist") and x.head and holds_shown_lines(x, shown) then return true end
-    end
-    return false
-end
+-- picture). The paragraph of a line and the test of a box are the walk's own
+-- (Serializer.find_para, Serializer.holds_lines); the strip ships before the
+-- walk runs, so it marks what is shown itself.
+local HL_LINE, HL_ALIGNMENT, HL_EQUATION = ids.HL_LINE, ids.HL_ALIGNMENT, ids.HL_EQUATION
 
 local function shown_as_is(p)
     local t = ntype(p)
@@ -241,14 +221,14 @@ local function drop_text_twice(nodes)
     local function mark(p)
         local t = ntype(p)
         if t == "hlist" and p.subtype == HL_LINE then
-            local para = find_para(p)
+            local para = Serializer.find_para(p)
             if para then shown[para] = true end
         elseif t == "vlist" and p.head and not node.get_attribute(p, TIKZ_PIC_ATTR) then
             for c in node.traverse(p.head) do mark(c) end
         end
     end
     for _, p in ipairs(nodes) do
-        if shown_as_is(p) and p.head and holds_shown_lines(p, shown) then
+        if shown_as_is(p) and p.head and Serializer.holds_lines(p, shown) then
             -- left out
         else
             mark(p)
@@ -361,17 +341,11 @@ function Pageless.ship(opts)
     end
 
     -- describe it all for stack.ts
-    local parts = { '{"unit":"sp","sp_per_pt":65536,' ..
-                    '"page_width":' .. (width + 2 * margin) .. ',"hsize":' .. width ..
-                    ',"margin":' .. margin .. ',"total_height":' .. y0 ..
-                    ',"chunks":[' }
-    for k, c in ipairs(chunks) do
-        parts[#parts + 1] = string.format('%s{"page":%d,"y0":%d,"height":%d,"depth":%d,"nodes":%d}',
-            k > 1 and "," or "", c.page, c.y0, c.height, c.depth, c.nodes)
-    end
-    parts[#parts + 1] = ']}'
     local f = assert(io.open(jsonname, "w"))
-    f:write(table.concat(parts))
+    f:write(Serializer.json_encode({
+        unit = "sp", sp_per_pt = 65536, page_width = width + 2 * margin, hsize = width,
+        margin = margin, total_height = y0, chunks = chunks,
+    }))
     f:close()
     texio.write_nl(string.format("pageless: shipped %d page(s), %.1fpt tall in all, %d picture(s); wrote %s",
         #chunks, y0 / 65536, pictures, jsonname))

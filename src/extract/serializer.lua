@@ -1922,15 +1922,17 @@ end
 -- again, packaged: multicols passes its column lines through the main list
 -- (the walk emits them as paragraphs) and then its output routine puts the
 -- balanced columns back as one \hbox. Kept, the text would show twice.
-local function holds_emitted_lines(n)
+-- (holds_lines: whether the box holds a line of a paragraph in `seen`.)
+local function holds_lines(n, seen)
     for x in node.traverse(n.head) do
         local p = node.get_attribute(x, PARA_ATTR)
-        if p and seen_para[p] then return true end
+        if p and seen[p] then return true end
         local t = node.type(x.id)
-        if (t == "hlist" or t == "vlist") and x.head and holds_emitted_lines(x) then return true end
+        if (t == "hlist" or t == "vlist") and x.head and holds_lines(x, seen) then return true end
     end
     return false
 end
+local function holds_emitted_lines(n) return holds_lines(n, seen_para) end
 
 -- The box as a fixed display draws it; nil for one that draws nothing, and
 -- nil, "emitted" for one holding text the stream already has.
@@ -2380,9 +2382,20 @@ function Serializer.flow_head()
     return flow_head
 end
 
--- Whether a node of it draws anything (draws): what the document's top is
--- for such a tool, as for the walk.
+-- The walk's rules, for such a tool to apply as the walk does (the pageless
+-- strip: tools/pageless-pdf/pageless_pdf.lua), not a copy of them: whether a
+-- node draws anything (the document's top), the paragraph a box's lines
+-- belong to, whether a box holds lines of paragraphs already shown (text the
+-- galley has twice), the attributes and box subtypes they read, and the JSON
+-- writer.
 Serializer.draws = draws
+Serializer.find_para = find_para
+Serializer.holds_lines = holds_lines
+Serializer.json_encode = json_encode
+Serializer.ids = {
+    PARA_ATTR = PARA_ATTR, TIKZ_PIC_ATTR = TIKZ_PIC_ATTR,
+    HL_LINE = HL_LINE, HL_ALIGNMENT = HL_ALIGNMENT, HL_EQUATION = HL_EQUATION,
+}
 
 -- The id-keyed tables (links, anchors, slots) are lists on the wire: an id is
 -- its entry's 1-based position. The ids come from counters in the capture code and
