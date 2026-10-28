@@ -132,6 +132,16 @@
   \let\endtikzpicture\reflowtex@endtikzpicture}
 \makeatother
 
+% Included graphics recorded (the wrapper is in reflowtex-capture.tex) when
+% the preamble loaded graphics: around the \Gin@setfile it left, which may
+% not be graphics' own – LaTeX's tagging code defines its own when graphics
+% is loaded.
+\makeatletter
+\@ifundefined{Gin@setfile}{}{%
+  \let\reflowtexOrigGinSetfile\Gin@setfile
+  \let\Gin@setfile\reflowtex@Ginsetfile}
+\makeatother
+
 % ── Cross-reference capture ──────────────────────────────────────────────────
 % \ref and friends print a number; what the reader wants is to be taken to the
 % thing numbered. Stamp every glyph of the printed text with a document-local
