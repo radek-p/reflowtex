@@ -120,6 +120,13 @@ export const cases: Record<string, CaseSettings> = {
   // 0.7 pt). At the document's width only: the lines are set to overfill that
   // measure. Worst attained 2026-10-28.
   'protrusion-anchor-at-end': { widths: [0], tolerance: 0.018 },
+  // Protrusion codes that change along the document: microtype setting one
+  // font's anew for each family it is substituted for, and \rpcode, \lpcode
+  // and \efcode set by hand between paragraphs. The paragraphs set before the
+  // last change were broken in the browser with the last codes, lines up to
+  // 0.69 pt off and broken elsewhere. Worst attained 2026-10-28.
+  'protrusion-codes-change': { tolerance: 0.043 },
+  'protrusion-codes-by-hand': { tolerance: 0.046 },
   // Paragraphs ending in \index entries, a \label or a \special after the
   // last word, with the line nearly full: TeX keeps the whatsits at a break,
   // breaks at the space after the word and sets an empty last line. The

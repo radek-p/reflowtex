@@ -21,12 +21,16 @@
 //    compositeTexts gives a box that is a letter and accents (ae's é: an
 //    acute and an e) that letter as its text, so it is read, searched and
 //    found as one.
-// The fonts the pieces are in join the font table, an entry per face and
-// size, a classic font yet to be given its face (ClassicFace): the
-// classic-font conversion that follows gives it its outline. The virtual
-// face's own entry is then a VirtualFace: no glyph is drawn from it. Pure
-// (files in through `readFile`), so the editor's converter runs the same
-// code.
+// The fonts the pieces are in join the font table, an entry per virtual font,
+// face and size, a classic font yet to be given its face (ClassicFace): the
+// classic-font conversion that follows gives it its outline. An entry of its
+// own per virtual font, as a glyph moved into it takes along the codes it had
+// there: two virtual fonts drawing from one face (a family's upright and
+// small capitals, a font and a version of it with other codes: serializer.lua)
+// may give its characters different codes, as may a document setting the
+// face directly. The virtual face's own entry is then a VirtualFace: no glyph
+// is drawn from it. Pure (files in through `readFile`), so the editor's
+// converter runs the same code.
 import { readTfm, texScale, type Tfm } from './tfm.ts';
 import type { FontInfo } from '../nodes.ts';
 
@@ -170,19 +174,16 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
   if (!virtual.size) return 0;
   let next = Math.max(0, ...[...fonts.keys()].map(Number).filter(Number.isFinite)) + 1;
   const ids = new Map<string, string>();
-  /** the font table's id for face `name` at `size`, an entry made when there is none */
-  const idOf = (name: string, size: number, from: FontEntry): string => {
-    const key = `${name}@${size}`;
+  /** the font table's id for face `name` at `size` as virtual font `vid` draws from it, an entry made the first time */
+  const idOf = (vid: string, name: string, size: number, from: FontEntry): string => {
+    const key = `${vid}:${name}@${size}`;
     let id = ids.get(key);
     if (id) return id;
-    id = [...fonts].find(([, f]) => f.name === name && f.size_sp === size && f.face.kind === 'tfm')?.[0];
-    if (!id) {
-      id = String(next++);
-      const entry: FontEntry = { name, size_sp: size, face: { kind: 'tfm' }, quad: files.tfm(name)?.param(6, size) ?? 0 };
-      // the virtual face's expansion is its pieces' (as an expanded copy of it would be drawn)
-      for (const k of ['expand_stretch', 'expand_shrink', 'expand_step']) if (from[k] !== undefined) entry[k] = from[k];
-      fonts.set(id, entry);
-    }
+    id = String(next++);
+    const entry: FontEntry = { name, size_sp: size, face: { kind: 'tfm' }, quad: files.tfm(name)?.param(6, size) ?? 0 };
+    // the virtual face's expansion is its pieces' (as an expanded copy of it would be drawn)
+    for (const k of ['expand_stretch', 'expand_shrink', 'expand_step']) if (from[k] !== undefined) entry[k] = from[k];
+    fonts.set(id, entry);
     ids.set(key, id);
     return id;
   };
@@ -196,7 +197,7 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
     replaced++;
     const only = pieces.length === 1 ? pieces[0] : null;
     if (only && only.kind === 'char' && only.x === 0 && only.y === 0) {
-      const id = idOf(only.font, only.size, vfont);
+      const id = idOf(String(n.font), only.font, only.size, vfont);
       carryCode(vfont, fonts.get(id)!, n.char, only.char);
       n.font = Number(id);
       n.char = only.char;
@@ -212,7 +213,7 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
       let piece: Node;
       if (q.kind === 'char') {
         const box = files.tfm(q.font)?.char(q.char, q.size) ?? { width: 0, height: 0, depth: 0 };
-        piece = { type: 'glyph', char: q.char, font: Number(idOf(q.font, q.size, vfont)), width: box.width, height: box.height, depth: box.depth, ...attrs };
+        piece = { type: 'glyph', char: q.char, font: Number(idOf(String(virtualFont), q.font, q.size, vfont)), width: box.width, height: box.height, depth: box.depth, ...attrs };
       } else piece = { type: 'rule', width: q.width, height: q.height, depth: 0 };
       const width = piece.width as number;
       if (q.y !== 0) piece = hbox(width, piece.height as number, piece.depth as number, [piece], q.y);

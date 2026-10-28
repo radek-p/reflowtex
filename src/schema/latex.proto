@@ -249,6 +249,10 @@ message FontInfo {
   // lists only the characters with a non-default code, among those the
   // document used in this font – and, for a font a \webtext slot is set in,
   // every character that protrudes, since a page may give the slot any text.
+  // The codes are those TeX broke the glyphs' paragraphs with: a font whose
+  // codes changed along the document has an entry for each set of them (the
+  // same name, size and file; another id), each glyph in the one it was set
+  // with.
   optional int32     quad           = 5;
   optional int32     expand_stretch = 6;
   optional int32     expand_shrink  = 7;

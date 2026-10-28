@@ -60,8 +60,24 @@ function resolve(chars: number[]) {
 test('one character at the origin: the glyph node itself, in the base font, its box and attributes kept', { skip: NO_CM }, () => {
   const { n, nodes, fonts } = resolve([65]);
   assert.equal(n, 1);
-  assert.deepEqual(nodes[0], { type: 'glyph', char: 66, font: 4, width: 300000, height: 400000, depth: 1000, color: '#c2410c', link: 2 });
-  assert.deepEqual(fonts.get('4')!.codes, [{ char: 66, lp: 50, rp: 0, ef: 1000 }], 'its protrusion code goes along');
+  assert.deepEqual(nodes[0], { type: 'glyph', char: 66, font: 5, width: 300000, height: 400000, depth: 1000, color: '#c2410c', link: 2 });
+  assert.deepEqual(fonts.get('5'), { name: 'cmr10', size_sp: SIZE, face: { kind: 'tfm' }, quad: cmr.param(6, SIZE),
+                                     codes: [{ char: 66, lp: 50, rp: 0, ef: 1000 }] }, 'its protrusion code goes along');
+  assert.equal(fonts.get('4')!.codes, undefined, 'into an entry of its own, not the document\'s cmr10');
+});
+
+test('two virtual fonts with other codes for one character draw from one face, each glyph keeping its own', { skip: NO_CM }, () => {
+  // the same virtual face twice, as a font and a version of it with other codes (serializer.lua)
+  const fonts = new Map<string, FontInfo>([
+    ['3', { name: 'testvf', size_sp: SIZE, face: { kind: 'tfm' }, codes: [{ char: 65, lp: 50, rp: 0, ef: 1000 }] }],
+    ['9', { name: 'testvf', size_sp: SIZE, face: { kind: 'tfm' }, codes: [{ char: 65, lp: 150, rp: 0, ef: 1000 }] }],
+  ]);
+  const nodes: N[] = [{ type: 'glyph', char: 65, font: 3 }, { type: 'glyph', char: 65, font: 9 }, { type: 'glyph', char: 65, font: 3 }];
+  resolveVirtualFonts(fonts, visit => nodes.forEach(visit), files);
+  const [a, b, c] = nodes.map(n => String(n.font));
+  assert.equal(a, c);
+  assert.notEqual(a, b);
+  assert.deepEqual([a, b].map(id => fonts.get(id)!.codes), [[{ char: 66, lp: 50, rp: 0, ef: 1000 }], [{ char: 66, lp: 150, rp: 0, ef: 1000 }]]);
 });
 
 test('a moved character: a box of the virtual character\'s size, a kern to the piece; the box is still that character', { skip: NO_CM }, () => {
@@ -69,7 +85,7 @@ test('a moved character: a box of the virtual character\'s size, a kern to the p
   const tenth = texScale(TENTH, SIZE);
   assert.deepEqual(nodes[0], { type: 'hlist', subtype: 2, width: 300000, height: 400000, depth: 1000, shift: 0, glue_set: 0, glue_sign: 0, glue_order: 0, children: [
     { type: 'kern', kern: tenth, subtype: 1 },
-    { type: 'glyph', char: 65, font: 4, width: w(cmr, 65), height: cmr.char(65, SIZE)!.height, depth: 0, color: '#c2410c', link: 2 },
+    { type: 'glyph', char: 65, font: 5, width: w(cmr, 65), height: cmr.char(65, SIZE)!.height, depth: 0, color: '#c2410c', link: 2 },
   ], font: 3, char: 66 });
 });
 
@@ -85,8 +101,8 @@ test('a moved character TeX expanded in a line it set: the box carries the expan
 test('several characters in two fonts and a rule, each where the packet sets it', { skip: NO_CM }, () => {
   const { nodes, fonts } = resolve([67]);
   const kids = nodes[0].children as N[];
-  assert.deepEqual(kids.map(k => [k.type, k.char ?? null, k.font ?? null]), [['glyph', 97, 4], ['glyph', 11, 5], ['rule', null, null]]);
-  assert.deepEqual(fonts.get('5'), { name: 'cmmi10', size_sp: SIZE, face: { kind: 'tfm' }, quad: cmmi.param(6, SIZE) });
+  assert.deepEqual(kids.map(k => [k.type, k.char ?? null, k.font ?? null]), [['glyph', 97, 5], ['glyph', 11, 6], ['rule', null, null]]);
+  assert.deepEqual(fonts.get('6'), { name: 'cmmi10', size_sp: SIZE, face: { kind: 'tfm' }, quad: cmmi.param(6, SIZE) });
   assert.deepEqual(fonts.get('3')!.face, { kind: 'virtual' }, 'the virtual face: none of its glyphs is drawn from it');
   assert.equal(kids[1].width, w(cmmi, 11));
   assert.deepEqual(kids[2], { type: 'rule', width: texScale(EM / 2, SIZE), height: texScale(RULE_H, SIZE), depth: 0 });

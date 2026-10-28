@@ -1,0 +1,23 @@
+% Protrusion and expansion codes changed by hand between paragraphs, without
+% microtype: TeX breaks each paragraph with the codes the font holds then, and
+% so must the browser. The same paragraph three times: with no codes, with
+% punctuation, hyphens and the letter t hanging into the margins and the e not
+% expanding, and with no codes again.
+\documentclass{article}
+\pagestyle{empty}
+\begin{document}
+\protrudechars=2 \adjustspacing=2
+\expandglyphsinfont\font 20 20 1
+\newcommand{\para}{Modern foundation models increasingly serve as general-purpose predictors, answering
+diverse user queries. Yet real deployments frequently deviate from pretraining conditions, in which a
+fixed (no-update) inference procedure can become brittle, which has been noted by many (Kim et al.,
+2023; Lin et al., 2024). More recently, analogous ideas have also been explored for large language
+models (Hardt and Sun, 2024; Hubotter et al., 2025a), and (Exp1) per-prompt selection works too.\par}
+\para
+\lpcode\font`(=500 \rpcode\font`.=700 \rpcode\font`,=700 \rpcode\font`-=700 \rpcode\font`;=500
+\lpcode\font`t=200 \rpcode\font`t=300 \efcode\font`e=0
+\para
+\lpcode\font`(=0 \rpcode\font`.=0 \rpcode\font`,=0 \rpcode\font`-=0 \rpcode\font`;=0
+\lpcode\font`t=0 \rpcode\font`t=0 \efcode\font`e=1000
+\para
+\end{document}
