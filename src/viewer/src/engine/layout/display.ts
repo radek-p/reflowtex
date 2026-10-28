@@ -303,8 +303,8 @@ export function preDisplaySizeSp(fontInfo: FontTable, lines: Line[], lrp: LinePl
 // alignment is always set with the full pair. null when the bundle carries
 // no skip data – the captured spacing then stands.
 export function displaySkipsFull(L: SegmentLayout, prev: SegmentLayout | undefined): boolean | null {
-    const rows = L.seg.kind === 'display' ? L.seg.rows : undefined;
-    const item = rows && rows[0] && rows[0].item;
+    if (L.seg.kind !== 'display') return null;
+    const rows = L.seg.rows, item = rows[0]?.item;
     if (!item || item.display_above === undefined || item.display_above === null) return null;
     // an alignment always gets the full pair (TeX §1206)
     if (item.box && item.box.subtype === HL_ALIGNMENT) return true;
@@ -312,8 +312,13 @@ export function displaySkipsFull(L: SegmentLayout, prev: SegmentLayout | undefin
     // At the width the document was set at, TeX's own choice stands: the
     // measure below follows TeX's to a fraction of a point, and a display
     // sitting within that of the threshold must not flip where the page is
-    // meant to be the document.
-    if (L.atSourceWidth && item.display_used_above != null) return item.display_used_above === item.display_above;
+    // meant to be the document. TeX's choice shows in either skip it set (it
+    // sets no above skip over a left number it puts above the formula).
+    if (L.atSourceWidth) {
+        if (item.display_used_above != null) return item.display_used_above === item.display_above;
+        const last = rows[rows.length - 1].item;
+        if (last.display_used_below != null) return last.display_used_below === last.display_below;
+    }
     const MAX = 1073741823;
     const captured = item.display_pre_size ?? 0;
     const pre = prev && prev.preDisplaySizeSp;
@@ -328,6 +333,11 @@ export function displaySkipsFull(L: SegmentLayout, prev: SegmentLayout | undefin
 // The change to the space above segment L (px) from redoing the skip choice:
 // the display's own above skip, and the below skip of a display just before
 // L. Records the display's choice on its layout for the segment after it.
+// Only a skip TeX set is chosen again: where TeX's own display glue stood
+// (display_used_above/below). Where it set none – at the text an alignment
+// carries between its rows (\intertext, whose skips are \vskip's of its
+// own), at an equation number set on a line of its own below or above the
+// formula (§1203, §1205) – the captured space stands as it is.
 export function displaySkipAdjust(L: SegmentLayout, prev: SegmentLayout | undefined): number {
     let delta = 0;
     if (L.seg.kind === 'display') {
@@ -335,36 +345,35 @@ export function displaySkipAdjust(L: SegmentLayout, prev: SegmentLayout | undefi
         L.displayFull = full;
         if (full !== null) {
             const it = L.seg.rows[0].item;
-            delta += ((full ? it.display_above! : it.display_above_short!) - (it.display_used_above || 0)) * SP_TO_PX;
+            if (it.display_used_above != null)
+                delta += ((full ? it.display_above! : it.display_above_short!) - it.display_used_above) * SP_TO_PX;
             // and the interline glue TeX set above the display, redone for
             // the line now above it and the display's height at this width
             const meta: LineMeta | null | undefined = it.display_baselineskip != null
                 ? { bskip: it.display_baselineskip * SP_TO_PX, lskip: (it.display_lineskip || 0) * SP_TO_PX,
                     lskiplimit: (it.display_lineskiplimit || 0) * SP_TO_PX }
                 : (prev && prev.firstMeta);
-            // A display that opened an empty paragraph (display_after_line
-            // false) had that paragraph's empty line above it, of depth 0,
-            // not the last line of the text before – when TeX set one. A
-            // paragraph with nothing in it at all (\noindent, or the indent
-            // box \@doendpe removes after a list or verbatim) gets no line
-            // (§1145), which is what \predisplaysize = -\maxdimen records;
-            // the glue above then comes from the text before, as usual.
+            // A display that opened a paragraph had that paragraph's empty
+            // line above it, of depth 0, not the item before – where TeX set
+            // one (display_after_blank): a paragraph with nothing in it at all
+            // (\noindent, or the indent box \@doendpe removes after a list or
+            // verbatim) gets no line (§1145). Otherwise the glue above comes
+            // from the item before: the text, or an equation number TeX set
+            // on a line of its own above the formula (§1203).
             if (it.display_interline_above != null && prev && meta && L.firstAscent != null) {
-                const blankLine = !it.display_after_line && it.display_pre_size !== -1073741823;
-                const depthAbove = blankLine ? 0 : prev.lastDepth;
+                const depthAbove = it.display_after_blank ? 0 : prev.lastDepth;
                 delta += texInterlineGlue(depthAbove, L.firstAscent, meta) - it.display_interline_above * SP_TO_PX;
             }
         }
     }
     if (prev && prev.seg.kind === 'display' && prev.displayFull !== null && prev.displayFull !== undefined) {
         const it = prev.seg.rows[prev.seg.rows.length - 1].item;
-        // LaTeX's \addvspace below the display asks for at least display_after_min;
-        // a number TeX set on its own line below the formula takes the skip's
-        // place (§1205)
-        const floor = it.display_after_min || 0;
-        const skip = it.display_number_below ? 0 : prev.displayFull ? it.display_below! : it.display_below_short!;
-        const below = Math.max(skip, floor);
-        delta += (below - Math.max(it.display_used_below || 0, floor)) * SP_TO_PX;
+        // LaTeX's \addvspace below the display asks for at least display_after_min
+        if (it.display_used_below != null) {
+            const floor = it.display_after_min || 0;
+            const below = Math.max(prev.displayFull ? it.display_below! : it.display_below_short!, floor);
+            delta += (below - Math.max(it.display_used_below, floor)) * SP_TO_PX;
+        }
         // and the interline glue between the display and the line below,
         // redone for that line at this width: display_interline_below is the
         // glue TeX set there – across a blank line, which stays in the gap, the

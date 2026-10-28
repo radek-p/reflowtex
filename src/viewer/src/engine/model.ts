@@ -281,6 +281,7 @@ export interface ContentItem extends DisplayRates {
     display_used_above?: number;
     display_used_below?: number;
     display_after_line?: boolean;
+    display_after_blank?: boolean;
     display_quad?: number;
     display_interline_above?: number;
     display_interline_below?: number;
@@ -289,7 +290,6 @@ export interface ContentItem extends DisplayRates {
     display_lineskip?: number;
     display_lineskiplimit?: number;
     display_after_min?: number;
-    display_number_below?: boolean;
     display_wide?: ContentItem;
     display_wide_from?: number;
     display_wide_width?: number;

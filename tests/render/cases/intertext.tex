@@ -1,0 +1,40 @@
+% Text set between the rows of an alignment, as in real papers: amsmath's
+% \intertext and mathtools' \shortintertext put the display skips around the
+% text as \vskip's of their own, and TeX sets no display skip of its own
+% there. An alignment that opens a paragraph, and one that closes it.
+\documentclass{article}
+\usepackage{mathtools}
+% one page with nothing but the text: checked against plain lualatex too (cases.ts)
+\pagestyle{empty}
+\begin{document}
+The two maps are defined on the same domain, and their composition is
+\begin{align}
+  f(x) &= \sum_{k=0}^{n} a_k x^k + \int_0^x g(t)\,dt, \\
+  g(x) &= \frac{d}{dx} \bigl(f(x) - a_0\bigr) - \sum_{k=1}^{n} k a_k x^{k-1}.
+  \intertext{The second line follows from the first by the fundamental theorem of calculus, applied once to the integral term and term by term to the polynomial:}
+  h(x) &= f(g(x)) + g(f(x)), \\
+  h'(x) &= f'(g(x))\,g'(x) + g'(f(x))\,f'(x).
+\end{align}
+With the short form the text sits closer to the rows around it,
+\begin{align*}
+  u &= v + w, \\
+  \shortintertext{so that}
+  v &= u - w,
+\end{align*}
+and the paragraph goes on after the alignment, as it would after any display.
+
+\noindent
+\begin{align}
+  p(t) &= q(t) + r(t), \\
+  \intertext{and in the same way}
+  q(t) &= p(t) - r(t)
+\end{align}
+opens this paragraph, and an alignment ends the next one:
+\begin{align*}
+  s &= \lim_{n\to\infty} s_n, \\
+  \intertext{where the limit exists since the sequence is bounded and monotone, and}
+  s_n &= \sum_{k=1}^{n} \frac{1}{k^2}.
+\end{align*}
+
+A paragraph after it, long enough to fill one line of the text width and then some more words.
+\end{document}

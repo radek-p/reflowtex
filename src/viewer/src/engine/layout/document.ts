@@ -4,7 +4,7 @@ import { SP_TO_PX, ZOOM, sumWidthSp, useGlyphMetrics } from '../core.ts';
 import {
     displaySkipAdjust, layoutDisplaySegment, preDisplaySizeSp, updateDisplayOverflowCue,
 } from './display.ts';
-import { lineProfile, minRequiredAdvance, texInterlineAdvance, texInterlineGlue } from './lines.ts';
+import { lineProfile, paragraphLeading, texInterlineAdvance, texInterlineGlue } from './lines.ts';
 import { layoutStreamSegment } from './stream.ts';
 import { keptHostBox } from '../../host/block-hosts.ts';
 import { blockKeyOf } from '../../host/host.ts';
@@ -216,8 +216,6 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
     // stream index; shared down into nested layouts, kept across rebuilds.
     cache.hosts = cache.hosts || new Map();
     cache.blockKey = cache.blockKey || newBlockKey();
-    const minGapPx = p.minGapPt * ZOOM;
-    const padPx    = p.padPt    * ZOOM;
 
     // Break candidates depend only on the node list, never on width or params,
     // so they are cached per paragraph across every reflow.
@@ -238,7 +236,7 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
             ? layoutDisplaySegment(fontInfo, seg, widthPt, displayModel)
             : layoutTextSegment(fontInfo, seg as TextSegment, widthPt, p, cache);
 
-        // Profiles use actual render coords so collision detection matches real ink positions.
+        // Each line's ink as drawn: its height and depth, which the leading follows.
         const profiles = geom.lines.map((ln, j) =>
             lineProfile(fontInfo, ln.nodes, geom.lrp[j].x0, geom.lrp[j].ratio, geom.lrp[j].er)
         );
@@ -248,24 +246,14 @@ export function layoutDocument(fontInfo: FontTable, doc: Doc, widthPt: number, p
         const adj = geom.adjust;
         const baselineYs = [(adj?.[0].above ?? 0) + ascent];
         for (let j = 1; j < geom.lines.length; j++) {
-            const gap = geom.gaps?.[j];
-            const lm = geom.meta?.[j];
             const prevDepth = profiles[j-1].reduce((m, it) => Math.max(m, it.d), 0);
             const thisAsc   = profiles[j].reduce((m, it) => Math.max(m, it.h), 0);
-            let advance: number;
-            if (gap !== undefined) {
-                // TeX's own spacing between the rows of an alignment, 0 where
-                // they touch (a longtable's). Measured baseline-to-baseline
-                // it must clear the previous depth and this row's ascent.
-                advance = prevDepth + gap + thisAsc;
-            } else if (lm) {
-                // Land the line at exactly the LaTeX baseline-to-baseline.
-                advance = texInterlineAdvance(prevDepth, thisAsc, lm);
-            } else {
-                // No captured metrics (older data): adaptive collision leading.
-                const needed = minRequiredAdvance(profiles[j-1], profiles[j]);
-                advance = needed > minGapPx ? needed + padPx : minGapPx;
-            }
+            // A display's rows stand TeX's own space apart (an alignment's, 0
+            // where they touch, as a longtable's), a text segment's lines at
+            // TeX's baseline-to-baseline distance, from their leading.
+            const gap = geom.gaps?.[j];
+            let advance = gap !== undefined ? prevDepth + gap + thisAsc
+                : texInterlineAdvance(prevDepth, thisAsc, geom.meta![j]);
             if (adj) advance += adj[j-1].below + adj[j].above;
             baselineYs.push(baselineYs[j-1] + advance);
         }
@@ -572,12 +560,10 @@ export function estimateGeometry(seg: TextSegment | DisplaySegment, widthPt: num
     }
     let H = 0, firstMeta: LineMeta | null = null, bskip = 12 * ZOOM;
     for (const { para } of seg.items) {
-        const meta = para.baselineskip != null ? { bskip: para.baselineskip * SP_TO_PX,
-                                                   lskip: (para.lineskip || 0) * SP_TO_PX,
-                                                   lskiplimit: (para.lineskiplimit || 0) * SP_TO_PX } : null;
+        const meta = paragraphLeading(para);
         // (a line's height for the estimate: a \baselineskip of 0 or less
         // keeps the one before)
-        if (meta && meta.bskip > 0) bskip = meta.bskip;
+        if (meta.bskip > 0) bskip = meta.bskip;
         if (!firstMeta) firstMeta = meta;
         const avail = Math.max(1, widthSp - (para.indent || 0));
         const lines = seg.isFigure ? 1 : Math.max(1, Math.ceil(sumWidthSp(para.nodes || []) * 1.03 / avail));
