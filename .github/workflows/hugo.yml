@@ -92,7 +92,9 @@ jobs:
         run: |
           id=$(gh run list --workflow corpus.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           [ -n "$id" ] || { echo "no successful corpus run yet: the site shows the committed data/corpus.json"; exit 0; }
-          gh run download "$id" --name corpus-site --dir website/
+          # into a folder of its own, then over website/: the download does not overwrite the committed data/corpus.json
+          gh run download "$id" --name corpus-site --dir "$RUNNER_TEMP/corpus-site"
+          cp -R "$RUNNER_TEMP/corpus-site/." website/
       - name: Run the render tests, for the site (a run by hand)
         if: github.event_name != 'workflow_run'
         run: |
