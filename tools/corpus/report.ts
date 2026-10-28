@@ -11,10 +11,24 @@
 //  - <site>/data/corpus.json: every paper of the manifest with its scores, or
 //    why it is stopped, and the totals (the data the website's showcase and
 //    accuracy sections are built from);
-//  - <site>/static/corpus/<id>/: the paper's page (page.ts), the page that
-//    was measured with its header and contents; its scripts and fonts are
-//    shared by all papers in <site>/static/corpus/assets/ where they are the
-//    same file;
+//  - <site>/corpus-blocks/<id>.json: the paper's block as the measured page
+//    has it, for the website's page of the paper to embed as its latex
+//    shortcode embeds a block: its data (nodelist_b64), its accessible layer
+//    (a11y_html), the attributes the measured block has (attrs), and its font
+//    map (font_map: original file → served file, relative to the site's
+//    fonts/; the files are in static/corpus/assets/fonts/), to be merged into
+//    that page's #latex-font-map. Outside static/: what is published is the
+//    page that embeds it;
+//  - <site>/static/corpus/<id>/outline.json: the paper's outline (its
+//    sections and the like, each with the id of its anchor on the page), as
+//    the viewer announces it (reflowtex:outline);
+//  - <site>/static/corpus/<id>/measured/: the page that was measured
+//    (page.ts adds its header and contents), which the comparison shows; its
+//    scripts and fonts are shared by all papers in
+//    <site>/static/corpus/assets/ where they are the same file, and the
+//    embedded blocks take their fonts from there too;
+//  - <site>/static/corpus/<id>/index.html: a link on to the paper's page on
+//    the site (docs/showcase/papers/<id>/);
 //  - <site>/static/corpus/report.json and <id>/data/: the comparison, as the
 //    render report reads it, as its batch "Paper corpus" (the report lists
 //    every batch it finds: tests/render/report/site.ts). Its larger files
@@ -33,6 +47,8 @@ import { gzipSync } from 'node:zlib';
 import { loadManifest, REPO, type Manifest, type Paper } from './manifest.ts';
 import { paperPage, redirectPage } from './page.ts';
 import { stripSvg } from '../pageless-pdf/vector-compare.ts';
+import { messageType } from '../../src/pipeline/schema.ts';
+import { a11yLayerFromBytes } from '../../src/pipeline/a11y.ts';
 
 /** What report.ts reads of a paper's metrics.json (run.ts). */
 export interface Metrics {
@@ -69,6 +85,8 @@ export interface CorpusData {
 
 const r5 = (x: number) => Math.round(x * 1e5) / 1e5;
 export const compareLink = (id: string): string => `render-tests/?batch=corpus#${encodeURIComponent(id)}`;
+/** The paper's page on the site (the website's docs page for it). */
+export const pageLink = (id: string): string => `docs/showcase/papers/${id}/`;
 
 /** A paper's entry from its metrics (null: not run). */
 export function paperEntry(p: Paper, m: Metrics | null, goal: Manifest['goal'], patchNote: string | null): CorpusPaper {
@@ -88,7 +106,7 @@ export function paperEntry(p: Paper, m: Metrics | null, goal: Manifest['goal'], 
     placement, absolute: displayed ? r5(s!.absolute.share) : null, jumps, max_jump_pt: displayed ? s!.vertical.max_abs_pt : null,
     glyphs: displayed ? s!.placement.tex_glyphs : null, lost_glyphs: displayed ? s!.placement.tex_glyphs_in_unmatched_lines : null,
     at_goal: displayed && placement! >= goal.placement && jumps! <= goal.jumps,
-    page: displayed ? `corpus/${p.id}/` : null, compare: displayed ? compareLink(p.id) : null,
+    page: displayed ? pageLink(p.id) : null, compare: displayed ? compareLink(p.id) : null,
   };
 }
 
@@ -127,8 +145,9 @@ if (import.meta.main) {
   const from = o.from ? JSON.parse(readFileSync(o.from, 'utf8')) as Record<string, Source> : null;
   const where = (id: string): Source => from?.[id] ?? { metrics: join(o.results!, id, 'metrics.json'), build: join(o.results!, id, 'build') };
   const commit = o.commit ?? execFileSync('git', ['-C', REPO, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  const out = join(site, 'static', 'corpus'), assets = join(out, 'assets');
+  const out = join(site, 'static', 'corpus'), assets = join(out, 'assets'), embeds = join(site, 'corpus-blocks');
   rmSync(out, { recursive: true, force: true });
+  rmSync(embeds, { recursive: true, force: true });
   mkdirSync(assets, { recursive: true });
 
   const papers: CorpusPaper[] = [], results: Record<string, unknown>[] = [];
@@ -140,7 +159,7 @@ if (import.meta.main) {
     let e = paperEntry(p, m, manifest.goal, patchNote);
     const at = m?.finished ?? (m ? statSync(src.metrics).mtime.toISOString() : new Date(0).toISOString());
     if (e.status === 'displayed') {
-      try { copyPaper(p, e, src.build, join(out, p.id), assets); }
+      try { copyPaper(p, e, src.build, join(out, p.id), assets, embeds); }
       catch (err) { e = { ...paperEntry(p, { failed_at: 'report', error: (err as Error).message }, manifest.goal, patchNote) }; }
     }
     papers.push(e);
@@ -151,7 +170,7 @@ if (import.meta.main) {
         : [e.reason ?? 'stopped'],
       at, tolerance: manifest.tolerance_pt, target: manifest.tolerance_pt,
       ...(ok && m?.worst_pt ? { worst: [m.worst_pt.glyph, m.worst_pt.rule] } : {}), ...(ok && m?.hsize_pt ? { hsize_pt: m.hsize_pt } : {}),
-      dir: `${p.id}/data`, ...(ok ? { page: p.id, lines: true, gz: true } : {}) });
+      dir: `${p.id}/data`, ...(ok ? { page: `${p.id}/measured`, lines: true, gz: true } : {}) });
     console.log(`${p.id}: ${ok ? measuredText(e) : e.reason}`);
   }
   const data: CorpusData = { generated: new Date().toISOString(), commit, texlive: manifest.texlive, tolerance_pt: manifest.tolerance_pt,
@@ -163,25 +182,62 @@ if (import.meta.main) {
   console.log(`corpus: ${t.displayed} of ${t.papers} displayed, ${t.at_goal} at the goal, mean placement ${t.mean_placement === null ? '–' : pc(t.mean_placement)}, ${t.jumps} vertical jumps`);
 }
 
-/** The paper's page and its comparison's files, into dir. */
-function copyPaper(p: Paper, e: CorpusPaper, build: string, dir: string, assets: string): void {
+/** The outline the viewer announces for a block (init.ts): its entries, each with its anchor's id. */
+export interface OutlineEntry { kind: string; env: string; level: number; number: string; title: string; id: string | null }
+export function outlineOf(bytes: Uint8Array): OutlineEntry[] {
+  const Document = messageType('Document');
+  const doc = Document.toObject(Document.decode(bytes), { enums: String, defaults: false }) as
+    { outline?: { kind?: string; env?: string; level?: number; number?: string; title?: string; anchor?: number }[]; anchors?: string[] };
+  return (doc.outline ?? []).map(e => ({ kind: e.kind ?? '', env: e.env ?? '', level: e.level ?? 0, number: e.number ?? '', title: e.title ?? '',
+    id: (doc.anchors ?? [])[(e.anchor ?? 0) - 1] ?? null }));
+}
+
+/** The block of a page (site.ts's blockHtml: one div, its data inline), and the page's font map. */
+export function blockOf(page: string): { block: string; bytes: Uint8Array; fonts: Record<string, string> } {
+  const blocks = page.match(/<div class="latex-block"[^>]*><\/div>/g) ?? [];
+  if (blocks.length !== 1) throw new Error(`the measured page has ${blocks.length} blocks, not one`);
+  const b64 = /data-nodelist-b64="([^"]*)"/.exec(blocks[0])?.[1];
+  if (!b64) throw new Error('the block has no data');
+  const map = /<script id="latex-font-map"[^>]*>([^<]*)<\/script>/.exec(page)?.[1];
+  return { block: blocks[0], bytes: new Uint8Array(Buffer.from(b64, 'base64')), fonts: map ? JSON.parse(map) as Record<string, string> : {} };
+}
+
+/** What a page of the site embeds for a paper (website/corpus-blocks/<id>.json): the block's data and accessible
+ *  layer as prebuild's data/latex_blocks/<key>.json has them, the attributes of the measured block (the
+ *  shortcode puts them on it), and its fonts, by served path relative to the site's fonts/ folder. */
+export function blockJson(block: string, bytes: Uint8Array, fonts: Record<string, string>, fontsFromSiteFonts: string): Record<string, unknown> {
+  const attrs: Record<string, string> = {};
+  for (const m of block.matchAll(/ (data-[a-z0-9-]+)="([^"]*)"/g)) if (m[1] !== 'data-nodelist-b64') attrs[m[1]] = m[2];
+  return { nodelist_b64: Buffer.from(bytes).toString('base64'), a11y_html: a11yLayerFromBytes(bytes), attrs,
+    font_map: Object.fromEntries(Object.entries(fonts).map(([k, v]) => [k, `${fontsFromSiteFonts}${v}`])) };
+}
+
+/** The paper's files: the block to embed, outline, measured page, links on, and the comparison. */
+function copyPaper(p: Paper, e: CorpusPaper, build: string, dir: string, assets: string, blocks: string): void {
   const site = join(build, 'site');
   for (const f of ['pageless.pdf', 'vector/vector.json', 'vector/lines.json']) if (!existsSync(join(build, f))) throw new Error(`no ${f} in ${build}`);
   if (!existsSync(join(site, 'index.html'))) throw new Error(`no site/index.html in ${build}`);
+  const measured = readFileSync(join(site, 'index.html'), 'utf8');
+  const { block, bytes, fonts } = blockOf(measured);
   // the page's scripts and fonts: shared when every one of them is the same as the shared copy (or there is none yet)
   const own = filesUnder(site).filter(f => f === 'latex-viewer.js' || f === 'protobuf.min.js' || f.startsWith('fonts/'));
   const shared = own.every(f => !existsSync(join(assets, f)) || sameFile(join(site, f), join(assets, f)));
-  mkdirSync(dir, { recursive: true });
+  const page = join(dir, 'measured');
+  mkdirSync(page, { recursive: true });
   for (const f of own) {
-    const to = join(shared ? assets : dir, f);
+    const to = join(shared ? assets : page, f);
     if (shared && existsSync(to)) continue;
     mkdirSync(dirname(to), { recursive: true });
     copyFileSync(join(site, f), to);
   }
-  writeFileSync(join(dir, 'index.html'), paperPage(readFileSync(join(site, 'index.html'), 'utf8'), {
+  writeFileSync(join(page, 'index.html'), paperPage(measured, {
     title: p.title, authors: p.authors, venue: p.venue, year: p.year, field: p.field, licence: p.licence, licence_url: p.licence_url,
     attribution: p.attribution, original_page: p.original_page, original_url: p.original_url, source_url: p.source.url,
-    compare: `../../${compareLink(p.id)}`, home: '../../', measured: measuredText(e), assets: shared ? '../assets/' : '' }));
+    compare: `../../../${compareLink(p.id)}`, home: '../../../', measured: measuredText(e), assets: shared ? '../../assets/' : '' }));
+  mkdirSync(blocks, { recursive: true });
+  writeFileSync(join(blocks, `${p.id}.json`), JSON.stringify(blockJson(block, bytes, fonts, shared ? '../corpus/assets/fonts/' : `../corpus/${p.id}/measured/fonts/`)));
+  writeFileSync(join(dir, 'outline.json'), JSON.stringify(outlineOf(bytes), null, 1));
+  writeFileSync(join(dir, 'index.html'), redirectPage(`../../${pageLink(p.id)}`, p.title));
   mkdirSync(join(dir, 'compare'), { recursive: true });
   writeFileSync(join(dir, 'compare', 'index.html'), redirectPage(`../../../${compareLink(p.id)}`, `${p.title}: compared with TeX`));
   // the comparison, as the render report reads it

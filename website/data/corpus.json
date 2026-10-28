@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-28T10:26:58.417Z",
+ "generated": "2026-10-28T10:34:29.540Z",
  "commit": "28b850768fbba6c8e99e3fbae7c6df6c7a05a4c1",
  "texlive": "2025 (frozen)",
  "tolerance_pt": 0.092,
@@ -99,7 +99,7 @@
    "glyphs": 82262,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2608.05234/",
+   "page": "docs/showcase/papers/arxiv-2608.05234/",
    "compare": "render-tests/?batch=corpus#arxiv-2608.05234"
   },
   {
@@ -220,7 +220,7 @@
    "glyphs": 41070,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2608.10970/",
+   "page": "docs/showcase/papers/arxiv-2608.10970/",
    "compare": "render-tests/?batch=corpus#arxiv-2608.10970"
   },
   {
@@ -263,7 +263,7 @@
    "glyphs": 90149,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2605.07774/",
+   "page": "docs/showcase/papers/arxiv-2605.07774/",
    "compare": "render-tests/?batch=corpus#arxiv-2605.07774"
   },
   {
@@ -307,7 +307,7 @@
    "glyphs": 97773,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2605.09077/",
+   "page": "docs/showcase/papers/arxiv-2605.09077/",
    "compare": "render-tests/?batch=corpus#arxiv-2605.09077"
   },
   {
@@ -353,7 +353,7 @@
    "glyphs": 257777,
    "lost_glyphs": 143,
    "at_goal": true,
-   "page": "corpus/arxiv-2511.10019/",
+   "page": "docs/showcase/papers/arxiv-2511.10019/",
    "compare": "render-tests/?batch=corpus#arxiv-2511.10019"
   },
   {
@@ -399,7 +399,7 @@
    "glyphs": 160596,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2507.09324/",
+   "page": "docs/showcase/papers/arxiv-2507.09324/",
    "compare": "render-tests/?batch=corpus#arxiv-2507.09324"
   },
   {
@@ -442,7 +442,7 @@
    "glyphs": 185048,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2605.07289/",
+   "page": "docs/showcase/papers/arxiv-2605.07289/",
    "compare": "render-tests/?batch=corpus#arxiv-2605.07289"
   },
   {
@@ -487,7 +487,7 @@
    "glyphs": 60907,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2506.19542/",
+   "page": "docs/showcase/papers/arxiv-2506.19542/",
    "compare": "render-tests/?batch=corpus#arxiv-2506.19542"
   },
   {
@@ -576,7 +576,7 @@
    "glyphs": 48106,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2604.27966/",
+   "page": "docs/showcase/papers/arxiv-2604.27966/",
    "compare": "render-tests/?batch=corpus#arxiv-2604.27966"
   },
   {
@@ -619,7 +619,7 @@
    "glyphs": 69524,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2602.13120/",
+   "page": "docs/showcase/papers/arxiv-2602.13120/",
    "compare": "render-tests/?batch=corpus#arxiv-2602.13120"
   },
   {
@@ -663,7 +663,7 @@
    "glyphs": 77679,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2512.04614/",
+   "page": "docs/showcase/papers/arxiv-2512.04614/",
    "compare": "render-tests/?batch=corpus#arxiv-2512.04614"
   },
   {
@@ -709,7 +709,7 @@
    "glyphs": 136072,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2604.27474/",
+   "page": "docs/showcase/papers/arxiv-2604.27474/",
    "compare": "render-tests/?batch=corpus#arxiv-2604.27474"
   },
   {
@@ -747,7 +747,7 @@
    "glyphs": 29044,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.10000/",
+   "page": "docs/showcase/papers/arxiv-2609.10000/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.10000"
   },
   {
@@ -780,7 +780,7 @@
    "glyphs": 6575,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.05048/",
+   "page": "docs/showcase/papers/arxiv-2609.05048/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.05048"
   },
   {
@@ -813,7 +813,7 @@
    "glyphs": 20956,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.14169/",
+   "page": "docs/showcase/papers/arxiv-2609.14169/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.14169"
   },
   {
@@ -847,7 +847,7 @@
    "glyphs": 23323,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.14135/",
+   "page": "docs/showcase/papers/arxiv-2609.14135/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.14135"
   },
   {
@@ -884,7 +884,7 @@
    "glyphs": 28595,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.04638/",
+   "page": "docs/showcase/papers/arxiv-2609.04638/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.04638"
   },
   {
@@ -930,7 +930,7 @@
    "glyphs": 98227,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2604.27268/",
+   "page": "docs/showcase/papers/arxiv-2604.27268/",
    "compare": "render-tests/?batch=corpus#arxiv-2604.27268"
   },
   {
@@ -969,7 +969,7 @@
    "glyphs": 57928,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.22225/",
+   "page": "docs/showcase/papers/arxiv-2609.22225/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.22225"
   },
   {
@@ -1008,7 +1008,7 @@
    "glyphs": 57873,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.22988/",
+   "page": "docs/showcase/papers/arxiv-2609.22988/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.22988"
   },
   {
@@ -1045,7 +1045,7 @@
    "glyphs": 70919,
    "lost_glyphs": 2,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.23125/",
+   "page": "docs/showcase/papers/arxiv-2609.23125/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.23125"
   },
   {
@@ -1084,7 +1084,7 @@
    "glyphs": 39077,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2608.25508/",
+   "page": "docs/showcase/papers/arxiv-2608.25508/",
    "compare": "render-tests/?batch=corpus#arxiv-2608.25508"
   },
   {
@@ -1123,7 +1123,7 @@
    "glyphs": 55772,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2608.25722/",
+   "page": "docs/showcase/papers/arxiv-2608.25722/",
    "compare": "render-tests/?batch=corpus#arxiv-2608.25722"
   },
   {
@@ -1158,7 +1158,7 @@
    "glyphs": 29073,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.11415/",
+   "page": "docs/showcase/papers/arxiv-2609.11415/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.11415"
   },
   {
@@ -1198,7 +1198,7 @@
    "glyphs": 39625,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.11473/",
+   "page": "docs/showcase/papers/arxiv-2609.11473/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.11473"
   },
   {
@@ -1236,7 +1236,7 @@
    "glyphs": 30828,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.11336/",
+   "page": "docs/showcase/papers/arxiv-2609.11336/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.11336"
   },
   {
@@ -1273,7 +1273,7 @@
    "glyphs": 46291,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-cond-mat_0604591/",
+   "page": "docs/showcase/papers/arxiv-cond-mat_0604591/",
    "compare": "render-tests/?batch=corpus#arxiv-cond-mat_0604591"
   },
   {
@@ -1316,7 +1316,7 @@
    "glyphs": 41171,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.22006/",
+   "page": "docs/showcase/papers/arxiv-2609.22006/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.22006"
   },
   {
@@ -1357,7 +1357,7 @@
    "glyphs": 96213,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.21590/",
+   "page": "docs/showcase/papers/arxiv-2609.21590/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.21590"
   },
   {
@@ -1399,7 +1399,7 @@
    "glyphs": 55544,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.18467/",
+   "page": "docs/showcase/papers/arxiv-2609.18467/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.18467"
   },
   {
@@ -1440,7 +1440,7 @@
    "glyphs": 14691,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.17460/",
+   "page": "docs/showcase/papers/arxiv-2609.17460/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.17460"
   },
   {
@@ -1479,7 +1479,7 @@
    "glyphs": 67392,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.15409/",
+   "page": "docs/showcase/papers/arxiv-2609.15409/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.15409"
   },
   {
@@ -1517,7 +1517,7 @@
    "glyphs": 16486,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.20044/",
+   "page": "docs/showcase/papers/arxiv-2609.20044/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.20044"
   },
   {
@@ -1555,7 +1555,7 @@
    "glyphs": 34346,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.20297/",
+   "page": "docs/showcase/papers/arxiv-2609.20297/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.20297"
   },
   {
@@ -1589,7 +1589,7 @@
    "glyphs": 39212,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.13599/",
+   "page": "docs/showcase/papers/arxiv-2609.13599/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.13599"
   },
   {
@@ -1629,7 +1629,7 @@
    "glyphs": 167056,
    "lost_glyphs": 1,
    "at_goal": true,
-   "page": "corpus/ctan-lshort-english/",
+   "page": "docs/showcase/papers/ctan-lshort-english/",
    "compare": "render-tests/?batch=corpus#ctan-lshort-english"
   },
   {
@@ -1670,7 +1670,7 @@
    "glyphs": 57065,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2604.07463/",
+   "page": "docs/showcase/papers/arxiv-2604.07463/",
    "compare": "render-tests/?batch=corpus#arxiv-2604.07463"
   },
   {
@@ -1709,7 +1709,7 @@
    "glyphs": 80267,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2506.21223/",
+   "page": "docs/showcase/papers/arxiv-2506.21223/",
    "compare": "render-tests/?batch=corpus#arxiv-2506.21223"
   },
   {
@@ -1765,7 +1765,7 @@
    "glyphs": 59600,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2506.24128/",
+   "page": "docs/showcase/papers/arxiv-2506.24128/",
    "compare": "render-tests/?batch=corpus#arxiv-2506.24128"
   },
   {
@@ -1804,7 +1804,7 @@
    "glyphs": 31811,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2604.01211/",
+   "page": "docs/showcase/papers/arxiv-2604.01211/",
    "compare": "render-tests/?batch=corpus#arxiv-2604.01211"
   },
   {
@@ -1842,7 +1842,7 @@
    "glyphs": 62158,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2309.06053/",
+   "page": "docs/showcase/papers/arxiv-2309.06053/",
    "compare": "render-tests/?batch=corpus#arxiv-2309.06053"
   },
   {
@@ -1884,7 +1884,7 @@
    "glyphs": 77440,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2604.08483/",
+   "page": "docs/showcase/papers/arxiv-2604.08483/",
    "compare": "render-tests/?batch=corpus#arxiv-2604.08483"
   },
   {
@@ -1919,7 +1919,7 @@
    "glyphs": 63922,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2310.06922/",
+   "page": "docs/showcase/papers/arxiv-2310.06922/",
    "compare": "render-tests/?batch=corpus#arxiv-2310.06922"
   },
   {
@@ -1965,7 +1965,7 @@
    "glyphs": 67479,
    "lost_glyphs": 0,
    "at_goal": true,
-   "page": "corpus/arxiv-2605.14987/",
+   "page": "docs/showcase/papers/arxiv-2605.14987/",
    "compare": "render-tests/?batch=corpus#arxiv-2605.14987"
   },
   {
@@ -2002,7 +2002,7 @@
    "glyphs": 219437,
    "lost_glyphs": 329,
    "at_goal": true,
-   "page": "corpus/arxiv-2609.12672/",
+   "page": "docs/showcase/papers/arxiv-2609.12672/",
    "compare": "render-tests/?batch=corpus#arxiv-2609.12672"
   },
   {
