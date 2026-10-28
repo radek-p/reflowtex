@@ -17,6 +17,20 @@ arbitrary commands as the build user, which turns "render this author's maths"
 into remote code execution. Nothing in the pipeline needs it: TikZ capture
 records finished boxes rather than shelling out to a sub-run.
 
+**EPS figures are converted before TeX runs, not by TeX.** LaTeX's own route
+for an EPS figure is epstopdf, which runs `repstopdf` from inside TeX and so
+needs shell escape. The pipeline does not turn it on for that, not even
+restricted, and Lua is no way round: LuaTeX's `os.execute` and `io.popen` obey
+the same switch (with it off, both return "command execution disabled"; with it
+restricted, only the whitelist runs). Instead `src/pipeline/figures.ts` runs the
+same converter itself, before TeX: `repstopdf` in its restricted mode, which
+runs Ghostscript with `-dSAFER`, on each `.eps` and `.ps` file under the
+document's directories, one at a time limit each (`REFLOWTEX_FIGURE_TIMEOUT`,
+120 s by default), in the same process environment – the same container – as
+TeX. It puts the PDFs where epstopdf looks for them, and TeX runs no program.
+Ghostscript still interprets PostScript the document supplies, so what follows
+for untrusted input (a container without network, a memory cap) covers it too.
+
 The flag is passed explicitly rather than left to the default, because TeX Live's
 default is **`restricted`, not off**. Restricted mode still executes a whitelist
 of helper programs – `latexminted` (Python), `texosquery-jre8` (Java),

@@ -14,11 +14,19 @@
 // A caller that needs shell escape (minted over snippets it wrote itself)
 // sets REFLOWTEX_SHELL_ESCAPE=1 (or the backend option shellEscape),
 // asserting every snippet is trusted.
+//
+// Lua is no way round the switch: LuaTeX's os.execute and io.popen obey it
+// ("All command execution disabled" with it off; only the whitelist when
+// restricted). What LaTeX would have run a program for itself – epstopdf
+// converting an EPS figure – the pipeline does before TeX runs instead
+// (figures.ts), when shell escape is off.
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { TexError } from './errors.ts';
 import { errorLines, fatalStop, texErrors, type TexErrorInfo } from './tex-log.ts';
+import { prepareFigures } from './figures.ts';
+import { consoleLog, type Log } from '../shared/log.ts';
 export type { TexErrorInfo };
 
 /** What a TeX error that TeX carried on past (nonstopmode) does to a build:
@@ -46,9 +54,15 @@ export interface LuaLatexOptions {
   onPass?: (pass: number, log: string) => void;
   /** how the block is named in messages */
   block?: string;
-  /** shell escape on (the caller asserts the document is trusted); default:
-   *  REFLOWTEX_SHELL_ESCAPE=1 */
-  shellEscape?: boolean;
+  /** shell escape on (the caller asserts the document is trusted), or
+   *  'restricted' (TeX Live's default: its whitelist, as a LaTeX user's run
+   *  has it); default: on with REFLOWTEX_SHELL_ESCAPE=1, else off */
+  shellEscape?: boolean | 'restricted';
+  /** where the document's EPS figures are kept converted, for later runs
+   *  (figures.ts; default: the run's own converted-figures-cache) */
+  figureCache?: string;
+  /** where conversion messages go (default: consoleLog, the console) */
+  log?: Log;
   /** an error TeX carried on past: returned (default 'warn'), or a TexError
    *  ('error') */
   texErrors?: TexErrorPolicy;
@@ -68,8 +82,11 @@ export interface LuaLatexRun {
 
 interface Run { code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }
 
-function lualatex(cwd: string, env: NodeJS.ProcessEnv, trusted: boolean, main: string, jobname: string): Promise<Run> {
-  const shellEscape = trusted ? '-shell-escape' : '-no-shell-escape';
+type ShellEscape = NonNullable<LuaLatexOptions['shellEscape']>;
+const SHELL_ESCAPE_FLAG = (s: ShellEscape) => (s === 'restricted' ? '-shell-restricted' : s ? '-shell-escape' : '-no-shell-escape');
+
+function lualatex(cwd: string, env: NodeJS.ProcessEnv, mode: ShellEscape, main: string, jobname: string): Promise<Run> {
+  const shellEscape = SHELL_ESCAPE_FLAG(mode);
   return new Promise((resolve, reject) => {
     const p = spawn('lualatex', [shellEscape, '-interaction=nonstopmode', `-jobname=${jobname}`, main], { cwd, env });
     let stdout = '', stderr = '';
@@ -129,7 +146,12 @@ export async function runLuaLatexOnce(dir: string, opts: Pick<LuaLatexOptions, '
 export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<LuaLatexRun> {
   const main = opts.main ?? 'input.tex';
   const jobname = opts.jobname ?? main.replace(/\.tex$/, '');
-  const env = runEnv(opts.texinputs);
+  const mode = opts.shellEscape ?? process.env.REFLOWTEX_SHELL_ESCAPE === '1';
+  // With shell escape off, TeX cannot convert an EPS figure: the pipeline
+  // does, first, and the figures' directory goes on TEXINPUTS before the
+  // document's. With it on, LaTeX's epstopdf converts as in any LaTeX run.
+  const figures = mode === false ? await prepareFigures(dir, opts.texinputs, { cache: opts.figureCache, log: opts.log ?? consoleLog(), block: opts.block }) : null;
+  const env = runEnv(figures ? [figures.dir, ...opts.texinputs] : opts.texinputs);
   const outputJson = join(dir, 'output.json');
   // what this job reads back is in its own directory from the first run on
   for (const ext of READ_BACK_EXTS) if (!existsSync(join(dir, `${jobname}.${ext}`))) writeFileSync(join(dir, `${jobname}.${ext}`), '');
@@ -137,8 +159,8 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<L
   let result: Run | null = null;
   const log = join(dir, `${jobname}.log`);
   const expect = join(dir, opts.expect ?? 'output.json');
-  let passes = 0;
-  for (let n = 0; n < Math.max(1, opts.passes); n++) {
+  let limit = Math.max(1, opts.passes), passes = 0;
+  for (let n = 0; n < limit; n++) {
     passes = n + 1;
     // LaTeX's MathML (tagging with luamml, src/pipeline/mathml.ts) is written
     // afresh each run – and LaTeX reads the last run's back in, to embed in
@@ -146,10 +168,13 @@ export async function runLuaLatex(dir: string, opts: LuaLatexOptions): Promise<L
     // for a classic font's double accent). The PDF here needs none: gone.
     rmSync(join(dir, `${jobname}-luamml-mathml.html`), { force: true });
     rmSync(outputJson, { force: true });
-    result = await lualatex(dir, env, opts.shellEscape ?? process.env.REFLOWTEX_SHELL_ESCAPE === '1', main, jobname);
+    result = await lualatex(dir, env, mode, main, jobname);
     const text = existsSync(log) ? readFileSync(log, 'utf8') : '';
     opts.onPass?.(n + 1, text);
     const after = readBack(dir, jobname);
+    // epstopdf asked for a figure's PDF under a name of its settings': it is
+    // there now, for another pass
+    if (figures?.placeRequested(text)) { limit = Math.max(limit, n + 2); before = after; continue; }
     if (opts.settle !== false && after === before && !RERUN_RE.test(text)) break;
     before = after;
   }

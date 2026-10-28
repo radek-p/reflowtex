@@ -142,12 +142,15 @@ export class LuaTeXBackend implements CaptureBackend {
       return d;
     };
     rmSync(join(dir, 'samples'), { recursive: true, force: true });
+    // EPS figures converted once, for every run of the job (lualatex.ts)
+    const figureCache = doc.figureCache ?? join(dir, 'converted-figures-cache');
     let runs = 0;
     return {
       capture: async (run: CaptureRun): Promise<CaptureResult> => {
         const d = runs++ === 0 ? dir : sampleDir();
         writeFileSync(join(d, DRIVER_FILE), input(run.widthExtraSp));
-        const r = await runLuaLatex(d, { texinputs, passes: run.passes, main: DRIVER_FILE, jobname, block: doc.label, shellEscape: this.shellEscape, texErrors: doc.texErrors });
+        const r = await runLuaLatex(d, { texinputs, passes: run.passes, main: DRIVER_FILE, jobname, block: doc.label, shellEscape: this.shellEscape,
+          texErrors: doc.texErrors, figureCache, log: doc.log });
         const data = readSerializerOutput(r.output);
         const errors: Diagnostic[] = r.errors.map(e => ({ severity: 'error', ...e, pass: r.passes }));
         return { data, dir: d, mathml: readMathmlFile(d, jobname), diagnostics: [...errors, ...(existsSync(r.log) ? logDiagnostics(readFileSync(r.log, 'utf8')) : [])] };

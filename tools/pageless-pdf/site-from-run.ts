@@ -72,7 +72,9 @@ export async function siteFromRun(build: string, site: string, o: SiteFromRunOpt
       if (!fresh) {
         writeFileSync(join(d, DRIVER_FILE), tex);
         for (const f of readBack(jobname)) if (existsSync(join(build, f))) copyFileSync(join(build, f), join(d, f));
-        await runLuaLatex(d, { texinputs, passes: o.passes ?? 1, settle: false, main: DRIVER_FILE, jobname, block: `sample ${name}` });
+        // (the strip's run converted the document's EPS figures: its cache)
+        await runLuaLatex(d, { texinputs, passes: o.passes ?? 1, settle: false, main: DRIVER_FILE, jobname, block: `sample ${name}`,
+          figureCache: join(build, 'converted-figures-cache'), log: pipelineLog });
       }
       const unknown = errorsIn(d).filter(e => !known.has(texErrorKey(e)));
       if (unknown.length) {

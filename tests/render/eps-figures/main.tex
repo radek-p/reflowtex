@@ -1,0 +1,17 @@
+% EPS figures, as LaTeX includes them: \includegraphics{figure.eps} and
+% \includegraphics{figure} (found as figure.eps), each included as the PDF
+% epstopdf names figure-eps-converted-to.pdf. TeX runs with shell escape
+% off and runs no converter: the pipeline converts the figure before TeX
+% runs and puts its PDF there. The figure is a hand-written EPS with a label
+% in Times-Roman.
+\documentclass{article}
+\usepackage{graphicx}
+\pagestyle{empty}
+\begin{document}
+A paragraph before the figures, long enough to break onto a second line of
+the column, quickly.
+
+\includegraphics{figure.eps} and the same figure named without its
+extension, \includegraphics[width=60pt]{figure}, in a paragraph long enough
+to break onto a second line of the column.
+\end{document}

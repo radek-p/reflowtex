@@ -55,6 +55,7 @@ import {
 } from '../../src/pipeline/driver.ts';
 import { runLuaLatex, type TexErrorPolicy } from '../../src/pipeline/lualatex.ts';
 import { texErrorWarning } from '../../src/pipeline/warnings.ts';
+import { Log } from '../../src/shared/log.ts';
 import { stack } from './stack.ts';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -128,7 +129,7 @@ export async function pageless(document: string, o: PagelessOptions): Promise<st
   writeFileSync(join(out, DRIVER_FILE), driverTex({ document: file, widthExtraSp, callerPreamble, metadata, extra: driverExtra(o.margin ?? '36pt', !o.texPictures) }));
   const run = await runLuaLatex(out, {
     texinputs, passes: o.passes ?? 2, settle: false, main: DRIVER_FILE, jobname, expect: `${jobname}.pdf`, block: basename(document),
-    texErrors: o.texErrors,
+    texErrors: o.texErrors, log: new Log('pipeline', [r => log(r.message)]),
     onPass: (n, text) => {
       const shipped = text.split('\n').filter(l => l.startsWith('pageless: '));
       log(`  pass ${n}: ${shipped.pop() ?? 'no pageless line in the log'}`);

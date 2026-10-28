@@ -97,7 +97,7 @@ If you'd rather not use a container, you need the [prerequisites](#prerequisites
 below on your own machine. Then:
 
 ```sh
-make check     # confirm lualatex and Node are present
+make check     # confirm lualatex and Node are present (and gs, for EPS figures)
 make serve     # compile examples/demo and serve it at http://localhost:8000
 ```
 
@@ -166,6 +166,9 @@ page, follow the DOM contract in [src/viewer/README.md](src/viewer/README.md).
 The build pipeline shells out to a real TeX toolchain:
 
 - **LuaTeX** (`lualatex`) – TeX Live 2023+
+- **Ghostscript** (`gs`) – only for EPS and PostScript figures, which TeX
+  Live's `repstopdf` converts with it to PDF before TeX runs (TeX itself runs
+  with shell escape off)
 - **Node 22.18+** – the build is TypeScript, which Node runs straight from the
   sources; its packages (`package.json`) are installed into `node_modules/` by
   `npm ci`, which every `make` target (and `website/build.sh`) does on first
