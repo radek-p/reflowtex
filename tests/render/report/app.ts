@@ -765,7 +765,8 @@ const STATUS: Record<string, string> = { pass: 'Pass', fail: 'Fail', known: 'Kno
 const MARK: Record<string, string> = { pass: '✓', fail: '✗', known: '○', fixed: '!', error: '⚠' };
 
 function App() {
-    const [report, setReport] = useState<{ results: Result[] } | null>(null), [error, setError] = useState<string | null>(null);
+    // (each read kept with the batch it is of: until the chosen batch's comes, nothing of another is shown)
+    const [read, setRead] = useState<{ batch: string; results: Result[] } | null>(null), [error, setError] = useState<string | null>(null);
     const [batches, setBatches] = useState<Batch[] | null>(null);
     const [batch, setBatch] = useState<Batch | null>(null);
     const [id, setId] = useState(idFromHash());
@@ -814,8 +815,9 @@ function App() {
         return () => removeEventListener('popstate', back);
     }, []);
     const BUILD = batch ? batchRoot(batch) : '';
-    const load = () => { if (batch) getJson<{ results: Result[] }>(batch.index).then(r => { setError(null); setReport(r); }, e => setError(String(e))); };
-    useEffect(() => { setReport(null); setError(null); load(); }, [batch?.id]);
+    const load = () => { const b = batch; if (b) getJson<{ results: Result[] }>(b.index).then(r => { setError(null); setRead({ batch: b.id, results: r.results }); }, e => setError(String(e))); };
+    useEffect(() => { setError(null); load(); }, [batch?.id]);
+    const report = read && read.batch === batch?.id ? read : null;
     const pickBatch = (b: Batch) => { if (b.id === batch?.id) return; history.pushState(null, '', batchHref(b)); setId(''); setBatch(b); };
     useEffect(() => { const h = () => setId(idFromHash()); addEventListener('hashchange', h); return () => removeEventListener('hashchange', h); }, []);
 
