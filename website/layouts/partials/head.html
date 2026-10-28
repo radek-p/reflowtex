@@ -238,6 +238,11 @@
      side of the text. */
   .docs-layout.has-toc { max-width: 100rem; }
   .docs-layout.has-toc #lt-content { flex: 0 1 46rem; }
+  /* A page with a width of its own (a paper of the corpus, at the width
+     TeX set it; partials/docs-shell.html): the column starts there while
+     the width control is on auto, and gives way in a narrower window. */
+  .docs-layout.has-own-width { max-width: max(100rem, calc(var(--docs-own-width) + 40rem)); }
+  html[data-width="auto"] .docs-layout.has-own-width #lt-content { flex-basis: var(--docs-own-width); }
   .docs-toc { flex: 0 0 14rem; min-width: 0; }
   .docs-toc nav {
     position: sticky; top: 3rem; max-height: calc(100vh - 5rem - var(--rtx-dock-bottom, 0px)); overflow-y: auto;

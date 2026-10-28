@@ -234,8 +234,12 @@ function copyPaper(p: Paper, e: CorpusPaper, build: string, dir: string, assets:
     title: p.title, authors: p.authors, venue: p.venue, year: p.year, field: p.field, licence: p.licence, licence_url: p.licence_url,
     attribution: p.attribution, original_page: p.original_page, original_url: p.original_url, source_url: p.source.url,
     compare: `../../../${compareLink(p.id)}`, home: '../../../', measured: measuredText(e), assets: shared ? '../../assets/' : '' }));
+  // the text width TeX set the paper at, which its page starts at
+  const v = JSON.parse(readFileSync(join(build, 'vector', 'vector.json'), 'utf8')) as Record<string, unknown>;
   mkdirSync(blocks, { recursive: true });
-  writeFileSync(join(blocks, `${p.id}.json`), JSON.stringify(blockJson(block, bytes, fonts, shared ? '../corpus/assets/fonts/' : `../corpus/${p.id}/measured/fonts/`)));
+  writeFileSync(join(blocks, `${p.id}.json`), JSON.stringify({
+    ...blockJson(block, bytes, fonts, shared ? '../corpus/assets/fonts/' : `../corpus/${p.id}/measured/fonts/`),
+    ...(typeof v.hsize_pt === 'number' ? { width_pt: v.hsize_pt } : {}) }));
   writeFileSync(join(dir, 'outline.json'), JSON.stringify(outlineOf(bytes), null, 1));
   writeFileSync(join(dir, 'index.html'), redirectPage(`../../${pageLink(p.id)}`, p.title));
   mkdirSync(join(dir, 'compare'), { recursive: true });
@@ -244,7 +248,6 @@ function copyPaper(p: Paper, e: CorpusPaper, build: string, dir: string, assets:
   const data = join(dir, 'data');
   mkdirSync(join(data, 'vector'), { recursive: true });
   copyFileSync(join(build, 'pageless.pdf'), join(data, 'pageless.pdf'));
-  const v = JSON.parse(readFileSync(join(build, 'vector', 'vector.json'), 'utf8')) as Record<string, unknown>;
   writeFileSync(join(data, 'vector', 'vector.json.gz'), gzipSync(JSON.stringify(slimVector(v)), { level: 9 }));
   writeFileSync(join(data, 'vector', 'lines.json.gz'), gzipSync(readFileSync(join(build, 'vector', 'lines.json')), { level: 9 }));
   writeFileSync(join(data, 'vector', 'strip.svg.gz'), gzipSync(stripSvg(join(build, 'pageless.pdf')), { level: 9 }));

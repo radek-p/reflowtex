@@ -12,7 +12,7 @@
           "path" .id
           "kind" "page"
           "title" .title
-          "content" (dict "mediaType" "text/markdown" "value" "{{< corpus-paper >}}")
+          "content" (dict "mediaType" "text/markdown" "value" "{{< latex file=\"showcase-paper-title\" />}}\n\n{{< corpus-paper >}}")
           "params" (dict "corpusId" .id "toc" true "widthControl" true "hideInNav" true "latexTitle" true)) -}}
   {{- end -}}
 {{- end -}}

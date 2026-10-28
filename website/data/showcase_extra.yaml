@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Documents in Showcase's grid besides the corpus's papers (data/corpus.json,
+# which CI writes): the same fields, written by hand. testmath.tex is on its
+# own page (content/docs/showcase/testmath.md) and among the render tests.
+papers:
+  - id: testmath
+    title: "Sample Paper for the amsmath Package"
+    authors: ["American Mathematical Society"]
+    year: 2023
+    venue: "amsmath documentation, version 2.0a"
+    domain: Mathematics
+    field: "Sample paper"
+    class: article
+    packages: [amsmath, amsthm]
+    licence: LPPL-1.3c
+    licence_url: "https://www.latex-project.org/lppl/lppl-1-3c/"
+    attribution: "testmath.tex, copyright 1995, 1999 American Mathematical Society and 2023 LaTeX Project, distributed with amsmath under the LaTeX Project Public License 1.3c."
+    original_page: "https://ctan.org/pkg/amsmath"
+    status: displayed
+    page: docs/showcase/testmath/
+    compare: "render-tests/?batch=tests#testmath@own"
