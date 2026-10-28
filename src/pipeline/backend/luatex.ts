@@ -91,7 +91,7 @@ export class LuaTeXBackend implements CaptureBackend {
   async open(doc: CaptureDocument): Promise<CaptureJob> {
     const { dir } = doc;
     const jobname = checkJobname(doc.jobname ?? DEFAULT_JOBNAME);
-    mkdirSync(join(dir, 'pics'), { recursive: true });      // PGF externalisation's conventional prefix
+    mkdirSync(dir, { recursive: true });
     const { callerPreamble } = writeDocument(doc);
     // Always refreshed: a stale serializer would silently lack newer features.
     copyFileSync(this.serializer, join(dir, 'serializer.lua'));
@@ -104,7 +104,12 @@ export class LuaTeXBackend implements CaptureBackend {
     const texinputs = [LATEX_DIR, ...doc.searchDirs];
     const metadata = await applicableMetadata(dir, DOCUMENT_FILE, doc.documentMetadata, { texinputs, shellEscape: this.shellEscape });
     const input = (widthExtraSp: number) => driverTex({ document: DOCUMENT_FILE, widthExtraSp, callerPreamble, metadata });
-    const own = new Set([`${jobname}.pdf`, `${jobname}.log`, 'output.json', 'nodelist.pb']);
+    // EPS figures converted once, for every run of the job (lualatex.ts)
+    const figureCache = doc.figureCache ?? join(dir, 'converted-figures-cache');
+    // a sample is a copy of everything the first run read and wrote – the
+    // .aux of an \include in a subdirectory too – but the run's own output,
+    // the samples and the figures kept for every run
+    const own = new Set([`${jobname}.pdf`, `${jobname}.log`, 'output.json', 'nodelist.pb', 'samples'].map(f => join(dir, f)).concat(figureCache));
     let sampleSeq = 0;
     const sampleDir = () => {
       const d = join(dir, 'samples', String(++sampleSeq));
@@ -112,13 +117,11 @@ export class LuaTeXBackend implements CaptureBackend {
       mkdirSync(d, { recursive: true });
       for (const f of readdirSync(dir)) {
         const p = join(dir, f);
-        if (statSync(p).isFile() && !own.has(f)) cpSync(p, join(d, f));
+        if (!own.has(p)) cpSync(p, join(d, f), { recursive: true });
       }
       return d;
     };
     rmSync(join(dir, 'samples'), { recursive: true, force: true });
-    // EPS figures converted once, for every run of the job (lualatex.ts)
-    const figureCache = doc.figureCache ?? join(dir, 'converted-figures-cache');
     let runs = 0;
     return {
       capture: async (run: CaptureRun): Promise<CaptureResult> => {

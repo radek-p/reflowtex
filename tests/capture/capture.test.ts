@@ -6,9 +6,9 @@
 // web tests look at. TeX only, no browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { DEFAULT_PREAMBLE, Pipeline, contentKey, type CompileOptions } from '../../src/pipeline/pipeline.ts';
 import { a11yLayer, type LayerDocument } from '../../src/pipeline/a11y.ts';
 import { Log } from '../../src/shared/log.ts';
@@ -1057,6 +1057,64 @@ test('the caller\'s metadata applies to a snippet', async () => {
   assert.equal((await compiled(LANG, '', { kind: 'snippet', documentMetadata: { keys: 'lang=de' } })).text, 'Lang:de.');
 });
 
+// ── Tables of contents ──────────────────────────────────────────────────────
+// Each line read from the .toc links to its heading (reflowtex-toc-k), the
+// lines of a list of figures do not; whatever reads the .toc – the kernel's
+// \@starttoc, or amsart's, which takes the heading as a second argument.
+
+for (const [cls, packages] of [['article', ''], ['amsart', ''], ['amsart', '\\usepackage{hyperref}\n']]) {
+  test(`a table of contents links each entry to its heading, a list of figures none: ${cls}${packages ? ' with hyperref' : ''}`, async () => {
+    const content = `\\documentclass{${cls}}\n${packages}\\begin{document}\n\\tableofcontents\n\\listoffigures\n` +
+      '\\section{Intro}\nText.\n\\subsection{More}\nMore text.\n\\begin{figure}\\caption{Afigure}\\end{figure}\n\\end{document}\n';
+    const key = contentKey(`toc\n${content}`, '');
+    await kinds.compile(content, { kind: 'document', key, passes: 3 });
+    const d: Output = JSON.parse(readFileSync(join(kinds.buildRoot, key, 'output.json'), 'utf8'));
+    assert.deepEqual((kinds.diagnostics.get(key) ?? []).filter(w => w.severity === 'error').map(w => w.message), []);
+    const toc = linkedRuns(d).filter(([, l]) => l.label?.startsWith('reflowtex-toc-'));
+    const labels = [...new Set(toc.map(([, l]) => l.label))];
+    assert.deepEqual(labels, labels.map((_, i) => `reflowtex-toc-${i + 1}`));
+    const text = (label: string) => toc.filter(([, l]) => l.label === label).map(([t]) => t).join('');
+    assert.ok(labels.some(l => /Intro/.test(text(l!))) && labels.some(l => /More/.test(text(l!))), labels.map(l => text(l!)).join(' | '));
+    assert.ok(!labels.some(l => /Afigure/.test(text(l!))), 'a list of figures links to no heading');
+    for (const l of labels) assert.ok(d.anchors.includes(l!), `${l} has its anchor`);
+  });
+}
+
+// ── The document's directories ──────────────────────────────────────────────
+// TeX runs in a build directory, which stands in for the document's: what
+// TeX writes into one of the document's subdirectories (\include's .aux) it
+// writes into the same one there, made when it is first written to. A
+// wider display sample is a copy of the first run's directory, those files
+// with it.
+
+test('\\include{chapters/one}: the chapter is set, and its .aux written and read back, in the run and its samples', async () => {
+  const src = mkdtempSync(join(tmpdir(), 'reflowtex-include-'));
+  mkdirSync(join(src, 'chapters'));
+  writeFileSync(join(src, 'chapters', 'one.tex'), '\\section{One}\\label{s:one}\nText of the included chapter.\n\\begin{equation}\\label{e:one} a = b \\end{equation}\n');
+  const main = '\\documentclass{article}\n\\begin{document}\nSee section~\\ref{s:one}: $$x = y \\quad (\\ref{e:one})$$\n\\include{chapters/one}\n\\end{document}\n';
+  const inc = new Pipeline({ buildRoot: join(root, 'build-include'), fontsDir: join(root, 'fonts'), searchDirs: [src], log: new Log('pipeline') });
+  await inc.compile(main, { kind: 'document', key: 'include', passes: 3 });
+  const dir = join(inc.buildRoot, 'include');
+  const d: Output = JSON.parse(readFileSync(join(dir, 'output.json'), 'utf8'));
+  const text = d.paragraphs.map(p => glyphText(p.nodes)).join(' ');
+  assert.match(text, /^Seesection1:/);
+  assert.match(text, /Textoftheincludedchapter\./);
+  assert.ok(existsSync(join(dir, 'chapters', 'one.aux')));
+  const samples = existsSync(join(dir, 'samples')) ? readdirSync(join(dir, 'samples')) : [];
+  assert.ok(samples.length > 0, 'a display sample was taken');
+  for (const s of samples) {
+    const log = readFileSync(join(dir, 'samples', s, 'input.log'), 'utf8');
+    assert.doesNotMatch(log, /Reference `[se]:one' on page \d+ undefined/, `sample ${s} read the chapter's .aux back`);
+  }
+});
+
+test('\\include{nowhere/one}, a directory the document\'s lacks: TeX cannot write its .aux, as in the document\'s directory', async () => {
+  const src = mkdtempSync(join(tmpdir(), 'reflowtex-include-'));
+  const inc = new Pipeline({ buildRoot: join(root, 'build-include'), fontsDir: join(root, 'fonts'), searchDirs: [src], log: new Log('pipeline') });
+  await assert.rejects(inc.compile('\\documentclass{article}\n\\begin{document}\nText.\n\\include{nowhere/one}\n\\end{document}\n', { kind: 'document', key: 'nowhere' }),
+    (e: Error) => e instanceof TexError && /I can't write on file `nowhere\/one\.aux'/.test(e.message));
+});
+
 // ── TeX errors ──────────────────────────────────────────────────────────────
 // The build stops only where lualatex gives the author nothing (TeX stopped,
 // no output). An error TeX carries on past leaves what plain lualatex leaves:
@@ -1075,6 +1133,36 @@ test('an undefined control sequence in the body: the block is built, and the war
   assert.match(mine[0].message, /: warning: TeX error: Undefined control sequence\. \(\.\/reflowtex-document\.tex:6: Before \\undefinedmacro\)$/);
   assert.deepEqual(d.warnings?.filter(w => w.code === 'tex-error').map(w => w.message), [mine[0].message.replace(/^.*: warning: /, '')],
     'the block\'s data carries it to the page\'s log');
+});
+
+/** `f` run with lualatex killed (with what it started) after `seconds`: a
+ *  stand-in for it, first on PATH, runs the real one with the stand-in's own
+ *  stdin, so a run that waits for an answer fails the test instead of
+ *  hanging it. (JavaScript: the stand-in is an executable Node runs as it
+ *  is, without a .ts name to strip types by.) */
+async function withLuaLatexLimit<T>(seconds: number, f: () => Promise<T>): Promise<T> {
+  const path = process.env.PATH ?? '';
+  const real = path.split(delimiter).map(d => join(d, 'lualatex')).find(p => existsSync(p));
+  assert.ok(real, 'lualatex on PATH');
+  const bin = mkdtempSync(join(tmpdir(), 'reflowtex-lualatex-limit-'));
+  writeFileSync(join(bin, 'lualatex'), `#!/usr/bin/env node
+const { spawn } = require('node:child_process');
+const p = spawn(${JSON.stringify(real)}, process.argv.slice(2), { stdio: 'inherit', detached: true });
+const timer = setTimeout(() => { try { process.kill(-p.pid, 'SIGKILL'); } catch {} }, ${seconds * 1000});
+p.on('exit', (code, signal) => { clearTimeout(timer); process.exit(signal ? 1 : code ?? 1); });
+`);
+  chmodSync(join(bin, 'lualatex'), 0o755);
+  process.env.PATH = `${bin}${delimiter}${path}`;
+  try { return await f(); } finally { process.env.PATH = path; rmSync(bin, { recursive: true, force: true }); }
+}
+
+test('a document that switches to \\errorstopmode: an error is one TeX carries on past, nothing waits for an answer', { timeout: 120_000 }, async () => {
+  const body = '\\errorstopmode Before \\undefinedmacro after.';
+  const d = await withLuaLatexLimit(60, () => capture(body));
+  assert.equal(d.paragraphs.map(p => glyphText(p.nodes)).join(' '), 'Beforeafter.');
+  const key = contentKey(body, '');
+  assert.deepEqual(pipeLog.records().filter(r => r.code === 'tex-error' && r.details.block === `${key} (${key})`)
+    .map(r => [r.level, r.details.error]), [['warning', '! Undefined control sequence.']]);
 });
 
 test('texErrors: \'error\': the same error fails the block, with TeX\'s error line', async () => {

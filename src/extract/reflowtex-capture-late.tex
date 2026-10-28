@@ -32,21 +32,22 @@
 % each entry becomes a link to its heading: the k-th line read from the .toc
 % was written by the k-th \addcontentsline{toc} of the run before, so it links
 % to the anchor that one places this run (reflowtex-toc-k, in the outline
-% capture below). A .toc line has a fourth argument when whatever wrote it
+% capture below). A line is the .toc's when TeX reads it from the job's .toc
+% file, whatever macro reads that – the kernel's \@starttoc, a class's own
+% with arguments of its own (amsart's takes the heading too) – and not a
+% .lof's or .lot's. A .toc line has a fourth argument when whatever wrote it
 % reads one (hyperref's anchor name, the kernel's destination since 2023), and
 % it is passed on untouched exactly then.
 \newcount\reflowtexTocEntryCount
 \newcount\reflowtexTocAnchorCount
 \makeatletter
-\let\reflowtex@tocfile\@empty
-\def\reflowtex@newstarttoc#1{%
-  \def\reflowtex@tocfile{#1}\reflowtex@starttoc{#1}\let\reflowtex@tocfile\@empty}
+% 1 while TeX reads the job's .toc, else 0
+\def\reflowtex@readingtoc{\directlua{tex.sprint(string.match(status.filename or "", "[^/]*$") == tex.jobname .. ".toc" and "1" or "0")}}
 \def\reflowtex@newcontentsline#1#2#3{%
   \@ifnextchar\bgroup{\reflowtex@contentsline{#1}{#2}}{\reflowtex@contentsline{#1}{#2}\reflowtex@noarg}}
 \def\reflowtex@noarg{\reflowtex@noarg}   % stands for a fourth argument the line did not have
 \def\reflowtex@contentsline#1#2#3{%
-  \def\reflowtex@tmp{toc}%
-  \ifx\reflowtex@tocfile\reflowtex@tmp
+  \ifnum\reflowtex@readingtoc=\@ne
     \global\advance\reflowtexTocEntryCount by 1
     \global\advance\reflowtexLinkCount by 1
     \directlua{Serializer.note_link(\the\reflowtexLinkCount,
@@ -71,9 +72,7 @@
 \AtBeginDocument{%
   \def\@dotsep{10000}%
   \let\reflowtexOrigContentsline\contentsline
-  \let\contentsline\reflowtex@newcontentsline
-  \let\reflowtex@starttoc\@starttoc
-  \let\@starttoc\reflowtex@newstarttoc}
+  \let\contentsline\reflowtex@newcontentsline}
 \makeatother
 
 % The build pipeline compiles display-bearing snippets at several increasingly

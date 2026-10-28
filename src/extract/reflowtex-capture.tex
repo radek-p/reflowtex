@@ -23,8 +23,17 @@
 % \input, \include, \InputIfFileExists, a class or package, and graphicx's
 % files unless the document sets \graphicspath – so TEXINPUTS's directories
 % go there too, and a relative name resolves against the document's
-% directory, as in a LaTeX run in that directory. (Backslashes and braces
-% are built with string.char so TeX does not read them; the directories are
+% directory, as in a LaTeX run in that directory.
+%
+% What TeX writes goes to the build directory, which stands in for the
+% document's: a name with a directory (\include{chapters/one} writes
+% chapters/one.aux) needs that directory there, as the document's directory
+% has it. So when TeX opens a file for writing in a directory the build
+% directory lacks but one of the document's directories has, it is made
+% first (directories only; never above the build directory). A directory the
+% document's own lacks stays missing, and TeX says it cannot write there, as
+% in a LaTeX run in the document's directory. (Backslashes and braces are
+% built with string.char so TeX does not read them; the directories are
 % printed as characters, whatever they hold.)
 \directlua{
   local bs, open, close = string.char(92), string.char(123), string.char(125)
@@ -39,7 +48,34 @@
     for _, d in ipairs(dirs) do tex.sprint(open); tex.sprint(-2, d); tex.sprint(close) end
     tex.sprint(close)
   end
+  luatexbase.add_to_callback("find_write_file", function(_, name)
+    local sub = string.match(name, "^(.+)/[^/]+$")
+    if sub and not lfs.isdir(sub) then
+      local parts, up = {}, false
+      for part in string.gmatch(sub, "[^/]+") do table.insert(parts, part); up = up or part == ".." end
+      for _, d in ipairs(up and {} or dirs) do
+        if lfs.isdir(d .. sub) then
+          local path = ""
+          for _, part in ipairs(parts) do path = path .. part; lfs.mkdir(path); path = path .. "/" end
+          break
+        end
+      end
+    end
+    return name
+  end, "reflowtex: the document's directories in the build directory")
 }
+
+% ── No terminal: the run stays in nonstopmode ───────────────────────────────
+% The pipeline runs TeX with -interaction=nonstopmode and stdin closed
+% (src/pipeline/lualatex.ts): nobody answers TeX. A document that switches to
+% a mode that asks – \errorstopmode, \scrollmode, as a class does after a
+% quiet \batchmode check and \tracingall does – would have TeX read the
+% terminal at its next error, find the end of the file and stop. The switch
+% keeps nonstopmode instead, so the error is one TeX carries on past, as it
+% is under nonstopmode; \batchmode is left as it is (it only writes less to
+% the terminal).
+\let\errorstopmode\nonstopmode
+\let\scrollmode\nonstopmode
 
 % ── Font resolution: prefer TeX Live's own copies over OS-installed ones ──────
 % luaotfload resolves a font *by name* against a database built from several
