@@ -58,7 +58,7 @@
      {{- with site.Params.latexColorMap }} data-color-map="{{ . }}"{{ end }}></div>
 {{- if and $a11y $b.a11y_html }}{{ $b.a11y_html | safeHTML }}{{ end }}
 {{- else }}
-<p class="corpus-missing">The paper's typeset text is not part of this build.</p>
+<p class="corpus-missing">The typeset paper appears here once the paper corpus has been compiled, which takes a while after each change. Until then, the original is linked above.</p>
 {{- end }}
 {{- else -}}
 <p class="corpus-missing">This paper is not in the corpus's data.</p>
