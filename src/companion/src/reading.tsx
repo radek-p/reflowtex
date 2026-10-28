@@ -253,40 +253,44 @@ export function ReadingOptions({ state = reading, width = false, selection = fal
                                 onClick={() => state.setWidth(w)}>{title(w)}</button>))}
                 </div>
             </div>}
-            {selection && state.selection && state.setSelection && <div class="rtx-reading-row">
-                <p class="rtx-reading-caption" id="rtx-selection-label">Selection</p>
-                <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-selection-label">
-                    {SELECTIONS.map(o => (
-                        <button type="button" role="radio" data-s={o.name} aria-checked={state.selection!.value === o.name}
-                                onClick={() => state.setSelection!(o.name)}>{o.label}</button>))}
-                </div>
-            </div>}
-            {state === reading && document.querySelector('.latex-a11y') && <div class="rtx-reading-row">
-                <p class="rtx-reading-caption" id="rtx-math-label">Formulas for screen readers</p>
-                <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-math-label">
-                    {MATH_MODES.map(o => (
-                        <button type="button" role="radio" data-m={o.name} aria-checked={reading.math.value === o.name}
-                                onClick={() => reading.setMath(o.name)}>{o.label}</button>))}
-                </div>
-            </div>}
-            {state === reading && document.querySelector('.latex-a11y') && api?.setScreenReaderMode && <div class="rtx-reading-row">
-                <p class="rtx-reading-caption" id="rtx-reader-label">Screen reader mode</p>
-                <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-reader-label">
-                    {[{ on: false, label: 'Off' }, { on: true, label: 'On' }].map(o => (
-                        <button type="button" role="radio" data-reader={String(o.on)} aria-checked={reading.reader.value === o.on}
-                                title={o.on ? 'A click reaches the text a screen reader reads, word by word; the drawing’s text is not selectable' : 'The drawing’s text is selected and clicked, as it is shown'}
-                                onClick={() => reading.setReader(o.on)}>{o.label}</button>))}
-                </div>
-            </div>}
-            {((inspect && inspector) || showDebug) && <div class="rtx-reading-row rtx-reading-tools">
-                {inspect && inspector && <button type="button" class="rtx-reading-inspect" title="The boxes and glue behind the page"
-                        onClick={() => { onDone?.(); inspector.open(); }}>
-                    <span>Inspect boxes and glue</span><kbd>{inspector.shortcut || ''}</kbd>
-                </button>}
-                {showDebug && <button type="button" role="switch" class="rtx-reading-debug" aria-checked={reading.debug.value}
-                        title="Show the text a screen reader reads, where it lies, each element tinted (debugging)"
-                        onClick={() => reading.setDebug(!reading.debug.value)}>Reader text</button>}
-            </div>}
+            {/* the less used options, folded under More so the panel opens short */}
+            <details class="rtx-reading-more">
+                <summary>More</summary>
+                {selection && state.selection && state.setSelection && <div class="rtx-reading-row">
+                    <p class="rtx-reading-caption" id="rtx-selection-label">Selection</p>
+                    <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-selection-label">
+                        {SELECTIONS.map(o => (
+                            <button type="button" role="radio" data-s={o.name} aria-checked={state.selection!.value === o.name}
+                                    onClick={() => state.setSelection!(o.name)}>{o.label}</button>))}
+                    </div>
+                </div>}
+                {state === reading && document.querySelector('.latex-a11y') && <div class="rtx-reading-row">
+                    <p class="rtx-reading-caption" id="rtx-math-label">Formulas for screen readers</p>
+                    <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-math-label">
+                        {MATH_MODES.map(o => (
+                            <button type="button" role="radio" data-m={o.name} aria-checked={reading.math.value === o.name}
+                                    onClick={() => reading.setMath(o.name)}>{o.label}</button>))}
+                    </div>
+                </div>}
+                {state === reading && document.querySelector('.latex-a11y') && api?.setScreenReaderMode && <div class="rtx-reading-row">
+                    <p class="rtx-reading-caption" id="rtx-reader-label">Screen reader mode</p>
+                    <div class="rtx-seg" role="radiogroup" aria-labelledby="rtx-reader-label">
+                        {[{ on: false, label: 'Off' }, { on: true, label: 'On' }].map(o => (
+                            <button type="button" role="radio" data-reader={String(o.on)} aria-checked={reading.reader.value === o.on}
+                                    title={o.on ? 'A click reaches the text a screen reader reads, word by word; the drawing’s text is not selectable' : 'The drawing’s text is selected and clicked, as it is shown'}
+                                    onClick={() => reading.setReader(o.on)}>{o.label}</button>))}
+                    </div>
+                </div>}
+                {((inspect && inspector) || showDebug) && <div class="rtx-reading-row rtx-reading-tools">
+                    {inspect && inspector && <button type="button" class="rtx-reading-inspect" title="The boxes and glue behind the page"
+                            onClick={() => { onDone?.(); inspector.open(); }}>
+                        <span>Inspect boxes and glue</span><kbd>{inspector.shortcut || ''}</kbd>
+                    </button>}
+                    {showDebug && <button type="button" role="switch" class="rtx-reading-debug" aria-checked={reading.debug.value}
+                            title="Show the text a screen reader reads, where it lies, each element tinted (debugging)"
+                            onClick={() => reading.setDebug(!reading.debug.value)}>Reader text</button>}
+                </div>}
+            </details>
         </div>);
 }
 
