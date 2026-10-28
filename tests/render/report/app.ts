@@ -21,6 +21,7 @@ import type { InspectorApi } from '../../../src/inspector/src/protocol.ts';
 import { BAND_PT, PX_PER_PT, bandsIn, cutStrip, indexBoxes, type Box, type BoxIndex, type Strip } from './bands.ts';
 import { summarise, type Fact, type Place, type Step, type Summary } from './summary.ts';
 import { placementOf, type Glyph, type LineData, type VectorGlyphs } from './placement.ts';
+import { batchHref, batchRoot, chooseBatch, DEFAULT_BATCHES, fileName, readBatches, type Batch } from './batches.ts';
 
 /** What the report reads of a comparison (vector.json, written by
  *  tools/pageless-pdf/vector-compare.ts): positions in pt. */
@@ -50,11 +51,17 @@ const INSPECTOR = document.querySelector<HTMLMetaElement>('meta[name="rr-inspect
 const { html, render, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } =
     await import(new URL(`${INSPECTOR}vendor/preact.js`, document.baseURI).href) as typeof import('../../../src/inspector/src/vendor/preact.js');
 
-const BUILD = 'build/';
 const RED = '#d93025', AMBER = '#e37400', BLUE = '#0b57d0';
 
 // ── Data ───────────────────────────────────────────────────────────────────────
-const getJson = async <T>(url: string): Promise<T> => { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
+/** A file's text; a .gz one unpacked here (it is served as it is, not with a content encoding). */
+async function getText(url: string): Promise<string> {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`${url}: ${r.status}`);
+    if (!url.split(/[?#]/)[0].endsWith('.gz')) return r.text();
+    return new Response(r.body!.pipeThrough(new DecompressionStream('gzip'))).text();
+}
+const getJson = async <T>(url: string): Promise<T> => JSON.parse(await getText(url)) as T;
 const f3 = (x: number): string => x.toFixed(3);
 const signed = (x: number): string => `${x >= 0 ? '+' : ''}${f3(x)}`;
 const widthLabel = (e: number): string => (e ? `${e > 0 ? '+' : ''}${e} pt` : 'own width');
@@ -444,7 +451,7 @@ function makeMarks({ scale, status }: { scale: () => number; status: () => HTMLE
         if (el) el.textContent = [
             pointer && `x ${f2(pointer.x)}  y ${f2(pointer.y)} pt`,
             area && `area ${f2(Math.abs(area.x1 - area.x0))} × ${f2(Math.abs(area.y1 - area.y0))} pt at (${f2(Math.min(area.x0, area.x1))}, ${f2(Math.min(area.y0, area.y1))})`,
-        ].filter(Boolean).join('   ·   ');
+        ].filter(Boolean).join('      ');
     }
     // (e.currentTarget: the pane; the point in its stage's pt)
     // (the crosshair's point, not the pointer's: CROSSHAIR_OFFSET px up and left)
@@ -529,7 +536,7 @@ function useStrip(src: string | null): Strip | null | false {
         setStrip(null);
         if (!src) return;
         let live = true;
-        fetch(src, { cache: 'no-store' }).then(r => (r.ok ? r.text() : null)).then(t => { if (live) setStrip((t && cutStrip(t)) || false); },
+        getText(src).then(t => { if (live) setStrip((t && cutStrip(t)) || false); },
             () => { if (live) setStrip(false); });
         return () => { live = false; };
     }, [src]);
@@ -714,7 +721,7 @@ function Headline({ r, summary, onMore }: { r: Result; summary: Summary; onMore:
     const nums = summary.headline.length ? summary.headline : [r.problems[0]];
     return html`<div class=${`headline ${r.status}`}>
         <span class=${`st ${r.status}`}>${STATUS[r.status]}</span>
-        <span class="nums">${nums.map((n, i) => html`${i ? html`<span class="dot"> · </span>` : null}${n}`)}</span>
+        <span class="nums">${nums.map((n, i) => html`${i ? html`<span class="dot">, </span>` : null}${n}`)}</span>
         <button type="button" class="ib text" title="All the test says, in the list's Summary tab" onClick=${onMore}>Summary (${r.problems.length})</button>
     </div>`;
 }
@@ -759,6 +766,8 @@ const MARK: Record<string, string> = { pass: '✓', fail: '✗', known: '○', f
 
 function App() {
     const [report, setReport] = useState<{ results: Result[] } | null>(null), [error, setError] = useState<string | null>(null);
+    const [batches, setBatches] = useState<Batch[] | null>(null);
+    const [batch, setBatch] = useState<Batch | null>(null);
     const [id, setId] = useState(idFromHash());
     const [vec, setVec] = useState<Vector | null>(null);
     const [lineData, setLineData] = useState<LineData | null>(null);
@@ -797,8 +806,17 @@ function App() {
         return () => mq.removeEventListener('change', follow);
     }, []);
 
-    const load = () => getJson<{ results: Result[] }>(`${BUILD}report.json`).then(setReport, e => setError(String(e)));
-    useEffect(() => { load(); }, []);
+    // the batches (batches.json beside the page; without it, the render tests alone), and the one the URL names
+    useEffect(() => {
+        getJson<unknown>('batches.json').then(readBatches, () => DEFAULT_BATCHES).then(list => { setBatches(list); setBatch(chooseBatch(list, location.search)); });
+        const back = () => setBatches(list => { if (list) setBatch(chooseBatch(list, location.search)); return list; });
+        addEventListener('popstate', back);
+        return () => removeEventListener('popstate', back);
+    }, []);
+    const BUILD = batch ? batchRoot(batch) : '';
+    const load = () => { if (batch) getJson<{ results: Result[] }>(batch.index).then(r => { setError(null); setReport(r); }, e => setError(String(e))); };
+    useEffect(() => { setReport(null); setError(null); load(); }, [batch?.id]);
+    const pickBatch = (b: Batch) => { if (b.id === batch?.id) return; history.pushState(null, '', batchHref(b)); setId(''); setBatch(b); };
     useEffect(() => { const h = () => setId(idFromHash()); addEventListener('hashchange', h); return () => removeEventListener('hashchange', h); }, []);
 
     const results = report?.results ?? [];
@@ -810,9 +828,9 @@ function App() {
     useEffect(() => {
         setVec(null); setLineData(null); setSel(-1); setSumSel(''); setLiveH(0); setLiveAt([0, 0]);
         if (!r || r.status === 'error') return;
-        getJson<Vector>(`${BUILD}${r.dir}/vector/vector.json`).then(setVec, e => setVec({ error: String(e) }));
-        if (r.lines) getJson<LineData>(`${BUILD}${r.dir}/vector/lines.json`).then(setLineData, () => setLineData(null));
-    }, [r?.id, r?.at]);
+        getJson<Vector>(`${BUILD}${r.dir}/vector/${fileName('vector.json', r.gz)}`).then(setVec, e => setVec({ error: String(e) }));
+        if (r.lines) getJson<LineData>(`${BUILD}${r.dir}/vector/${fileName('lines.json', r.gz)}`).then(setLineData, () => setLineData(null));
+    }, [batch?.id, r?.id, r?.at]);
 
     const glyphThr = thr[r?.id]?.[0] ?? r?.tolerance ?? 0.05;
     const ruleThr = thr[r?.id]?.[1] ?? r?.rule_tolerance ?? r?.tolerance ?? 0.05;
@@ -834,7 +852,7 @@ function App() {
     const vdir = r ? `${BUILD}${r.dir}/vector/` : '';
     const noVec = !r ? null : r.status === 'error' ? 'The test stopped before a comparison: see above.' : vec?.error ? `No comparison: ${vec.error}` : null;
     // (the snapshot only when it is shown: the live page is shown where there is one)
-    const stripSrc = r && !noVec ? `${vdir}strip.svg${stamp}` : null;
+    const stripSrc = r && !noVec ? `${vdir}${fileName('strip.svg', r.gz)}${stamp}` : null;
     const viewerSrc = r && !noVec && (mode !== 'live' || !r.page) ? `${vdir}viewer.png${stamp}` : null;
     const strip = useStrip(stripSrc), viewerSize = useImageSize(viewerSrc);
     const stripSize = strip ? strip.size : strip;
@@ -971,9 +989,16 @@ function App() {
         return () => removeEventListener('keydown', key);
     });
 
-    if (error) return html`<p class="empty">Could not read the report: ${error}. Run <kbd>make test-render</kbd>, then <kbd>make render-report</kbd>.</p>`;
-    if (!report) return html`<p class="empty">Loading…</p>`;
-    if (!results.length) return html`<p class="empty">No results yet: run <kbd>make test-render</kbd> (or one case), then reload.</p>`;
+    // the batch selector: shown where there is more than one batch, before anything else (a batch with no
+    // results can be left for another)
+    const batchPick = batches && batch && batches.length > 1 ? html`<${Seg} title="Which results: each batch is its own list and summary"
+        value=${batch.id} onChange=${(v: string) => pickBatch(batches.find(b => b.id === v)!)} options=${batches.map(b => [b.id, b.label] as [string, string])}/>` : null;
+    const alone = (text: ComponentChildren) => html`<div class="rep">${batchPick ? html`<div class="bar"><div class="group start" role="group" aria-label="Batch">${batchPick}</div></div>` : null}
+        <p class="empty">${text}</p></div>`;
+    const tests = batch?.id === 'tests';
+    if (error) return alone(tests ? html`Could not read the report: ${error}. Run <kbd>make test-render</kbd>, then <kbd>make render-report</kbd>.` : `Could not read the results: ${error}.`);
+    if (!report) return alone('Loading…');
+    if (!results.length) return alone(tests ? html`No results yet: run <kbd>make test-render</kbd> (or one case), then reload.` : 'No results in this batch.');
 
     const counts = results.reduce((a: Record<string, number>, x) => ({ ...a, [x.status]: (a[x.status] ?? 0) + 1 }), {});
     const liveSrc = r.page ? `${BUILD}${r.page}/index.html` : null;
@@ -983,9 +1008,10 @@ function App() {
     return html`<div class="rep">
         <div class="bar">
             <div class="group start" role="group" aria-label="Tests">
+                ${batchPick}${batchPick ? html`<span class="sep"></span>` : null}
                 <button class="ib" title="Previous test (←)" aria-label="Previous test" onClick=${() => go(idx - 1)}><${IconPrev}/></button>
                 <span class="pick"><select aria-label="Test" value=${r.id} onChange=${(e: Event & { target: HTMLSelectElement }) => { location.hash = encodeURIComponent(e.target.value); }}>
-                    ${results.map(x => html`<option value=${x.id}>${MARK[x.status] ?? '·'} ${x.id}</option>`)}
+                    ${results.map(x => html`<option value=${x.id}>${MARK[x.status] ?? ' '} ${x.label ?? x.id}</option>`)}
                 </select></span>
                 <button class="ib" title="Next test (→)" aria-label="Next test" onClick=${() => go(idx + 1)}><${IconNext}/></button>
                 <span class=${`st ${r.status}`} title=${r.known ? `known: ${r.known}` : ''}>${STATUS[r.status]}</span>
@@ -1002,7 +1028,7 @@ function App() {
                     onClick=${toggleInspector}><${IconInspect}/> Inspect</button>
                 <${ViewMenu} theme=${theme} setTheme=${setTheme} colours=${coloursKept} setColours=${setColours} split=${split} setSplit=${setSplit} lock=${lock} setLock=${setLock}/>
                 <span class="sep"></span>
-                <span class="totals" title="All tests, by status">${Object.entries(counts).map(([k, n]) => html`<span class=${`st ${k}`}>${n}</span>`)}</span>
+                <span class="totals" title=${`All of ${batch?.label ?? 'the tests'}, by status`}>${Object.entries(counts).map(([k, n]) => html`<span class=${`st ${k}`}>${n}</span>`)}</span>
                 <button class="ib" title="Read the report again (after a test run)" aria-label="Reload" onClick=${load}><${IconReload}/></button>
             </div>
         </div>
@@ -1010,13 +1036,13 @@ function App() {
         <div class="main">
             <div class=${`compare${colours === 'inverted' ? ' inverted' : ''}`} ref=${compare} data-dir=${dir}>
                 <section class="side">
-                    <h2><span class="title">TeX · pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></span></h2>
+                    <h2><span class="title">TeX, pageless PDF <span class="mono">${r.case} at ${f3(hsizePt)} pt (${widthLabel(r.extra)})</span></span></h2>
                     ${empty ?? html`<${Pane} paneRef=${left} onScroll=${onLeft} stage=${stage} stagePt=${stagePt} side="left" marks=${marks}>
                         <${StripSheet} strip=${strip} pane=${left} scale=${scale}/>
                         <${Boxes} pane=${left} items=${items} index=${index.strip} side="strip" sel=${sel} scale=${scale} stagePt=${stagePt}/><//>`}
                 </section>
                 <section class="side">
-                    <h2><span class="title">Browser · reflowed</span>
+                    <h2><span class="title">Browser, reflowed</span>
                         <${Seg} title="The browser's side: the page itself (the inspector works on it), or the screenshot the test compared" value=${mode}
                             onChange=${setSide} options=${[['live', 'Live page'], ['snapshot', 'Snapshot']]}/></h2>
                     ${empty ?? html`<${Pane} paneRef=${right} onScroll=${onRight} stage=${stage} stagePt=${stagePt} side="right" marks=${marks}>
@@ -1076,7 +1102,7 @@ function App() {
             </span>
             <span class="group middle where mono" ref=${statusRef}></span>
             <span class="group end">
-                <span title="Glyphs: TeX's, the browser's, and matched">${vec?.glyphs ? `glyphs ${vec.glyphs.strip} · ${vec.glyphs.viewer} · ${vec.glyphs.matched}` : ''}</span>
+                <span title="Glyphs: TeX's, the browser's, and matched">${vec?.glyphs ? `glyphs: ${vec.glyphs.strip} TeX, ${vec.glyphs.viewer} browser, ${vec.glyphs.matched} matched` : ''}</span>
                 <span title=${`ran ${new Date(r.at).toLocaleString()}`}>ran ${new Date(r.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 <a href=${`${BUILD}${r.dir}/pageless.pdf`} target="_blank">pageless.pdf</a>
                 <a href=${`${vdir}vector.json`} target="_blank">vector.json</a>

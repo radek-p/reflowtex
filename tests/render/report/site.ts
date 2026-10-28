@@ -11,10 +11,30 @@
 // site's deploy takes CI's run of them (.github/workflows/hugo.yml), so the
 // page shows the version it is part of. With no results, it says so and the
 // site goes without.
+//
+// It also writes batches.json beside the page: the render tests, and every
+// other batch of results published on the site – a folder of <site>/static
+// whose report.json names its batch ({ "batch": { "id", "label", "order" },
+// "results": [...] }, the paper corpus's: tools/corpus/report.ts). The report
+// shows one batch at a time (?batch=<id>).
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { allCases, BUILD } from '../render.ts';
 import { writeIndex } from './results.ts';
+import { DEFAULT_BATCHES, type Batch } from './batches.ts';
+
+/** The batches for the report at <site>/static/<page>/: the render tests, and each folder of static/ with a batch's report.json. */
+export function siteBatches(site: string, page = 'render-tests'): Batch[] {
+  const statics = join(site, 'static'), out: Batch[] = [...DEFAULT_BATCHES];
+  for (const d of existsSync(statics) ? readdirSync(statics).sort() : []) {
+    const f = join(statics, d, 'report.json');
+    if (d === page || !existsSync(f)) continue;
+    const b = (JSON.parse(readFileSync(f, 'utf8')) as { batch?: { id?: unknown; label?: unknown; order?: unknown } }).batch;
+    if (typeof b?.id !== 'string' || typeof b.label !== 'string' || out.some(x => x.id === b.id)) continue;
+    out.push({ id: b.id, label: b.label, index: `../${d}/report.json`, ...(typeof b.order === 'number' ? { order: b.order } : {}) });
+  }
+  return out;
+}
 
 /** What the report reads, relative to build/: the index, each test's files,
  *  and each page it tested (with its fonts and scripts). */
@@ -44,4 +64,8 @@ if (import.meta.main) {
     for (const f of files) { mkdirSync(dirname(join(into, f)), { recursive: true }); writeFileSync(join(into, f), readFileSync(join(BUILD, f))); }
     console.log(`render-tests: ${tests} tests, ${files.length} files into ${into}`);
   }
+  const batches = siteBatches(site);
+  mkdirSync(join(site, 'static', 'render-tests'), { recursive: true });
+  writeFileSync(join(site, 'static', 'render-tests', 'batches.json'), JSON.stringify({ batches }, null, 1));
+  console.log(`render-tests: batches ${batches.map(b => b.id).join(', ')}`);
 }

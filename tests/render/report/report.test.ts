@@ -336,7 +336,7 @@ test('what a test says: one line above the sides, all of it in the Summary tab, 
     return { text: h.innerText.replace(/\s+/g, ' ').trim(), height: h.getBoundingClientRect().height,
              lines: h.querySelector('.nums')!.getClientRects().length, list: document.querySelectorAll('.problems, .headline li').length };
   });
-  assert.equal(top.text, 'Fail 990 of 1000 lines matched, 7 step(s) · 81.4 % of glyphs within 0.092 pt · 666 rules not drawn (0 allowed) Summary (14)');
+  assert.equal(top.text, 'Fail 990 of 1000 lines matched, 7 step(s), 81.4 % of glyphs within 0.092 pt, 666 rules not drawn (0 allowed) Summary (14)');
   assert.ok(top.height <= 30 && top.lines === 1, `the line is ${top.height} px tall`);
   assert.equal(top.list, 0);
   // the Summary tab: the lines in groups, the steps five at first

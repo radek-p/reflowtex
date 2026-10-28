@@ -1,0 +1,8 @@
+# Removes \usepackage{qcircuit}, which no file of the paper uses (no \Qcircuit, \qw or \gate):
+# qcircuit loads xypdf, which stops under LuaTeX ("pdfTeX version 1.40.0 or higher is needed").
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/preamble_usepackages.tex
++++ b/preamble_usepackages.tex
+@@ -36 +36 @@
+-\usepackage{qcircuit}
++% \usepackage{qcircuit}  (removed for the test corpus: unused, and its xypdf needs pdfTeX)

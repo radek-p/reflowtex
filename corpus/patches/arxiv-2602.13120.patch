@@ -1,0 +1,9 @@
+# The paper's own loop defines \fa .. \fz as \mathfrak letters with \cs_new and already skips \fi.
+# lipics-v2021 loads fontawesome5, which defines \fa, so \cs_new stops with an error. The paper uses neither \fa
+# nor any fontawesome icon, so the loop now skips 'a' as it skips 'i'; nothing in the paper changes.
+# The source is CC BY 4.0, which allows modified copies with the change indicated: this file is that indication.
+--- a/cfg/macros-mathmode.tex
++++ b/cfg/macros-mathmode.tex
+@@ -236 +236 @@
+-    \str_if_eq:nnTF { #1 } { i }
++    \bool_lazy_or:nnTF { \str_if_eq_p:nn { #1 } { i } } { \str_if_eq_p:nn { #1 } { a } }

@@ -23,6 +23,10 @@ export interface Result {
   dir: string; page?: string;
   /** whether the build has its lines paired (vector/lines.json): the report then compares by placement */
   lines?: boolean;
+  /** what the report lists it as, where it is more than its id (a paper's title) */
+  label?: string;
+  /** its vector/ files gzipped (vector.json.gz, lines.json.gz, strip.svg.gz) */
+  gz?: boolean;
 }
 
 export function writeResult(dir: string, r: Omit<Result, 'at' | 'dir'>, build: string): void {
