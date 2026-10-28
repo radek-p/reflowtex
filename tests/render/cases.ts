@@ -107,6 +107,13 @@ export const cases: Record<string, CaseSettings> = {
   // digit; the browser stopped at the empty box, and each such line sat up to
   // 0.41 pt right of TeX's. Worst attained 2026-10-28.
   'protrusion-superscript-start': { tolerance: 0.039 },
+  // Lines ending in a full stop and a box holding only a box holding a
+  // penalty (a restated theorem's anchor) under microtype: TeX steps back out
+  // of the box and hangs the full stop; the browser found nothing to hang, and
+  // lines that fit only by it were shrunk or broken otherwise (179 glyphs past
+  // 0.7 pt). At the document's width only: the lines are set to overfill that
+  // measure. Worst attained 2026-10-28.
+  'protrusion-anchor-at-end': { widths: [0], tolerance: 0.018 },
   paragraph: { tolerance: 0.010 },
   // The paragraph at widths that are no whole number of pixels (2 px per pt):
   // a real paper's \hsize rarely is one. The column must be the exact width,

@@ -60,3 +60,37 @@ test('a line\'s start: a box of nothing ends the search at the node after it', (
   assert.equal(findFirstGlyph([box([penalty(0)])], 0), null);
   assert.equal(findFirstGlyph([box([], 2 * PT), glyph('A')], 0), null, 'a box with a size stops it');
 });
+
+// A paragraph ending in a period and the anchor thm-restate and hyperref
+// leave: \penalty10000 \hbox{\hbox{\penalty10000}} \penalty10000. LuaTeX
+// goes into the box, finds nothing but penalties, steps back out of both and
+// on before the box: the period protrudes.
+test('a line\'s end: the search steps back out of a box of nothing and goes on before it', () => {
+  assert.equal(char(findLastGlyph([glyph('x'), glyph('.'), penalty(10000), box([box([penalty(10000)])]), penalty(10000)], 5)), '.');
+  assert.equal(char(findLastGlyph([glyph('.'), box([penalty(0), box([])])], 2)), '.');
+  assert.equal(findLastGlyph([box([penalty(10000)]), penalty(0)], 2), null, 'nothing before it');
+  // a box whose last item stops the search: nothing protrudes
+  const kern: TexNode = { type: 'kern', kern: PT, subtype: 1 };
+  assert.equal(findLastGlyph([glyph('.'), box([glyph('a'), kern])], 2), null);
+  assert.equal(findLastGlyph([glyph('.'), box([], 2 * PT)], 2), null, 'a box with a size stops it');
+});
+
+// LuaTeX looks for the character at a line's end back to the line's start
+// only: a line holding nothing but penalties after a break does not hang the
+// character before the break.
+test('a line\'s end: the search stops at the line\'s start', async () => {
+  interface Candidate { kind: string; nodeIdx: number; rightProtrusion: number }
+  const breaker = await import(`${VIEWER}breaker.ts`) as {
+    buildBreakCandidates(nodes: TexNode[], fontInfo: object, para: object): Candidate[];
+    rightProtrusionOf(a: Candidate, b: Candidate, packed: boolean): number;
+  };
+  const QUAD = 10 * PT;
+  const fontInfo = { 1: { quad: QUAD, codes: new Map([[0x2E, { char: 0x2E, lp: 0, rp: 500, ef: 1000 }]]) } };
+  const pfs: TexNode = { type: 'glue', subtype: 15, width: 0, stretch: PT, stretch_order: 2, shrink: 0 };
+  const nodes = [glyph('a'), glyph('.'), penalty(0), penalty(0), glyph('b'), penalty(10000), pfs];
+  const bcs = breaker.buildBreakCandidates(nodes, fontInfo, { protrude_chars: 2 });
+  assert.deepEqual(bcs.map(b => [b.kind, b.nodeIdx]), [['start', -1], ['penalty', 2], ['penalty', 3], ['end', 6]]);
+  assert.equal(breaker.rightProtrusionOf(bcs[0], bcs[1], false), QUAD / 2, 'the period ends the first line');
+  assert.equal(breaker.rightProtrusionOf(bcs[0], bcs[2], false), QUAD / 2, 'and a line from the start to the second penalty');
+  assert.equal(breaker.rightProtrusionOf(bcs[1], bcs[2], false), 0, 'but not the empty line between the two');
+});
