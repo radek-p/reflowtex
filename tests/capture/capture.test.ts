@@ -233,6 +233,67 @@ test('a line TeX set in a box keeps its glyphs\' expansion and its margin kerns'
   assert.ok((lines[0].children!.find(c => c.type === 'kern')?.kern ?? 0) < 0, 'a margin kern at the first line\'s start');
 });
 
+test('codes changed between paragraphs: each paragraph\'s glyphs are in a version of the font with the codes it was broken with', async () => {
+  // \rpcode and \efcode set on the font by hand, as microtype does when one
+  // font serves shapes of several families; the third paragraph goes back to
+  // the first one's codes, and so to its version
+  const d = await capture([
+    '\\protrudechars=2 \\adjustspacing=2 \\expandglyphsinfont\\font 20 20 1',
+    '\\rpcode\\font`t=0 \\efcode\\font`e=1000 First, with its last word set.\\par',
+    '\\rpcode\\font`t=200 \\efcode\\font`e=500 Second, with its last word set.\\par',
+    '\\rpcode\\font`t=0 \\efcode\\font`e=1000 Third, with its last word set.\\par',
+  ].join('\n'));
+  type Codes = { char: number; lp: number; rp: number; ef: number };
+  type Font = { name: string; size_sp: number; filename?: string; quad?: number; expand_stretch?: number; codes?: Codes[] };
+  const fonts = d.fonts as Record<string, Font>;
+  const fontOf = (k: number) => {
+    const ids = new Set([...walk(d.paragraphs[k].nodes)].filter(n => n.type === 'glyph' && n.char === 0x74).map(n => String(n.font)));
+    assert.equal(ids.size, 1, `paragraph ${k + 1}: its t's in one font`);
+    return [...ids][0];
+  };
+  const [first, second, third] = [0, 1, 2].map(fontOf);
+  assert.notEqual(first, second, 'the second paragraph is in another version');
+  assert.equal(first, third, 'the third is in the first one\'s');
+  const code = (id: string, c: number) => fonts[id].codes?.find(x => x.char === c);
+  assert.equal(code(first, 0x74)?.rp ?? 0, 0);
+  assert.equal(code(second, 0x74)?.rp, 200);
+  assert.equal(code(first, 0x65)?.ef ?? 1000, 1000);
+  assert.equal(code(second, 0x65)?.ef, 500);
+  // a version is the same face at the same size, with the same expansion
+  const { codes: _a, ...a } = fonts[first], { codes: _b, ...b } = fonts[second];
+  assert.deepEqual(b, a);
+  assert.equal(a.expand_stretch, 20);
+});
+
+test('a font LuaTeX letterspaces (\\textls) records the packets of the characters set in it', async () => {
+  // (a classic font: an OpenType one microtype letterspaces by font kerns)
+  const d = await capture('Plain and \\textls[200]{spaced} words.', '\\usepackage[T1]{fontenc}\\usepackage{microtype}');
+  type Packets = { char: number; commands: (string | number)[][] }[];
+  const fonts = d.fonts as Record<string, { name: string; size_sp: number; packets?: Packets }>;
+  const spaced = Object.entries(fonts).filter(([, f]) => f.packets);
+  assert.equal(spaced.length, 1, 'one letterspaced font');
+  const [id, f] = spaced[0];
+  assert.deepEqual(f.packets!.map(p => p.char), [...'acdeps'].map(c => c.charCodeAt(0)), 'the characters set in it');
+  for (const p of f.packets!) {
+    const [right1, char, right2] = p.commands;
+    assert.deepEqual([right1[0], char[0], right2[0]], ['right', 'char', 'right']);
+    assert.equal(right1[1], right2[1], 'half the letterspace on each side');
+    assert.equal(char[2], p.char);
+    assert.ok(fonts[String(char[1])] && String(char[1]) !== id, 'the character of the font it copied, in the table');
+  }
+  // each glyph of it is drawn as its packet does (output.json as the pipeline leaves it): a box of the
+  // character's size, the character of the font it copied moved right in it
+  const boxes = [...walk(d.paragraphs[0].nodes)].filter(n => String(n.font) === id);
+  assert.deepEqual(boxes.map(b => [b.type, b.children?.map(c => c.type)]), Array(6).fill(['hlist', ['kern', 'glyph']]));
+  assert.ok(boxes.every(b => b.children![0].kern! > 0));
+});
+
+test('codes that never change give one entry per font', async () => {
+  const d = await capture('First paragraph.\\par Second paragraph.\\par Third.', '\\usepackage{microtype}');
+  const names = Object.values(d.fonts as Record<string, { name: string; size_sp: number }>).map(f => `${f.name}@${f.size_sp}`);
+  assert.equal(new Set(names).size, names.length, names.join(', '));
+});
+
 test('multicols text is not kept twice', async () => {
   // multicol's output routine puts the balanced columns back on the main
   // list as one box, after their lines went past as ordinary lines.

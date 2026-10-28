@@ -90,82 +90,237 @@ local function note_font(font_id)
     }
 end
 
--- The characters each font was used for, so the microtypography pass below
--- only has to look those up.
-local used_chars = {}
--- The fonts a \webtext slot's default is set in (reflowtex.sty): a page may
--- give the slot any text, in that font, so its characters' protrusion codes
--- are recorded for the whole font, not only for those the document used.
-local slot_fonts = {}
-
-local function note_char(font_id, ch)
-    local t = used_chars[font_id]
-    if not t then
-        t = {}
-        used_chars[font_id] = t
-    end
-    t[ch] = true
-end
-
 -- ── Protrusion and expansion ──────────────────────────────────────────────
--- microtype (or a preamble using \lpcode, \rpcode and \expandglyphsinfont
--- directly) configures these on the engine's *internal* font structures after
--- the font is loaded. font.getfont returns the table the font was defined
--- from, which never learns of them; font.getcopy rebuilds a table from the
--- internal structure and does. So they are read once per font at the very end,
--- when everything is set, for the characters the document actually used.
+-- microtype (or a preamble using \lpcode, \rpcode, \efcode and
+-- \expandglyphsinfont directly) configures these on the engine's *internal*
+-- font structures after the font is loaded. font.getfont returns the table
+-- the font was defined from, which never learns of them; font.getcopy
+-- rebuilds a table from the internal structure and does.
 -- Units are TeX's own: lp/rp are \lpcode/\rpcode (thousandths of the font's
 -- quad), ef is \efcode (thousandths of the character's width, 1000 = like the
 -- rest of the font), stretch/shrink/step are \expandglyphsinfont's three
 -- arguments (thousandths). A breaker given these reproduces TeX's protruded
 -- and expanded lines exactly; the viewer's own breaker keeps its own tables.
+--
+-- They may change along the document, and TeX breaks each paragraph with
+-- those the font holds at that moment: microtype sets a font's codes each
+-- time an NFSS shape is first selected, from that shape's family's lists,
+-- and one font serving several shapes (a family the encoding lacks, which
+-- LaTeX substitutes) has them set again, differently, for each. So a font's
+-- codes are read when a paragraph broken with protrusion or expansion (else
+-- they are not used) is captured with glyphs in it, if any code may have
+-- changed since the font's last reading; a font whose codes are not those of
+-- any earlier reading gets a new version, and the paragraph's glyphs point at
+-- the version in force. The first version keeps the font's id; each later
+-- one is an entry of its own in the font table (the same face, size and
+-- file: one more font id), given an id past every font's when the table is
+-- written. What is not captured with a paragraph (displays, boxes) is written
+-- at the end, with the codes then in force. A document whose codes never
+-- change has one version per font, as before.
+--
+-- LuaTeX gives Lua no way to read a character's codes but font.getcopy,
+-- which copies the whole font (a millisecond or two for an OpenType text
+-- face): once per font and paragraph, that would double a long document's
+-- run. Nor does it say when a code changes. So the primitives that change
+-- them, \lpcode, \rpcode, \efcode and \expandglyphsinfont, count each time
+-- they are used (reflowtex-capture.tex, codes_changed below; as do
+-- font.setexpansion's calls), and a font is read again only after that count
+-- has moved since its last reading. The count moves on a read of a code as
+-- well (\the\lpcode), which only costs a reading more.
 local function round_int(v)
     return math.floor((v or 0) + 0.5)
 end
 
-local function annotate_fonts()
-    if not font.getcopy then return end
-    for id, info in pairs(used_fonts) do
+-- font id → its versions, in the order met: { codes = {[char] = {lp, rp, ef}},
+-- count, stretch, shrink, step, chars = {[char] = true} (those set in it),
+-- glyphs = the serialized glyphs set in it (but the first version's, which
+-- keep the font's id), slot = a \webtext slot's default is set in it }
+local font_versions = {}
+-- font id → the version its glyphs are set in now, and the count of code
+-- changes at its last reading
+local version_now, read_at = {}, {}
+-- the count; whether the codes of what is serialized now matter (a
+-- paragraph's do when TeX breaks it with protrusion or expansion; what is
+-- written at the end is given those then in force)
+local code_changes, codes_matter = 0, false
+
+local function codes_changed()
+    code_changes = code_changes + 1
+end
+-- what \lpcode, \rpcode, \efcode and \expandglyphsinfont call (reflowtex-capture.tex)
+Serializer = Serializer or {}
+Serializer.codes_changed = codes_changed
+if font.setexpansion then
+    local setexpansion = font.setexpansion
+    font.setexpansion = function(...)
+        codes_changed()
+        return setexpansion(...)
+    end
+end
+
+local function char_codes(ch)
+    return ch.left_protruding or 0, ch.right_protruding or 0, ch.expansion_factor or 1000
+end
+
+-- Whether a version holds the codes of the font as `f` (font.getcopy) has them.
+local function same_codes(v, f)
+    if v.stretch ~= (f.stretch or 0) or v.shrink ~= (f.shrink or 0) or v.step ~= (f.step or 0) then return false end
+    local n = 0
+    for c, ch in pairs(f.characters or {}) do
+        local lp, rp, ef = char_codes(ch)
+        if lp ~= 0 or rp ~= 0 or ef ~= 1000 then
+            local had = v.codes[c]
+            if not had or had[1] ~= lp or had[2] ~= rp or had[3] ~= ef then return false end
+            n = n + 1
+        end
+    end
+    return n == v.count
+end
+
+local function new_version(f)
+    local codes, count = {}, 0
+    for c, ch in pairs(f.characters or {}) do
+        local lp, rp, ef = char_codes(ch)
+        if type(c) == "number" and (lp ~= 0 or rp ~= 0 or ef ~= 1000) then
+            codes[c] = { lp, rp, ef }
+            count = count + 1
+        end
+    end
+    local params = f.parameters or {}
+    return { codes = codes, count = count, stretch = f.stretch or 0, shrink = f.shrink or 0, step = f.step or 0,
+             quad = round_int(params.quad or params[6] or f.size or 0), chars = {}, glyphs = {} }
+end
+
+-- The version of font `id` a glyph serialized now is set in: read again
+-- while codes matter, if they may have changed; nil before the first
+-- reading (the first version, whenever it is made).
+local function font_version(id)
+    if codes_matter and read_at[id] ~= code_changes and font.getcopy then
+        read_at[id] = code_changes
         local ok, f = pcall(font.getcopy, id)
         if ok and type(f) == "table" then
-            local params = f.parameters or {}
-            info.quad = round_int(params.quad or params[6] or f.size or 0)
-            if (f.stretch or 0) ~= 0 or (f.shrink or 0) ~= 0 then
-                info.expand_stretch = f.stretch or 0
-                info.expand_shrink  = f.shrink or 0
-                info.expand_step    = f.step or 0
+            local vs = font_versions[id]
+            if not vs then
+                vs = {}
+                font_versions[id] = vs
             end
-            local chars = f.characters or {}
-            local cs = {}
-            for c in pairs(used_chars[id] or {}) do cs[#cs + 1] = c end
-            table.sort(cs)
-            local codes = {}
-            for _, c in ipairs(cs) do
-                local ch = chars[c]
-                if ch then
-                    local lp = ch.left_protruding or 0
-                    local rp = ch.right_protruding or 0
-                    local ef = ch.expansion_factor or 1000
-                    if lp ~= 0 or rp ~= 0 or ef ~= 1000 then
-                        codes[#codes + 1] = { char = c, lp = lp, rp = rp, ef = ef }
-                    end
+            local now = version_now[id]
+            if not (now and same_codes(now, f)) then
+                now = nil
+                for _, v in ipairs(vs) do
+                    if same_codes(v, f) then now = v break end
                 end
-            end
-            -- A slot's font: every other character that protrudes, too (a
-            -- live text's word is never expanded, so \efcode is left out).
-            if slot_fonts[id] then
-                local more = {}
-                for c, ch in pairs(chars) do
-                    if type(c) == "number" and not (used_chars[id] or {})[c] then
-                        local lp = ch.left_protruding or 0
-                        local rp = ch.right_protruding or 0
-                        if lp ~= 0 or rp ~= 0 then more[#more + 1] = { char = c, lp = lp, rp = rp, ef = 1000 } end
-                    end
+                if not now then
+                    now = new_version(f)
+                    vs[#vs + 1] = now
                 end
-                for _, e in ipairs(more) do codes[#codes + 1] = e end
-                table.sort(codes, function(a, b) return a.char < b.char end)
+                version_now[id] = now
             end
-            if #codes > 0 then info.codes = codes end
+        end
+    end
+    return version_now[id]
+end
+
+-- The characters each font was used for, so the microtypography pass below
+-- only has to record those; those set before the font's first version is
+-- made are its first version's.
+local first_chars = {}
+-- The fonts a \webtext slot's default is set in (reflowtex.sty): a page may
+-- give the slot any text, in that font, so its characters' protrusion codes
+-- are recorded for the whole font, not only for those the document used.
+local slot_fonts = {}
+
+-- Note glyph `g` (serialized) of node `n`: its font, its character, and the
+-- version of the font's codes it is set in.
+local function note_glyph(n, g, slot)
+    note_font(n.font)
+    local v = font_version(n.font)
+    local chars = v and v.chars or first_chars[n.font]
+    if not chars then
+        chars = {}
+        first_chars[n.font] = chars
+    end
+    chars[n.char] = true
+    if v and v ~= font_versions[n.font][1] then v.glyphs[#v.glyphs + 1] = g end
+    if slot then
+        if v then v.slot = true else slot_fonts[n.font] = true end
+    end
+end
+
+-- font id → char → the packet of each character set in a virtual font
+-- LuaTeX made itself (note_packet, below)
+local font_packets = {}
+
+-- A version's entry of the font table: `info` (the font's) with the codes of
+-- the characters set in it.
+local function annotate(info, v, chars, slot)
+    info.quad = v.quad
+    if v.stretch ~= 0 or v.shrink ~= 0 then
+        info.expand_stretch = v.stretch
+        info.expand_shrink  = v.shrink
+        info.expand_step    = v.step
+    end
+    local codes = {}
+    for c in pairs(chars) do
+        local had = v.codes[c]
+        if had then codes[#codes + 1] = { char = c, lp = had[1], rp = had[2], ef = had[3] } end
+    end
+    -- A slot's font: every other character that protrudes, too (a live
+    -- text's word is never expanded, so \efcode is left out).
+    if slot then
+        for c, had in pairs(v.codes) do
+            if not chars[c] and (had[1] ~= 0 or had[2] ~= 0) then
+                codes[#codes + 1] = { char = c, lp = had[1], rp = had[2], ef = 1000 }
+            end
+        end
+    end
+    table.sort(codes, function(a, b) return a.char < b.char end)
+    if #codes > 0 then info.codes = codes end
+end
+
+-- A font's recorded packets, as the font table has them: by character. None
+-- if one of its characters' could not be (drawn then from the font's face).
+local function packet_list(id)
+    local t = font_packets[id]
+    if not t then return nil end
+    local out = {}
+    for c, commands in pairs(t) do
+        if type(commands) ~= "table" or commands.pending then return nil end
+        out[#out + 1] = { char = c, commands = commands }
+    end
+    table.sort(out, function(a, b) return a.char < b.char end)
+    return out
+end
+
+local function annotate_fonts()
+    if not font.getcopy then return end
+    local ids, next_id = {}, font.max and font.max() or 0
+    for id in pairs(used_fonts) do
+        ids[#ids + 1] = id
+        if id > next_id then next_id = id end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        local info, vs = used_fonts[id], font_versions[id]
+        if not vs then
+            -- no glyph of it was set while codes mattered: those of the end
+            codes_matter = true
+            font_version(id)
+            vs = font_versions[id]
+        end
+        if vs then
+            local first = vs[1]
+            for c in pairs(first_chars[id] or {}) do first.chars[c] = true end
+            annotate(info, first, first.chars, first.slot or slot_fonts[id])
+            info.packets = packet_list(id)
+            for k = 2, #vs do
+                local v = vs[k]
+                next_id = next_id + 1
+                local entry = { name = info.name, size_sp = info.size_sp, filename = info.filename, packets = info.packets }
+                annotate(entry, v, v.chars, v.slot)
+                used_fonts[next_id] = entry
+                for _, g in ipairs(v.glyphs) do g.font = next_id end
+            end
         end
     end
 end
@@ -786,6 +941,95 @@ local function note_missing(n)
     end
 end
 
+-- ── Virtual fonts LuaTeX made ─────────────────────────────────────────────
+-- A virtual font's characters are packets that draw characters of other
+-- fonts, moved, and rules; the pipeline draws each glyph as its packet does
+-- (src/pipeline/fonts/vf.ts), reading the packets of a classic virtual font
+-- from its .vf file. A virtual font LuaTeX makes itself has none:
+-- \letterspacefont (microtype's tracking, \textls, \lsstyle) copies a font
+-- and makes each character a packet that moves right by half the letterspace,
+-- sets the character of the font it copied and moves right by the other
+-- half; a virtual font may be defined from Lua too. For those the packet of
+-- each character set is recorded as LuaTeX holds it (font.getcopy), in a few
+-- commands: right and down, push and pop, a rule (height and width), and a
+-- character of a font by its id, with that character's box (sp) and glyph
+-- index (a font command is folded into the characters after it). The moves
+-- and rules are in the units LuaTeX keeps them in and its backend draws them
+-- by, as a .vf's: 2^20 is the virtual font's size (for \letterspacefont's
+-- moves, made in sp, that draws each character size / 2^20 of half the
+-- letterspace right of its box's origin, as TeX's PDF has it). The fonts it
+-- names join the font table, and a character of one that is such a font
+-- again has its packet recorded too. A packet with any other command (a
+-- special, Lua code, an image, a scale) is not recorded: the glyph is then
+-- drawn from the font's own face, as before.
+local made_virtual = {}   -- font id → its engine copy, if LuaTeX made it as a virtual font; else false
+local function made_virtual_font(id)
+    local v = made_virtual[id]
+    if v == nil then
+        v = false
+        local f = font.getfont(id)
+        if not (f and f.type ~= "virtual") and font.getcopy then
+            local ok, copy = pcall(font.getcopy, id)
+            if ok and type(copy) == "table" and copy.type == "virtual"
+                    and not kpse.find_file(copy.name or "", "vf") then
+                v = copy
+            end
+        end
+        made_virtual[id] = v
+    end
+    return v
+end
+
+local note_packet
+-- The packet of character `c` of virtual font `f` (its engine copy), in the
+-- commands above; nil if it has any other.
+local function packet_commands(f, c)
+    local ch = f.characters and f.characters[c]
+    if not (ch and ch.commands) then return nil end
+    local local_fonts = f.fonts or {}
+    local current = local_fonts[1] and local_fonts[1].id
+    local out = {}
+    for _, cmd in ipairs(ch.commands) do
+        local op = cmd[1]
+        if op == "right" or op == "down" then
+            out[#out + 1] = { op, round_int(cmd[2]) }
+        elseif op == "push" or op == "pop" then
+            out[#out + 1] = { op }
+        elseif op == "rule" then
+            out[#out + 1] = { "rule", round_int(cmd[2]), round_int(cmd[3]) }
+        elseif op == "font" then
+            current = cmd[2]
+        elseif op == "char" or op == "slot" then
+            local fid, d = current, cmd[2]
+            if op == "slot" then fid, d = cmd[2], cmd[3] end
+            local info = fid and d and char_info(fid, d)
+            if not info then return nil end
+            note_font(fid)
+            if made_virtual_font(fid) then note_packet(fid, d) end
+            out[#out + 1] = { "char", fid, d, info.width or 0, info.height or 0, info.depth or 0, info.index }
+        elseif op ~= "nop" and op ~= "comment" then
+            return nil
+        end
+    end
+    return out
+end
+
+-- Record the packet of character `c` of font `id` if LuaTeX made the font as
+-- a virtual one (once per character; false: it could not be).
+local PENDING = { pending = true }            -- (a packet naming its own character stops there)
+function note_packet(id, c)
+    local f = made_virtual_font(id)
+    if not f then return end
+    local t = font_packets[id]
+    if not t then
+        t = {}
+        font_packets[id] = t
+    end
+    if t[c] ~= nil then return end
+    t[c] = PENDING
+    t[c] = packet_commands(f, c) or false
+end
+
 -- ── Node serializer ───────────────────────────────────────────────────────
 
 -- Font expansion in a line TeX has set (\adjustspacing, microtype): LuaTeX
@@ -877,9 +1121,6 @@ local function serialize_nodelist(head)
                                               glue_set = 0, glue_sign = 0, glue_order = 0, children = {} } } }
 
         elseif t == "glyph" then
-            note_font(n.font)
-            note_char(n.font, n.char)
-            if node.get_attribute(n, SLOT_ATTR) then slot_fonts[n.font] = true end
             local cinfo = char_info(n.font, n.char)
             local g = {
                 type   = "glyph",
@@ -897,6 +1138,8 @@ local function serialize_nodelist(head)
                 mark       = node.get_attribute(n, MARK_ATTR),
             }
             if not g.link and not g.footnote then g.link = open_link_id() end
+            note_glyph(n, g, g.slot)
+            note_packet(n.font, n.char)
             cur[#cur + 1] = g
 
         elseif t == "glue" then
@@ -1284,6 +1527,8 @@ local function capture_paragraph(head, groupcode)
     local shape = para_shape()
     local indent, width = shape[1][1], shape[1][2]
     local ls, rs = skip_width("leftskip"), skip_width("rightskip")
+    -- the fonts' codes matter where TeX breaks the paragraph with them
+    codes_matter = (tex.protrudechars or 0) ~= 0 or (tex.adjustspacing or 0) ~= 0
     all_paragraphs[idx] = {
         index  = idx,
         -- where its first line's text is set: the band less the margin
@@ -2482,6 +2727,7 @@ end
 
 local function write_output()
     hy_open = {}
+    codes_matter = true                 -- what is written now is given the codes in force at the end
     walk_flow(flow_head, { sp = 0 })
     resolve_hyperref()
     for _, p in ipairs(all_paragraphs) do remap_footnote_refs(p.nodes) end
