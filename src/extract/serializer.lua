@@ -18,6 +18,9 @@ local SHAPE = {}          -- metatable key: "array" | "object"
 local function json_array(t)  return setmetatable(t or {}, { [SHAPE] = "array" })  end
 local function json_object(t) return setmetatable(t or {}, { [SHAPE] = "object" }) end
 
+local JSON_ESCAPES = { ['"'] = '\\"', ['\\'] = '\\\\', ['\n'] = '\\n', ['\r'] = '\\r', ['\t'] = '\\t' }
+local function json_escape(c) return JSON_ESCAPES[c] or string.format('\\u%04x', c:byte()) end
+
 local function json_encode(val)
     local t = type(val)
     if t == "nil" then
@@ -27,13 +30,9 @@ local function json_encode(val)
     elseif t == "number" then
         return tostring(val)
     elseif t == "string" then
-        return '"' ..
-            val:gsub('\\', '\\\\')
-               :gsub('"',  '\\"')
-               :gsub('\n', '\\n')
-               :gsub('\r', '\\r')
-               :gsub('\t', '\\t')
-            .. '"'
+        -- JSON wants every character below U+0020 escaped, not only the three
+        -- with a short form (a missing \char1 is named in a string)
+        return '"' .. val:gsub('[%c"\\]', json_escape) .. '"'
     elseif t == "table" then
         local mt = getmetatable(val)
         local shape = mt and mt[SHAPE]
@@ -788,6 +787,21 @@ end
 
 -- ── Node serializer ───────────────────────────────────────────────────────
 
+-- Font expansion in a line TeX has set (\adjustspacing, microtype): LuaTeX
+-- marks each glyph of the line with its factor (millionths of the glyph's
+-- width, which the node gives unexpanded) and each font kern between them
+-- with what it adds (sp). A paragraph the viewer breaks again has none yet;
+-- a line TeX finished in a box (a minipage, a p-column, a caption) keeps
+-- them, as it keeps the margin kerns protrusion put at its ends.
+local function glyph_expansion(n)
+    local ef = n.expansion_factor
+    return ef and ef ~= 0 and ef or nil
+end
+local function expanded_width(n)
+    local ef = glyph_expansion(n)
+    return ef and math.floor(n.width * (1000000 + ef) / 1000000 + 0.5) or n.width
+end
+
 -- A discretionary's penalty: \hyphenpenalty or \exhyphenpenalty, set on the
 -- node when it was made. Recorded where it is not their usual 50, which the
 -- viewer takes for one without.
@@ -856,7 +870,7 @@ local function serialize_nodelist(head)
             -- a character the font lacks, or the font's .notdef: drawn by
             -- nothing (see "Characters TeX could not set" above)
             if not char_info(n.font, n.char) then note_missing(n) end
-            cur[#cur + 1] = { type = "hlist", subtype = 2, width = n.width, height = n.height, depth = n.depth,
+            cur[#cur + 1] = { type = "hlist", subtype = 2, width = expanded_width(n), height = n.height, depth = n.depth,
                               shift = 0, glue_set = 0, glue_sign = 0, glue_order = 0,
                               children = { { type = "rule", width = 0, height = 0, depth = 0 } } }
 
@@ -873,6 +887,7 @@ local function serialize_nodelist(head)
                 width  = n.width,
                 height = n.height,
                 depth  = n.depth,
+                expansion_factor = glyph_expansion(n),
                 color  = current_color,
                 footnote   = node.get_attribute(n, FOOTNOTE_MARK_ATTR),
                 link       = node.get_attribute(n, LINK_ATTR),
@@ -907,9 +922,15 @@ local function serialize_nodelist(head)
         elseif t == "kern" then
             cur[#cur + 1] = {
                 type    = "kern",
-                kern    = n.kern,
+                kern    = n.kern + (n.expansion_factor or 0),   -- as expanded (above)
                 subtype = n.subtype,
             }
+
+        elseif t == "margin_kern" then
+            -- protrusion in a line TeX has set: the line's first or last
+            -- character hangs into the margin by this much; a kern of a
+            -- fixed width, as TeX sets it (an explicit one, subtype 1)
+            cur[#cur + 1] = { type = "kern", kern = n.width, subtype = 1 }
 
         elseif t == "penalty" then
             cur[#cur + 1] = {

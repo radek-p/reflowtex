@@ -129,7 +129,9 @@ function makeRecord(box: HTMLElement, index: number, instance: Instance, def: Ki
             // segment (layoutDocument: each segment is a spacer, then its box).
             const segs = (owner.dom && owner.dom.segs) || [];
             const i = segs.findIndex(sg => sg.box === box);
-            const px = (el: HTMLElement | undefined) => (el && parseFloat(el.style.height)) || 0;
+            // (a negative space is the spacer's margin: document.ts setSpacer)
+            const px = (el: HTMLElement | undefined) =>
+                el ? (parseFloat(el.style.height) || 0) + (parseFloat(el.style.marginBottom) || 0) : 0;
             return { before: i >= 0 ? px(segs[i].gap) : 0, after: i >= 0 && i + 1 < segs.length ? px(segs[i + 1].gap) : 0 };
         },
         setEdges(e: { top?: Surface | null; bottom?: Surface | null }) {

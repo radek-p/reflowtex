@@ -69,8 +69,8 @@ export function sizeSegment(s: DomSegment, L: SegmentLayout, prev: SegmentLayout
             margin += texInterlineGlue(prev.lastDepth, L.firstAscent, L.firstMeta);
         }
         margin += displaySkipAdjust(L, prev);
-        const g = onGridCarried(margin, prev?.gridCarry || 0);
-        setStyle(s.gap, 'height', `${g.r}px`);
+        const g = onGridCarried(prev ? margin : Math.max(0, margin), prev?.gridCarry || 0);
+        setSpacer(s.gap, g.r);
         L.gridCarry = g.carry;          // the nested layout sized its own box
         return { mount: s.box.firstElementChild, overflows: false };
     }
@@ -96,7 +96,7 @@ export function sizeSegment(s: DomSegment, L: SegmentLayout, prev: SegmentLayout
     // to a drift of a few points against TeX's own galley.
     // (the gap above, set further down, is rounded first: see onGridCarried)
     const margin = spaceAbove(L, prev);
-    const gap = onGridCarried(margin, prev?.gridCarry || 0);
+    const gap = onGridCarried(prev ? margin : Math.max(0, margin), prev?.gridCarry || 0);
     const box = onGridCarried(L.H, gap.carry);
     const H = box.r;
     L.gridCarry = box.carry;
@@ -155,7 +155,7 @@ export function sizeSegment(s: DomSegment, L: SegmentLayout, prev: SegmentLayout
     setStyle(s.box, 'containerType', mount === s.wrap ? 'inline-size' : '');
     // The space above the segment lives in its spacer, not in a margin on the
     // element itself (scroll anchoring again, see layoutDocument).
-    setStyle(s.gap, 'height', `${gap.r}px`);
+    setSpacer(s.gap, gap.r);
     setStyle(svg, 'marginTop', '');
     if (s.wrap) { setStyle(s.wrap, 'marginTop', ''); setStyle(s.wrap, 'marginBottom', ''); }
     if (mount === s.wrap) {
@@ -502,6 +502,17 @@ export function syncChildren(parent: Element, want: Element[]): void {
 type StyleProp = 'height' | 'overflowX' | 'containerType' | 'marginTop' | 'marginBottom' | 'paddingTop'
     | 'paddingBottom' | 'overflowAnchor';
 export function setStyle(el: HTMLElement | SVGElement, prop: StyleProp, v: string): void { if (el.style[prop] !== v) el.style[prop] = v; }
+// The space above a segment (px), in its spacer. TeX may take back more than
+// the interline glue gives (a negative \vspace after a row of boxes, whose
+// \lineskip is all the glue there is), and pull the segment up over the one
+// before it; no height is negative, so that is a negative margin (the boxes
+// have none of their own for it to collapse with). The first segment is never
+// pulled up: nothing in the block is above the block's top (its spacer is the
+// block's first child, whose margin would move the block itself).
+export function setSpacer(el: HTMLElement, px: number): void {
+    setStyle(el, 'height', `${Math.max(0, px)}px`);
+    setStyle(el, 'marginBottom', px < 0 ? `${px}px` : '');
+}
 export function setAttr(el: Element, name: string, v: string): void { if (el.getAttribute(name) !== v) el.setAttribute(name, v); }
 
 // Per-segment cache, keyed by the layout parameters (a change of alignment or of

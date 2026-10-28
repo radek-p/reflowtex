@@ -236,8 +236,12 @@
 % empty box where it stood (attribute 915), which flows with the text, for
 % the viewer to place the aside by. \marginpar (reflowtex-capture-late.tex) and reflowtex.sty's
 % \webaside are made of it. Parameters are taken as written: expand them first.
+% Its text is set as LaTeX sets a \marginpar or a footnote, with the paragraph
+% settings restored (\@parboxrestore): what holds around it – a list's margins,
+% \raggedright's \\ – does not apply inside.
 \newinsert\reflowtexAsideIns
 \count\reflowtexAsideIns=0 \dimen\reflowtexAsideIns=\maxdimen \skip\reflowtexAsideIns=0pt
+\makeatletter
 \long\def\reflowtexAside#1#2#3{%
   \global\advance\reflowtexStreamCount by 1
   \directlua{Serializer.note_stream(\the\reflowtexStreamCount,
@@ -247,8 +251,9 @@
     \attribute914=\reflowtexStreamCount\relax
     \insert\reflowtexAsideIns{%
       \attribute911=\reflowtexStreamCount\relax
-      \hsize\linewidth \parindent0pt \everypar{}#3\par}%
+      \hsize\linewidth \@parboxrestore #3\par}%
   \endgroup}
+\makeatother
 
 % ── Batch parts ──────────────────────────────────────────────────────────────
 % Pipeline.compile_batch compiles several snippets (a book's chapters) as one

@@ -55,6 +55,9 @@ export interface NodeFields extends Rates, Floors {
     leader?: TexNode;
     /** A CSS hex colour; absent: the text colour. */
     color?: string;
+    /** A glyph's (a character box's) font expansion in a line TeX set in a
+     *  box, in millionths of its width; absent: none (latex.proto). */
+    expansion_factor?: number;
     /** 1-based indices into the document's tables. */
     picture?: number;
     metrics?: number;

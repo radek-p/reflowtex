@@ -96,7 +96,10 @@ export const charW = (n: TexNode): number => n.type === 'glyph' ? gW(n) : (n.wid
 // A font kern between two characters expands with them, by the mean of their
 // codes (LuaTeX's kern_stretch/kern_shrink); one of the two fonts not
 // expanding halves it, as LuaTeX averages the two fonts' limits.
+// A character in a line TeX itself set (in a box: a minipage, a p-column)
+// comes with the factor TeX gave it, which is what it is drawn with there.
 export function glyphExpandScale(fontInfo: FontTable | null | undefined, n: TexNode, er: number): number {
+    if (n.expansion_factor) return ownExpandScale(n);
     if (!er || n.text !== undefined) return 1;
     const fi = fontInfo && fontInfo[String(n.font)];
     if (!fi || !fi.expand) return 1;
@@ -104,6 +107,8 @@ export function glyphExpandScale(fontInfo: FontTable | null | undefined, n: TexN
     const ef = c && c.ef !== undefined ? c.ef : 1000;
     return ef > 0 ? 1 + er * ef / 1000 : 1;
 }
+/** A character's own expansion (expansion_factor), or none. */
+export const ownExpandScale = (n: TexNode): number => 1 + (n.expansion_factor || 0) / 1e6;
 export function kernExpandScale(fontInfo: FontTable | null | undefined, l: TexNode | undefined, r: TexNode | undefined, er: number): number {
     if (!er || !l || !r || !isChar(l) || !isChar(r)) return 1;
     const fl = fontInfo && fontInfo[String(l.font)], fr = fontInfo && fontInfo[String(r.font)];
@@ -137,7 +142,7 @@ export const gD = (n: TexNode): number => n.depth  !== undefined ? n.depth  : gl
 
 export function nodeWidthSp(n: TexNode): number {
     switch (n.type) {
-        case 'glyph':               return gW(n);
+        case 'glyph':               return gW(n) * ownExpandScale(n);
         case 'picture':             return n.width;
         case 'kern':                return n.kern;
         case 'glue':                return n.width;
@@ -147,7 +152,7 @@ export function nodeWidthSp(n: TexNode): number {
         // A transform is drawing-only and has no metrics of its own; its
         // children advance the pen just as they did before being grouped.
         case 'transform':           return sumWidthSp(n.children);
-        case 'hlist': case 'vlist': return n.width;
+        case 'hlist': case 'vlist': return n.width * ownExpandScale(n);   // (a character's box)
         case 'math':                return n.surround;
         // A rule in a line is a \vrule: its width is set (a running one's
         // is none), its height and depth run to the line's.

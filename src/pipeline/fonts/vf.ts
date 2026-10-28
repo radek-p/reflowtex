@@ -154,8 +154,10 @@ type Node = { type: string; [field: string]: unknown };
 type FontEntry = FontInfo;
 type Code = { char: number; [field: string]: unknown };
 
-/** The fields of a glyph that are its place and shape, not its attributes. */
-const GLYPH_OWN = new Set(['type', 'char', 'font', 'gindex', 'width', 'height', 'depth']);
+/** The fields of a glyph that are its place and shape, not its attributes;
+ *  its expansion in a line TeX set too, which is the box's (it widens the
+ *  pieces with it). */
+const GLYPH_OWN = new Set(['type', 'char', 'font', 'gindex', 'width', 'height', 'depth', 'expansion_factor']);
 
 /** Replace every glyph set in a virtual face by what its packet draws (see
  *  the top of this file). `fonts`: the document's font table (id → entry),
@@ -201,7 +203,7 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
       delete n.gindex;
       return;
     }
-    const virtualChar = n.char, virtualFont = n.font;
+    const virtualChar = n.char, virtualFont = n.font, expansion = n.expansion_factor;
     const attrs = Object.fromEntries(Object.entries(n).filter(([k]) => !GLYPH_OWN.has(k)));
     const children: Node[] = [];
     let at = 0;
@@ -219,6 +221,7 @@ export function resolveVirtualFonts(fonts: Map<string, FontEntry>, each: (visit:
     }
     for (const k of Object.keys(n)) if (k !== 'width' && k !== 'height' && k !== 'depth') delete n[k];
     Object.assign(n, hbox(n.width as number, n.height as number, n.depth as number, children, 0), { font: virtualFont, char: virtualChar });
+    if (expansion !== undefined) n.expansion_factor = expansion;
   });
   // each virtual face is drawn from the fonts its packets name, not itself
   for (const f of virtual.values()) f.face = { kind: 'virtual' };

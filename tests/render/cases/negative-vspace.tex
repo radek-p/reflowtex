@@ -1,0 +1,30 @@
+% Negative space between rows of boxes, as in real papers' figures: "\\ \vspace{-len}" between two
+% rows. Under \centering the \\ ends the paragraph, and the space is a \vskip between two paragraphs,
+% which pulls the second row up over the first (the interline glue is \lineskip there); in running
+% text it is a \vadjust below the line.
+\documentclass{article}
+\newcommand\panel[1]{\parbox[b]{3cm}{\centering\rule{3cm}{1.5cm}\\ (#1) Panel}}
+\begin{document}
+Text before the rows, long enough to make a full line of running text in the column and a bit more.
+
+\begin{center}
+\panel{a}\hspace{-5mm}\panel{b}
+\\ \vspace{-0.35cm}
+\panel{c}\hspace{-5mm}\panel{d}
+\end{center}
+Text between, long enough to make a full line of running text in the column and a bit more.
+
+\noindent\rule{3cm}{1cm}\hspace{-5mm}\rule{3cm}{1cm}\\ \vspace{-0.25cm}
+\rule{3cm}{1cm}\hspace{-5mm}\rule{3cm}{1cm}
+
+Running text with space taken back in the middle of a sentence, long enough to fill a line or two
+of the column at every width\vspace{-2pt} it is set at, and then it goes on for another line or so.
+\begin{figure}[h]
+\centering
+\panel{e}\hspace{-5mm}\panel{f}
+\\ \vspace{-0.35cm}
+\panel{g}\hspace{-5mm}\panel{h}
+\caption{Two rows of panels.}
+\end{figure}
+Text after, long enough to make a full line of running text in the column and a bit more.
+\end{document}

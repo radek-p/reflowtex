@@ -73,6 +73,15 @@ test('a moved character: a box of the virtual character\'s size, a kern to the p
   ], font: 3, char: 66 });
 });
 
+test('a moved character TeX expanded in a line it set: the box carries the expansion, its piece not', { skip: NO_CM }, () => {
+  const fonts = new Map<string, FontInfo>([['3', { name: 'testvf', size_sp: SIZE, face: { kind: 'tfm' } }]]);
+  const nodes: N[] = [{ type: 'glyph', char: 66, font: 3, width: 300000, height: 400000, depth: 1000, expansion_factor: 20000 }];
+  resolveVirtualFonts(fonts, visit => nodes.forEach(visit), files);
+  assert.equal(nodes[0].type, 'hlist');
+  assert.equal(nodes[0].expansion_factor, 20000);
+  assert.deepEqual((nodes[0].children as N[]).map(c => c.expansion_factor), [undefined, undefined]);
+});
+
 test('several characters in two fonts and a rule, each where the packet sets it', { skip: NO_CM }, () => {
   const { nodes, fonts } = resolve([67]);
   const kids = nodes[0].children as N[];

@@ -177,6 +177,40 @@ test('a \\vadjust is kept in its paragraph, with its height and what it draws', 
   assert.deepEqual(d.content.filter(it => it.kind === 'vspace').map(it => it.amount ?? 0).filter(a => a !== 0), []);
 });
 
+// A line TeX set in a box (a minipage, a p-column) is drawn as TeX finished
+// it: with microtype, its glyphs expanded and its edge characters hanging by
+// margin kerns. What is recorded of each such line adds up to the line's
+// width, as TeX packed it.
+test('a line TeX set in a box keeps its glyphs\' expansion and its margin kerns', async () => {
+  const d = await capture('\\noindent\\begin{minipage}[t]{4cm}(a) Mean absolute error of the predicted pressure field, '
+    + 'in kilopascal, over all the test cases. ``Lower\'\' is better, and the scale is logarithmic throughout.\\end{minipage}',
+    '\\usepackage{microtype}');
+  type Packed = Node & { glue_set?: number; glue_sign?: number; glue_order?: number;
+                         stretch?: number; shrink?: number; stretch_order?: number; shrink_order?: number; expansion_factor?: number };
+  const lines: Packed[] = [];
+  for (const p of d.paragraphs) for (const n of walk(p.nodes) as Generator<Packed>)
+    if (n.type === 'hlist' && n.children?.some(c => c.type === 'glyph')) lines.push(n);
+  assert.ok(lines.length >= 4, `${lines.length} lines`);
+  const glyphs = lines.flatMap(l => l.children!.filter(c => c.type === 'glyph') as Packed[]);
+  assert.ok(glyphs.some(g => g.expansion_factor), 'some glyphs are expanded');
+  for (const l of lines) {
+    let w = 0;
+    for (const c of l.children! as Packed[]) {
+      if (c.type === 'glyph') w += c.width! * (1 + (c.expansion_factor ?? 0) / 1e6);
+      else if (c.type === 'kern') w += c.kern!;
+      else if (c.type === 'glue') {
+        w += c.width!;
+        if (l.glue_sign === 1 && (c.stretch_order ?? 0) === (l.glue_order ?? 0)) w += (c.stretch ?? 0) * l.glue_set!;
+        if (l.glue_sign === 2 && (c.shrink_order ?? 0) === (l.glue_order ?? 0)) w -= (c.shrink ?? 0) * l.glue_set!;
+      } else w += c.width ?? 0;
+    }
+    // (TeX rounds each expanded glyph to a whole sp)
+    assert.ok(Math.abs(w - l.width!) < l.children!.length, `${glyphText([l])}: ${w} sp drawn, TeX's line ${l.width} sp`);
+  }
+  // the line starting with "(a)" hangs its parenthesis into the margin
+  assert.ok((lines[0].children!.find(c => c.type === 'kern')?.kern ?? 0) < 0, 'a margin kern at the first line\'s start');
+});
+
 test('multicols text is not kept twice', async () => {
   // multicol's output routine puts the balanced columns back on the main
   // list as one box, after their lines went past as ordinary lines.
@@ -390,6 +424,20 @@ test('Lean: the parts are marked, decl and url on the widget', async () => {
   assert.match(streams.find(s => attrsOf(s.attrs)['rtx-part'] === 'code')!.text!, /example : 1 = 1 := rfl/);
 });
 
+// An aside's text is set as LaTeX sets a \marginpar: with the paragraph
+// settings restored. Under \raggedright, \\ ends the paragraph, and a second
+// \\ after it is "There's no line here to end"; in the aside it breaks lines.
+test('an aside restores the paragraph settings: \\\\ \\\\ under \\raggedright is no error', async () => {
+  const body = '\\raggedright Some text\\marginpar{One\\\\ \\\\ Two} more text.';
+  const d = await capture(body);
+  const key = contentKey(body, '');
+  const errors = pipeLog.records().filter(r => r.code === 'tex-error' && r.details.block === `${key} (${key})`);
+  assert.deepEqual(errors.map(r => r.details.error), []);
+  const aside = (d as unknown as { streams: { kind: string; content?: Item[] }[] }).streams.find(s => s.kind === 'marginpar');
+  const paras = (aside?.content ?? []).filter(i => i.kind === 'paragraph').map(i => glyphText(d.paragraphs[i.para! - 1].nodes));
+  assert.deepEqual(paras, ['OneTwo'], 'one paragraph, its lines broken by \\\\');
+});
+
 // ── Classic fonts ───────────────────────────────────────────────────────────
 // A Type 1 face is converted for the browser (src/pipeline/fonts/type1.ts)
 // and its glyphs readdressed; what each glyph then draws is checked in the
@@ -509,6 +557,13 @@ test('a METAFONT-only font (bbm) is drawn from its bitmaps, as double-struck let
     .map(n => String.fromCodePoint(n.char!)).join('');
   assert.equal(chars, 'ℝ𝟙ℕ');
   assert.deepEqual(drawnGlyphNames(d).filter(([face]) => face.startsWith('bbm')).map(([, g]) => g), ['g82', 'g49', 'g78']);
+});
+
+// A string in output.json may hold any character: one below U+0020 is
+// escaped, as JSON wants (here a missing \char1, named with the words around it).
+test('a control character in a string: output.json is valid JSON', async () => {
+  const d = await capture('Before \\char1 after.') as Output & { missing_chars: { char: number; where: string[] }[] };
+  assert.deepEqual(d.missing_chars.map(m => [m.char, m.where[0]]), [[1, 'Before \u0001after.']]);
 });
 
 // A character the font lacks ("Missing character" in TeX's log) is drawn by
