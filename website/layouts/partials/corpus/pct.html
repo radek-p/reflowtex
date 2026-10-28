@@ -1,9 +1,9 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
-{{- /* A share as a percentage with two decimals, rounded down, so that
-       a paper with one glyph out of place never shows 100%. Takes a
-       fraction (0.9998) or a percentage (99.98). */ -}}
+{{- /* A share as a percentage with two decimals. Takes a fraction (0.9998)
+       or a percentage (99.98). Only a share of exactly 1 shows as 100%:
+       one that rounds to it shows as 99.99%. */ -}}
 {{- $v := float . -}}
 {{- if le $v 1.0 }}{{ $v = mul $v 100 }}{{ end -}}
 {{- $s := "100" -}}
-{{- if lt $v 100 }}{{ $s = printf "%.2f" (div (math.Floor (add (mul $v 100) 0.000001)) 100.0) }}{{ end -}}
+{{- if lt $v 100 }}{{ $s = printf "%.2f" (math.Min 99.99 (div (math.Round (mul $v 100)) 100.0)) }}{{ end -}}
 {{- return (printf "%s%%" $s) -}}

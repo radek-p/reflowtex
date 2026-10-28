@@ -1,6 +1,13 @@
 {{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
-{{- /* A paper is at the goal when it is shown, at least 99% of its glyphs
-       are placed and it has no vertical jump. */ -}}
-{{- $p := float (.placement | default 0) -}}
-{{- if le $p 1.0 }}{{ $p = mul $p 100 }}{{ end -}}
-{{- return (and (eq .status "displayed") (ge $p 99.0) (eq (int (.jumps | default 0)) 0)) -}}
+{{- /* Whether a paper is at the goal: its at_goal, where the data says;
+       else shown, with placement at least the goal's and no more jumps
+       than it allows (goal in corpus.json; 99% and none without it). */ -}}
+{{- $r := false -}}
+{{- if isset . "at_goal" -}}
+  {{- $r = .at_goal -}}
+{{- else -}}
+  {{- $goal := (partial "corpus/data.html" .).goal | default dict -}}
+  {{- $p := float (.placement | default 0) -}}{{- if gt $p 1.0 }}{{ $p = div $p 100 }}{{ end -}}
+  {{- $r = and (eq .status "displayed") (ge $p (float ($goal.placement | default 0.99))) (le (int (.jumps | default 0)) (int ($goal.jumps | default 0))) -}}
+{{- end -}}
+{{- return $r -}}

@@ -77,8 +77,6 @@ text width, and the two are compared glyph by glyph. A paper's
 \emph{placement} is the share of \TeX's glyphs that the browser puts within
 0.092\,pt of \TeX's position along their line, in the lines that match. A \emph{vertical jump} is a gap between
 two lines whose height differs from \TeX's by more than the same tolerance.
-A paper is at the goal when its placement is at least 99\% and it has no
-vertical jump.
 
 A two-column paper is set here in one column at its full text width, as a
 web page has no columns; we compare with \TeX{} setting that one column, not

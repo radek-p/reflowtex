@@ -1,0 +1,6 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* A licence's name as people write it, from its SPDX id
+       (CC-BY-4.0 → CC BY 4.0); an id not listed here is shown as it is. */ -}}
+{{- $names := dict "CC-BY-4.0" "CC BY 4.0" "CC-BY-SA-4.0" "CC BY-SA 4.0" "CC0-1.0" "CC0 1.0"
+     "GPL-2.0-or-later" "GPL 2.0 or later" "GPL-3.0-or-later" "GPL 3.0 or later" "LPPL-1.3c" "LPPL 1.3c" -}}
+{{- return (index $names . | default .) -}}

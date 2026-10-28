@@ -32,25 +32,25 @@
         {{- with .field }}<p class="cc-field">{{ . }}</p>{{ end }}
         <h4 class="cc-title">{{ if and $shown .page }}<a href="{{ .page | relURL }}">{{ .title }}</a>{{ else }}{{ .title }}{{ end }}</h4>
         {{- with partial "corpus/authors.html" .authors }}<p class="cc-authors">{{ . }}</p>{{ end }}
-        {{- $where := slice }}{{ with or (and .published .published.venue) .venue }}{{ $where = $where | append . }}{{ end }}
+        {{- $where := slice }}{{ with or .venue (and .published .published.venue) }}{{ $where = $where | append . }}{{ end }}
         {{- with .year }}{{ if not (in (delimit $where " ") (string .)) }}{{ $where = $where | append (string .) }}{{ end }}{{ end }}
         {{- with $where }}<p class="cc-venue">{{ delimit . ", " }}</p>{{ end }}
         {{- with .published }}{{ with .doi }}<p class="cc-doi">DOI <a href="{{ or $p.published.url (printf "https://doi.org/%s" .) }}" rel="noopener">{{ . }}</a></p>{{ end }}{{ end }}
         <ul class="cc-labels" aria-label="Class and notable packages">
           {{- with .class }}<li class="cc-class" title="Document class">{{ . }}</li>{{ end }}
-          {{- range .packages }}{{ if ne . $p.class }}<li>{{ . }}</li>{{ end }}{{ end }}
+          {{- range .packages }}{{ if not (hasPrefix ($p.class | default "") .) }}<li>{{ . }}</li>{{ end }}{{ end }}
         </ul>
         {{- if not $shown }}
-        <p class="cc-reason"><strong>Not shown here:</strong> {{ .reason | default "it did not build" }}</p>
+        <p class="cc-reason"><strong>Not shown here.</strong> {{ .reason | default "It did not build." }}</p>
         {{- end }}
-        {{- with .patched }}<p class="cc-patched">Changed to build here: {{ . }}</p>{{ end }}
+        {{- with .patched }}<details class="cc-patched"><summary>Changed to build here</summary><p>{{ . }}</p></details>{{ end }}
         <p class="cc-links">
           {{- if and $shown .page }}<a class="cc-read" href="{{ .page | relURL }}">Read it here</a>{{ end }}
           {{- with .original_url }}{{ if ne . $pub.url }}<a href="{{ . }}" rel="noopener">Original</a>{{ end }}{{ end }}
           {{- with .source_url }}{{ if ne . $pub.url }}<a href="{{ . }}" rel="noopener">Source</a>{{ end }}{{ end }}
         </p>
         <p class="cc-licence">
-          {{- if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ .licence }}</a>{{ else }}{{ .licence }}{{ end }}
+          {{- if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ partial "corpus/licence.html" .licence }}</a>{{ else }}{{ partial "corpus/licence.html" .licence }}{{ end }}
           {{- with $pub.url }}, published at <a href="{{ . }}" rel="noopener">{{ $pub.host }}</a>{{ end }}
           {{- with .attribution }}<span>{{ . }}</span>{{ end -}}
         </p>

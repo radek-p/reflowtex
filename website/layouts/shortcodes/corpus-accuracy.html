@@ -21,7 +21,12 @@
   {{- end }}
   {{- $shown := where $papers "status" "displayed" }}
   {{- with $shown }}{{ with index (sort . "placement") 0 }}
-  <p class="corpus-note">Mean placement is over the papers shown. The lowest is
+  {{- $goal := $c.goal | default dict }}
+  {{- $gj := int ($goal.jumps | default 0) }}
+  <p class="corpus-note">A paper is at the goal when its placement is at least
+    {{ partial "corpus/pct.html" ($goal.placement | default 0.99) | replaceRE "\\.00%" "%" }} and it has
+    {{ if eq $gj 0 }}no vertical jump{{ else }}at most {{ $gj }} vertical {{ cond (eq $gj 1) "jump" "jumps" }}{{ end }}.
+    Mean placement is over the papers shown; the lowest is
     {{ partial "corpus/pct.html" .placement }}, in <a href="#row-{{ .id }}">{{ .title }}</a>.</p>
   {{- end }}{{ end }}
   <p class="corpus-run">
@@ -53,8 +58,8 @@
           {{- if and $shown .page }}<a href="{{ .page | relURL }}">{{ .title }}</a>{{ else }}{{ .title }}{{ end }}
           <span class="ct-sub ct-meta">{{ with .class }}<code>{{ . }}</code>{{ end }}{{ with .field }}<span>{{ . }}</span>{{ end }}</span>
           {{- $pub := partial "corpus/published.html" . }}
-          <span class="ct-sub">{{ if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ .licence }}</a>{{ else }}{{ .licence }}{{ end }}{{ with $pub.url }}, published at <a href="{{ . }}" rel="noopener">{{ $pub.host }}</a>{{ end }}</span>
-          {{- if not $shown }}<span class="ct-reason">Not shown: {{ .reason | default "it did not build" }}</span>{{ end }}
+          <span class="ct-sub">{{ if .licence_url }}<a href="{{ .licence_url }}" rel="noopener license">{{ partial "corpus/licence.html" .licence }}</a>{{ else }}{{ partial "corpus/licence.html" .licence }}{{ end }}{{ with $pub.url }}, published at <a href="{{ . }}" rel="noopener">{{ $pub.host }}</a>{{ end }}</span>
+          {{- if not $shown }}<span class="ct-reason">{{ .reason | default "It did not build." }}</span>{{ end }}
         </th>
         {{- if $shown }}
         <td class="num">{{ partial "corpus/pct.html" .placement }}</td>
