@@ -1,0 +1,100 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* The corpus's cards (shortcodes/corpus-showcase.html) and table
+       (shortcodes/corpus-accuracy.html): written once per page. Colours are
+       the page's own (currentColor, the accent), so every theme fits. */ -}}
+{{- if not (.Store.Get "corpusStyle") -}}
+{{- .Store.Set "corpusStyle" true -}}
+<style>
+  .corpus, .corpus-acc { --cc-line: color-mix(in srgb, currentColor 12%, transparent); margin: 1.5rem 0 3rem; }
+  .corpus-summary, .corpus-note, .corpus-run, .corpus-missing { max-width: 46rem; }
+  .corpus-summary { margin: 0 0 1rem; }
+  .corpus a, .corpus-acc a { text-underline-offset: .15em; }
+
+  /* Domains to jump to: one row of pills that wraps. */
+  .corpus-domains-nav { display: flex; flex-wrap: wrap; gap: .45rem; list-style: none; margin: 0 0 1rem; padding: 0; }
+  .corpus-domains-nav a {
+    display: inline-flex; align-items: baseline; gap: .4em; padding: .3rem .8rem; border-radius: 999px;
+    text-decoration: none; font-size: .85rem; border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+    transition: background .15s ease; }
+  .corpus-domains-nav a:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
+  .corpus-domains-nav span { font-size: .78rem; opacity: .6; font-variant-numeric: tabular-nums; }
+
+  /* A domain: its name in small capitals over a hairline, then the cards. */
+  .corpus-domain { margin: 2.25rem 0 0; scroll-margin-top: 1.25rem; }
+  .corpus-domain > h3 {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+    margin: 0 0 1rem; padding-bottom: .45rem; border-bottom: 1px solid var(--cc-line);
+    font-size: .78rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+  .corpus-domain > h3 span { font-weight: 400; letter-spacing: .02em; text-transform: none; opacity: .6; }
+  .corpus-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 1rem; }
+
+  /* A card: a field of the faint tint the home page's cards have. */
+  .corpus-card {
+    display: flex; flex-direction: column; gap: .4rem; min-width: 0; box-sizing: border-box;
+    padding: 1.1rem 1.2rem 1rem; font-size: .875rem; line-height: 1.45;
+    background: color-mix(in srgb, currentColor 3%, transparent); scroll-margin-top: 1.25rem; }
+  .corpus-card p { margin: 0; }
+  .cc-field { font-size: .7rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; opacity: .55; }
+  .cc-title { margin: 0; font-size: 1rem; font-weight: 650; line-height: 1.3; overflow-wrap: break-word; }
+  .cc-title a { text-decoration: none; }
+  .cc-title a:hover { text-decoration: underline; }
+  .cc-authors { opacity: .85; }
+  .cc-venue { opacity: .65; }
+  .cc-doi { font-size: .78rem; opacity: .75; overflow-wrap: anywhere; }
+  .cc-labels { display: flex; flex-wrap: wrap; gap: .3rem; list-style: none; margin: .3rem 0 .1rem; padding: 0; }
+  .cc-labels li {
+    padding: .05rem .4rem; border-radius: 3px; font: .78rem/1.45 "Latin Modern Mono", ui-monospace, Menlo, monospace;
+    border: 1px solid color-mix(in srgb, currentColor 16%, transparent); overflow-wrap: anywhere; }
+  .cc-labels li.cc-class { border-color: transparent; color: var(--lt-primary);
+    background: color-mix(in srgb, var(--lt-primary) 10%, transparent); }
+  .cc-reason, .cc-patched { font-size: .825rem; }
+  .cc-patched { opacity: .75; }
+  .cc-links { display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin-top: auto !important; padding-top: .5rem; }
+  .cc-links a { font-weight: 500; }
+  .cc-links a.cc-read { font-weight: 650; color: var(--lt-primary); }
+  .cc-licence { padding-top: .55rem; border-top: 1px solid var(--cc-line); font-size: .75rem; line-height: 1.4; opacity: .7; }
+  .cc-licence span { display: block; }
+  /* Not shown: an outline where the others have a field. */
+  .corpus-card.is-stopped { background: none; border: 1px dashed color-mix(in srgb, currentColor 32%, transparent); }
+
+  /* The totals: five figures in a row, two or three a row on a phone. */
+  .corpus-totals {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: .75rem;
+    max-width: 46rem; margin: 0 0 1rem; padding: 0; }
+  .corpus-totals > div { padding: .8rem 1rem .75rem; background: color-mix(in srgb, currentColor 3%, transparent); }
+  .corpus-totals dt { font-size: .75rem; opacity: .7; }
+  .corpus-totals dd { margin: .1rem 0 0; font-size: 1.55rem; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  @media (max-width: 30rem) { .corpus-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .corpus-note, .corpus-run { font-size: .85rem; margin: 0 0 .8rem; }
+  .corpus-run { opacity: .8; }
+  .corpus-run code, .ct-sub code { font-size: .95em; }
+
+  /* The table: by domain, figures right-aligned in tabular digits; the
+     head stays in view while it scrolls. Two columns give way on a phone. */
+  .corpus-table-wrap { max-width: 46rem; margin: 1.5rem 0 1rem; }
+  .corpus-table { width: 100%; border-collapse: collapse; font-size: .875rem; line-height: 1.4; font-variant-numeric: tabular-nums; }
+  .corpus-table th, .corpus-table td { padding: .5rem .45rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--cc-line); }
+  .corpus-table th:first-child { padding-left: 0; }
+  .corpus-table th:last-child, .corpus-table td:last-child { padding-right: 0; }
+  .corpus-table thead th {
+    position: sticky; top: 0; z-index: 1; background: var(--latex-page-bg, Canvas);
+    font-size: .75rem; font-weight: 600; opacity: 1; color: color-mix(in srgb, currentColor 70%, transparent);
+    border-bottom-color: color-mix(in srgb, currentColor 30%, transparent); }
+  .corpus-table .num { text-align: right; white-space: nowrap; }
+  .corpus-table tbody th { font-weight: 500; }
+  .corpus-table tbody th a { text-decoration: none; }
+  .corpus-table tbody th a:hover { text-decoration: underline; }
+  .corpus-table .ct-domain th {
+    padding-top: 1.4rem; font-size: .72rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; opacity: .65; }
+  .ct-sub, .ct-reason { display: block; font-size: .78rem; font-weight: 400; opacity: .65; }
+  .ct-reason { opacity: .85; margin-top: .15rem; }
+  .ct-status { white-space: nowrap; }
+  .ct-status > span { display: inline-flex; align-items: center; gap: .3em; }
+  .ct-goal svg { width: .8em; height: .8em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .ct-below, .ct-stopped { font-weight: 600; }
+  .ct-compare { display: block; font-size: .8rem; color: var(--lt-primary); }
+  .corpus-table tr:target > * { background: color-mix(in srgb, var(--lt-primary) 8%, transparent); }
+  .corpus-table tr.is-stopped td.num { opacity: .5; }
+  @media (max-width: 40rem) { .corpus-table .c-abs, .corpus-table .c-glyphs { display: none; } }
+</style>
+{{- end -}}

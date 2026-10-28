@@ -1,0 +1,10 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* Where a paper was published: its landing page (original_page) where
+       the data has one, else original_url, else source_url. Returns
+       { url, host }, the host without "www.", or nothing. */ -}}
+{{- $url := or .original_page .original_url .source_url -}}
+{{- $r := dict "url" "" "host" "" -}}
+{{- with $url -}}
+  {{- $r = dict "url" . "host" (strings.TrimPrefix "www." (urls.Parse .).Host) -}}
+{{- end -}}
+{{- return $r -}}

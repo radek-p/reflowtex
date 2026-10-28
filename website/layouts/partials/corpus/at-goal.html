@@ -1,0 +1,6 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* A paper is at the goal when it is shown, at least 99% of its glyphs
+       are placed and it has no vertical jump. */ -}}
+{{- $p := float (.placement | default 0) -}}
+{{- if le $p 1.0 }}{{ $p = mul $p 100 }}{{ end -}}
+{{- return (and (eq .status "displayed") (ge $p 99.0) (eq (int (.jumps | default 0)) 0)) -}}

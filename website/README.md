@@ -39,6 +39,8 @@ that is fine, since `public/` is not tracked.
 | `layouts/partials/hero.html` | the animated hero (ported from `experiments/26-reflow-tex-hero`) |
 | `browser/privacy-notice.ts` | the note, shown once, on what the site keeps in the browser (About › Privacy); build.sh makes it `static/privacy-notice.js` |
 | `static/images/` | pictures the docs show (the render tests page's screenshot) |
+| `layouts/shortcodes/corpus-showcase.html`, `corpus-accuracy.html` | the paper corpus on Showcase (cards by domain) and on Accuracy (totals and a table), from `data/corpus.json`, which CI writes; helpers in `layouts/partials/corpus/` |
+| `layouts/partials/report-url.html` | the one place the comparison report's URLs are made (its path is `params.report.path` in `hugo.toml`) |
 
 Built into `static/` by `build.sh`, not kept in git: the render tests' report
 at `/render-tests/`, with the results of this checkout's render tests (the

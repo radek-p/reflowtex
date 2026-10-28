@@ -1,0 +1,11 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* The comparison report's URLs, made here and nowhere else. The
+       report (tests/render/report) is put at params.report.path by
+       build.sh. . is a dict: "batch", "tests" (the render tests) or
+       "corpus", and for the corpus "paper", an entry of corpus.json,
+       whose compare field is the URL of its comparison
+       (render-tests/?batch=corpus#<id>). */ -}}
+{{- $base := site.Params.report.path | default "render-tests/" -}}
+{{- $url := printf "%s?batch=%s" $base (.batch | default "tests") -}}
+{{- with .paper }}{{ $url = .compare | default (printf "%s?batch=corpus#%s" $base .id) }}{{ end -}}
+{{- return ($url | relURL) -}}
