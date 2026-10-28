@@ -275,10 +275,10 @@ message Paragraph {
   optional int32 baselineskip  = 3;
   optional int32 lineskip      = 4;
   optional int32 lineskiplimit = 5;
-  // Per-paragraph alignment from TeX's \leftskip/\rightskip: "center", "left"
-  // (\raggedright), or "right" (\raggedleft). Absent = justified (the default),
-  // so the paragraph inherits the block's --latex-align.
-  optional string align = 6;
+  // (6 was the alignment, a label read off the margin skips' stretch order:
+  // the skips themselves are left_skip and right_skip.)
+  reserved 6;
+  reserved "align";
 
   // \adjustspacing and \protrudechars in force when TeX broke the paragraph
   // (LuaTeX's meaning: 0 = off, 1 = applied when a line is set, 2 = also
@@ -312,6 +312,17 @@ message Paragraph {
   // after. The first entry is `indent` and `width` again. Absent = every line
   // has `indent` and `width`.
   repeated LineBand shape = 17;
+
+  // \leftskip and \rightskip as TeX broke the paragraph with them, less their
+  // fixed parts (those are in `indent` and `width`): a glue node of width 0
+  // with their stretch and shrink, only where they have any. TeX adds them to
+  // every line: their stretch and shrink count in its badness, and the line's
+  // slack is shared between them and its own glue – LaTeX's \centering is
+  // 0pt plus 1fil on both sides, a class may centre with finite stretch
+  // (0pt plus .3\hsize). Absent: rigid; with neither, the paragraph is set
+  // as the block's alignment (data-align) asks.
+  optional Node left_skip  = 18;
+  optional Node right_skip = 19;
 }
 
 // A line's band in a shaped paragraph (sp, at Document.source_width): where

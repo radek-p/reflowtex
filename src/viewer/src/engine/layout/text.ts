@@ -1,20 +1,40 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { buildBreakCandidates, kpBreak, paragraphParams } from '../breaker.ts';
+import { alignOf, blockRigidParFill, buildBreakCandidates, kpBreak, paragraphParams } from '../breaker.ts';
 import { HL_ALIGNMENT, IGNORE_DEPTH_SP, SP_TO_PX, ZOOM, fillInfo, gD, gH, gW, sumExpandableSp, sumWidthSp } from '../core.ts';
 import { AFFINE_CHILD_LISTS, affineDisplayNode, preDisplaySizeSp } from './display.ts';
 import { mergeWidgetRuns } from '../../host/widgets.ts';
 import { paragraphLeading } from './lines.ts';
-import type { BoxNode, ContentItem, Doc, FontTable, LineBand, Paragraph, TexNode } from '../model.ts';
+import type { BoxNode, ContentItem, Doc, FontTable, GlueNode, LineBand, Paragraph, TexNode } from '../model.ts';
 import type { Line, LineAdjust, LineMeta, LinePlacement, Segment, Segments, SegmentGeometry, TextSegment } from './types.ts';
 import type { LayoutCache } from './types.ts';
 import type { Params } from '../../runtime/params.ts';
 
-// A glue's stretch order (LuaTeX's: 0 finite, 1 fi, 2 fil, 3 fill, 4 filll),
-// and the stretch of 1fil, the \leftskip or \rightskip LaTeX's \centering,
-// \raggedright and \raggedleft set (para.align says which).
-const FIL = 2;
-const FLUSH_GLUE = 65536;
+// A margin skip's stretch order when it stretches (LuaTeX's: 0 finite, 1 fi,
+// 2 fil, 3 fill, 4 filll), and its stretch at an order.
+const stretchOrder = (g: GlueNode | undefined) => g && g.stretch ? g.stretch_order || 0 : 0;
+const stretchAt = (g: GlueNode | undefined, order: number) => g && (g.stretch_order || 0) === order ? g.stretch || 0 : 0;
+
+// A paragraph whose margin skips are a share of the measure (0pt plus
+// .3\hsize) has their stretch and shrink with rates (display_model's
+// attachParagraphRates): the skips at a measure deltaSp wider than TeX's.
+function skipsAtWidth(para: Paragraph, deltaSp: number): Paragraph {
+    const rated = (g: GlueNode | undefined) => !!g && (g.stretch_rate !== undefined || g.shrink_rate !== undefined);
+    if (!deltaSp || !(rated(para.left_skip) || rated(para.right_skip))) return para;
+    const at = (g: GlueNode | undefined) => g && affineDisplayNode(g, deltaSp) as GlueNode;
+    return { ...para, left_skip: at(para.left_skip), right_skip: at(para.right_skip) };
+}
+
+// The nodes of a paragraph with its \parfillskip made rigid, kept per list.
+const rigidParFills = new WeakMap<TexNode[], TexNode[]>();
+function rigidParFill(nodes: TexNode[]): TexNode[] {
+    let r = rigidParFills.get(nodes);
+    if (!r) {
+        r = nodes.map(n => n.type === 'glue' && n.subtype === 15 ? { ...n, width: 0, stretch: 0, stretch_order: 0, shrink: 0, shrink_order: 0 } : n);
+        rigidParFills.set(nodes, r);
+    }
+    return r;
+}
 
 // ── Document → SVG element ────────────────────────────────────────────────────
 // A block is an ordered stream of paragraphs and displays (see latex.proto).
@@ -289,20 +309,16 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
         itemStarts.push(lines.length);
         // A paragraph holding a box set to the measure (a tabular*, a figure
         // scaled to \linewidth) carries rates: its nodes follow this width.
-        const nodes = paragraphAtWidth(para, widthSp, cache.sourceWidthSp!);
+        // A paragraph TeX justified, set as the block asks (data-align): centred
+        // or flush right as LaTeX's \centering and \raggedleft set it, with a
+        // rigid \parfillskip (blockRigidParFill).
+        const atWidth = paragraphAtWidth(para, widthSp, cache.sourceWidthSp!);
+        const nodes = blockRigidParFill(para, p.align) ? rigidParFill(atWidth) : atWidth;
         let bcs = nodes === para.nodes ? cache.bcs!.get(index) : null;
         if (!bcs) {
             bcs = buildBreakCandidates(nodes, fontInfo, para);
             if (nodes === para.nodes) cache.bcs!.set(index, bcs);
         }
-
-        // Alignment is per paragraph: TeX's \centering/\raggedright/\raggedleft
-        // set the paragraph's \leftskip/\rightskip, which the serializer reads and
-        // records as para.align. A paragraph with none (the common case) inherits
-        // the block's alignment (p.align, from --latex-align). This is what centres
-        // a \maketitle title inside an otherwise justified document.
-        const align   = para.align || p.align;
-        const justify = align === 'justify';
 
         // TeX interline parameters for this paragraph, for the LaTeX rule
         const lineMeta = paragraphLeading(para);
@@ -343,11 +359,16 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
         // apply them as TeX did.
         // TeX's breaking parameters, the paragraph's own where it had them
         // (\sloppy: every bibliography)
-        const pp = paragraphParams(p, para);
+        // Alignment is per paragraph: TeX's \centering/\raggedright/\raggedleft
+        // set the paragraph's \leftskip/\rightskip, which the serializer
+        // records, and every line is set between them (paragraphParams). A
+        // paragraph with none (the common case) is set as the block's
+        // alignment asks (p.align, from --latex-align).
+        const pp = paragraphParams(p, skipsAtWidth(para, widthSp - (cache.sourceWidthSp || widthSp)));
         // (a shaped paragraph is the built-in breaker's: the hook takes one measure)
         const ext = typeof window !== 'undefined' && typeof window.reflowtexBreak === 'function' && bands.length === 1
             ? window.reflowtexBreak(nodes, measure[0], pp, {
-                  gW, gH, gD, align,
+                  gW, gH, gD, align: alignOf(pp),
                   bskip: para.baselineskip || 0,
                   lskip: para.lineskip || 0,
                   font: fid => fontInfo[String(fid)] || null,
@@ -355,16 +376,14 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
                   protrudeChars: para.protrude_chars || 0,
               })
             : null;
-        const broken = ext || kpBreak(bcs, nodes, bands.length === 1 ? measure[0] : measure, justify ? pp : { ...pp, ragged: true });
+        const broken = ext || kpBreak(bcs, nodes, bands.length === 1 ? measure[0] : measure, pp);
+        const L = pp.leftSkip, R = pp.rightSkip;
         for (let k = 0; k < broken.length; k++) {
             const ln = broken[k], band = bands[Math.min(k, bands.length - 1)];
             const availSp = measure[Math.min(k, measure.length - 1)];
-            const indentPx = band.indentSp * SP_TO_PX, availPx = columnPx - indentPx - band.rightSp * SP_TO_PX;
+            const indentPx = band.indentSp * SP_TO_PX;
             ln.nodes = mergeWidgetRuns(ln.nodes);
-            // For non-justified modes: allow glue shrink (ratio<0) but never stretch.
-            // When the line must shrink, rendering and positioning are identical to justify.
-            // The alignment offset only applies to lines whose natural width fits the column.
-            const ratio = justify ? ln.ratio : Math.min(0, ln.ratio);
+            const ratio = ln.ratio;
             const er    = ln.expand !== undefined ? ln.expand
                         : (p.useExpansion && !ln.exact) ? ratio * p.maxExpand : 0;
             const protX = -(p.useProtrusion ? ln.leftProtrusion * SP_TO_PX : 0);
@@ -374,69 +393,32 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
             // both sides: it is still a line that fits, centred.
             const natSp = sumWidthSp(ln.nodes) + (er ? Math.round(er * sumExpandableSp(fontInfo, ln.nodes)) : 0);
             const natPx = natSp * SP_TO_PX;
-            // TeX's line box holds its margin kerns: what protrudes is not
-            // part of the width the line must fit in. (A breaker that returns
-            // the right margin kern as a node has it in natPx already; the
-            // built-in one reports it as rightProtrusion.) A line whose last
-            // character hangs therefore fits even when its natural width is a
-            // little over the measure – and a fill in it still takes the
-            // rest, or "… \hfill [Gaj+20," ends short of TeX's by the rest.
-            const lpPx = -protX;
-            const rpPx = p.useProtrusion ? (ln.rightProtrusion || 0) * SP_TO_PX : 0;
-            let x0: number, fillRatio = 0, fillOrder = 0;
-            if (ratio < 0 || natPx - lpPx - rpPx > availPx) {
-                // ratio<0 is not a reliable proxy for "too wide to fit" on its
-                // own: kpBreak's ratio falls back to exactly 0 (not negative)
-                // when a line is overfull but every glue order has zero
-                // shrinkability to report a shrink ratio against – exactly
-                // \begin{center}'s infinite-stretch, zero-shrink centring
-                // glue. Left unguarded, the center/right branch below computes
-                // a negative x0 for any centred figure wider than the column,
-                // drawing it into negative SVG coordinates: still positioned
-                // correctly relative to nothing, but visibly detached to the
-                // left of the column instead of flush with its left edge.
-                x0 = protX;  // squeezed to fit – same position as justified
-            } else {
-                // So a centred or right-aligned line is placed by its width
-                // less what protrudes, and its first character then hangs out
-                // of that place by the left protrusion.
-                switch (align) {
-                    case 'right':  x0 = availPx - natPx + rpPx; break;
-                    case 'center': x0 = (availPx - natPx + lpPx + rpPx) / 2 - lpPx; break;
-                    default:       x0 = protX; break;
-                }
-                // A line with an infinite fill and room to spare distributes the
-                // slack into that fill (KP left it at ratio 0), flushing whatever
-                // follows to the right margin. This is set-once at layout: the fill
-                // stretch is a fixed measure, only the available width varies.
-                // A paragraph that is not justified has fills of its own, its
-                // \leftskip and \rightskip (LaTeX's \@flushglue, 0pt plus 1fil):
-                // a fill in the line of the same order shares the slack with
-                // them, as LaTeX's \and (plus .17fil) does between centred
-                // author blocks; one of a lower order gets none of it, one of a
-                // higher order all of it.
-                const fi = fillInfo(ln.nodes);
-                const skipL = align === 'center' || align === 'right' ? FLUSH_GLUE : 0;
-                const skipR = align === 'center' || align === 'left' ? FLUSH_GLUE : 0;
-                const skips = fi.order === FIL ? skipL + skipR : 0;
-                if (fi.order > 0 && fi.stretch > 0 && (fi.order >= FIL || !(skipL + skipR))) {
-                    // TeX packs the line with its margin kerns in it, so a
-                    // protruding first or last character widens the slack by
-                    // what it hangs into the margin: the fill pushes the last
-                    // character past the measure by its protrusion, as in a
-                    // justified line ("… \hfill [Gaj+20," ends with its comma
-                    // hanging). The built-in breaker reports the right kern as
-                    // rightProtrusion; a breaker that returns it as a kern node
-                    // has it in natSp already and reports none.
-                    const leftKernSp  = p.useProtrusion ? (ln.leftProtrusion || 0) : 0;
-                    const rightKernSp = p.useProtrusion ? (ln.rightProtrusion || 0) : 0;
-                    const slackSp = availSp - (natSp - leftKernSp - rightKernSp);
-                    if (slackSp > 0) {
-                        fillRatio = slackSp / (fi.stretch + skips); fillOrder = fi.order;
-                        x0 = protX + (skips ? slackSp * skipL / (fi.stretch + skips) * SP_TO_PX : 0);
-                    }
-                }
-            }
+            // TeX sets the line between the margin skips, \leftskip and
+            // \rightskip, packed to the measure, with its margin kerns in it:
+            // what protrudes is not part of the width the line must fit in.
+            // (A breaker that returns the right margin kern as a node has it
+            // in natSp already; the built-in one reports it as
+            // rightProtrusion.) The slack goes to the glue of the highest
+            // order that stretches – the line's own and the skips' – so a
+            // fill in the line shares it with skips of its order (LaTeX's \and,
+            // plus .17fil, between centred author blocks), and gets all of it
+            // over skips of a lower order (\hfill in a ragged line); a line with
+            // no infinite glue is set by the breaker's ratio, which counts the
+            // skips' finite stretch and shrink. Where the line starts is the
+            // \leftskip's share; its first character then hangs out of that
+            // place by its protrusion. A line too wide to shrink to the
+            // measure starts at the margin, as TeX sets it.
+            const leftKernSp  = p.useProtrusion ? (ln.leftProtrusion || 0) : 0;
+            const rightKernSp = p.useProtrusion ? (ln.rightProtrusion || 0) : 0;
+            const slackSp = availSp - (natSp - leftKernSp - rightKernSp);
+            const fi = fillInfo(ln.nodes);
+            const order = Math.max(fi.stretch ? fi.order : 0, stretchOrder(L), stretchOrder(R));
+            let x0 = protX, fillRatio = 0, fillOrder = 0;
+            if (slackSp > 0 && order > 0) {
+                const total = (fi.order === order ? fi.stretch : 0) + stretchAt(L, order) + stretchAt(R, order);
+                if (total > 0) { fillRatio = slackSp / total; fillOrder = order; x0 += fillRatio * stretchAt(L, order) * SP_TO_PX; }
+            } else if (ratio > 0) x0 += ratio * stretchAt(L, 0) * SP_TO_PX;
+            else if (ratio < 0) x0 += ratio * (L?.shrink || 0) * SP_TO_PX;
             maxRightPx = Math.max(maxRightPx, x0 + indentPx + natPx);
             lines.push(ln);
             lrp.push({ ratio, er, x0: x0 + indentPx, fillRatio, fillOrder });

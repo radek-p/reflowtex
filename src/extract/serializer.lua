@@ -1217,26 +1217,6 @@ local function param_dimen(name)
     return v.width or 0                            -- glue spec (baselineskip, lineskip)
 end
 
--- Paragraph alignment, read from the \leftskip/\rightskip in force as it is
--- broken. LaTeX's alignment commands set these to \@flushglue (0pt plus 1fil):
--- \centering sets both, \raggedright only \rightskip, \raggedleft only
--- \leftskip. So an infinite stretch order on each side names the alignment;
--- neither (the normal case) is justified and returns nil, which the renderer
--- reads as "inherit the block alignment", keeping the wire form small.
-local function glue_stretch_order(name)
-    local ok, _, _, _, sto = pcall(tex.getglue, name)
-    if ok and sto then return sto end
-    return 0
-end
-local function para_align()
-    local ls = glue_stretch_order("leftskip")  > 0
-    local rs = glue_stretch_order("rightskip") > 0
-    if ls and rs then return "center" end
-    if rs then return "left"  end   -- ragged right: text flush left
-    if ls then return "right" end   -- ragged left:  text flush right
-    return nil                      -- justified (default)
-end
-
 -- Remove the empty boxes \label left behind, once their positions have been
 -- recorded. Only top-level ones: a marker nested inside a box is already inside
 -- something TeX has finished building, where it can no longer affect anything.
@@ -1260,6 +1240,24 @@ end
 local function skip_width(name)
     local ok, w = pcall(tex.getglue, name)
     return (ok and w) or 0
+end
+
+-- The rest of a margin skip, its stretch and shrink, as a glue node of width
+-- 0, or nil when it has none. TeX adds both skips to every line it breaks:
+-- their stretch and shrink count in each line's badness, and the line's
+-- slack is shared between them and its own glue. LaTeX's \centering is
+-- 0pt plus 1fil on each side; a class may centre with finite stretch
+-- (0pt plus .3\hsize), which breaks the lines differently.
+local function margin_skip(name)
+    local ok, _, st, sh, sto, sho = pcall(tex.getglue, name)
+    if not ok or ((st or 0) == 0 and (sh or 0) == 0) then return nil end
+    return {
+        type          = "glue",
+        stretch       = st,
+        shrink        = sh,
+        stretch_order = sto ~= 0 and sto or nil,
+        shrink_order  = sho ~= 0 and sho or nil,
+    }
 end
 
 -- The line breaker's parameters, recorded for a paragraph only where they
@@ -1309,7 +1307,8 @@ local function capture_paragraph(head, groupcode)
         -- applied, and whether inside the breaker or only when a line is set.
         adjust_spacing = tex.adjustspacing or 0,
         protrude_chars = tex.protrudechars or 0,
-        align  = para_align(),
+        left_skip  = margin_skip("leftskip"),
+        right_skip = margin_skip("rightskip"),
         nodes  = serialize_nodelist(head),
     }
     for _, b in ipairs(BREAK_PARAMS) do

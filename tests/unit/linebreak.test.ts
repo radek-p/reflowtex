@@ -32,6 +32,7 @@ interface Breaker {
   kpBreakpoints(bcs: Candidate[], nodes: Node[], lineWidthSp: number, p: object): { bcIdx: number }[];
   kpPass(bcs: Candidate[], lineWidthSp: number, threshold: number, p: object, o?: object):
     { breaks: { bcIdx: number }[] | null };
+  paragraphParams(p: object, para: object): object;
 }
 const VIEWER = new URL('../../src/viewer/src/', import.meta.url).href;
 const breaker: Breaker = await import(`${VIEWER}engine/breaker.ts`);
@@ -46,9 +47,10 @@ const penalty = (n: number): Node => ({ type: 'penalty', penalty: n });
 const parfillskip = glue(0, PT, 2, 15);
 // LaTeX's \and between author blocks: \hskip 1em plus .17fil (at 12pt)
 const and = () => glue(12, Math.round(0.17 * PT), 2);
-const breaksOf = (nodes: Node[], widthPt: number, ragged: boolean) => {
+const breaksOf = (nodes: Node[], widthPt: number, centred: boolean) => {
   const bcs = breaker.buildBreakCandidates(nodes, {}, {});
-  const p = { ...paramsFromData({ texFinalPass: 'strict' }, ragged ? 'center' : 'justify'), ragged };
+  // (centred: LaTeX's \centering, \leftskip and \rightskip 0pt plus 1fil)
+  const p = breaker.paragraphParams(paramsFromData({ texFinalPass: 'strict' }, centred ? 'center' : 'justify'), {});
   return breaker.kpBreakpoints(bcs, nodes, widthPt * PT, p).map(b => bcs[b.bcIdx].nodeIdx);
 };
 
@@ -56,8 +58,9 @@ test('glue of infinite stretch after a box is a breakpoint, and a break there di
   const nodes = [box(150), and(), box(150), and(), box(150), parfillskip];
   const bcs = breaker.buildBreakCandidates(nodes, {}, {});
   assert.deepEqual(bcs.map(b => [b.kind, b.nodeIdx]), [['start', -1], ['space', 1], ['space', 3], ['end', 5]]);
-  // a line ending there does not hold the fill; one starting there neither
-  assert.deepEqual(bcs.map(b => [b.cumFill, b.leadFill]), [[0, 0], [0, 1], [1, 1], [2, 0]]);
+  // a line ending there does not hold the fill; one starting there neither;
+  // the last line holds the \parfillskip's
+  assert.deepEqual(bcs.map(b => [b.cumFill, b.leadFill]), [[0, 0], [0, 1], [1, 1], [3, 0]]);
 });
 
 test("the \\hfil of \\\\ is no breakpoint: it follows a \\nobreak", () => {
@@ -103,4 +106,28 @@ test('a start dropped when its line is overfull, in a pass before the final one'
     const r = breaker.kpPass(bcs, 100 * PT, 200, p, o);
     assert.deepEqual(r.breaks?.map(b => b.bcIdx), [2, 4], JSON.stringify(o));
   }
+});
+
+// A formula that starts a line: TeX discards its math node with the
+// \mathsurround, and the glue it opens with (a \,), as it discards the space
+// before it (§879). The line keeps a copy of the math node without the
+// surround, the mark of where the formula begins, which stands for the
+// paragraph's own node.
+test('a break before a formula discards its surround and its opening glue', async () => {
+  const { extractLineNodes } = await import(`${VIEWER}engine/breaker.ts`) as
+    { extractLineNodes(a: Candidate, b: Candidate, nodes: Node[]): Node[] };
+  const { paragraphNode } = await import(`${VIEWER}engine/core.ts`) as { paragraphNode(n: Node): Node };
+  const math = (subtype: number): Node => ({ type: 'math', subtype, surround: 6554 });   // 0.1pt
+  const thin = glue(2, 0, 0);
+  const nodes = [box(100), glue(3, PT, 0), math(0), thin, box(20), math(1), glue(3, PT, 0), box(100), parfillskip];
+  const bcs = breaker.buildBreakCandidates(nodes, {}, {}) as (Candidate & { leadW: number; trailW: number })[];
+  assert.deepEqual(bcs.map(b => [b.kind, b.nodeIdx]), [['start', -1], ['space', 1], ['space', 6], ['end', 8]]);
+  // the space, the surround and the \, go with the break before the formula
+  assert.equal(bcs[1].leadW, 3 * PT + 6554 + 2 * PT);
+  // a break after it drops the closing surround from the line's end
+  assert.equal(bcs[2].trailW, 6554);
+  const line = extractLineNodes(bcs[1], bcs[2], nodes);
+  assert.deepEqual(line.map(n => n.type), ['math', 'hlist']);
+  assert.equal(line[0].surround, 0);
+  assert.equal(paragraphNode(line[0]), nodes[2]);
 });

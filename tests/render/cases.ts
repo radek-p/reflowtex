@@ -90,6 +90,17 @@ export const cases: Record<string, CaseSettings> = {
   // fonts lacked). All 235 glyphs found. Worst attained 2026-10-25.
   'latin-modern-math': { tolerance: 0.009, rule_tolerance: 0.004 },
   'lists-headings': { tolerance: 0.009 },
+  // Table of contents entries whose last line reaches into the \rightskip
+  // (\parfillskip -\rightskip). Worst attained 2026-10-28 (0.70 at the other
+  // widths before the last line counted its \parfillskip's width).
+  'toc-entries': { tolerance: 0.014 },
+  // Margin skips that stretch, finite (0pt plus .3\hsize, which follows the
+  // measure) and infinite, and a table of contents. Worst attained 2026-10-28
+  // (0.69, lines broken otherwise, before they were set as glue).
+  'margin-skips': { tolerance: 0.011 },
+  // Formulas at line starts with \mathsurround 0.1pt and an opening \,: TeX
+  // discards both at a break. Worst attained 2026-10-28 (0.689 before).
+  mathsurround: { tolerance: 0.010 },
   microtype: { tolerance: 0.014 },
   // The same in paragraphs TeX set inside boxes (minipages side by side, a
   // \parbox, p-columns), whose lines the browser draws as TeX finished them:

@@ -243,7 +243,6 @@ export interface Paragraph {
     baselineskip?: number;
     lineskip?: number;
     lineskiplimit?: number;
-    align?: string;
     adjust_spacing?: number;
     protrude_chars?: number;
     width?: number;
@@ -256,6 +255,10 @@ export interface Paragraph {
     final_hyphen_demerits?: number;
     /** each line's band where they differ (latex.proto's Paragraph.shape) */
     shape?: LineBand[];
+    /** \leftskip and \rightskip less their fixed parts, where they stretch
+     *  or shrink (latex.proto's Paragraph.left_skip, right_skip) */
+    left_skip?: GlueNode;
+    right_skip?: GlueNode;
 }
 
 /** A line's band in a shaped paragraph: its indent and measure (sp). */

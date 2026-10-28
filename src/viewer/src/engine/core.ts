@@ -16,6 +16,19 @@ export const IGNORE_DEPTH_SP = -65536000;
 // goes on on the next line: the painter marks their glyphs (data-break), so
 // that copying joins it again (runtime/copy.ts), as reading does (a11y.ts).
 export const BREAK_NODES = new WeakMap<TexNode, 'drop' | 'keep'>();
+// A math node a line break discarded at the next line's start, as TeX
+// discards it with its \mathsurround (breaker.ts, extractLineNodes): the line
+// keeps a copy without the surround, which marks where its formula begins
+// (its MathML). The copy's paragraph node is the one TeX had.
+const DISCARDED_MATH = new WeakMap<TexNode, TexNode>(), DISCARDED_COPY = new WeakMap<TexNode, TexNode>();
+export function discardedMath(n: TexNode): TexNode {
+    let c = DISCARDED_COPY.get(n);
+    if (!c) { c = { ...n, surround: 0 } as TexNode; DISCARDED_COPY.set(n, c); DISCARDED_MATH.set(c, n); }
+    return c;
+}
+/** The paragraph's own node of a node in a line: itself, or what a copy
+ *  made at a line break stands for. */
+export const paragraphNode = (n: TexNode): TexNode => DISCARDED_MATH.get(n) ?? n;
 const AUTOMATIC_DISC = 2;           // LuaTeX's discretionary for a typed "-"
 export const breakKind = (disc: TexNode | undefined): 'drop' | 'keep' => ((disc && disc.subtype) === AUTOMATIC_DISC ? 'keep' : 'drop');
 export const RUNNING_RULE = -1073741824;

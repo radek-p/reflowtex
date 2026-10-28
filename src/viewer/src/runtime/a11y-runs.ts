@@ -3,7 +3,7 @@
 // paragraph's lines as runs of words and formulas, each where it is drawn,
 // and a display's ink. Reads the layout only; writes nothing.
 
-import { BREAK_NODES, SP_TO_PX, useGlyphMetrics } from '../engine/core.ts';
+import { BREAK_NODES, SP_TO_PX, paragraphNode, useGlyphMetrics } from '../engine/core.ts';
 import { renderNodes } from '../engine/render.ts';
 import { glyphText } from '../../../shared/glyph-text.ts';
 import type { BlockData } from './block-data.ts';
@@ -127,7 +127,7 @@ export function runsOf(data: BlockData, i: number, a: number, b: number): LayerR
         for (let k = 0; k < nodes.length; k++) {
             const n = nodes[k];
             if (carryEnd >= 0) {                             // the rest of a formula begun above
-                const p = at.get(n);
+                const p = at.get(paragraphNode(n));
                 if (p === undefined || p <= carryEnd) continue;
                 carryEnd = -1;
             }
@@ -205,7 +205,7 @@ function paragraphOrder(data: BlockData, L: SegmentLayout): (j: number) => Map<T
  *  of its end-math node. -1 when `n` is not found (the formula is then taken
  *  to end with its line: text is never lost to it). */
 function formulaEndIn(at: Map<TexNode, number>, n: TexNode): number {
-    const start = at.get(n);
+    const start = at.get(paragraphNode(n));
     if (start === undefined) return -1;
     const nodes = [...at.keys()];
     let depth = 0;

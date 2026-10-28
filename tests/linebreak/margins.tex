@@ -1,0 +1,46 @@
+% Paragraphs set between margin skips that stretch or shrink: TeX adds
+% \leftskip and \rightskip to every line, so their stretch and shrink count in
+% each line's badness and share its slack. Centred with finite stretch
+% (0pt plus .3\hsize on both sides and a rigid \parfillskip, as some classes
+% centre their author blocks), LaTeX's \centering, \raggedright and
+% \raggedleft (0pt plus 1fil), a ragged right of finite stretch (0pt plus
+% 2em), a \leftskip of 2em plus 1fil, margin skips that shrink, and a table
+% of contents' entry (\rightskip 2.55em, \parfillskip -\rightskip, so that
+% its last line reaches into the margin skip; the dots are left out, a
+% \hfill in their place). Each paragraph is set at
+% several measures. Captured with capture.lua into margins/ (README.md).
+\documentclass{article}
+\newcommand\at[2]{{\hsize=#1\relax #2\par}}
+\newcommand\textA{First Author, Second Author, Third Author and Fourth Author, Department of Physics, Some University, Some City 12345, Some Country, and Institute for Theoretical Physics, Another University, Another City}
+\newcommand\textB{The quick brown fox jumps over the lazy dog, and the five boxing wizards jump quickly over the fence while sphinx of black quartz judges my vow and the dog sleeps on.}
+\newcommand\finite{\leftskip=0pt plus .3\hsize \rightskip=0pt plus .3\hsize \parfillskip=0pt \parindent=0pt \finalhyphendemerits=0 }
+\newcommand\ragged{\rightskip=0pt plus 2em \parfillskip=0pt plus 1fil }
+\newcommand\hang{\leftskip=2em plus 1fil \parfillskip=0pt }
+\newcommand\shrinks{\leftskip=0pt plus 1em minus 2pt \rightskip=0pt plus 1em minus 2pt }
+\newcommand\toc{\leftskip=1.5em \rightskip=2.55em \parfillskip=-\rightskip \parindent=1.5em \hskip-\leftskip}
+\newcommand\textC{The convex hull of the simulability set and its connection to compatibility structures\nobreak\hfill\nobreak\hbox to 1.55em{\hfil 12}}
+\begin{document}
+\at{345pt}{\finite\textA}
+\at{300pt}{\finite\textA}
+\at{240pt}{\finite\textA}
+\at{180pt}{\finite\textA}
+\at{300pt}{\finite\textB}
+\at{200pt}{\finite\textB}
+\at{345pt}{\centering\textA}
+\at{240pt}{\centering\textB}
+\at{300pt}{\raggedright\textB}
+\at{180pt}{\raggedright\textA}
+\at{300pt}{\raggedleft\textB}
+\at{300pt}{\ragged\textB}
+\at{200pt}{\ragged\textB}
+\at{300pt}{\hang\textB}
+\at{200pt}{\hang\textA}
+\at{300pt}{\shrinks\textB}
+\at{200pt}{\shrinks\textB}
+\at{345pt}{\toc\textC}
+\at{340pt}{\toc\textC}
+\at{300pt}{\toc\textC}
+\at{250pt}{\toc\textC}
+\at{396pt}{\toc\textC}
+\at{404pt}{\toc\textC}
+\end{document}

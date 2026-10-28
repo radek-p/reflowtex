@@ -1,0 +1,22 @@
+% \mathsurround > 0 and formulas opening with \, where lines break: TeX discards
+% the math node at a line's start with its surround, and the glue at the
+% formula's start with it (§879); a break after a formula drops its closing
+% surround (§881). The lines are broken again at other widths, where each
+% formula's width at a line's start decides the breaks.
+\documentclass{article}
+\mathsurround=0.1pt
+\newcommand{\cU}{\,\mathcal{U}}
+\begin{document}
+Let the graph be given and consider the following sets of vertices in it, every one of which
+$G$ contains as a subgraph; when $G$ contains no bidirected edge we call it a directed acyclic
+graph, and $S\subseteq V$ is called an adjustment set for $X$ and $Y$ if it satisfies the
+criterion. We write $\cU = \cU_1 \cup \cU_2$ for the variables, where $\cU_1$ consists of the
+top-level variables and $\cU_2$ of the others; set $N = |\cU_1|$ and $M = |\cU_2|$ for the
+sizes, and note $N+M = |\cU|$ holds by definition of $\cU$ and of $\cU_1$, $\cU_2$ in general.
+$X$ and $Y$ are separated by $S$ if and only if $S$ satisfies the criterion in the graph $G$,
+and $\{D\}$ for $A$ and $B$ is primary but not sufficient in $G$ whenever $D$ is a collider.
+
+Another paragraph: $a$ $b$ $c$ $d$ $e$ $f$ $g$ $h$ $i$ $j$ $k$ $l$ $m$ $n$ $o$ $p$ $q$ $r$ $s$
+$t$ $u$ $v$ $w$ $x$ $y$ $z$ $A$ $B$ $C$ $D$ $E$ $F$ $G$ $H$ $I$ $J$ $K$ $L$ $M$ $N$ $O$ $P$ $Q$
+$R$ $S$ $T$ $U$ $V$ $W$ $X$ $Y$ $Z$ $a$ $b$ $c$ $d$ $e$ $f$ $g$ $h$ $i$ $j$ $k$ $l$ $m$ $n$ $o$.
+\end{document}
