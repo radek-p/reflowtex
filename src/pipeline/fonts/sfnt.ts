@@ -199,6 +199,19 @@ export function format12(subs: CmapSubtable[]): CmapSubtable {
   return made;
 }
 
+/** `otf` with `entries` (code point → glyph id) in its format-12 cmap
+ *  subtable (format12: made when there is none), which a code point outside
+ *  the BMP needs. opentype.js writes a format-4 cmap only, which holds none
+ *  of them (𝑎, 𝟙): a font it makes with such code points goes through here. */
+export function withFormat12(otf: Bytes, entries: Iterable<[number, number]>): Bytes {
+  const sfnt = readSfnt(otf);
+  const subs = parseCmap(sfnt.tables.get('cmap')!), f12 = format12(subs);
+  for (const [cp, gid] of entries) f12.shared.map.set(cp, gid);
+  f12.shared.dirty = true;
+  sfnt.tables.set('cmap', buildCmap(subs));
+  return writeSfnt(sfnt);
+}
+
 export function buildCmap(subs: CmapSubtable[]): Bytes {
   const blobs: Bytes[] = [], blobOf = new Map<CmapSubtable, number>();
   for (const s of subs) {

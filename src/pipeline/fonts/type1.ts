@@ -7,11 +7,13 @@
 // Addressing is the crux. A classic font is 8-bit: a glyph lives in a slot
 // (0–255) whose meaning is the font's own – slot 0x22 of cmsy10 is
 // 'arrowup', not '"'. Each slot gets a target code point:
-//  * a slot whose glyph name resolves (Adobe Glyph List) to one common,
-//    searchable character gets that real code point, so the text can be
-//    selected and found – keyed on the name, not the slot (cmr's slot 0x3C
-//    is 'exclamdown', and gets U+00A1, not '<');
-//  * everything else keeps a private-use code, U+E000 + slot (slotCode in
+//  * a slot whose glyph name resolves (the Adobe Glyph List and TeX's
+//    extension of it: agl.ts) to one character that stands as text of its
+//    own gets that real code point, so the text can be selected, found and
+//    read – keyed on the name, not the slot (cmr's slot 0x3C is
+//    'exclamdown', and gets U+00A1, not '<'; cmsy's 'prime' is ′);
+//  * everything else – a glyph no character (cmex's sized delimiters), a
+//    combining mark – keeps a private-use code, U+E000 + slot (slotCode in
 //    src/shared/glyph-text.ts, which reads it as no text).
 // Real code points are claimed first-come by ascending slot, so the cmap
 // stays a function. Every converted font is its own @font-face, so private
@@ -27,8 +29,8 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import opentype from 'opentype.js';
-import { toUnicode } from './agl.ts';
-import { readSfnt, writeSfnt, setHeadTimes } from './sfnt.ts';
+import { glyphReadings } from './agl.ts';
+import { readSfnt, writeSfnt, setHeadTimes, withFormat12 } from './sfnt.ts';
 import { slotCode } from '../../shared/glyph-text.ts';
 
 type Bytes = Uint8Array;
@@ -404,24 +406,20 @@ function specialize(cmds: Cmd[]): Cmd[] {
 
 // ── Addressing and conversion ───────────────────────────────────────────────
 
-const SEARCHABLE_RANGES: [number, number][] = [
-  [0x0020, 0x007E],   // ASCII
-  [0x00A1, 0x00FF],   // Latin-1
-  [0x0100, 0x017F],   // Latin Extended-A
-  [0x0391, 0x03A9],   // Greek capitals
-  [0x03B1, 0x03C9],   // Greek smalls
-  [0xFB00, 0xFB04],   // the f-ligatures, read as their letters (src/shared/glyph-text.ts)
-];
-const SEARCHABLE_SINGLES = new Set([0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2020, 0x2021, 0x2026, 0x2122]);
-const searchable = (cp: number) => SEARCHABLE_SINGLES.has(cp) || SEARCHABLE_RANGES.some(([lo, hi]) => cp >= lo && cp <= hi);
+/** One character that stands as text of its own: a graphic character
+ *  (Unicode's: a letter, number, punctuation, symbol or space) other than a
+ *  combining mark, which the browser draws onto the character before it.
+ *  Not a control, format character (a soft hyphen draws as nothing),
+ *  private-use code or unassigned one. */
+const STANDALONE = /^[\p{L}\p{N}\p{P}\p{S}\p{Zs}]$/u;
 
 /** slot → target code point (see the top of this file). */
 export function addressing(slots: Map<number, string>): Map<number, number> {
   const out = new Map<number, number>(), claimed = new Set<number>();
   for (const slot of [...slots.keys()].sort((a, b) => a - b)) {
-    const u = [...toUnicode(slots.get(slot)!)];
-    const cp = u.length === 1 ? u[0].codePointAt(0)! : null;
-    if (cp !== null && searchable(cp) && !claimed.has(cp)) { out.set(slot, cp); claimed.add(cp); }
+    const ch = glyphReadings(slots.get(slot)!).find(r => STANDALONE.test(r));
+    const cp = ch === undefined ? null : ch.codePointAt(0)!;
+    if (cp !== null && !claimed.has(cp)) { out.set(slot, cp); claimed.add(cp); }
     else out.set(slot, slotCode(slot));
   }
   return out;
@@ -472,7 +470,12 @@ export function convertOutline(pfb: string, name: string, encoding: string[] | n
     familyName: label, styleName: 'Regular', fullName: label, postScriptName: `${name}-ReflowTeXConverted`,
     unitsPerEm: upm, ascender: upm, descender: 0, glyphs,
   });
-  return { bytes: reproducible(new Uint8Array(font.toArrayBuffer())), addressing: addr };
+  let otf: Bytes = new Uint8Array(font.toArrayBuffer());
+  // a code point past the BMP (newtx's math italic 'u1D44E', 𝑎) needs a
+  // format-12 cmap, which opentype.js does not write
+  const past = order.flatMap((g, gid) => cps.get(g)!.filter(cp => cp > 0xFFFF).map((cp): [number, number] => [cp, gid]));
+  if (past.length) otf = withFormat12(otf, past);
+  return { bytes: reproducible(otf), addressing: addr };
 }
 
 /** opentype.js's output with its head's times fixed, so that a face made

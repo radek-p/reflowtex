@@ -11,8 +11,9 @@ import { basename, join } from 'node:path';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import opentype from 'opentype.js';
-import { convertOutline, convertType1, findOutline, glyphOutline, kpsewhich, parseMapLines, parseType1, readEncoding, setDocumentMapLines } from '../../src/pipeline/fonts/type1.ts';
+import { addressing, convertOutline, convertType1, findOutline, glyphOutline, kpsewhich, parseMapLines, parseType1, readEncoding, setDocumentMapLines } from '../../src/pipeline/fonts/type1.ts';
 import { glyphText, slotCode } from '../../src/shared/glyph-text.ts';
+import { glyphReadings } from '../../src/pipeline/fonts/agl.ts';
 
 /** Why a test is skipped: the TeX Live files it reads that this machine
  *  lacks (false when it has them all). In the CI image every one is there. */
@@ -56,7 +57,7 @@ test('every slot of lmsy10 that TeX uses is addressed', { skip: LM_MATHS }, () =
   // \aleph, |, \infty, \cup, \subseteq, \langle, \rangle, the brackets
   for (const slot of [64, 106, 49, 91, 18, 104, 105, 102, 103]) assert.ok(addressing.has(slot), `slot ${slot} not addressed`);
   assert.equal(addressing.get(106), '|'.codePointAt(0));
-  assert.equal(addressing.get(64), slotCode(64));        // aleph: not a searchable character
+  assert.equal(addressing.get(64), 0x2135);              // aleph: ℵ
 });
 
 // They were private-use codes (U+E000 + slot): read as nothing, copied as
@@ -69,6 +70,53 @@ test("a classic font's f-ligatures are their characters, and read as their lette
     const slots = face === 'cmr10' ? [11, 12, 13, 14, 15] : [0x1B, 0x1C, 0x1D, 0x1E, 0x1F];
     assert.deepEqual(slots.map(s => glyphText(addressing.get(s)!)), ['ff', 'fi', 'fl', 'ffi', 'ffl'], face);
   }
+});
+
+// They were private-use codes too, read as nothing: only ASCII, Latin-1,
+// Greek and a few punctuation marks were let through, and a name the Adobe
+// list lacks (cmsy's 'prime', TeX's own) had no character at all.
+test("a classic maths font's symbols are their characters: ′ ∞ ∀ ∃ ∇ ◦ ⊕ − → ∈ ≤ ⟨", { skip: lacking('cmsy10.pfb') }, () => {
+  const found = findOutline('cmsy10');
+  assert.ok(found);
+  const { addressing } = convertOutline(found[0], 'cmsy10', found[1]);
+  const slots = [0x30, 0x31, 0x38, 0x39, 0x72, 0x0E, 0x08, 0x00, 0x21, 0x32, 0x14, 0x68];
+  assert.equal(slots.map(s => glyphText(addressing.get(s)!)).join(' '), '′ ∞ ∀ ∃ ∇ ◦ ⊕ − → ∈ ≤ ⟨');
+  // and the converted face draws each by that character
+  assert.deepEqual(convertedNames('cmsy10', [0x30, 0x31]), ['prime', 'infinity']);
+});
+
+// newtx's maths italic names its letters by their mathematical alphabet
+// (u1D44E, 𝑎): a code point past the BMP, which a format-4 cmap cannot hold.
+test('a glyph whose character is past the BMP is drawn by it (newtx: 𝑎)', { skip: lacking('NewTXMI.pfb') }, () => {
+  const found = findOutline('NewTXMI');
+  assert.ok(found);
+  const { addressing } = convertOutline(found[0], 'NewTXMI', found[1]);
+  const slot = [...addressing].find(([, cp]) => cp === 0x1D44E)?.[0];
+  assert.ok(slot !== undefined, 'u1D44E addressed as 𝑎');
+  assert.deepEqual(convertedNames('NewTXMI', [slot]), ['u1D44E']);
+});
+
+test('glyph names read through the Adobe list, then TeX\'s extension of it, each reading in order', () => {
+  assert.deepEqual(glyphReadings('prime'), ['′', 'ʹ']);                 // TeX's list only
+  assert.deepEqual(glyphReadings('minute'), ['′']);                     // the Adobe list's
+  assert.deepEqual(glyphReadings('dotlessj'), ['\u{F6BE}', 'ȷ', '𝚥']);  // the Adobe list's first, a private-use code
+  assert.deepEqual(glyphReadings('f_i'), ['fi']);
+  assert.deepEqual(glyphReadings('uni2032.alt'), ['′']);
+  assert.deepEqual(glyphReadings('summationtext'), []);
+});
+
+test('a slot takes the first reading that is a character of its own; the rest keep private-use codes', () => {
+  const a = addressing(new Map([
+    [0x11, 'dotlessj'],        // past the Adobe list's private-use code: ȷ
+    [0x30, 'prime'],
+    [0x36, 'negationslash'],   // a combining mark: drawn onto the glyph before it
+    [0x37, 'mapsto'],          // no list names it
+    [0x40, 'uni2032'],         // ′ again: taken by the first slot
+    [0x50, 'summationtext'],   // a sized operator: no character
+    [0x7F, 'sfthyphen'],       // a soft hyphen: a format character, drawn as nothing
+  ]));
+  assert.deepEqual([...a], [[0x11, 0x0237], [0x30, 0x2032], [0x36, slotCode(0x36)], [0x37, slotCode(0x37)],
+                            [0x40, slotCode(0x40)], [0x50, slotCode(0x50)], [0x7F, slotCode(0x7F)]]);
 });
 
 test('a face whose map entry has no encoding keeps the outline\'s own', { skip: lacking('pdftex.map', 'cmsy10.pfb') }, () => {
