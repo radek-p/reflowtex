@@ -45,3 +45,15 @@ export function batchHref(b: Batch, id?: string): string {
 
 /** A result's file: gzipped (name.gz) where the result says its files are. */
 export const fileName = (name: string, gz?: boolean): string => (gz ? `${name}.gz` : name);
+
+/** A batch's results as listed: those that stopped with no result (status 'error') last, the rest in their order. */
+export function listed<T extends { status: string }>(results: T[]): T[] {
+  return [...results.filter(r => r.status !== 'error'), ...results.filter(r => r.status === 'error')];
+}
+
+/** Which result opens: the one the URL names, else the first with a result (never one that stopped, while any has one). */
+export function opening<T extends { id: string; status: string }>(results: T[], id: string): number {
+  const named = results.findIndex(r => r.id === id);
+  if (named >= 0) return named;
+  return Math.max(0, results.findIndex(r => r.status !== 'error'));
+}

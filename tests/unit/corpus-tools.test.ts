@@ -14,7 +14,7 @@ import { applyPatch, patchReason } from '../../tools/corpus/patch.ts';
 import { loaded, notable, type Loaded } from '../../tools/corpus/packages.ts';
 import { checkManifest, safeRelative, loadManifest, type Manifest, type Paper } from '../../tools/corpus/manifest.ts';
 import { paperEntry, totals, pc, compareLink } from '../../tools/corpus/report.ts';
-import { batchHref, batchRoot, chooseBatch, readBatches, DEFAULT_BATCHES } from '../../tests/render/report/batches.ts';
+import { batchHref, batchRoot, chooseBatch, listed, opening, readBatches, DEFAULT_BATCHES } from '../../tests/render/report/batches.ts';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'corpus-test-'));
 const enc = (s: string) => new Uint8Array(Buffer.from(s));
@@ -133,4 +133,13 @@ test('the report\'s batches: listed in order, chosen by the URL, each with its o
   assert.equal(chooseBatch(list, '?batch=nope').id, 'tests');
   assert.equal(batchRoot(list[1]), '../corpus/');
   assert.equal(batchHref(list[1], 'arxiv-2608.05234'), '?batch=corpus#arxiv-2608.05234');
+});
+
+test('the report lists what stopped last, and opens on a result unless the URL names another', () => {
+  const r = [{ id: 'x', status: 'error' }, { id: 'a', status: 'pass' }, { id: 'y', status: 'error' }, { id: 'b', status: 'fail' }];
+  const l = listed(r);
+  assert.deepEqual(l.map(x => x.id), ['a', 'b', 'x', 'y']);
+  assert.equal(l[opening(l, '')].id, 'a');
+  assert.equal(l[opening(l, 'y')].id, 'y');
+  assert.equal(opening(listed([{ id: 'x', status: 'error' }]), ''), 0);
 });
