@@ -270,15 +270,6 @@ export function lineBandAtWidth(band: LineBand, widthSp: number, sourceWidthSp: 
     return { indentSp, rightSp, availSp: widthSp - indentSp - rightSp };
 }
 
-// The widest box, picture or rule of a list (sp).
-function widestBoxSp(nodes: TexNode[]): number {
-    let w = 0;
-    for (const n of nodes) {
-        if (n.type === 'hlist' || n.type === 'vlist' || n.type === 'picture' || n.type === 'rule') w = Math.max(w, n.width || 0);
-    }
-    return w;
-}
-
 export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt: number, p: Params, cache: LayoutCache): SegmentGeometry {
     const widthSp  = Math.round(widthPt * 65536);
     const columnPx = widthPt * ZOOM;
@@ -331,12 +322,12 @@ export function layoutTextSegment(fontInfo: FontTable, seg: TextSegment, widthPt
         const bands = (para.shape && para.shape.length > 1 ? para.shape : [para])
             .map(b => lineBandAtWidth(b, widthSp, cache.sourceWidthSp!));
         // A figure paragraph (a picture, a table, a framed box – no running
-        // text) scrolls whole when it is wider than the column, so it is broken
-        // against its widest box when that is wider: each box stays whole, and
-        // the lines break where TeX's do (a box as wide as the column, then a
-        // space and a label's anchor, makes a second line, an empty one).
-        const widest = seg.isFigure ? widestBoxSp(nodes) : 0;
-        const measure = bands.map(b => Math.max(1, b.availSp, widest));
+        // text) is broken against the column like any other, as TeX breaks it:
+        // a box wider than the column cannot fit, so TeX's final pass sets it
+        // on an overfull line of its own, after an empty first line (a list
+        // item's label, centre's), with \lineskip between the two. The line
+        // is then wider than the column, and the segment scrolls whole.
+        const measure = bands.map(b => Math.max(1, b.availSp));
 
         // Pluggable breaker. A page may install an alternative paragraph
         // breaker as window.reflowtexBreak(nodes, availSp, params, helpers)

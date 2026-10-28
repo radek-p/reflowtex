@@ -1,0 +1,40 @@
+% Figures holding a centred TikZ picture of a fixed size, as in real papers: in center, 0.525 pt wider than the text (TeX reports the line overfull and sets the picture on a line of its own, \lineskip below an empty first line), one narrower, and one wider with \centering, each with a caption and text after it.
+\documentclass[11pt]{article}
+\usepackage{tikz}
+% one page with nothing but the text: checked against plain lualatex too
+% (cases.ts), where every float is [H]
+\pagestyle{empty}
+\newcommand\testpicture[1]{%
+  \begin{tikzpicture}
+    \useasboundingbox (0,0) rectangle (#1,2cm);
+    \draw (0.2,0.2) rectangle (2,1.8);
+    \node at (1.1,1) {$a_1$};
+    \node[anchor=east] at (#1,1) {right};
+  \end{tikzpicture}}
+\begin{document}
+A paragraph before the first figure, long enough to break onto a second line
+of the column, quickly.
+\begin{figure}
+\begin{center}
+  \testpicture{360.525pt}
+\end{center}
+\caption{A picture a little wider than the text, in center.}
+\end{figure}
+A paragraph after the first figure, long enough to break onto a second line
+of the column, before the next one.
+\begin{figure}
+\begin{center}
+  \testpicture{330pt}
+\end{center}
+\caption{A picture narrower than the text, in center.}
+\end{figure}
+A paragraph after the second figure, long enough to break onto a second line
+of the column, before the last one.
+\begin{figure}
+  \centering
+  \testpicture{360.525pt}
+  \caption{A picture a little wider than the text, centred with centering.}
+\end{figure}
+A last paragraph, after all the figures, long enough to break onto a second
+line of the column.
+\end{document}

@@ -280,4 +280,14 @@ export const cases: Record<string, CaseSettings> = {
   // glyphs here), and one put back after the prose that follows it. Worst
   // attained 2026-10-27.
   floats: { against_plain: true, plain_file: 'tests/render/cases/plain/floats.tex', tolerance: 0.009, rule_tolerance: 0.004 },
+  // Figures holding a centred picture wider than the column, as in real
+  // papers: TeX cannot fit it, and its final pass sets the picture on a line
+  // of its own, \lineskip below an empty first line. The browser broke such a
+  // paragraph against its widest box, so the picture fitted on the first line
+  // and that \lineskip was lost: everything below each such figure 1 pt
+  // higher (433 of 514 glyphs past 0.7 pt at the document's width and 100 pt
+  // narrower; 85 pt wider, every picture fits). The strip glyph for glyph against
+  // plain lualatex's page with every float [H]. Worst attained 2026-10-27.
+  'figure-center-tikz': { against_plain: true, plain_file: 'tests/render/cases/plain/figure-center-tikz.tex',
+    tex_pictures: true, tolerance: 0.010 },
 };
