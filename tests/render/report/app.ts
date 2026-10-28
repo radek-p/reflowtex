@@ -21,7 +21,7 @@ import type { InspectorApi } from '../../../src/inspector/src/protocol.ts';
 import { BAND_PT, PX_PER_PT, bandsIn, cutStrip, indexBoxes, type Box, type BoxIndex, type Strip } from './bands.ts';
 import { summarise, type Fact, type Place, type Step, type Summary } from './summary.ts';
 import { placementOf, type Glyph, type LineData, type VectorGlyphs } from './placement.ts';
-import { batchHref, batchRoot, chooseBatch, DEFAULT_BATCHES, fileName, readBatches, type Batch } from './batches.ts';
+import { batchHref, batchRoot, chooseBatch, DEFAULT_BATCHES, fileName, listed, opening, readBatches, type Batch } from './batches.ts';
 
 /** What the report reads of a comparison (vector.json, written by
  *  tools/pageless-pdf/vector-compare.ts): positions in pt. */
@@ -821,8 +821,9 @@ function App() {
     const pickBatch = (b: Batch) => { if (b.id === batch?.id) return; history.pushState(null, '', batchHref(b)); setId(''); setBatch(b); };
     useEffect(() => { const h = () => setId(idFromHash()); addEventListener('hashchange', h); return () => removeEventListener('hashchange', h); }, []);
 
-    const results = report?.results ?? [];
-    const idx = Math.max(0, results.findIndex(r => r.id === id));
+    // (those that stopped last, and never the one that opens while any has a result)
+    const results = useMemo(() => listed(report?.results ?? []), [report]);
+    const idx = opening(results, id);
     const r = results[idx];
     const go = (i: number) => { const t = results[(i + results.length) % results.length]; if (t) location.hash = encodeURIComponent(t.id); };
     const summary = useMemo(() => summarise(r?.problems ?? []), [r?.id, r?.at]);

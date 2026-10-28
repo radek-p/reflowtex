@@ -196,7 +196,10 @@ before(async () => {
   }
   const paper = JSON.parse(readFileSync(join(corpus, 'paper-a', 'w0', 'result.json'), 'utf8'));
   writeFileSync(join(corpus, 'report.json'), JSON.stringify({ batch: { id: 'corpus', label: 'Paper corpus', order: 2 },
-    results: [{ ...paper, label: 'A paper (paper-a)', gz: true }] }));
+    // stopped papers first, as a batch may list them: the report lists them last and opens on a result
+    results: [{ id: 'stopped-1', case: 'stopped-1', extra: 0, status: 'error', problems: ['Needs pdfTeX.'], at: paper.at, tolerance: 0.092, target: 0.092, dir: 'stopped-1' },
+      { id: 'stopped-2', case: 'stopped-2', extra: 0, status: 'error', problems: ['Needs pdfTeX.'], at: paper.at, tolerance: 0.092, target: 0.092, dir: 'stopped-2' },
+      { ...paper, label: 'A paper (paper-a)', gz: true }] }));
   writeFileSync(join(page, 'batches.json'), JSON.stringify({ batches: [{ id: 'corpus', label: 'Paper corpus', index: 'corpus/report.json', order: 2 },
     { id: 'tests', label: 'Tests', index: 'build/report.json', order: 1 }] }));
   ({ server, url } = await serveMounts({ '/': page, '/build/': build, '/corpus/': corpus, '/inspector/': join(REPO, 'src/inspector') }));
@@ -498,15 +501,18 @@ test('a build without paired lines: in absolute position, and the report says so
 
 test('batches: each its own list and totals, named by the URL, its gzipped files read', async () => {
   const page = await open('paper-a', false);
-  await page.goto(`${url}/?batch=corpus#paper-a`);
+  // no result named: the first with a result opens, not one that stopped
+  await page.goto(`${url}/?batch=corpus`);
   await drawn(page);
+  assert.equal(await page.evaluate(() => document.querySelector<HTMLSelectElement>('select[aria-label="Test"]')!.value), 'paper-a');
   const listed = () => page.evaluate(() => ({
     options: [...document.querySelectorAll<HTMLOptionElement>('select[aria-label="Test"] option')].map(o => o.textContent!.trim()),
     totals: document.querySelector('.totals')!.textContent, batch: document.querySelector('[aria-label="Which results: each batch is its own list and summary"] [aria-pressed="true"]')?.textContent,
     uses: document.querySelectorAll('svg.sheet use').length }));
   const corpus = await listed();
-  assert.deepEqual(corpus.options.map(o => o.replace(/^\S+\s/, '')), ['A paper (paper-a)']);
-  assert.equal(corpus.totals, '1');
+  // the stopped ones listed, last
+  assert.deepEqual(corpus.options.map(o => o.replace(/^\S+\s/, '')), ['A paper (paper-a)', 'stopped-1', 'stopped-2']);
+  assert.equal(corpus.totals, '12');
   assert.equal(corpus.batch, 'Paper corpus');
   assert.ok(corpus.uses > 0, 'the TeX side drawn from strip.svg.gz');
   // the other batch: the tests alone, and the URL says so
@@ -514,7 +520,9 @@ test('batches: each its own list and totals, named by the URL, its gzipped files
   await page.waitForFunction(() => [...document.querySelectorAll('select[aria-label="Test"] option')].length > 1);
   const tests = await listed();
   assert.ok(tests.options.some(o => o.endsWith(' long')), JSON.stringify(tests.options));
-  assert.ok(!tests.options.some(o => o.includes('paper-a')));
+  assert.ok(!tests.options.some(o => o.includes('paper-a') || o.includes('stopped-1')));
+  // here too, what stopped comes last
+  assert.ok(tests.options.at(-1)!.endsWith(' stopped'), JSON.stringify(tests.options));
   assert.equal(new URL(page.url()).searchParams.get('batch'), 'tests');
   assert.deepEqual(page.errors, []);
   await page.context().close();
